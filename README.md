@@ -8,14 +8,22 @@
 [![GitHub release](https://img.shields.io/github/v/release/cibrandocampo/nudge)](https://github.com/cibrandocampo/nudge/releases)
 [![CI](https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml/badge.svg)](https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12-blue?logo=python)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/django-5.x-green?logo=django)](https://www.djangoproject.com/)
-[![React](https://img.shields.io/badge/react-18-61DAFB?logo=react&logoColor=000)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/vite-5-646CFF?logo=vite&logoColor=fff)](https://vitejs.dev/)
+[![Django](https://img.shields.io/badge/django-5.2-green?logo=django)](https://www.djangoproject.com/)
+[![React](https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff)](https://vitejs.dev/)
 [![codecov](https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg)](https://codecov.io/gh/cibrandocampo/nudge)
 
 > A gentle reminder for recurring things.
 
 Nudge is a personal PWA that sends you a quiet push notification when something you do regularly is due again — without you having to think about it.
+
+<p align="center">
+  <img src="docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/>
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/05-inventory.png" width="260" alt="Inventory"/>
+</p>
 
 ---
 
@@ -86,6 +94,26 @@ The point is simple: anything you do on a schedule, Nudge can track.
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-login.png" width="260" alt="Login"/><br/><b>Login</b></td>
+    <td align="center"><img src="docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/><br/><b>Dashboard</b></td>
+    <td align="center"><img src="docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/04-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
+    <td align="center"><img src="docs/screenshots/05-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
+    <td align="center"><img src="docs/screenshots/06-history.png" width="260" alt="History"/><br/><b>History</b></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><img src="docs/screenshots/07-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
+  </tr>
+</table>
+
+---
+
 ## Quick start (self-hosted)
 
 ### Requirements
@@ -136,7 +164,6 @@ See [dev/README.md](dev/README.md) for the full development setup, including how
 
 - [Architecture & technical design](docs/ARCHITECTURE.md)
 - [Development setup](dev/README.md)
-- [Project specification](docs/nudge_project_spec.md)
 - [Backup & restore](docs/backup.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
