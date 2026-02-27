@@ -125,3 +125,20 @@ Required after changing `requirements.txt` or any `Dockerfile`:
 ```bash
 docker compose -f dev/docker-compose.yml build
 ```
+
+## Claude Code
+
+This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant.
+
+Custom skills are provided in `.claude/skills/` to help Claude understand the project conventions:
+
+| Skill | Purpose |
+|-------|---------|
+| `backend-patterns` | Django models, views, serializers, URLs, Celery tasks |
+| `frontend-patterns` | React components, pages, API calls, i18n, CSS modules |
+| `dev-workflow` | Docker commands, environment setup, debugging |
+| `django-admin` | Admin panel customization and branding |
+| `git-conventions` | Commit message format, branch naming |
+| `run-tests` | Test execution commands |
+
+These skills are automatically loaded when using Claude Code in this repository.

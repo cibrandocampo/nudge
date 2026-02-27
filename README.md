@@ -12,6 +12,7 @@
 [![React](https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff)](https://vitejs.dev/)
 [![codecov](https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg)](https://codecov.io/gh/cibrandocampo/nudge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > A gentle reminder for recurring things.
 
@@ -37,47 +38,16 @@ You define the task once, tell it how often it should happen, and then you just 
 
 ## Examples
 
-### Medical & health
-
 | What | Interval |
 |------|----------|
-| Take metformin | Every 12 hours |
-| Eye drops (keratoconus) | Every 4 hours |
-| Vitamin D supplement | Every 24 hours |
-| Blood pressure check | Every 3 days |
-| Change wound dressing | Every 2 days |
-| Monthly self-exam | Every 30 days |
-
-### Home & maintenance
-
-| What | Interval |
-|------|----------|
-| Change the fryer oil | Every 10 uses → every 2 weeks |
-| Water the cacti | Every 5 days |
-| Water the ferns | Every 2 days |
-| Clean the coffee machine | Every 7 days |
-| Replace the Brita filter | Every 30 days |
-| HVAC filter | Every 90 days |
-| Defrost the freezer | Every 60 days |
-
-### Pets & plants
-
-| What | Interval |
-|------|----------|
+| Take medication | Every 12 hours |
+| Water the plants | Every 3 days |
+| Change HVAC filter | Every 90 days |
 | Deworm the cat | Every 90 days |
-| Flea/tick treatment | Every 30 days |
-| Fertilise the plants | Every 14 days |
-| Prune the lemon tree | Every 180 days |
-
-### Work & admin
-
-| What | Interval |
-|------|----------|
 | Rotate API keys | Every 90 days |
-| Review server backups | Every 7 days |
-| Pay quarterly taxes | Every 90 days |
+| Review backups | Every 7 days |
 
-The point is simple: anything you do on a schedule, Nudge can track.
+Anything you do on a schedule, Nudge can track.
 
 ---
 
@@ -116,41 +86,29 @@ The point is simple: anything you do on a schedule, Nudge can track.
 
 ## Quick start (self-hosted)
 
-### Requirements
-
-- Docker and Docker Compose
-- Port 80 available (HTTPS is handled upstream by your reverse proxy / NAS DSM)
-
-### 1. Configure environment
-
 ```bash
-cp .env.example .env
-# Fill in the values — see comments inside .env.example
-```
+# 1. Download docker-compose.yml
+curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/docker-compose.yml
 
-Key variables:
+# 2. Create .env file with your settings
+cat > .env << 'EOF'
+POSTGRES_PASSWORD=your-db-password
+DJANGO_SECRET_KEY=your-secret-key
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your-admin-password
+VAPID_PRIVATE_KEY=your-vapid-private-key
+VAPID_PUBLIC_KEY=your-vapid-public-key
+EOF
 
-| Variable | How to generate |
-|----------|-----------------|
-| `DJANGO_SECRET_KEY` | `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
-| `POSTGRES_PASSWORD` | Any strong password |
-| `ADMIN_PASSWORD` | Password for the default admin account |
-| `VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` | `pip install py-vapid && vapid --gen` |
-
-### 2. Start
-
-```bash
+# 3. Start
 mkdir -p data
 docker compose up -d
 ```
 
-On first boot, database migrations run automatically and the admin account is created from `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+The app is available at `http://localhost` (port 80 by default, configurable via `NUDGE_HTTP_PORT` in `.env`). Admin panel at `/nudge-admin/`.
 
-The app is available at `http://localhost` (or your configured domain).
-
-### 3. Add users
-
-Open the Django admin panel at `/nudge-admin/` and create accounts for anyone who should have access.
+For detailed configuration options, see [docs/configuration.md](docs/configuration.md).
 
 ---
 
@@ -162,6 +120,7 @@ See [dev/README.md](dev/README.md) for the full development setup, including how
 
 ## Documentation
 
+- [Configuration](docs/configuration.md)
 - [Architecture & technical design](docs/ARCHITECTURE.md)
 - [Development setup](dev/README.md)
 - [Backup & restore](docs/backup.md)
@@ -180,3 +139,15 @@ Pre-built multi-arch images (linux/amd64 + linux/arm64) are published to Docker 
 | Both | `stable` + `vX.Y.Z` | On GitHub release |
 
 Images are also rebuilt weekly to pick up base-image and dependency security patches.
+
+---
+
+## Built with Claude Code
+
+This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills are provided in `.claude/skills/` to maintain project conventions. See [dev/README.md](dev/README.md#claude-code) for details.
+
+---
+
+## License
+
+[MIT](LICENSE)
