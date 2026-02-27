@@ -1,0 +1,144 @@
+.container {
+  max-width: 540px;
+}
+
+.back {
+  color: var(--c-text-3);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.edit {
+  color: var(--c-primary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  color: var(--c-text);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.description {
+  color: var(--c-text-3);
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+.meta {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  background: var(--c-surface);
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--c-border-inner);
+}
+
+.metaRow:last-child {
+  border-bottom: none;
+}
+
+.metaLabel {
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+}
+
+.metaValue {
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.doneBtn {
+  width: 100%;
+  padding: 0.85rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+}
+
+.section {
+  margin-bottom: 1.5rem;
+}
+
+.entryList {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+.entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--c-border-inner);
+  font-size: 0.875rem;
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entryDate {
+  color: var(--c-text-3);
+}
+
+.notes {
+  color: var(--c-muted);
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+.viewAll {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--c-primary);
+  text-decoration: none;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.toggleBtn {
+  flex: 1;
+  padding: 0.65rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.deleteBtn {
+  flex: 1;
+  padding: 0.65rem;
+  border: 1px solid var(--c-danger-bg);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-danger);
+  font-size: 0.875rem;
+  cursor: pointer;
+}

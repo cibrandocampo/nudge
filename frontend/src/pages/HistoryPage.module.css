@@ -1,0 +1,70 @@
+.container {
+  max-width: 540px;
+}
+
+.filter {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  outline: none;
+  cursor: pointer;
+}
+
+.group {
+  margin-bottom: 1.5rem;
+}
+
+.dateLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.5rem;
+}
+
+.list {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+.entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--c-border-inner);
+  font-size: 0.875rem;
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entryName {
+  color: var(--c-text);
+  font-weight: 500;
+}
+
+.entryTime {
+  color: var(--c-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.moreBtn {
+  display: block;
+  width: 100%;
+  padding: 0.65rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+}

@@ -1,0 +1,20 @@
+.section {
+  margin-bottom: 2rem;
+}
+
+.list {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.newLink {
+  display: inline-block;
+  padding: 0.6rem 1.25rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+}

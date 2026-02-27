@@ -1,0 +1,167 @@
+.container {
+  max-width: 480px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.username {
+  color: var(--c-text);
+  font-weight: 500;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.hint {
+  color: var(--c-text-3);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.tzHint {
+  color: var(--c-primary);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.langRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.langBtn {
+  padding: 0.45rem 0.875rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.langBtnActive {
+  padding: 0.45rem 0.875rem;
+  border: 1px solid var(--c-primary);
+  border-radius: 8px;
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.listbox {
+  height: auto;
+  padding: 0;
+  margin-top: 0.35rem;
+}
+
+.saveBtn {
+  padding: 0.75rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--c-border-inner);
+  margin: 1.5rem 0;
+}
+
+.inputTime {
+  width: 130px;
+}
+
+/* ── PushStatus ──────────────────────────────────────────────── */
+
+.pushWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.pushRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pushDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pushDotActive {
+  background: var(--c-success);
+}
+
+.pushDotDenied {
+  background: var(--c-danger);
+}
+
+.pushDotDefault {
+  background: var(--c-warning);
+}
+
+.pushLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.pushLabelActive {
+  color: var(--c-success-text);
+}
+
+.pushLabelDenied {
+  color: var(--c-danger-text);
+}
+
+.pushLabelDefault {
+  color: var(--c-warning-text);
+}
+
+.pushHint {
+  color: var(--c-text-3);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.pushBtn {
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.pushBtnGhost {
+  padding: 0.6rem 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+  align-self: flex-start;
+}

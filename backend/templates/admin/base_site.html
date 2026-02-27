@@ -1,0 +1,115 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | Nudge{% endblock %}
+{% block branding %}
+  <div id="site-name"><a href="/">Nudge</a></div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  /* ── Override Django's own CSS variables ──────────────────────────── */
+
+  /* Light mode */
+  :root, html[data-theme="light"] {
+    --primary: #eef2ff;
+    --secondary: #6366f1;
+    --accent: #818cf8;
+    --primary-fg: #fff;
+
+    --header-bg: #6366f1;
+    --header-color: #fff;
+    --header-branding-color: #fff;
+    --header-link-color: #fff;
+
+    --breadcrumbs-fg: #4f46e5;
+    --breadcrumbs-link-fg: #4f46e5;
+    --breadcrumbs-bg: #eef2ff;
+
+    --link-fg: #6366f1;
+    --link-hover-color: #4f46e5;
+    --link-selected-fg: #818cf8;
+
+    --body-bg: #f9fafb;
+    --module-bg: #6366f1;
+
+    --button-bg: #6366f1;
+    --button-hover-bg: #4f46e5;
+    --default-button-bg: #6366f1;
+    --default-button-hover-bg: #4f46e5;
+  }
+
+  /* Dark mode */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --primary: #312e81;
+      --secondary: #6366f1;
+      --accent: #818cf8;
+      --primary-fg: #f1f5f9;
+
+      --header-bg: #6366f1;
+      --header-color: #fff;
+      --header-branding-color: #fff;
+      --header-link-color: #fff;
+
+      --breadcrumbs-fg: #c7d2fe;
+      --breadcrumbs-link-fg: #a5b4fc;
+      --breadcrumbs-bg: #312e81;
+
+      --link-fg: #a5b4fc;
+      --link-hover-color: #c7d2fe;
+      --link-selected-fg: #818cf8;
+
+      --body-bg: #1e1e2e;
+      --module-bg: #6366f1;
+
+      --button-bg: #6366f1;
+      --button-hover-bg: #4f46e5;
+      --default-button-bg: #6366f1;
+      --default-button-hover-bg: #4f46e5;
+    }
+  }
+
+  html[data-theme="dark"] {
+    --primary: #312e81;
+    --secondary: #6366f1;
+    --accent: #818cf8;
+    --primary-fg: #f1f5f9;
+
+    --header-bg: #6366f1;
+    --header-color: #fff;
+    --header-branding-color: #fff;
+    --header-link-color: #fff;
+
+    --breadcrumbs-fg: #c7d2fe;
+    --breadcrumbs-link-fg: #a5b4fc;
+    --breadcrumbs-bg: #312e81;
+
+    --link-fg: #a5b4fc;
+    --link-hover-color: #c7d2fe;
+    --link-selected-fg: #818cf8;
+
+    --body-bg: #1e1e2e;
+    --module-bg: #6366f1;
+
+    --button-bg: #6366f1;
+    --button-hover-bg: #4f46e5;
+    --default-button-bg: #6366f1;
+    --default-button-hover-bg: #4f46e5;
+  }
+
+  /* ── Small tweaks not covered by variables ────────────────────────── */
+  #branding h1 { font-weight: 700; }
+  #site-name, #site-name a:link, #site-name a:visited,
+  #branding h1, #branding h1 a:link, #branding h1 a:visited {
+    color: #fff !important;
+    opacity: 1 !important;
+  }
+
+  /* Module header text always white */
+  div.module > h2, div.module > caption { color: #fff; }
+  div.module > h2 a, div.module > h2 span,
+  div.module > caption a { color: #fff !important; }
+</style>
+{% endblock %}

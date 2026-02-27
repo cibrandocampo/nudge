@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Pre-commit hook — runs linters inside the dev Docker containers.
+# Install with: bash scripts/install-hooks.sh
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+COMPOSE="docker compose -f dev/docker-compose.yml"
+
+# ── Check that dev containers are running ────────────────────────────────────
+
+if ! $COMPOSE ps --status running --format '{{.Name}}' 2>/dev/null | grep -q backend; then
+  echo -e "${RED}Pre-commit: dev backend container is not running.${NC}"
+  echo "Start the dev environment first:  docker compose -f dev/docker-compose.yml up -d"
+  exit 1
+fi
+
+if ! $COMPOSE ps --status running --format '{{.Name}}' 2>/dev/null | grep -q frontend; then
+  echo -e "${RED}Pre-commit: dev frontend container is not running.${NC}"
+  echo "Start the dev environment first:  docker compose -f dev/docker-compose.yml up -d"
+  exit 1
+fi
+
+# ── Backend: ruff ────────────────────────────────────────────────────────────
+
+echo "Running ruff check..."
+if ! $COMPOSE exec -T backend ruff check .; then
+  echo -e "${RED}ruff check failed.${NC}"
+  exit 1
+fi
+
+echo "Running ruff format --check..."
+if ! $COMPOSE exec -T backend ruff format --check .; then
+  echo -e "${RED}ruff format failed. Run: docker compose -f dev/docker-compose.yml exec backend ruff format .${NC}"
+  exit 1
+fi
+
+# ── Frontend: prettier ───────────────────────────────────────────────────────
+
+echo "Running prettier --check..."
+if ! $COMPOSE exec -T frontend npx prettier --check src/ 2>/dev/null; then
+  echo -e "${RED}prettier check failed. Run: docker compose -f dev/docker-compose.yml exec frontend npx prettier --write src/${NC}"
+  exit 1
+fi
+
+# ── Frontend: eslint ─────────────────────────────────────────────────────────
+
+echo "Running eslint..."
+if ! $COMPOSE exec -T frontend npx eslint src/ --max-warnings 0 2>/dev/null; then
+  # Retry without --max-warnings (warnings are acceptable)
+  if ! $COMPOSE exec -T frontend npx eslint src/; then
+    echo -e "${RED}eslint failed.${NC}"
+    exit 1
+  fi
+fi
+
+# ── Done ─────────────────────────────────────────────────────────────────────
+
+echo -e "${GREEN}All lint checks passed.${NC}"

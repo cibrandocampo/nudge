@@ -1,0 +1,11 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies from package.json before mounting the source volume
+COPY frontend/package*.json ./
+RUN npm install
+
+# Source code is mounted at runtime via a bind volume.
+# The node_modules anonymous volume prevents the host mount from overwriting it.
+CMD ["npm", "run", "dev", "--", "--host"]

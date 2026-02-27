@@ -1,0 +1,75 @@
+.root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  padding: 1.5rem 1.25rem;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  padding-bottom: 5.5rem;
+}
+
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  z-index: 100;
+}
+
+.link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0 0.6rem;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: color 0.15s;
+  color: var(--c-muted);
+  border-top: 2px solid transparent;
+}
+
+.linkActive {
+  color: var(--c-primary);
+  border-top-color: var(--c-primary);
+}
+
+.linkInner {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-danger);
+}
+
+.navLabel {
+  display: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-top: 0.15rem;
+  letter-spacing: 0.01em;
+}
+
+@media (min-width: 600px) {
+  .navLabel {
+    display: block;
+  }
+}

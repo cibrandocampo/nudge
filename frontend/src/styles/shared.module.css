@@ -1,0 +1,90 @@
+/* ── Buttons ─────────────────────────────────────────────────── */
+
+.disabled {
+  opacity: 0.6;
+}
+
+/* ── Inputs ──────────────────────────────────────────────────── */
+
+.input {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  outline: none;
+  width: 100%;
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-sizing: border-box;
+}
+
+/* ── Card ────────────────────────────────────────────────────── */
+
+.card {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+/* ── Overlay / Modal ─────────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.modalBox {
+  background: var(--c-surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 340px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Typography ──────────────────────────────────────────────── */
+
+.sectionTitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.75rem;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.02em;
+}
+
+.error {
+  color: var(--c-danger);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.muted {
+  color: var(--c-muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* ── Layout helpers ──────────────────────────────────────────── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}

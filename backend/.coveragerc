@@ -1,0 +1,9 @@
+[run]
+source = apps
+omit =
+    */migrations/*
+    */management/commands/generate_vapid_keys.py
+
+[report]
+show_missing = true
+skip_covered = false

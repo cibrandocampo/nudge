@@ -1,0 +1,110 @@
+services:
+
+  db:
+    image: postgres:${DOCKER_POSTGRES_VERSION:-16-alpine}
+    container_name: "${PROJECT_NAME:-nudge}-db"
+    init: true
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nudge_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nudge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  redis:
+    image: redis:${DOCKER_REDIS_VERSION:-7-alpine}
+    container_name: "${PROJECT_NAME:-nudge}-redis"
+    init: true
+    networks:
+      - nudge_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 128m
+    logging: *default-logging
+    restart: unless-stopped
+
+  backend:
+    image: cibrandocampo/nudge-backend:${DOCKER_NUDGE_VERSION:-stable}
+    container_name: "${PROJECT_NAME:-nudge}-backend"
+    init: true
+    command: gunicorn nudge.wsgi:application --bind 0.0.0.0:${BACKEND_PORT:-8000} --workers ${GUNICORN_WORKERS:-2}
+    env_file: .env
+    networks:
+      - nudge_net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${BACKEND_PORT:-8000}/api/health/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    logging: *default-logging
+    restart: unless-stopped
+
+  celery:
+    image: cibrandocampo/nudge-backend:${DOCKER_NUDGE_VERSION:-stable}
+    container_name: "${PROJECT_NAME:-nudge}-celery"
+    init: true
+    command: celery -A nudge worker -B --loglevel=${LOG_LEVEL:-info}
+    env_file: .env
+    networks:
+      - nudge_net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 512m
+    logging: *default-logging
+    restart: unless-stopped
+
+  frontend:
+    image: cibrandocampo/nudge-frontend:${DOCKER_NUDGE_VERSION:-stable}
+    container_name: "${PROJECT_NAME:-nudge}-frontend"
+    init: true
+    ports:
+      - "${NUDGE_HTTP_PORT:-80}:80"
+    networks:
+      - nudge_net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://localhost || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    logging: *default-logging
+    restart: unless-stopped
+
+networks:
+  nudge_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: "none"
+      o: "bind"
+      device: "${DATA_PATH:-./data}"

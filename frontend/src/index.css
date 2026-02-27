@@ -1,0 +1,55 @@
+:root {
+  --c-primary: #6366f1;
+  --c-primary-bg: #eef2ff;
+  --c-text: #111827;
+  --c-text-2: #374151;
+  --c-text-3: #6b7280;
+  --c-muted: #9ca3af;
+  --c-border: #e5e7eb;
+  --c-border-inner: #f3f4f6;
+  --c-border-strong: #d1d5db;
+  --c-bg: #f9fafb;
+  --c-surface: #fff;
+  --c-danger: #ef4444;
+  --c-danger-bg: #fecaca;
+  --c-danger-text: #991b1b;
+  --c-success: #10b981;
+  --c-success-text: #065f46;
+  --c-warning: #f59e0b;
+  --c-warning-text: #92400e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--c-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--c-text);
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: inherit;
+}
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}

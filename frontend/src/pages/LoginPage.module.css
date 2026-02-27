@@ -1,0 +1,51 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--c-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--c-surface);
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  border: 1px solid var(--c-border);
+  text-align: center;
+}
+
+.logo {
+  margin: 0 0 0.35rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.03em;
+}
+
+.tagline {
+  margin: 0 0 2rem;
+  color: var(--c-muted);
+  font-size: 0.875rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.btn {
+  padding: 0.75rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}

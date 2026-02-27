@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install prod requirements + dev-only requirements
+COPY backend/requirements.txt requirements.txt
+COPY dev/requirements.txt requirements.dev.txt
+RUN pip install --no-cache-dir -r requirements.txt -r requirements.dev.txt
+
+# Copy the entrypoint outside /app so volume mounts don't shadow it
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Source code is mounted at runtime via a bind volume — no COPY needed
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
