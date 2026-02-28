@@ -80,20 +80,19 @@ class RoutineViewSet(viewsets.ModelViewSet):
             return Response([])
 
         units = []
-        lots = (
-            routine.stock.lots.filter(quantity__gt=0)
-            .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-        )
+        lots = routine.stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
         for lot in lots:
             lot_number = lot.lot_number or None
             expiry_date = lot.expiry_date.isoformat() if lot.expiry_date else None
             for i in range(1, lot.quantity + 1):
-                units.append({
-                    "lot_id": lot.id,
-                    "lot_number": lot_number,
-                    "expiry_date": expiry_date,
-                    "unit_index": i,
-                })
+                units.append(
+                    {
+                        "lot_id": lot.id,
+                        "lot_number": lot_number,
+                        "expiry_date": expiry_date,
+                        "unit_index": i,
+                    }
+                )
         return Response(units)
 
     @action(detail=True, methods=["post"], url_path="log")
@@ -129,9 +128,7 @@ class RoutineViewSet(viewsets.ModelViewSet):
 
                     # Validate lot_ids belong to this routine's stock
                     lot_ids = [sel["lot_id"] for sel in lot_selections]
-                    valid_ids = set(
-                        routine.stock.lots.filter(id__in=lot_ids).values_list("id", flat=True)
-                    )
+                    valid_ids = set(routine.stock.lots.filter(id__in=lot_ids).values_list("id", flat=True))
                     invalid = set(lot_ids) - valid_ids
                     if invalid:
                         return Response(
@@ -144,17 +141,17 @@ class RoutineViewSet(viewsets.ModelViewSet):
                         qty = sel["quantity"]
                         if qty <= 0:
                             continue
-                        lot = StockLot.objects.select_for_update().get(
-                            id=sel["lot_id"], stock=routine.stock
-                        )
+                        lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=routine.stock)
                         consume = min(lot.quantity, qty)
                         lot.quantity -= consume
                         lot.save(update_fields=["quantity"])
-                        consumed_lots.append({
-                            "lot_number": lot.lot_number or None,
-                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                            "quantity": consume,
-                        })
+                        consumed_lots.append(
+                            {
+                                "lot_number": lot.lot_number or None,
+                                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                                "quantity": consume,
+                            }
+                        )
                 else:
                     # Decrement stock using FEFO (First Expired, First Out)
                     remaining = routine.stock_usage
@@ -169,11 +166,13 @@ class RoutineViewSet(viewsets.ModelViewSet):
                         lot.quantity -= consume
                         lot.save(update_fields=["quantity"])
                         remaining -= consume
-                        consumed_lots.append({
-                            "lot_number": lot.lot_number or None,
-                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                            "quantity": consume,
-                        })
+                        consumed_lots.append(
+                            {
+                                "lot_number": lot.lot_number or None,
+                                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                                "quantity": consume,
+                            }
+                        )
 
                 entry.consumed_lots = consumed_lots
                 entry.save(update_fields=["consumed_lots"])

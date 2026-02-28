@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('routines', '0002_alter_routine_stock_usage'),
+        ("routines", "0002_alter_routine_stock_usage"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='routineentry',
-            name='consumed_lots',
-            field=models.JSONField(blank=True, default=list, help_text='Lots consumed in this entry: [{lot_number, expiry_date, quantity}]'),
+            model_name="routineentry",
+            name="consumed_lots",
+            field=models.JSONField(
+                blank=True, default=list, help_text="Lots consumed in this entry: [{lot_number, expiry_date, quantity}]"
+            ),
         ),
     ]
