@@ -12,18 +12,18 @@
 [![React](https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff)](https://vitejs.dev/)
 [![codecov](https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg)](https://codecov.io/gh/cibrandocampo/nudge)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cibrandocampo/nudge/blob/main/LICENSE)
 
 > A gentle reminder for recurring things.
 
 Nudge is a personal PWA that sends you a quiet push notification when something you do regularly is due again — without you having to think about it.
 
 <p align="center">
-  <img src="docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/>
   &nbsp;&nbsp;
-  <img src="docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/>
   &nbsp;&nbsp;
-  <img src="docs/screenshots/05-inventory.png" width="260" alt="Inventory"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-inventory.png" width="260" alt="Inventory"/>
 </p>
 
 ---
@@ -68,17 +68,17 @@ Anything you do on a schedule, Nudge can track.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/01-login.png" width="260" alt="Login"/><br/><b>Login</b></td>
-    <td align="center"><img src="docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/><br/><b>Dashboard</b></td>
-    <td align="center"><img src="docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" width="260" alt="Login"/><br/><b>Login</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/><br/><b>Dashboard</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/04-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
-    <td align="center"><img src="docs/screenshots/05-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
-    <td align="center"><img src="docs/screenshots/06-history.png" width="260" alt="History"/><br/><b>History</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-history.png" width="260" alt="History"/><br/><b>History</b></td>
   </tr>
   <tr>
-    <td colspan="3" align="center"><img src="docs/screenshots/07-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
+    <td colspan="3" align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
   </tr>
 </table>
 
@@ -108,23 +108,23 @@ docker compose up -d
 
 The app is available at `http://localhost` (port 80 by default, configurable via `NUDGE_HTTP_PORT` in `.env`). Admin panel at `/nudge-admin/`.
 
-For detailed configuration options, see [docs/configuration.md](docs/configuration.md).
+For detailed configuration options, see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md).
 
 ---
 
 ## Development
 
-See [dev/README.md](dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
+See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
 
 ---
 
 ## Documentation
 
-- [Configuration](docs/configuration.md)
-- [Architecture & technical design](docs/ARCHITECTURE.md)
-- [Development setup](dev/README.md)
-- [Backup & restore](docs/backup.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Configuration](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md)
+- [Architecture & technical design](https://github.com/cibrandocampo/nudge/blob/main/docs/ARCHITECTURE.md)
+- [Development setup](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md)
+- [Backup & restore](https://github.com/cibrandocampo/nudge/blob/main/docs/backup.md)
+- [Troubleshooting](https://github.com/cibrandocampo/nudge/blob/main/docs/troubleshooting.md)
 
 ---
 
@@ -144,10 +144,12 @@ Images are also rebuilt weekly to pick up base-image and dependency security pat
 
 ## Built with Claude Code
 
-This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills are provided in `.claude/skills/` to maintain project conventions. See [dev/README.md](dev/README.md#claude-code) for details.
+This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills are provided in `.claude/skills/` to maintain project conventions. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md#claude-code) for details.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](https://github.com/cibrandocampo/nudge/blob/main/LICENSE) © 2026 Cibrán Docampo Piñeiro.
+
+You are free to **use**, **modify**, **distribute**, and **self-host** this software — personally or commercially — as long as the original copyright notice is preserved. No warranty is provided.
