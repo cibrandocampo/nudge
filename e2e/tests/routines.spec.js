@@ -25,7 +25,7 @@ test.describe('Routines', () => {
     // Should redirect to routine detail
     await expect(page).toHaveURL(/\/routines\/\d+$/)
     await expect(page.getByText(ROUTINE_NAME)).toBeVisible()
-    await expect(page.getByText('Every 1 week')).toBeVisible()
+    await expect(page.getByText('Every week')).toBeVisible()
   })
 
   test('edit a routine', async ({ page }) => {

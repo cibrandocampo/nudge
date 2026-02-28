@@ -47,21 +47,43 @@ Run a specific test file:
 docker compose -f dev/docker-compose.yml exec frontend npx vitest run src/pages/__tests__/SettingsPage.test.jsx
 ```
 
-## E2E tests (Playwright — runs on host)
+## E2E tests (Playwright — Docker, NOT host)
 
-Playwright is the only thing that runs on the host (needs a real browser).
-Requires credentials and the dev environment running:
+Playwright runs in its own Docker image (`e2e/Dockerfile`). Use `--network host` so
+the container can reach `localhost:5173` (frontend) and `localhost:8000` (backend).
+Requires the full dev stack running first.
 
+**Build image** (only once, or after changing e2e/package.json):
 ```bash
-cd e2e && E2E_USERNAME=admin E2E_PASSWORD=<password> npx playwright test
+docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
 ```
 
-Run a specific spec:
+**Run all tests:**
 ```bash
-cd e2e && E2E_USERNAME=admin E2E_PASSWORD=<password> npx playwright test settings.spec.js
+docker run --rm --network host \
+  -e E2E_USERNAME=admin \
+  -e E2E_PASSWORD=<password> \
+  -e BASE_URL=http://localhost:5173 \
+  nudge-e2e npx playwright test
+```
+
+**Run a specific spec:**
+```bash
+docker run --rm --network host \
+  -e E2E_USERNAME=admin \
+  -e E2E_PASSWORD=<password> \
+  -e BASE_URL=http://localhost:5173 \
+  nudge-e2e npx playwright test tests/dashboard.spec.js
 ```
 
 The password is in `.env` as `ADMIN_PASSWORD`.
+
+**Known pre-existing failures (not our code):**
+- `admin login with correct credentials` — test hardcodes password `nudge-admin-2026`
+- `admin shows nudge models` — depends on admin login
+- `create a routine with preset interval` — expects `"Every 1 week"` but i18n returns `"Every week"`
+- `add a lot to a stock item` / `delete a lot` — expects `"3 ud."` but English locale returns `"3 u."`
+- `sign out clears session` — occasionally flaky (30s timeout)
 
 ## Verification workflow
 

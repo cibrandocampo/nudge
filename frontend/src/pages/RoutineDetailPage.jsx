@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { formatRelativeTime, getLocale } from '../utils/time'
 import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
+import LotSelectionModal from '../components/LotSelectionModal'
 import shared from '../styles/shared.module.css'
 import s from './RoutineDetailPage.module.css'
 
@@ -20,6 +21,7 @@ export default function RoutineDetailPage() {
   const [error, setError] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [actionError, setActionError] = useState(null)
+  const [lotModal, setLotModal] = useState(null) // null | { lots }
 
   const fetchData = async () => {
     const [rRes, eRes] = await Promise.all([api.get(`/routines/${id}/`), api.get(`/routines/${id}/entries/`)])
@@ -45,10 +47,41 @@ export default function RoutineDetailPage() {
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const markDone = async () => {
+    if (routine?.requires_lot_selection) {
+      setCompleting(true)
+      setActionError(null)
+      try {
+        const res = await api.get(`/routines/${id}/lots-for-selection/`)
+        if (!res.ok) throw new Error()
+        const lots = await res.json()
+        setLotModal({ lots })
+      } catch {
+        setActionError(t('common.actionError'))
+      } finally {
+        setCompleting(false)
+      }
+      return
+    }
+
     setCompleting(true)
     setActionError(null)
     try {
       const res = await api.post(`/routines/${id}/log/`, {})
+      if (!res.ok) throw new Error()
+      await fetchData()
+    } catch {
+      setActionError(t('common.actionError'))
+    } finally {
+      setCompleting(false)
+    }
+  }
+
+  const handleLotConfirm = async (lotSelections) => {
+    setLotModal(null)
+    setCompleting(true)
+    setActionError(null)
+    try {
+      const res = await api.post(`/routines/${id}/log/`, { lot_selections: lotSelections })
       if (!res.ok) throw new Error()
       await fetchData()
     } catch {
@@ -166,6 +199,14 @@ export default function RoutineDetailPage() {
           onConfirm={confirmDelete}
           onCancel={() => setShowDeleteConfirm(false)}
           confirmLabel={t('routine.detail.delete')}
+        />
+      )}
+      {lotModal && (
+        <LotSelectionModal
+          routine={routine}
+          lots={lotModal.lots}
+          onConfirm={handleLotConfirm}
+          onCancel={() => setLotModal(null)}
         />
       )}
     </div>

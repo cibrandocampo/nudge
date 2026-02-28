@@ -639,6 +639,177 @@ class RoutineViewSetTest(APITestCase):
         response = self.client.post(f"/api/routines/{r.id}/log/", {})
         self.assertEqual(response.status_code, 201)
 
+    # ── requires_lot_selection ────────────────────────────────────────────────
+
+    def test_requires_lot_selection_true(self):
+        """Stock with at least one lot with lot_number → True."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, lot_number="RTEW32")
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/")
+        self.assertTrue(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_false_no_lot_number(self):
+        """All lots without lot_number → False."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_false_no_stock(self):
+        """Routine without stock → False."""
+        r = make_routine(self.user, stock=None)
+        response = self.client.get(f"/api/routines/{r.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_false_zero_quantity_lot(self):
+        """Lot with lot_number but quantity=0 → False."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=0, lot_number="RTEW32")
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+    # ── lots_for_selection action ─────────────────────────────────────────────
+
+    def test_lots_for_selection_returns_expanded_units(self):
+        """Each unit in a lot becomes its own entry with unit_index."""
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=2, lot_number="LOT-A")
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]["lot_id"], lot.id)
+        self.assertEqual(data[0]["lot_number"], "LOT-A")
+        self.assertEqual(data[0]["unit_index"], 1)
+        self.assertEqual(data[1]["unit_index"], 2)
+
+    def test_lots_for_selection_fefo_order(self):
+        """Lots are returned in FEFO order (sooner expiry first)."""
+        stock = make_stock(self.user)
+        late = make_lot(stock, quantity=1, expiry_date=date.today() + timedelta(days=120), lot_number="LATE")
+        early = make_lot(stock, quantity=1, expiry_date=date.today() + timedelta(days=30), lot_number="EARLY")
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
+        data = response.json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]["lot_id"], early.id)
+        self.assertEqual(data[1]["lot_id"], late.id)
+
+    def test_lots_for_selection_excludes_zero_quantity(self):
+        """Lots with quantity=0 are excluded."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=0, lot_number="EMPTY")
+        make_lot(stock, quantity=3, lot_number="FULL")
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
+        data = response.json()
+        self.assertEqual(len(data), 3)
+        self.assertTrue(all(u["lot_number"] == "FULL" for u in data))
+
+    def test_lots_for_selection_no_stock_returns_empty(self):
+        """Routine without stock → empty list."""
+        r = make_routine(self.user, stock=None)
+        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_lots_for_selection_no_lot_number_returns_null(self):
+        """Lots without lot_number are served with lot_number: null."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=1)
+        r = make_routine(self.user, stock=stock)
+        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
+        data = response.json()
+        self.assertIsNone(data[0]["lot_number"])
+
+    # ── log with lot_selections ───────────────────────────────────────────────
+
+    def test_log_with_lot_selections(self):
+        """Specified lots are decremented by given quantities."""
+        stock = make_stock(self.user)
+        lot1 = make_lot(stock, quantity=5, lot_number="LOT-1")
+        lot2 = make_lot(stock, quantity=5, lot_number="LOT-2")
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 3
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": lot1.id, "quantity": 2}, {"lot_id": lot2.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        lot1.refresh_from_db()
+        lot2.refresh_from_db()
+        self.assertEqual(lot1.quantity, 3)
+        self.assertEqual(lot2.quantity, 4)
+
+    def test_log_with_lot_selections_stores_consumed_lots(self):
+        """consumed_lots is saved with lot detail on manual selection."""
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5, lot_number="RTEW32", expiry_date=date.today() + timedelta(days=60))
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 2
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": lot.id, "quantity": 2}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["consumed_lots"]), 1)
+        self.assertEqual(data["consumed_lots"][0]["lot_number"], "RTEW32")
+        self.assertEqual(data["consumed_lots"][0]["quantity"], 2)
+
+    def test_log_lot_selections_invalid_sum(self):
+        """Sum of lot_selections quantities != stock_usage → 400."""
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=10, lot_number="LOT-1")
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 3
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": lot.id, "quantity": 2}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("lot_selections", response.json())
+
+    def test_log_lot_selection_wrong_stock(self):
+        """lot_id belonging to a different stock → 400."""
+        stock = make_stock(self.user)
+        other_stock = make_stock(self.user, name="OtherStock")
+        other_lot = make_lot(other_stock, quantity=10, lot_number="OTHER")
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 1
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": other_lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("lot_selections", response.json())
+
+    def test_log_fefo_stores_consumed_lots(self):
+        """FEFO auto-consumption also saves consumed_lots for traceability."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, lot_number="LOT-1", expiry_date=date.today() + timedelta(days=30))
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 2
+        r.save()
+        response = self.client.post(f"/api/routines/{r.id}/log/", {})
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["consumed_lots"]), 1)
+        self.assertEqual(data["consumed_lots"][0]["lot_number"], "LOT-1")
+        self.assertEqual(data["consumed_lots"][0]["quantity"], 2)
+
     # ── entries action ────────────────────────────────────────────────────────
 
     def test_entries_returns_list(self):
