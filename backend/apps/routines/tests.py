@@ -799,7 +799,7 @@ class RoutineViewSetTest(APITestCase):
     def test_log_fefo_stores_consumed_lots(self):
         """FEFO auto-consumption also saves consumed_lots for traceability."""
         stock = make_stock(self.user)
-        lot = make_lot(stock, quantity=5, lot_number="LOT-1", expiry_date=date.today() + timedelta(days=30))
+        make_lot(stock, quantity=5, lot_number="LOT-1", expiry_date=date.today() + timedelta(days=30))
         r = make_routine(self.user, stock=stock)
         r.stock_usage = 2
         r.save()

@@ -94,6 +94,99 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
+  it('shows lot selection modal when routine requires_lot_selection', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 1,
+      requires_lot_selection: true,
+    }
+    server.use(http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })))
+
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Done'))
+
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+  })
+
+  it('confirms lot selection and calls log with lot_selections', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 1,
+      requires_lot_selection: true,
+    }
+    let logBody = null
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    // Select one lot and confirm
+    await user.click(screen.getByText('LOT-A (1)'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    expect(logBody.lot_selections).toEqual([{ lot_id: 1, quantity: 1 }])
+  })
+
+  it('cancels lot selection modal without logging', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 1,
+      requires_lot_selection: true,
+    }
+    let logCalled = false
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Cancel'))
+
+    expect(logCalled).toBe(false)
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+
   it('marks a routine done and refreshes', async () => {
     const dueRoutine = {
       id: 1,
