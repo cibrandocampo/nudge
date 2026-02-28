@@ -42,7 +42,7 @@ test.describe('Inventory', () => {
     await card.getByRole('button', { name: /add batch/i }).last().click()
 
     // Total quantity should now show 5
-    await expect(card.getByText('5 ud.')).toBeVisible()
+    await expect(card.getByText('5 u.')).toBeVisible()
   })
 
   test('delete a stock item', async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe('Inventory', () => {
     await card.getByRole('button', { name: /add batch/i }).click()
     await card.locator('input[type="number"]').fill('3')
     await card.getByRole('button', { name: /add batch/i }).last().click()
-    await expect(card.getByText('3 ud.')).toBeVisible()
+    await expect(card.getByText('3 u.')).toBeVisible()
 
     // Delete the lot using the 🗑 button
     await card.getByTitle('Delete').last().click()

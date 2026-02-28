@@ -69,14 +69,43 @@ class RoutineViewSet(viewsets.ModelViewSet):
         logger.info("Routine %s deleted by user %s.", instance.id, self.request.user.id)
         super().perform_destroy(instance)
 
+    @action(detail=True, methods=["get"], url_path="lots-for-selection")
+    def lots_for_selection(self, request, pk=None):
+        """
+        Return the available lots expanded into individual units (FEFO order).
+        Used to populate the lot selection modal on the frontend.
+        """
+        routine = self.get_object()
+        if not routine.stock:
+            return Response([])
+
+        units = []
+        lots = (
+            routine.stock.lots.filter(quantity__gt=0)
+            .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+        )
+        for lot in lots:
+            lot_number = lot.lot_number or None
+            expiry_date = lot.expiry_date.isoformat() if lot.expiry_date else None
+            for i in range(1, lot.quantity + 1):
+                units.append({
+                    "lot_id": lot.id,
+                    "lot_number": lot_number,
+                    "expiry_date": expiry_date,
+                    "unit_index": i,
+                })
+        return Response(units)
+
     @action(detail=True, methods=["post"], url_path="log")
     def log(self, request, pk=None):
         """
         Log a routine execution (create a RoutineEntry).
         Decrements stock quantity in FEFO order if a stock item is linked.
+        Accepts optional lot_selections to specify which lots to consume.
         Resets notification state for this cycle.
         """
         routine = self.get_object()
+        lot_selections = request.data.get("lot_selections")
 
         with transaction.atomic():
             entry = RoutineEntry.objects.create(
@@ -86,20 +115,68 @@ class RoutineViewSet(viewsets.ModelViewSet):
             # Invalidate cached last_entry so subsequent calls see the new entry
             routine._last_entry_cache = entry
 
-            # Decrement stock using FEFO (First Expired, First Out)
             if routine.stock:
-                remaining = routine.stock_usage
-                for lot in (
-                    routine.stock.lots.select_for_update()
-                    .filter(quantity__gt=0)
-                    .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-                ):
-                    if remaining <= 0:
-                        break
-                    consume = min(lot.quantity, remaining)
-                    lot.quantity -= consume
-                    lot.save(update_fields=["quantity"])
-                    remaining -= consume
+                consumed_lots = []
+
+                if lot_selections is not None:
+                    # Validate total quantity matches stock_usage
+                    total = sum(sel.get("quantity", 0) for sel in lot_selections)
+                    if total != routine.stock_usage:
+                        return Response(
+                            {"lot_selections": "Total quantity must equal stock_usage."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    # Validate lot_ids belong to this routine's stock
+                    lot_ids = [sel["lot_id"] for sel in lot_selections]
+                    valid_ids = set(
+                        routine.stock.lots.filter(id__in=lot_ids).values_list("id", flat=True)
+                    )
+                    invalid = set(lot_ids) - valid_ids
+                    if invalid:
+                        return Response(
+                            {"lot_selections": "One or more lot_ids are invalid."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    # Decrement specified lots
+                    for sel in lot_selections:
+                        qty = sel["quantity"]
+                        if qty <= 0:
+                            continue
+                        lot = StockLot.objects.select_for_update().get(
+                            id=sel["lot_id"], stock=routine.stock
+                        )
+                        consume = min(lot.quantity, qty)
+                        lot.quantity -= consume
+                        lot.save(update_fields=["quantity"])
+                        consumed_lots.append({
+                            "lot_number": lot.lot_number or None,
+                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                            "quantity": consume,
+                        })
+                else:
+                    # Decrement stock using FEFO (First Expired, First Out)
+                    remaining = routine.stock_usage
+                    for lot in (
+                        routine.stock.lots.select_for_update()
+                        .filter(quantity__gt=0)
+                        .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+                    ):
+                        if remaining <= 0:
+                            break
+                        consume = min(lot.quantity, remaining)
+                        lot.quantity -= consume
+                        lot.save(update_fields=["quantity"])
+                        remaining -= consume
+                        consumed_lots.append({
+                            "lot_number": lot.lot_number or None,
+                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                            "quantity": consume,
+                        })
+
+                entry.consumed_lots = consumed_lots
+                entry.save(update_fields=["consumed_lots"])
                 routine.stock.save(update_fields=["updated_at"])
 
             # Reset notification state so the worker doesn't send stale reminders

@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test'
 
+const ADMIN_PASSWORD = process.env.E2E_PASSWORD ?? ''
+
 test.describe('Django Admin', () => {
   test('admin login page loads with CSS', async ({ page }) => {
     await page.goto('/admin/')
@@ -20,7 +22,7 @@ test.describe('Django Admin', () => {
   test('admin login with correct credentials', async ({ page }) => {
     await page.goto('/admin/')
     await page.getByLabel('Username:').fill('admin')
-    await page.getByLabel('Password:').fill('nudge-admin-2026')
+    await page.getByLabel('Password:').fill(ADMIN_PASSWORD)
     await page.getByRole('button', { name: 'Log in' }).click()
     await expect(page).toHaveURL('/admin/')
     await expect(page.getByText(/site administration/i)).toBeVisible()
@@ -29,7 +31,7 @@ test.describe('Django Admin', () => {
   test('admin shows nudge models', async ({ page }) => {
     await page.goto('/admin/')
     await page.getByLabel('Username:').fill('admin')
-    await page.getByLabel('Password:').fill('nudge-admin-2026')
+    await page.getByLabel('Password:').fill(ADMIN_PASSWORD)
     await page.getByRole('button', { name: 'Log in' }).click()
     await expect(page.getByRole('link', { name: 'Routines' }).first()).toBeVisible()
     await expect(page.getByRole('link', { name: 'Users' }).first()).toBeVisible()
