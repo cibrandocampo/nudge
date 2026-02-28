@@ -31,6 +31,8 @@ test.describe('Auth', () => {
   test('sign out clears session', async ({ page }) => {
     await login(page)
     await page.goto('/settings')
+    // Sign out is inside the header dropdown — open via the user button (has ▾ chevron)
+    await page.getByRole('button', { name: /▾/ }).click()
     await page.getByRole('button', { name: 'Sign out' }).click()
     await expect(page).toHaveURL('/login')
     await page.goto('/')

@@ -143,6 +143,67 @@ describe('RoutineDetailPage', () => {
     expect(screen.getByText('View all →')).toBeInTheDocument()
   })
 
+  it('shows lot selection modal when routine requires_lot_selection', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+  })
+
+  it('confirms lot selection and calls log with lot_selections', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+    )
+    let logBody = null
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('LOT-A (1)'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    expect(logBody.lot_selections).toEqual([{ lot_id: 1, quantity: 1 }])
+  })
+
+  it('cancels lot selection modal without logging', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+    )
+    let logCalled = false
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Cancel'))
+
+    expect(logCalled).toBe(false)
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+
   it('renders back and edit links', async () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('← Back')).toBeInTheDocument())

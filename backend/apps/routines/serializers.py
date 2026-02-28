@@ -66,6 +66,7 @@ class RoutineSerializer(serializers.ModelSerializer):
     next_due_at = serializers.SerializerMethodField()
     is_due = serializers.SerializerMethodField()
     hours_until_due = serializers.SerializerMethodField()
+    requires_lot_selection = serializers.SerializerMethodField()
 
     class Meta:
         model = Routine
@@ -85,8 +86,9 @@ class RoutineSerializer(serializers.ModelSerializer):
             "next_due_at",
             "is_due",
             "hours_until_due",
+            "requires_lot_selection",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "stock_name", "stock_quantity"]
+        read_only_fields = ["id", "created_at", "updated_at", "stock_name", "stock_quantity", "requires_lot_selection"]
 
     def validate_stock(self, value):
         # Ensure the stock item belongs to the requesting user
@@ -112,11 +114,16 @@ class RoutineSerializer(serializers.ModelSerializer):
         delta = (due - timezone.now()).total_seconds() / 3600
         return round(delta, 1)
 
+    def get_requires_lot_selection(self, obj):
+        if not obj.stock_id:
+            return False
+        return obj.stock.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
+
 
 class RoutineEntrySerializer(serializers.ModelSerializer):
     routine_name = serializers.CharField(source="routine.name", read_only=True)
 
     class Meta:
         model = RoutineEntry
-        fields = ["id", "routine", "routine_name", "created_at", "notes"]
-        read_only_fields = ["id", "routine", "created_at"]
+        fields = ["id", "routine", "routine_name", "created_at", "notes", "consumed_lots"]
+        read_only_fields = ["id", "routine", "created_at", "consumed_lots"]

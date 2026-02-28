@@ -38,6 +38,14 @@ export const handlers = [
 
   http.get(`${BASE}/routines/:id/entries/`, () => HttpResponse.json([])),
 
+  http.get(`${BASE}/routines/:id/lots-for-selection/`, () =>
+    HttpResponse.json([
+      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 1 },
+      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 2 },
+      { lot_id: 2, lot_number: null, expiry_date: null, unit_index: 1 },
+    ]),
+  ),
+
   http.post(`${BASE}/routines/:id/log/`, () => HttpResponse.json({ id: 1 }, { status: 201 })),
 
   http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),

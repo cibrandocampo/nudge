@@ -136,6 +136,11 @@ class RoutineEntry(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     notes = models.CharField(max_length=1000, blank=True)
+    consumed_lots = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lots consumed in this entry: [{lot_number, expiry_date, quantity}]",
+    )
 
     class Meta:
         ordering = ["-created_at"]

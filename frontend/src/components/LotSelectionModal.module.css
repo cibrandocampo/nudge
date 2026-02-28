@@ -1,0 +1,121 @@
+.box {
+  background: var(--c-surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 0 0 1rem;
+  font-size: 0.825rem;
+  color: var(--c-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.item:hover {
+  border-color: var(--c-accent, #4f7ef8);
+}
+
+.itemSelected {
+  border-color: var(--c-accent, #4f7ef8);
+  background: color-mix(in srgb, var(--c-accent, #4f7ef8) 8%, transparent);
+}
+
+.indicator {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1.5px solid var(--c-border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--c-accent, #4f7ef8);
+  flex-shrink: 0;
+}
+
+.itemSelected .indicator {
+  border-color: var(--c-accent, #4f7ef8);
+  background: var(--c-accent, #4f7ef8);
+  color: #fff;
+}
+
+.label {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--c-text);
+}
+
+.expiry {
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+
+.error {
+  color: var(--c-danger);
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.cancelBtn {
+  padding: 0.6rem 1.2rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.confirmBtn {
+  padding: 0.6rem 1.2rem;
+  background: var(--c-accent, #4f7ef8);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
