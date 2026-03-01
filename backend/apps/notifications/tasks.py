@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from apps.routines.models import Routine
+from apps.routines.models import Routine, RoutineEntry
 
 from .models import NotificationState
 from .push import notify_daily_heads_up, notify_due, notify_reminder
@@ -34,8 +34,26 @@ def check_notifications():
     User = get_user_model()
     now_utc = timezone.now()
 
-    users = User.objects.filter(is_active=True).prefetch_related(
-        Prefetch("routines", queryset=Routine.objects.filter(is_active=True).select_related("stock")),
+    users = (
+        User.objects.filter(
+            is_active=True,
+            push_subscriptions__isnull=False,
+        )
+        .distinct()
+        .prefetch_related(
+            Prefetch(
+                "routines",
+                queryset=Routine.objects.filter(is_active=True)
+                .select_related("stock")
+                .prefetch_related(
+                    Prefetch(
+                        "entries",
+                        queryset=RoutineEntry.objects.order_by("-created_at"),
+                        to_attr="_prefetched_entries",
+                    )
+                ),
+            ),
+        )
     )
 
     for user in users:
@@ -101,8 +119,8 @@ def _check_daily_heads_up(user, now_utc, now_local):
         # Lock all notification states for due routines
         states = {r.id: _get_or_create_state(r, lock=True) for r in due_routines}
 
-        # Skip if we already sent the daily notification for all due routines today
-        already_sent = all(states[r.id].last_daily_notification == today_local for r in due_routines)
+        # Skip if we already sent the daily notification for any due routine today
+        already_sent = any(states[r.id].last_daily_notification == today_local for r in due_routines)
         if already_sent:
             return
 
@@ -164,7 +182,10 @@ def _check_reminder(routine, now_utc):
             return
 
         next_due = routine.next_due_at()
-        hours_overdue = round((now_utc - next_due).total_seconds() / 3600) if next_due else 0
+        if next_due:
+            hours_overdue = round((now_utc - next_due).total_seconds() / 3600)
+        else:
+            hours_overdue = round((now_utc - state.last_due_notification).total_seconds() / 3600)
 
         notify_reminder(routine, hours_overdue=hours_overdue)
         logger.info(

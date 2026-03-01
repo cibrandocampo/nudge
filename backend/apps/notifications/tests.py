@@ -26,6 +26,7 @@ from .tasks import (
     _check_reminder,
     _get_or_create_state,
     _is_due_today,
+    check_notifications,
 )
 
 User = get_user_model()
@@ -510,6 +511,25 @@ class CheckDailyHeadsUpTest(TestCase):
             _check_daily_heads_up(self.user, now, now)
             mock_notify.assert_not_called()
 
+    def test_does_not_send_twice_when_new_routine_enters_due_state(self):
+        """
+        Regression test for Fix 5: if a second Celery run fires within the window
+        and a new routine became due, the daily notification must NOT be sent again.
+
+        Scenario: first run sent for r1 (marked today). Second run finds r1 + r2 due.
+        Because r1 is already marked today (any() is True), no second send occurs.
+        """
+        r1 = make_routine(self.user, name="R1", interval_hours=1)
+        make_routine(self.user, name="R2", interval_hours=1)
+        now = self._now_at(8, 30)
+        # r1 was already notified in the first run
+        NotificationState.objects.create(routine=r1, last_daily_notification=now.date())
+        # r2 has no state yet (new)
+
+        with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
+            _check_daily_heads_up(self.user, now, now)
+            mock_notify.assert_not_called()
+
 
 class CheckDueNotificationTest(TestCase):
     def setUp(self):
@@ -669,6 +689,21 @@ class CheckReminderTest(TestCase):
             _, kwargs = mock_notify.call_args
             self.assertEqual(kwargs["hours_overdue"], 4)
 
+    def test_hours_overdue_positive_for_never_logged_routine(self):
+        """Never-logged routine should report hours > 0, not 0."""
+        routine = make_routine(self.user, interval_hours=1)
+        # No entries — routine was never logged
+        due_sent_at = timezone.now() - timedelta(hours=9)
+        NotificationState.objects.create(
+            routine=routine,
+            last_due_notification=due_sent_at,
+        )
+        now = timezone.now()
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(routine, now)
+            _, kwargs = mock_notify.call_args
+            self.assertGreater(kwargs["hours_overdue"], 0)
+
 
 # ── check_notifications Celery task ──────────────────────────────────────────
 
@@ -677,8 +712,6 @@ class CheckNotificationsTaskTest(TestCase):
     """Integration-style test for the main Celery task."""
 
     def test_invalid_timezone_skips_user_without_error(self):
-        from .tasks import check_notifications
-
         user = make_user(username="badtz")
         # Force invalid timezone bypassing model validation
         User.objects.filter(pk=user.pk).update(timezone="Not/Valid")
@@ -686,8 +719,6 @@ class CheckNotificationsTaskTest(TestCase):
         check_notifications()
 
     def test_processes_active_users(self):
-        from .tasks import check_notifications
-
         user = make_user(username="active")
         make_routine(user, interval_hours=1)
         # Should not raise; patches avoid actual push sends
@@ -699,14 +730,34 @@ class CheckNotificationsTaskTest(TestCase):
             check_notifications()
 
     def test_skips_inactive_users(self):
-        from .tasks import check_notifications
-
         user = make_user(username="inactive")
         User.objects.filter(pk=user.pk).update(is_active=False)
         make_routine(user, interval_hours=1)
         with patch("apps.notifications.tasks.notify_due") as mock_due:
             check_notifications()
             mock_due.assert_not_called()
+
+    def test_skips_users_with_no_push_subscriptions(self):
+        """Users without push subscriptions should be excluded from processing."""
+        user = make_user(username="no_sub")
+        make_routine(user, interval_hours=1)  # overdue → would trigger notify_due
+        # No subscription created for this user
+        with patch("apps.notifications.tasks.notify_due") as mock_due:
+            check_notifications()
+            mock_due.assert_not_called()
+
+    def test_processes_users_with_push_subscriptions(self):
+        """Users with push subscriptions should be processed."""
+        user = make_user(username="with_sub")
+        make_routine(user, interval_hours=1)  # never logged → overdue
+        make_subscription(user)
+        with (
+            patch("apps.notifications.tasks.notify_due") as mock_due,
+            patch("apps.notifications.tasks.notify_daily_heads_up"),
+            patch("apps.notifications.tasks.notify_reminder"),
+        ):
+            check_notifications()
+            mock_due.assert_called_once()
 
 
 # ── Push message i18n ─────────────────────────────────────────────────────────
