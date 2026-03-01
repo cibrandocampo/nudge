@@ -86,29 +86,94 @@ Anything you do on a schedule, Nudge can track.
 
 ## Quick start (self-hosted)
 
+### 1. Download the files
+
 ```bash
-# 1. Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/.env.example
+cp .env.example .env
+```
 
-# 2. Create .env file with your settings
-cat > .env << 'EOF'
-POSTGRES_PASSWORD=your-db-password
-DJANGO_SECRET_KEY=your-secret-key
-ADMIN_USERNAME=admin
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your-admin-password
-VAPID_PRIVATE_KEY=your-vapid-private-key
-VAPID_PUBLIC_KEY=your-vapid-public-key
-EOF
+### 2. Generate the required secrets
 
-# 3. Start
+**Django secret key**
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+Paste the output into `DJANGO_SECRET_KEY` in `.env`.
+
+**VAPID keys** (required for push notifications)
+
+```bash
+pip install py-vapid
+vapid --gen
+vapid --applicationServerKey
+```
+
+From the output:
+- `Application Server Key` → `VAPID_PUBLIC_KEY` and `VITE_VAPID_PUBLIC_KEY`
+- `Private key` → `VAPID_PRIVATE_KEY`
+
+> If you don't have Python locally, run this inside any Docker container that has Python (`docker exec -it <container> sh`). The `.pem` files created by `vapid --gen` are only needed to recover the keys later — you do not need to keep them on the server.
+
+**Passwords**
+
+Choose a strong random string for `POSTGRES_PASSWORD` and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD`.
+
+### 3. Configure your domain
+
+Edit `.env` and set:
+
+```env
+DJANGO_ALLOWED_HOSTS=nudge.example.com,localhost
+CORS_ALLOWED_ORIGINS=https://nudge.example.com
+VITE_API_BASE_URL=https://nudge.example.com/api
+```
+
+> `localhost` must always be present in `DJANGO_ALLOWED_HOSTS` — the Docker healthcheck contacts the backend directly on `localhost:8000` and Django would reject the request otherwise.
+
+> If you need to access the app by IP during initial setup (before DNS/reverse proxy is ready), add that IP too: `DJANGO_ALLOWED_HOSTS=nudge.example.com,localhost,192.168.1.10`.
+
+### 4. Reverse proxy and HTTPS
+
+The frontend container is the only one that exposes a port (default `80`, or whatever you set in `NUDGE_HTTP_PORT`). The backend, database, and Redis are internal — never exposed directly.
+
+For a public deployment, put a reverse proxy in front (nginx, Traefik, Caddy, Synology reverse proxy, etc.) to terminate TLS and forward traffic to `NUDGE_HTTP_PORT`. Set `NUDGE_HTTP_PORT` to a free internal port (e.g. `8080`) if port 80 is already in use on the host.
+
+### 5. Start
+
+```bash
 mkdir -p data
 docker compose up -d
 ```
 
-The app is available at `http://localhost` (port 80 by default, configurable via `NUDGE_HTTP_PORT` in `.env`). Admin panel at `/nudge-admin/`.
+The app is available at the configured port. Admin panel at `/nudge-admin/`.
 
-For detailed configuration options, see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md).
+For all configuration options, see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md).
+
+---
+
+## Install as an app (PWA)
+
+Nudge is a Progressive Web App — it can be installed on your home screen and works like a native app, with push notifications included. No app store required.
+
+**Android** (Chrome, Edge, Samsung Internet)
+
+1. Open Nudge in your browser
+2. Tap the browser menu (three dots)
+3. Tap **Add to Home screen** (or **Install app**)
+4. Confirm — the Nudge icon will appear on your home screen
+
+**iOS** (Safari only — Chrome and Firefox on iOS do not support PWA installation)
+
+1. Open Nudge in **Safari**
+2. Tap the **Share** button (the square with an arrow pointing up)
+3. Scroll down and tap **Add to Home Screen**
+4. Tap **Add** to confirm
+
+Once installed, open Nudge from the home screen icon and enable push notifications from the Settings page.
 
 ---
 

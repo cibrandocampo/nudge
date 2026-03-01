@@ -226,6 +226,9 @@ backend/staticfiles/
 # ── Internal task docs ───────────────────────────
 docs/tasks/
 
+# ── Local deployment configs ─────────────────────
+deploy/
+
 # ── OS ───────────────────────────────────────────
 .DS_Store
 .DS_Store?
