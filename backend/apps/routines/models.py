@@ -134,7 +134,7 @@ class RoutineEntry(models.Model):
         on_delete=models.CASCADE,
         related_name="entries",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
     notes = models.CharField(max_length=1000, blank=True)
     consumed_lots = models.JSONField(
         default=list,
