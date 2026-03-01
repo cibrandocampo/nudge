@@ -68,6 +68,9 @@ class RoutineSerializer(serializers.ModelSerializer):
     hours_until_due = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
 
+    # Write-only: backdates the first entry so the routine isn't immediately overdue
+    last_done_at = serializers.DateTimeField(write_only=True, required=False, allow_null=True)
+
     class Meta:
         model = Routine
         fields = [
@@ -87,6 +90,7 @@ class RoutineSerializer(serializers.ModelSerializer):
             "is_due",
             "hours_until_due",
             "requires_lot_selection",
+            "last_done_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "stock_name", "stock_quantity", "requires_lot_selection"]
 
@@ -96,6 +100,18 @@ class RoutineSerializer(serializers.ModelSerializer):
         if value and request and value.user != request.user:
             raise serializers.ValidationError("Invalid stock item.")
         return value
+
+    def validate_last_done_at(self, value):
+        if value and value > timezone.now():
+            raise serializers.ValidationError("Cannot be in the future.")
+        return value
+
+    def create(self, validated_data):
+        last_done_at = validated_data.pop("last_done_at", None)
+        routine = super().create(validated_data)
+        if last_done_at:
+            RoutineEntry.objects.create(routine=routine, created_at=last_done_at)
+        return routine
 
     def get_last_entry_at(self, obj):
         last = obj.last_entry()
