@@ -153,6 +153,12 @@ The app is available at the configured port. Admin panel at `/nudge-admin/`.
 
 For all configuration options, see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md).
 
+### Logs
+
+All containers write to stdout and use Docker's default `json-file` logging driver, so tools like **Portainer**, **Synology Container Manager**, **Dozzle**, or plain `docker logs` work out of the box.
+
+To cap disk usage, configure log rotation once at the Docker daemon level (`/etc/docker/daemon.json`) instead of per-container — see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#logging) for details.
+
 ---
 
 ## Install as an app (PWA)
