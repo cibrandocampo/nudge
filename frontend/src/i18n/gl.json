@@ -135,6 +135,8 @@
   "common.unit": "ud.",
   "common.error": "Erro ao cargar os datos. Tenta recargar a páxina.",
   "common.actionError": "Algo saíu mal. Téntao de novo.",
+  "common.showPassword": "Mostrar contrasinal",
+  "common.hidePassword": "Ocultar contrasinal",
   "common.cancel": "Cancelar",
   "common.confirm": "Confirmar",
   "common.back": "← Atrás",

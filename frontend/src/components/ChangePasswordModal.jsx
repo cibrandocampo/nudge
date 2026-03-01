@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import PasswordInput from './PasswordInput'
 import shared from '../styles/shared.module.css'
 import s from './Header.module.css'
 
@@ -43,26 +44,20 @@ export default function ChangePasswordModal({ onClose }) {
           <p className={s.success}>{t('header.passwordSaved')}</p>
         ) : (
           <form onSubmit={handle} className={s.modalForm}>
-            <input
-              className={shared.input}
-              type="password"
+            <PasswordInput
               placeholder={t('header.currentPassword')}
               value={form.current}
               onChange={set('current')}
               required
               autoFocus
             />
-            <input
-              className={shared.input}
-              type="password"
+            <PasswordInput
               placeholder={t('header.newPassword')}
               value={form.next}
               onChange={set('next')}
               required
             />
-            <input
-              className={shared.input}
-              type="password"
+            <PasswordInput
               placeholder={t('header.confirmPassword')}
               value={form.confirm}
               onChange={set('confirm')}
