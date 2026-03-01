@@ -16,12 +16,7 @@ self.addEventListener('push', (event) => {
     icon: '/icons/pwa-192x192.png',
     badge: '/icons/badge.svg',
     data: data.data ?? {},
-    actions: data.actions?.length
-      ? data.actions
-      : [
-          { action: 'mark-done', title: 'Mark as done' },
-          { action: 'dismiss', title: 'Dismiss' },
-        ],
+    actions: data.actions ?? [],
   }
   event.waitUntil(self.registration.showNotification(title, options))
 })
@@ -29,11 +24,18 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const routineId = event.notification.data?.routine_id
+  const url = event.action === 'mark-done' && routineId
+    ? `/routines/${routineId}?action=mark-done`
+    : routineId ? `/routines/${routineId}` : '/'
 
-  if (event.action === 'mark-done' && routineId) {
-    // Open the routine page with action param — the page will auto-log
-    event.waitUntil(clients.openWindow(`/routines/${routineId}?action=mark-done`))
-  } else {
-    event.waitUntil(clients.openWindow(routineId ? `/routines/${routineId}` : '/'))
-  }
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      const existing = windowClients.find((c) => c.url.startsWith(self.location.origin))
+      if (existing) {
+        existing.navigate(url)
+        return existing.focus()
+      }
+      return clients.openWindow(url)
+    })
+  )
 })
