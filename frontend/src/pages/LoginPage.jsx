@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
+import PasswordInput from '../components/PasswordInput'
 import shared from '../styles/shared.module.css'
 import s from './LoginPage.module.css'
 
@@ -43,9 +44,7 @@ export default function LoginPage() {
             required
             autoFocus
           />
-          <input
-            className={shared.input}
-            type="password"
+          <PasswordInput
             placeholder={t('login.password')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

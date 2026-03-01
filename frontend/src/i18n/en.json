@@ -135,6 +135,8 @@
   "common.unit": "u.",
   "common.error": "Could not load data. Try refreshing the page.",
   "common.actionError": "Something went wrong. Please try again.",
+  "common.showPassword": "Show password",
+  "common.hidePassword": "Hide password",
   "common.cancel": "Cancel",
   "common.confirm": "Confirm",
   "common.back": "← Back",
