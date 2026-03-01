@@ -64,7 +64,7 @@ services:
     image: cibrandocampo/nudge-backend:${DOCKER_NUDGE_VERSION:-stable}
     container_name: "${PROJECT_NAME:-nudge}-celery"
     init: true
-    command: celery -A nudge worker -B --loglevel=${LOG_LEVEL:-info}
+    command: celery -A nudge worker -B --loglevel=${CELERY_LOG_LEVEL:-info}
     env_file: .env
     networks:
       - nudge_net
