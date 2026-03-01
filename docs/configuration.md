@@ -46,12 +46,46 @@ The admin user is created automatically on first startup if no superuser exists.
 | `POSTGRES_PASSWORD` | — | Database password |
 | `DATABASE_URL` | — | Full connection URL (e.g., `postgresql://nudge:password@db:5432/nudge`) |
 
+## Logging
+
+Log levels can be set independently for each service:
+
+| Variable | Default | Controls |
+|----------|---------|---------|
+| `DJANGO_LOG_LEVEL` | `info` | Django application and apps loggers |
+| `CELERY_LOG_LEVEL` | `info` | Celery worker |
+
+Valid values: `debug`, `info`, `warning`, `error`, `critical`.
+
+### Log rotation and GUI log viewers
+
+The production `docker-compose.yml` does not configure a custom logging driver, so Docker uses its default `json-file` driver without size limits. This allows log management tools like **Portainer**, **Synology Container Manager**, **Dozzle**, or plain `docker logs` to work out of the box.
+
+If you want to cap disk usage, configure log rotation at the Docker daemon level rather than per-container. Edit (or create) `/etc/docker/daemon.json` on the host:
+
+```json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
+Then restart the Docker daemon:
+
+```bash
+sudo systemctl restart docker
+```
+
+This applies the rotation policy to all containers globally without breaking GUI log viewers.
+
 ## Redis / Celery
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL for Celery |
-| `LOG_LEVEL` | `info` | Celery log level (`debug`, `info`, `warning`, `error`, `critical`) |
 
 ## Web Push (VAPID)
 
