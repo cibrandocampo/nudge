@@ -33,12 +33,23 @@ class StockSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stock
         fields = [
-            "id", "name", "quantity", "lots",
-            "has_expiring_lots", "expiring_lots", "requires_lot_selection", "updated_at",
+            "id",
+            "name",
+            "quantity",
+            "lots",
+            "has_expiring_lots",
+            "expiring_lots",
+            "requires_lot_selection",
+            "updated_at",
         ]
         read_only_fields = [
-            "id", "quantity", "lots",
-            "has_expiring_lots", "expiring_lots", "requires_lot_selection", "updated_at",
+            "id",
+            "quantity",
+            "lots",
+            "has_expiring_lots",
+            "expiring_lots",
+            "requires_lot_selection",
+            "updated_at",
         ]
 
     def get_quantity(self, obj):
