@@ -5,15 +5,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('routines', '0003_routineentry_consumed_lots'),
+        ("routines", "0003_routineentry_consumed_lots"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='routineentry',
-            name='created_at',
+            model_name="routineentry",
+            name="created_at",
             field=models.DateTimeField(default=django.utils.timezone.now),
         ),
     ]
