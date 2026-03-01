@@ -74,6 +74,15 @@ Tests in `src/components/__tests__/`.
 - MSW handlers in `src/test/mocks/handlers.js`
 - Mock user has `timezone: 'Europe/Madrid'`, `language: 'en'`
 
+### Required for every new frontend feature
+
+1. **Add MSW handlers** for any new API endpoints in `src/test/mocks/handlers.js`.
+2. **Write new tests** in the relevant `__tests__/` file covering: renders correctly,
+   user interactions (clicks, form submits), error states, loading states, and any
+   conditional rendering logic.
+3. **Run the full suite** and confirm no regressions.
+4. **Update `frontend-patterns` SKILL.md** if a new pattern or convention is introduced.
+
 ### Native `<select>` scroll quirk
 
 Safari and some browsers don't auto-scroll a `<select size=N>` to show the

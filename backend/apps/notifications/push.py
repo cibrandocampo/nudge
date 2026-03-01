@@ -1,5 +1,6 @@
 import json
 import logging
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.utils import timezone
@@ -17,43 +18,40 @@ TYPE_TEST = "test"
 
 _MSGS = {
     "en": {
-        "daily_title": "Nudge — Tasks for today",
-        "daily_one": "You have 1 pending task today.",
-        "daily_many": "You have {n} pending tasks today.",
-        "due_title": "Time for: {name}",
-        "due_body": "Interval of {hours}h reached.",
-        "reminder_title": "Still pending: {name}",
-        "reminder_body": "Overdue by {hours}h.",
+        "daily_one": "1 task today",
+        "daily_many": "{n} tasks today",
+        "due_title": "{name}",
+        "due_body": "Due at {time}",
+        "reminder_title": "{name}",
+        "reminder_body": "{hours}h overdue",
         "action_done": "Mark as done",
         "action_dismiss": "Dismiss",
-        "test_title": "Nudge — Test notification",
-        "test_body": "If you see this, push notifications are working!",
+        "test_title": "Push test",
+        "test_body": "It works!",
     },
     "es": {
-        "daily_title": "Nudge — Tareas para hoy",
-        "daily_one": "Tienes 1 tarea pendiente hoy.",
-        "daily_many": "Tienes {n} tareas pendientes hoy.",
-        "due_title": "Pendiente: {name}",
-        "due_body": "Intervalo de {hours}h alcanzado.",
-        "reminder_title": "Sigue pendiente: {name}",
-        "reminder_body": "Lleva {hours}h de retraso.",
+        "daily_one": "1 tarea hoy",
+        "daily_many": "{n} tareas hoy",
+        "due_title": "{name}",
+        "due_body": "Desde las {time}",
+        "reminder_title": "{name}",
+        "reminder_body": "{hours}h de retraso",
         "action_done": "Marcar como hecho",
         "action_dismiss": "Ignorar",
-        "test_title": "Nudge — Notificación de prueba",
-        "test_body": "Si ves esto, ¡las notificaciones push funcionan!",
+        "test_title": "Prueba push",
+        "test_body": "¡Funciona!",
     },
     "gl": {
-        "daily_title": "Nudge — Tarefas para hoxe",
-        "daily_one": "Tes 1 tarefa pendente hoxe.",
-        "daily_many": "Tes {n} tarefas pendentes hoxe.",
-        "due_title": "Pendente: {name}",
-        "due_body": "Intervalo de {hours}h alcanzado.",
-        "reminder_title": "Segue pendente: {name}",
-        "reminder_body": "Leva {hours}h de atraso.",
+        "daily_one": "1 tarefa hoxe",
+        "daily_many": "{n} tarefas hoxe",
+        "due_title": "{name}",
+        "due_body": "Dende as {time}",
+        "reminder_title": "{name}",
+        "reminder_body": "{hours}h de atraso",
         "action_done": "Marcar como feito",
         "action_dismiss": "Ignorar",
-        "test_title": "Nudge — Notificación de proba",
-        "test_body": "Se ves isto, as notificacións push funcionan!",
+        "test_title": "Proba push",
+        "test_body": "Funciona!",
     },
 }
 
@@ -151,11 +149,12 @@ def _actions(user):
     ]
 
 
-def notify_daily_heads_up(user, due_count: int):
-    body = _m(user, "daily_one") if due_count == 1 else _m(user, "daily_many", n=due_count)
+def notify_daily_heads_up(user, due_count: int, names: list = None):
+    title = _m(user, "daily_one") if due_count == 1 else _m(user, "daily_many", n=due_count)
+    body = ", ".join(names) if names else ""
     send_push_notification(
         user,
-        title=_m(user, "daily_title"),
+        title=title,
         body=body,
         type=TYPE_DAILY,
         actions=_actions(user),
@@ -164,10 +163,20 @@ def notify_daily_heads_up(user, due_count: int):
 
 def notify_due(routine):
     user = routine.user
+    if routine.description:
+        body = routine.description
+    else:
+        try:
+            user_tz = ZoneInfo(user.timezone)
+            next_due = routine.next_due_at()
+            time_str = next_due.astimezone(user_tz).strftime("%H:%M") if next_due else ""
+        except (ZoneInfoNotFoundError, ValueError):
+            time_str = ""
+        body = _m(user, "due_body", time=time_str) if time_str else ""
     send_push_notification(
         user,
         title=_m(user, "due_title", name=routine.name),
-        body=routine.description or _m(user, "due_body", hours=routine.interval_hours),
+        body=body,
         type=TYPE_DUE,
         data={"routine_id": routine.id},
         actions=_actions(user),

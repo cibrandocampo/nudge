@@ -94,6 +94,36 @@ After any code change, always run both backend + frontend in parallel:
 
 If both pass, the change is safe.
 
+## Required checklist for every new implementation
+
+Every new feature or non-trivial change MUST complete all of the following before
+being considered done:
+
+### 1. Write new unit tests
+- **Backend**: add test cases to the relevant `tests.py` (follow `APITestCase` /
+  `TestCase` patterns, helper functions `make_*`, hardcoded URL paths).
+  Cover: happy path, validation errors, auth/ownership checks (401/403/404).
+- **Frontend**: add test cases to the relevant `__tests__/` file (follow Vitest +
+  RTL + MSW patterns, use `renderWithProviders`, add MSW handlers in
+  `src/test/mocks/handlers.js` for any new endpoint).
+  Cover: renders correctly, user interactions, error states, loading states.
+
+### 2. Verify no regressions
+Run the full suites (backend + frontend in parallel) and confirm **all existing
+tests still pass**.
+
+### 3. E2E tests (when applicable)
+Add or update a Playwright spec in `e2e/tests/` when the feature introduces a
+**new user-visible flow** (new page, new critical action, new form).
+Not required for purely internal refactors or backend-only changes with no UI.
+
+### 4. Update documentation (when applicable)
+Update the relevant SKILL.md or CLAUDE.md when the change:
+- Adds a new architectural pattern or convention
+- Introduces a new endpoint, model, or service
+- Changes an existing workflow that other devs need to know about
+Do NOT document implementation details — only stable patterns and decisions.
+
 ## Known caveats
 
 - jsdom (used by Vitest) does NOT implement `scrollIntoView`, `IntersectionObserver`,

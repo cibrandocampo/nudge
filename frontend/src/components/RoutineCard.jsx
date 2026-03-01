@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
 import cx from '../utils/cx'
@@ -13,32 +13,48 @@ function statusClass(routine) {
 
 export default function RoutineCard({ routine, onMarkDone, completing }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const timeLabel = routine.next_due_at
     ? formatRelativeTime(routine.next_due_at)
     : `${t('card.since')} ${formatAbsoluteDate(routine.created_at)}`
 
+  const info = (
+    <div className={s.info}>
+      <span className={s.name}>{routine.name}</span>
+      <span className={s.time}>{timeLabel}</span>
+      {routine.stock_name && (
+        <span className={s.stock}>
+          {t('card.stock')} {routine.stock_quantity} · {routine.stock_name}
+        </span>
+      )}
+    </div>
+  )
+
+  if (!routine.is_due) {
+    return (
+      <Link to={`/routines/${routine.id}`} className={cx(s.row, s.rowLink, s.borderSuccess)}>
+        {info}
+        <span className={s.chevron}>›</span>
+      </Link>
+    )
+  }
+
   return (
-    <div className={cx(s.row, statusClass(routine))}>
-      <div className={s.info}>
-        <Link to={`/routines/${routine.id}`} className={s.name}>
-          {routine.name}
-        </Link>
-        <span className={s.time}>{timeLabel}</span>
-        {routine.stock_name && (
-          <span className={s.stock}>
-            {t('card.stock')} {routine.stock_quantity} · {routine.stock_name}
-          </span>
-        )}
-      </div>
-      {routine.is_due && (
+    <div
+      className={cx(s.row, s.rowLink, statusClass(routine))}
+      onClick={() => navigate(`/routines/${routine.id}`)}
+    >
+      {info}
+      <div className={s.actions}>
         <button
           className={cx(s.doneBtn, completing && shared.disabled)}
-          onClick={() => onMarkDone(routine.id)}
+          onClick={(e) => { e.stopPropagation(); onMarkDone(routine.id) }}
           disabled={completing}
         >
           {completing ? '…' : t('card.done')}
         </button>
-      )}
+        <span className={s.chevron}>›</span>
+      </div>
     </div>
   )
 }

@@ -12,11 +12,20 @@ const stockItem = {
   quantity: 10,
   has_expiring_lots: false,
   expiring_lots: [],
+  requires_lot_selection: false,
   lots: [
     { id: 100, quantity: 5, expiry_date: '2025-06-01', lot_number: 'LOT-A' },
     { id: 101, quantity: 5, expiry_date: null, lot_number: '' },
   ],
 }
+
+const stockWithLots = {
+  ...stockItem,
+  requires_lot_selection: true,
+  lots: [{ id: 100, quantity: 5, expiry_date: '2027-01-01', lot_number: 'LOT-A' }],
+}
+
+const emptyStock = { ...stockItem, quantity: 0, lots: [] }
 
 describe('InventoryPage', () => {
   it('shows loading state initially', () => {
@@ -188,5 +197,84 @@ describe('InventoryPage', () => {
   it('renders page title', async () => {
     renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Inventory')).toBeInTheDocument())
+  })
+})
+
+describe('InventoryPage — consume button', () => {
+  it('shows −1 button when stock has quantity > 0', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+  })
+
+  it('does not show −1 button when stock quantity is 0', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([emptyStock])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.queryByTitle('Consume 1 unit')).not.toBeInTheDocument()
+  })
+
+  it('clicking −1 calls consume endpoint and updates quantity', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+
+    await waitFor(() => expect(screen.getByText('(4 total)')).toBeInTheDocument())
+  })
+
+  it('shows error when consume fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
+      http.post(`${BASE}/stock/${stockItem.id}/consume/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('opens lot selection modal when requires_lot_selection is true', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockWithLots])))
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+  })
+
+  it('cancelling lot modal closes it without consuming', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockWithLots])))
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Cancel'))
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+    // Quantity unchanged
+    expect(screen.getByText('(10 total)')).toBeInTheDocument()
+  })
+
+  it('confirming lot selection calls consume with lot_selections and updates quantity', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockWithLots])))
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    // Select the first unit
+    const items = screen.getAllByRole('radio')
+    await user.click(items[0])
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('(4 total)')).toBeInTheDocument())
   })
 })
