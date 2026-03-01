@@ -61,6 +61,8 @@
   "routine.form.weeks": "semanas",
   "routine.form.months": "meses",
   "routine.form.years": "anos",
+  "routine.form.lastDoneToggle": "Xa o fixen recentemente",
+  "routine.form.lastDoneLabel": "Última vez realizado",
   "card.since": "Desde",
   "card.stock": "Stock:",
   "card.done": "Feito",

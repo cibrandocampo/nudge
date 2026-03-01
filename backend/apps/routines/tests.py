@@ -315,6 +315,54 @@ class RoutineSerializerTest(TestCase):
         self.assertEqual(data["stock_name"], "Filters")
         self.assertEqual(data["stock_quantity"], 5)
 
+    def test_last_done_at_creates_backdated_entry(self):
+        """When last_done_at is provided, a RoutineEntry is created with that timestamp."""
+        backdated = timezone.now() - timedelta(hours=48)
+        s = RoutineSerializer(
+            data={
+                "name": "Water cactus",
+                "interval_hours": 336,
+                "is_active": True,
+                "last_done_at": backdated.isoformat(),
+            }
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+        routine = s.save(user=self.user)
+        self.assertEqual(routine.entries.count(), 1)
+        entry = routine.entries.first()
+        self.assertAlmostEqual(entry.created_at.timestamp(), backdated.timestamp(), delta=1)
+
+    def test_last_done_at_omitted_creates_no_entry(self):
+        """Without last_done_at, no RoutineEntry is created on routine creation."""
+        s = RoutineSerializer(data={"name": "Oil change", "interval_hours": 24, "is_active": True})
+        self.assertTrue(s.is_valid(), s.errors)
+        routine = s.save(user=self.user)
+        self.assertEqual(routine.entries.count(), 0)
+
+    def test_last_done_at_null_creates_no_entry(self):
+        """Explicit null last_done_at also creates no entry."""
+        s = RoutineSerializer(
+            data={"name": "Oil change", "interval_hours": 24, "is_active": True, "last_done_at": None}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+        routine = s.save(user=self.user)
+        self.assertEqual(routine.entries.count(), 0)
+
+    def test_last_done_at_future_is_invalid(self):
+        """A future last_done_at is rejected with a validation error."""
+        future = timezone.now() + timedelta(hours=1)
+        s = RoutineSerializer(
+            data={"name": "Test", "interval_hours": 24, "is_active": True, "last_done_at": future.isoformat()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("last_done_at", s.errors)
+
+    def test_last_done_at_not_in_read_response(self):
+        """last_done_at is write-only and does not appear in serialized output."""
+        r = make_routine(self.user)
+        data = RoutineSerializer(r).data
+        self.assertNotIn("last_done_at", data)
+
     def test_stock_validation_rejects_other_users_stock(self):
         other_user = make_user(username="other")
         other_stock = make_stock(other_user)
@@ -546,6 +594,51 @@ class RoutineViewSetTest(APITestCase):
         response = self.client.delete(f"/api/routines/{r.id}/")
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Routine.objects.filter(pk=r.id).exists())
+
+    def test_create_with_last_done_at_creates_backdated_entry(self):
+        """POST /routines/ with last_done_at creates a RoutineEntry with that timestamp."""
+        backdated = timezone.now() - timedelta(hours=48)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": backdated.isoformat()},
+        )
+        self.assertEqual(response.status_code, 201)
+        routine = Routine.objects.get(pk=response.json()["id"])
+        self.assertEqual(routine.entries.count(), 1)
+        self.assertAlmostEqual(
+            routine.entries.first().created_at.timestamp(),
+            backdated.timestamp(),
+            delta=1,
+        )
+
+    def test_create_with_recent_last_done_at_not_due(self):
+        """A new routine with a recent last_done_at should not be immediately due."""
+        recent = timezone.now() - timedelta(hours=2)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": recent.isoformat()},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(response.json()["is_due"])
+
+    def test_create_without_last_done_at_is_due_immediately(self):
+        """A new routine without last_done_at is due immediately."""
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Water cactus", "interval_hours": 336, "is_active": True},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["is_due"])
+
+    def test_create_with_future_last_done_at_returns_400(self):
+        """A future last_done_at is rejected."""
+        future = timezone.now() + timedelta(hours=1)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": future.isoformat()},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("last_done_at", response.json())
 
     def test_log_other_users_routine_returns_404(self):
         r = make_routine(self.other)

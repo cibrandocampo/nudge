@@ -40,6 +40,8 @@ export default function RoutineFormPage() {
   const [intervalDraft, setIntervalDraft] = useState(null) // string while focused
   const [stocks, setStocks] = useState([])
   const [usesStock, setUsesStock] = useState(false)
+  const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
+  const [lastDoneAt, setLastDoneAt] = useState('')
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
@@ -106,6 +108,9 @@ export default function RoutineFormPage() {
       stock: usesStock && form.stock ? Number(form.stock) : null,
       stock_usage: Number(form.stock_usage),
       is_active: true,
+    }
+    if (!isEditing && lastDoneEnabled && lastDoneAt) {
+      payload.last_done_at = new Date(lastDoneAt).toISOString()
     }
     try {
       const res = isEditing ? await api.patch(`/routines/${id}/`, payload) : await api.post('/routines/', payload)
@@ -238,6 +243,35 @@ export default function RoutineFormPage() {
               />
             </Field>
           </>
+        )}
+
+        {!isEditing && (
+          <Field label="">
+            <label className={s.checkLabel}>
+              <input
+                type="checkbox"
+                checked={lastDoneEnabled}
+                onChange={(e) => {
+                  setLastDoneEnabled(e.target.checked)
+                  if (e.target.checked && !lastDoneAt) {
+                    const now = new Date()
+                    now.setSeconds(0, 0)
+                    setLastDoneAt(now.toISOString().slice(0, 16))
+                  }
+                }}
+              />
+              <span>{t('routine.form.lastDoneToggle')}</span>
+            </label>
+            {lastDoneEnabled && (
+              <input
+                className={cx(shared.input, s.lastDoneInput)}
+                type="datetime-local"
+                value={lastDoneAt}
+                max={new Date().toISOString().slice(0, 16)}
+                onChange={(e) => setLastDoneAt(e.target.value)}
+              />
+            )}
+          </Field>
         )}
 
         {errors.submit && <p className={shared.error}>{errors.submit}</p>}

@@ -86,6 +86,10 @@
   width: 90px;
 }
 
+.lastDoneInput {
+  margin-top: 0.4rem;
+}
+
 .checkLabel {
   display: flex;
   align-items: center;

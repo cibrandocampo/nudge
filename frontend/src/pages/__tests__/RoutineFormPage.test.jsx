@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { server } from '../../test/mocks/server'
@@ -189,6 +189,58 @@ describe('RoutineFormPage', () => {
     renderEdit()
     await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
     expect(screen.getByText('Stock item')).toBeInTheDocument()
+  })
+
+  it('shows "already did this" checkbox in create mode', async () => {
+    renderCreate()
+    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+  })
+
+  it('does not show "already did this" checkbox in edit mode', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(editRoutine)))
+    renderEdit()
+    await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+    expect(screen.queryByText('I already did this recently')).not.toBeInTheDocument()
+  })
+
+  it('checking "already did this" reveals datetime input with default value', async () => {
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+
+    expect(screen.queryByDisplayValue(/T/)).not.toBeInTheDocument()
+    await user.click(screen.getByText('I already did this recently'))
+
+    const datetimeInput = screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
+    expect(datetimeInput).toBeInTheDocument()
+  })
+
+  it('changing the datetime input updates the value', async () => {
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+
+    await user.click(screen.getByText('I already did this recently'))
+    const datetimeInput = screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
+    fireEvent.change(datetimeInput, { target: { value: '2026-02-27T10:00' } })
+    expect(datetimeInput.value).toBe('2026-02-27T10:00')
+  })
+
+  it('submits with last_done_at when checkbox is checked', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Water cactus')
+    await user.click(screen.getByText('I already did this recently'))
+    await user.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(capturedBody?.last_done_at).toBeDefined())
+    expect(new Date(capturedBody.last_done_at).getTime()).not.toBeNaN()
   })
 
   it('shows saving state on submit', async () => {
