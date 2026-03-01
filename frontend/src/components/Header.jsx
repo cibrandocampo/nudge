@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
+import { unsubscribeFromPush } from '../utils/push'
 import ChangePasswordModal from './ChangePasswordModal'
 import s from './Header.module.css'
 
@@ -37,8 +38,9 @@ export default function Header() {
     form.submit()
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false)
+    await unsubscribeFromPush().catch(() => {})
     logout()
     navigate('/login')
   }
