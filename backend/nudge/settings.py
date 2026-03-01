@@ -190,6 +190,8 @@ VAPID_CLAIMS_EMAIL = env("VAPID_CLAIMS_EMAIL", default="admin@example.com")
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
+_LOG_LEVEL = env("DJANGO_LOG_LEVEL", default="INFO").upper()
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -207,17 +209,17 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": _LOG_LEVEL,
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": "INFO",
+            "level": _LOG_LEVEL,
             "propagate": False,
         },
         "apps": {
             "handlers": ["console"],
-            "level": "DEBUG" if DEBUG else "INFO",
+            "level": _LOG_LEVEL,
             "propagate": False,
         },
     },
