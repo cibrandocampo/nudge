@@ -352,18 +352,21 @@ class PushHelperTest(TestCase):
 
     def test_notify_daily_heads_up_singular(self):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(self.user, due_count=1)
+            notify_daily_heads_up(self.user, due_count=1, names=["Filter change"])
             args = mock_send.call_args
             self.assertEqual(args[1]["type"], TYPE_DAILY)
-            self.assertIn("1", args[1]["body"])
-            self.assertIn("task", args[1]["body"])
+            self.assertIn("1", args[1]["title"])
+            self.assertIn("task", args[1]["title"])
+            self.assertEqual(args[1]["body"], "Filter change")
 
     def test_notify_daily_heads_up_plural(self):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(self.user, due_count=3)
-            body = mock_send.call_args[1]["body"]
-            self.assertIn("3", body)
-            self.assertIn("tasks", body)
+            notify_daily_heads_up(self.user, due_count=3, names=["A", "B", "C"])
+            args = mock_send.call_args
+            title = args[1]["title"]
+            self.assertIn("3", title)
+            self.assertIn("tasks", title)
+            self.assertEqual(args[1]["body"], "A, B, C")
 
     def test_notify_due(self):
         routine = make_routine(self.user, name="Filter change")
@@ -386,7 +389,7 @@ class PushHelperTest(TestCase):
             notify_test(self.user)
             args = mock_send.call_args
             self.assertEqual(args[1]["type"], TYPE_TEST)
-            self.assertIn("Test", args[1]["title"])
+            self.assertIn("Push test", args[1]["title"])
 
 
 # ── tasks helpers ─────────────────────────────────────────────────────────────
@@ -731,76 +734,93 @@ class PushHelperLanguageTest(TestCase):
     def test_daily_english_singular(self):
         user = self._user("en")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=1)
+            notify_daily_heads_up(user, due_count=1, names=["Oil change"])
         kwargs = mock_send.call_args[1]
-        self.assertIn("Tasks for today", kwargs["title"])
-        self.assertEqual(kwargs["body"], "You have 1 pending task today.")
+        self.assertEqual(kwargs["title"], "1 task today")
+        self.assertEqual(kwargs["body"], "Oil change")
 
     def test_daily_english_plural(self):
         user = self._user("en", username="user_en2")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=3)
+            notify_daily_heads_up(user, due_count=3, names=["Oil change", "Water plants", "Check filter"])
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["body"], "You have 3 pending tasks today.")
+        self.assertEqual(kwargs["title"], "3 tasks today")
+        self.assertEqual(kwargs["body"], "Oil change, Water plants, Check filter")
 
     def test_daily_spanish_singular(self):
         user = self._user("es")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=1)
+            notify_daily_heads_up(user, due_count=1, names=["Cambiar filtro"])
         kwargs = mock_send.call_args[1]
-        self.assertIn("hoy", kwargs["title"])
-        self.assertEqual(kwargs["body"], "Tienes 1 tarea pendiente hoy.")
+        self.assertEqual(kwargs["title"], "1 tarea hoy")
+        self.assertEqual(kwargs["body"], "Cambiar filtro")
 
     def test_daily_spanish_plural(self):
         user = self._user("es", username="user_es2")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=4)
+            notify_daily_heads_up(user, due_count=4, names=["A", "B", "C", "D"])
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["body"], "Tienes 4 tareas pendientes hoy.")
+        self.assertEqual(kwargs["title"], "4 tareas hoy")
+        self.assertEqual(kwargs["body"], "A, B, C, D")
 
     def test_daily_galician_singular(self):
         user = self._user("gl")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=1)
+            notify_daily_heads_up(user, due_count=1, names=["Revisar aceite"])
         kwargs = mock_send.call_args[1]
-        self.assertIn("hoxe", kwargs["title"])
-        self.assertEqual(kwargs["body"], "Tes 1 tarefa pendente hoxe.")
+        self.assertEqual(kwargs["title"], "1 tarefa hoxe")
+        self.assertEqual(kwargs["body"], "Revisar aceite")
 
     def test_daily_galician_plural(self):
         user = self._user("gl", username="user_gl2")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
-            notify_daily_heads_up(user, due_count=2)
+            notify_daily_heads_up(user, due_count=2, names=["Revisar aceite", "Cambiar filtro"])
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["body"], "Tes 2 tarefas pendentes hoxe.")
+        self.assertEqual(kwargs["title"], "2 tarefas hoxe")
+        self.assertEqual(kwargs["body"], "Revisar aceite, Cambiar filtro")
 
     # ── due notification ──────────────────────────────────────────────────────
 
+    def _logged_routine(self, user, **kwargs):
+        """Create a routine with one entry so next_due_at() returns a real datetime."""
+        routine = make_routine(user, **kwargs)
+        RoutineEntry.objects.create(routine=routine, created_at=timezone.now() - timedelta(hours=routine.interval_hours))
+        return routine
+
     def test_due_english(self):
         user = self._user("en")
-        routine = make_routine(user, name="Oil change", interval_hours=720)
+        routine = self._logged_routine(user, name="Oil change", interval_hours=720)
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_due(routine)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Time for: Oil change")
-        self.assertIn("720", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Oil change")
+        self.assertRegex(kwargs["body"], r"^Due at \d{2}:\d{2}$")
 
     def test_due_spanish(self):
         user = self._user("es")
-        routine = make_routine(user, name="Cambiar filtro", interval_hours=24)
+        routine = self._logged_routine(user, name="Cambiar filtro", interval_hours=24)
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_due(routine)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Pendiente: Cambiar filtro")
-        self.assertIn("alcanzado", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Cambiar filtro")
+        self.assertRegex(kwargs["body"], r"^Desde las \d{2}:\d{2}$")
 
     def test_due_galician(self):
         user = self._user("gl")
-        routine = make_routine(user, name="Revisar aceite", interval_hours=24)
+        routine = self._logged_routine(user, name="Revisar aceite", interval_hours=24)
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_due(routine)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Pendente: Revisar aceite")
-        self.assertIn("alcanzado", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Revisar aceite")
+        self.assertRegex(kwargs["body"], r"^Dende as \d{2}:\d{2}$")
+
+    def test_due_never_logged_has_empty_body(self):
+        """Routines never logged have no next_due_at — body should be empty."""
+        user = self._user("en", username="user_en_never")
+        routine = make_routine(user, name="Never done")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_due(routine)
+        self.assertEqual(mock_send.call_args[1]["body"], "")
 
     def test_due_uses_description_over_default_body(self):
         """If the routine has a description, it is used as body regardless of language."""
@@ -823,8 +843,8 @@ class PushHelperLanguageTest(TestCase):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_reminder(routine, hours_overdue=5)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Still pending: Check engine")
-        self.assertEqual(kwargs["body"], "Overdue by 5h.")
+        self.assertEqual(kwargs["title"], "Check engine")
+        self.assertEqual(kwargs["body"], "5h overdue")
 
     def test_reminder_spanish(self):
         user = self._user("es")
@@ -832,8 +852,8 @@ class PushHelperLanguageTest(TestCase):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_reminder(routine, hours_overdue=3)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Sigue pendiente: Revisar motor")
-        self.assertEqual(kwargs["body"], "Lleva 3h de retraso.")
+        self.assertEqual(kwargs["title"], "Revisar motor")
+        self.assertEqual(kwargs["body"], "3h de retraso")
 
     def test_reminder_galician(self):
         user = self._user("gl")
@@ -841,8 +861,8 @@ class PushHelperLanguageTest(TestCase):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_reminder(routine, hours_overdue=3)
         kwargs = mock_send.call_args[1]
-        self.assertEqual(kwargs["title"], "Segue pendente: Revisar motor")
-        self.assertEqual(kwargs["body"], "Leva 3h de atraso.")
+        self.assertEqual(kwargs["title"], "Revisar motor")
+        self.assertEqual(kwargs["body"], "3h de atraso")
 
     # ── test notification ───────────────────────────────────────────────────
 
@@ -851,24 +871,24 @@ class PushHelperLanguageTest(TestCase):
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_test(user)
         kwargs = mock_send.call_args[1]
-        self.assertIn("Test", kwargs["title"])
-        self.assertIn("working", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Push test")
+        self.assertEqual(kwargs["body"], "It works!")
 
     def test_test_spanish(self):
         user = self._user("es")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_test(user)
         kwargs = mock_send.call_args[1]
-        self.assertIn("prueba", kwargs["title"])
-        self.assertIn("funcionan", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Prueba push")
+        self.assertEqual(kwargs["body"], "¡Funciona!")
 
     def test_test_galician(self):
         user = self._user("gl")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_test(user)
         kwargs = mock_send.call_args[1]
-        self.assertIn("proba", kwargs["title"])
-        self.assertIn("funcionan", kwargs["body"])
+        self.assertEqual(kwargs["title"], "Proba push")
+        self.assertEqual(kwargs["body"], "Funciona!")
 
     # ── action buttons ────────────────────────────────────────────────────────
 
@@ -914,7 +934,7 @@ class PushHelperLanguageTest(TestCase):
         routine = make_routine(user, name="Test")
         with patch("apps.notifications.push.send_push_notification") as mock_send:
             notify_due(routine)
-        self.assertIn("Time for", mock_send.call_args[1]["title"])
+        self.assertEqual(mock_send.call_args[1]["title"], "Test")
 
 
 # ── DST / timezone edge cases ───────────────────────────────────────────────

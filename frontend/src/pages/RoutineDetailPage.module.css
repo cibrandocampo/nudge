@@ -73,6 +73,19 @@
   margin-bottom: 1.5rem;
 }
 
+.advanceBtn {
+  width: 100%;
+  padding: 0.85rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+}
+
 .section {
   margin-bottom: 1.5rem;
 }

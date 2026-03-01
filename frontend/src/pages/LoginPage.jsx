@@ -32,7 +32,7 @@ export default function LoginPage() {
   return (
     <div className={s.page}>
       <div className={s.card}>
-        <h1 className={s.logo}>Nudge</h1>
+        <img src="/icons/source.svg" alt="Nudge" className={s.logoImg} />
         <p className={s.tagline}>{t('login.tagline')}</p>
         <form onSubmit={handleSubmit} className={s.form}>
           <input

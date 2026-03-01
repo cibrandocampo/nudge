@@ -14,7 +14,7 @@ test.describe('Dashboard', () => {
   })
 
   test('bottom nav is visible', async ({ page }) => {
-    await expect(page.getByRole('link', { name: 'Home' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Routines' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'History' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Inventory' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()

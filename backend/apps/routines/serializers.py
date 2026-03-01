@@ -28,11 +28,12 @@ class StockSerializer(serializers.ModelSerializer):
     quantity = serializers.SerializerMethodField()
     has_expiring_lots = serializers.SerializerMethodField()
     expiring_lots = serializers.SerializerMethodField()
+    requires_lot_selection = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
-        fields = ["id", "name", "quantity", "lots", "has_expiring_lots", "expiring_lots", "updated_at"]
-        read_only_fields = ["id", "quantity", "lots", "has_expiring_lots", "expiring_lots", "updated_at"]
+        fields = ["id", "name", "quantity", "lots", "has_expiring_lots", "expiring_lots", "requires_lot_selection", "updated_at"]
+        read_only_fields = ["id", "quantity", "lots", "has_expiring_lots", "expiring_lots", "requires_lot_selection", "updated_at"]
 
     def get_quantity(self, obj):
         # Use prefetched lots if available to avoid an extra aggregate query
@@ -54,6 +55,12 @@ class StockSerializer(serializers.ModelSerializer):
 
     def get_expiring_lots(self, obj):
         return StockLotSerializer(self._expiring_lots(obj), many=True).data
+
+    def get_requires_lot_selection(self, obj):
+        # Use prefetch cache when available to avoid an extra query
+        if "lots" in obj.__dict__.get("_prefetched_objects_cache", {}):
+            return any(lot.lot_number and lot.quantity > 0 for lot in obj.lots.all())
+        return obj.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
 
 
 class RoutineSerializer(serializers.ModelSerializer):

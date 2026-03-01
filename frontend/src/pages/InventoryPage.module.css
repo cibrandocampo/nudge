@@ -103,10 +103,23 @@
 
 .productCard {
   border: 1px solid var(--c-border);
+  border-left: 3px solid transparent;
   border-radius: 8px;
   margin-bottom: 1rem;
   background: var(--c-surface);
   overflow: hidden;
+}
+
+.cardDanger {
+  border-left-color: var(--c-danger);
+}
+
+.cardWarning {
+  border-left-color: var(--c-warning);
+}
+
+.cardSuccess {
+  border-left-color: var(--c-success);
 }
 
 .productHeader {
@@ -134,11 +147,29 @@
   color: var(--c-text-3);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.consumeBtn {
+  padding: 0.25rem 0.6rem;
+  background: var(--c-primary);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+}
+
 .deleteBtn {
   background: none;
   border: none;
-  color: var(--c-text-3);
-  font-size: 0.8rem;
+  color: var(--c-danger);
+  font-size: 0.9rem;
   cursor: pointer;
   padding: 0.25rem;
 }
@@ -197,7 +228,7 @@
   cursor: pointer;
   font-size: 0.85rem;
   padding: 0.2rem;
-  color: var(--c-text-3);
+  color: var(--c-danger);
 }
 
 /* ── Add lot form ────────────────────────────────────────────── */

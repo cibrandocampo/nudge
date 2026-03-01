@@ -19,7 +19,7 @@ class StockViewSet(viewsets.ModelViewSet):
     serializer_class = StockSerializer
 
     def get_queryset(self):
-        return Stock.objects.filter(user=self.request.user).prefetch_related("lots")
+        return Stock.objects.filter(user=self.request.user).prefetch_related("lots").order_by("name")
 
     def perform_create(self, serializer):
         stock = serializer.save(user=self.request.user)
@@ -28,6 +28,89 @@ class StockViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         logger.info("Stock %s deleted by user %s.", instance.id, self.request.user.id)
         super().perform_destroy(instance)
+
+    @action(detail=True, methods=["get"], url_path="lots-for-selection")
+    def lots_for_selection(self, request, pk=None):
+        """
+        Return available lots expanded into individual units (FEFO order).
+        Used to populate the lot selection modal when consuming stock directly.
+        """
+        stock = self.get_object()
+        units = []
+        lots = stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+        for lot in lots:
+            lot_number = lot.lot_number or None
+            expiry_date = lot.expiry_date.isoformat() if lot.expiry_date else None
+            for i in range(1, lot.quantity + 1):
+                units.append(
+                    {
+                        "lot_id": lot.id,
+                        "lot_number": lot_number,
+                        "expiry_date": expiry_date,
+                        "unit_index": i,
+                    }
+                )
+        return Response(units)
+
+    @action(detail=True, methods=["post"], url_path="consume")
+    def consume(self, request, pk=None):
+        """
+        Consume units from a stock item directly (without a routine).
+        Accepts optional lot_selections; otherwise uses FEFO.
+        """
+        stock = self.get_object()
+        try:
+            quantity = int(request.data.get("quantity", 1))
+        except (TypeError, ValueError):
+            return Response({"quantity": "Must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({"quantity": "Must be > 0."}, status=status.HTTP_400_BAD_REQUEST)
+
+        lot_selections = request.data.get("lot_selections")
+
+        with transaction.atomic():
+            if lot_selections is not None:
+                total = sum(sel.get("quantity", 0) for sel in lot_selections)
+                if total != quantity:
+                    return Response(
+                        {"lot_selections": "Total quantity must equal quantity."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                lot_ids = [sel["lot_id"] for sel in lot_selections]
+                valid_ids = set(stock.lots.filter(id__in=lot_ids).values_list("id", flat=True))
+                invalid = set(lot_ids) - valid_ids
+                if invalid:
+                    return Response(
+                        {"lot_selections": "One or more lot_ids are invalid."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                for sel in lot_selections:
+                    qty = sel["quantity"]
+                    if qty <= 0:
+                        continue
+                    lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=stock)
+                    lot.quantity -= min(lot.quantity, qty)
+                    lot.save(update_fields=["quantity"])
+            else:
+                remaining = quantity
+                for lot in (
+                    stock.lots.select_for_update()
+                    .filter(quantity__gt=0)
+                    .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+                ):
+                    if remaining <= 0:
+                        break
+                    consume = min(lot.quantity, remaining)
+                    lot.quantity -= consume
+                    lot.save(update_fields=["quantity"])
+                    remaining -= consume
+
+            stock.save(update_fields=["updated_at"])
+
+        logger.info("Stock %s consumed %d unit(s) by user %s.", stock.id, quantity, request.user.id)
+        stock.refresh_from_db()
+        stock = Stock.objects.prefetch_related("lots").get(pk=stock.pk)
+        return Response(StockSerializer(stock).data)
 
 
 class StockLotViewSet(viewsets.ModelViewSet):

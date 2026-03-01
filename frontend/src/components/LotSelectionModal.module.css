@@ -49,12 +49,12 @@
 }
 
 .item:hover {
-  border-color: var(--c-accent, #4f7ef8);
+  border-color: var(--c-primary);
 }
 
 .itemSelected {
-  border-color: var(--c-accent, #4f7ef8);
-  background: color-mix(in srgb, var(--c-accent, #4f7ef8) 8%, transparent);
+  border-color: var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 8%, transparent);
 }
 
 .indicator {
@@ -66,13 +66,13 @@
   align-items: center;
   justify-content: center;
   font-size: 0.7rem;
-  color: var(--c-accent, #4f7ef8);
+  color: var(--c-primary);
   flex-shrink: 0;
 }
 
 .itemSelected .indicator {
-  border-color: var(--c-accent, #4f7ef8);
-  background: var(--c-accent, #4f7ef8);
+  border-color: var(--c-primary);
+  background: var(--c-primary);
   color: #fff;
 }
 
@@ -111,7 +111,7 @@
 
 .confirmBtn {
   padding: 0.6rem 1.2rem;
-  background: var(--c-accent, #4f7ef8);
+  background: var(--c-primary);
   border: none;
   border-radius: 8px;
   color: #fff;
