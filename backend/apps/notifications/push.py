@@ -1,10 +1,10 @@
 import json
 import logging
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.utils import timezone
 from pywebpush import WebPushException, webpush
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import PushSubscription
 

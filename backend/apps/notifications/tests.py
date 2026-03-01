@@ -784,7 +784,10 @@ class PushHelperLanguageTest(TestCase):
     def _logged_routine(self, user, **kwargs):
         """Create a routine with one entry so next_due_at() returns a real datetime."""
         routine = make_routine(user, **kwargs)
-        RoutineEntry.objects.create(routine=routine, created_at=timezone.now() - timedelta(hours=routine.interval_hours))
+        RoutineEntry.objects.create(
+            routine=routine,
+            created_at=timezone.now() - timedelta(hours=routine.interval_hours),
+        )
         return routine
 
     def test_due_english(self):
