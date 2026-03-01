@@ -17,6 +17,10 @@
   border-left-color: var(--c-danger);
 }
 
+.borderSuccess {
+  border-left-color: var(--c-success);
+}
+
 .info {
   display: flex;
   flex-direction: column;
@@ -40,6 +44,31 @@
 .stock {
   font-size: 0.75rem;
   color: var(--c-muted);
+}
+
+.rowLink {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.rowLink:hover {
+  background: var(--c-bg);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.chevron {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  color: var(--c-text-3);
+  text-decoration: none;
+  line-height: 1;
+  padding: 0 0.25rem;
 }
 
 .doneBtn {

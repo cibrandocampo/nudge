@@ -4,7 +4,7 @@ import { login, CREDS } from './helpers.js'
 test.describe('Auth', () => {
   test('login page loads', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.getByText('Nudge')).toBeVisible()
+    await expect(page.getByAltText('Nudge')).toBeVisible()
     await expect(page.getByPlaceholder('Username')).toBeVisible()
     await expect(page.getByPlaceholder('Password')).toBeVisible()
   })

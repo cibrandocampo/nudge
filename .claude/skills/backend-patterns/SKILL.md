@@ -63,6 +63,15 @@ The `routines` app is the exception — it defines `routines/`, `stock/`, `entri
 - No `reverse()` usage — tests verify the actual URLs clients use
 - Run: `docker compose -f dev/docker-compose.yml exec backend python manage.py test`
 
+### Required for every new backend feature
+
+1. **Write new tests** covering: happy path, validation errors (400), auth/ownership
+   (401/403/404). Use `APITestCase` for views, `TestCase` for models/serializers.
+   Follow the `make_*` helper pattern (e.g. `make_user`, `make_stock`, `make_lot`).
+2. **Run the full suite** and confirm no regressions.
+3. **Update `backend-patterns` SKILL.md** if a new architectural pattern or
+   convention is introduced.
+
 ## Formatting
 
 - **ruff** for linting and formatting (configured in `pyproject.toml`)

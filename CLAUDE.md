@@ -1,31 +1,31 @@
-# Nudge — instrucciones para Claude Code
+# Nudge — Claude Code instructions
 
-## Entorno de desarrollo: SIEMPRE usar Docker
+## Development environment: ALWAYS use Docker
 
-**NUNCA ejecutes código Python, Node o npm directamente en el host.**
-Usa siempre el entorno Docker de desarrollo definido en `dev/docker-compose.yml`.
-Este compose usa bind mounts, por lo que los cambios en archivos locales son visibles
-de inmediato dentro del contenedor — no hace falta reconstruir la imagen.
+**NEVER run Python, Node, or npm directly on the host.**
+Always use the Docker development environment defined in `dev/docker-compose.yml`.
+This compose uses bind mounts, so local file changes are visible inside the container
+immediately — no image rebuild needed.
 
-### Comandos de referencia
+### Reference commands
 
-| Tarea | Comando |
+| Task | Command |
 |---|---|
-| **Tests backend** | `docker compose -f dev/docker-compose.yml exec backend python manage.py test` |
-| **Tests con cobertura** | `docker compose -f dev/docker-compose.yml exec backend coverage run manage.py test` |
-| **Tests e2e (Playwright)** | `cd e2e && E2E_USERNAME=admin E2E_PASSWORD=<pass> npx playwright test` |
+| **Backend tests** | `docker compose -f dev/docker-compose.yml exec backend python manage.py test` |
+| **Tests with coverage** | `docker compose -f dev/docker-compose.yml exec backend coverage run manage.py test` |
+| **E2E tests (Playwright)** | `cd e2e && E2E_USERNAME=admin E2E_PASSWORD=<pass> npx playwright test` |
 | **Build frontend** | `docker compose -f dev/docker-compose.yml exec frontend npm run build` |
-| **Instalar deps frontend** | `docker compose -f dev/docker-compose.yml exec frontend npm install` |
+| **Install frontend deps** | `docker compose -f dev/docker-compose.yml exec frontend npm install` |
 | **Django shell** | `docker compose -f dev/docker-compose.yml exec backend python manage.py shell` |
 | **Makemigrations** | `docker compose -f dev/docker-compose.yml exec backend python manage.py makemigrations` |
 | **Migrate** | `docker compose -f dev/docker-compose.yml exec backend python manage.py migrate` |
 
-Si el entorno dev no está levantado, arrancarlo con:
+If the dev environment is not running, start it with:
 ```bash
 docker compose -f dev/docker-compose.yml up -d
 ```
 
-### Por qué NO usar `docker compose run --rm backend`
-El `docker-compose.yml` raíz es el de **producción** — construye imágenes con `COPY` del
-código. Los cambios locales no se reflejan hasta hacer `docker compose build`.
-El `dev/docker-compose.yml` es el correcto para desarrollo.
+### Why NOT use `docker compose run --rm backend`
+The root `docker-compose.yml` is for **production** — it builds images with `COPY` of the
+code. Local changes are not reflected until `docker compose build` is run.
+`dev/docker-compose.yml` is the correct one for development.

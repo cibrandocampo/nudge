@@ -85,6 +85,25 @@ export const handlers = [
 
   http.delete(`${BASE}/stock/:stockId/lots/:lotId/`, () => new HttpResponse(null, { status: 204 })),
 
+  http.post(`${BASE}/stock/:id/consume/`, ({ params }) =>
+    HttpResponse.json({
+      id: Number(params.id),
+      name: 'Filters',
+      quantity: 4,
+      lots: [{ id: 100, quantity: 4, expiry_date: null, lot_number: '' }],
+      expiring_lots: [],
+      has_expiring_lots: false,
+      requires_lot_selection: false,
+    }),
+  ),
+
+  http.get(`${BASE}/stock/:id/lots-for-selection/`, () =>
+    HttpResponse.json([
+      { lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 1 },
+      { lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 2 },
+    ]),
+  ),
+
   http.get(`${BASE}/push/vapid-public-key/`, () => HttpResponse.json({ public_key: 'BFake-VAPID-Key' })),
 
   http.post(`${BASE}/push/subscribe/`, () => HttpResponse.json({}, { status: 201 })),

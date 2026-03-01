@@ -210,3 +210,103 @@ describe('RoutineDetailPage', () => {
     expect(screen.getByText('Edit')).toBeInTheDocument()
   })
 })
+
+describe('RoutineDetailPage — advance button', () => {
+  const notDueRoutine = {
+    id: 1,
+    name: 'Take vitamins',
+    interval_hours: 24,
+    is_active: true,
+    is_due: false,
+    requires_lot_selection: false,
+    next_due_at: new Date(Date.now() + 20 * 3600000).toISOString(),
+    stock_name: null,
+    stock_quantity: null,
+    stock_usage: null,
+    stock: null,
+  }
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json(notDueRoutine)),
+      http.get(`${BASE}/routines/1/entries/`, () => HttpResponse.json([])),
+    )
+  })
+
+  it('shows advance button when not due and active', async () => {
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+    expect(screen.queryByText('Mark as done')).not.toBeInTheDocument()
+  })
+
+  it('does not show advance button when due', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...notDueRoutine, is_due: true }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    expect(screen.queryByText('Do it now')).not.toBeInTheDocument()
+  })
+
+  it('does not show advance button when inactive', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...notDueRoutine, is_active: false }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    expect(screen.queryByText('Do it now')).not.toBeInTheDocument()
+  })
+
+  it('shows confirmation modal when advance button clicked', async () => {
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+    await user.click(screen.getByText('Do it now'))
+    expect(screen.getByText('Log this routine ahead of schedule?')).toBeInTheDocument()
+  })
+
+  it('logs routine after advance confirmation', async () => {
+    let logCalled = false
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+    await user.click(screen.getByText('Do it now'))
+    await user.click(screen.getAllByText('Do it now')[1])
+    await waitFor(() => expect(logCalled).toBe(true))
+  })
+
+  it('cancels advance confirmation without logging', async () => {
+    let logCalled = false
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+    await user.click(screen.getByText('Do it now'))
+    await user.click(screen.getByText('Cancel'))
+    expect(logCalled).toBe(false)
+    expect(screen.queryByText('Log this routine ahead of schedule?')).not.toBeInTheDocument()
+  })
+
+  it('shows error when advance log fails', async () => {
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+    await user.click(screen.getByText('Do it now'))
+    await user.click(screen.getAllByText('Do it now')[1])
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+})

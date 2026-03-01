@@ -5,15 +5,15 @@ import Layout from '../Layout'
 describe('Layout', () => {
   it('renders 4 nav links', () => {
     renderWithProviders(<Layout />)
-    expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.getByText('Routines')).toBeInTheDocument()
     expect(screen.getByText('Inventory')).toBeInTheDocument()
     expect(screen.getByText('History')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 
-  it('Home link has active class at /', () => {
+  it('Routines link has active class at /', () => {
     renderWithProviders(<Layout />, { initialEntries: ['/'] })
-    const homeLink = screen.getByText('Home').closest('a')
+    const homeLink = screen.getByText('Routines').closest('a')
     expect(homeLink.className).toContain('linkActive')
   })
 

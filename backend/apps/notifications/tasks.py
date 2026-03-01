@@ -106,7 +106,7 @@ def _check_daily_heads_up(user, now_utc, now_local):
         if already_sent:
             return
 
-        notify_daily_heads_up(user, due_count=len(due_routines))
+        notify_daily_heads_up(user, due_count=len(due_routines), names=[r.name for r in due_routines])
         logger.info("Daily heads-up sent to user %s (%d routines due).", user.id, len(due_routines))
 
         # Mark all due routines as notified today

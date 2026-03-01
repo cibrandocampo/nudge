@@ -526,6 +526,170 @@ class StockLotViewSetTest(APITestCase):
         self.assertEqual(response.status_code, 401)
 
 
+# ── Stock consume / lots-for-selection ───────────────────────────────────────
+
+
+class StockConsumeTest(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.other = make_user(username="other")
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+
+    # ── consume endpoint ──────────────────────────────────────────────────────
+
+    def test_consume_fefo_single_lot(self):
+        make_lot(self.stock, quantity=5)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
+        self.assertEqual(response.status_code, 200)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.quantity, 4)
+
+    def test_consume_fefo_respects_expiry_order(self):
+        soon = date.today() + timedelta(days=10)
+        later = date.today() + timedelta(days=100)
+        make_lot(self.stock, quantity=3, expiry_date=later)
+        make_lot(self.stock, quantity=3, expiry_date=soon)
+        self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
+        lots = list(self.stock.lots.order_by("expiry_date"))
+        # The lot expiring sooner should have been decremented
+        self.assertEqual(lots[0].quantity, 2)
+        self.assertEqual(lots[1].quantity, 3)
+
+    def test_consume_fefo_nulls_last(self):
+        make_lot(self.stock, quantity=3, expiry_date=None)
+        make_lot(self.stock, quantity=3, expiry_date=date.today() + timedelta(days=30))
+        self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
+        no_expiry = self.stock.lots.get(expiry_date__isnull=True)
+        with_expiry = self.stock.lots.get(expiry_date__isnull=False)
+        # Lot with expiry should be consumed first (nulls last)
+        self.assertEqual(with_expiry.quantity, 2)
+        self.assertEqual(no_expiry.quantity, 3)
+
+    def test_consume_fefo_spans_multiple_lots(self):
+        make_lot(self.stock, quantity=1, expiry_date=date.today() + timedelta(days=5))
+        make_lot(self.stock, quantity=5, expiry_date=date.today() + timedelta(days=50))
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 3})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.stock.quantity, 3)
+
+    def test_consume_with_lot_selections(self):
+        lot = make_lot(self.stock, quantity=5, lot_number="LOT-A")
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1, "lot_selections": [{"lot_id": lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 4)
+
+    def test_consume_lot_selections_wrong_total_returns_400(self):
+        lot = make_lot(self.stock, quantity=5, lot_number="LOT-A")
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 2, "lot_selections": [{"lot_id": lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_consume_lot_selections_invalid_lot_returns_400(self):
+        other_stock = make_stock(self.other)
+        other_lot = make_lot(other_stock, quantity=5)
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1, "lot_selections": [{"lot_id": other_lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_consume_zero_quantity_returns_400(self):
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 0})
+        self.assertEqual(response.status_code, 400)
+
+    def test_consume_returns_updated_stock_data(self):
+        make_lot(self.stock, quantity=10)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 3})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["quantity"], 7)
+        self.assertIn("lots", data)
+        self.assertIn("requires_lot_selection", data)
+
+    def test_consume_other_users_stock_returns_404(self):
+        stock = make_stock(self.other)
+        make_lot(stock, quantity=5)
+        response = self.client.post(f"/api/stock/{stock.id}/consume/", {"quantity": 1})
+        self.assertEqual(response.status_code, 404)
+
+    def test_consume_unauthenticated_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
+        self.assertEqual(response.status_code, 401)
+
+    # ── lots-for-selection endpoint ───────────────────────────────────────────
+
+    def test_lots_for_selection_empty_stock(self):
+        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_lots_for_selection_expands_units(self):
+        make_lot(self.stock, quantity=3, lot_number="LOT-1")
+        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 3)
+        self.assertEqual(data[0]["unit_index"], 1)
+        self.assertEqual(data[1]["unit_index"], 2)
+        self.assertEqual(data[2]["unit_index"], 3)
+        self.assertTrue(all(u["lot_number"] == "LOT-1" for u in data))
+
+    def test_lots_for_selection_fefo_order(self):
+        later = date.today() + timedelta(days=90)
+        soon = date.today() + timedelta(days=10)
+        make_lot(self.stock, quantity=1, lot_number="LATER", expiry_date=later)
+        make_lot(self.stock, quantity=1, lot_number="SOON", expiry_date=soon)
+        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
+        data = response.json()
+        self.assertEqual(data[0]["lot_number"], "SOON")
+        self.assertEqual(data[1]["lot_number"], "LATER")
+
+    def test_lots_for_selection_excludes_zero_quantity_lots(self):
+        make_lot(self.stock, quantity=0, lot_number="EMPTY")
+        make_lot(self.stock, quantity=2, lot_number="FULL")
+        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
+        data = response.json()
+        self.assertEqual(len(data), 2)
+        self.assertTrue(all(u["lot_number"] == "FULL" for u in data))
+
+    def test_lots_for_selection_other_users_stock_returns_404(self):
+        stock = make_stock(self.other)
+        response = self.client.get(f"/api/stock/{stock.id}/lots-for-selection/")
+        self.assertEqual(response.status_code, 404)
+
+    # ── requires_lot_selection field ─────────────────────────────────────────
+
+    def test_requires_lot_selection_false_with_no_lots(self):
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_false_with_blank_lot_numbers(self):
+        make_lot(self.stock, quantity=5, lot_number="")
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_true_with_named_lot(self):
+        make_lot(self.stock, quantity=5, lot_number="LOT-1")
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertTrue(response.json()["requires_lot_selection"])
+
+    def test_requires_lot_selection_false_when_named_lot_has_zero_quantity(self):
+        make_lot(self.stock, quantity=0, lot_number="LOT-1")
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertFalse(response.json()["requires_lot_selection"])
+
+
 # ── Routine ViewSet ───────────────────────────────────────────────────────────
 
 

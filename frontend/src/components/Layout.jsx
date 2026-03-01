@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, History, Package, Settings } from 'lucide-react'
+import { ListChecks, History, Package, Settings } from 'lucide-react'
 import cx from '../utils/cx'
 import Header from './Header'
 import s from './Layout.module.css'
@@ -21,7 +21,7 @@ export default function Layout() {
   const { t } = useTranslation()
 
   const NAV = [
-    { to: '/', icon: Home, label: t('nav.home'), end: true },
+    { to: '/', icon: ListChecks, label: t('nav.home'), end: true },
     { to: '/inventory', icon: Package, label: t('nav.inventory'), end: false },
     { to: '/history', icon: History, label: t('nav.history'), end: false },
     { to: '/settings', icon: Settings, label: t('nav.settings'), end: false },

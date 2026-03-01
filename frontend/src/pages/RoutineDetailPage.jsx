@@ -20,6 +20,7 @@ export default function RoutineDetailPage() {
   const [completing, setCompleting] = useState(false)
   const [error, setError] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false)
   const [actionError, setActionError] = useState(null)
   const [lotModal, setLotModal] = useState(null) // null | { lots }
 
@@ -167,6 +168,16 @@ export default function RoutineDetailPage() {
         </button>
       )}
 
+      {!routine.is_due && routine.is_active && (
+        <button
+          className={cx(s.advanceBtn, completing && shared.disabled)}
+          onClick={() => setShowAdvanceConfirm(true)}
+          disabled={completing}
+        >
+          {t('routine.detail.advance')}
+        </button>
+      )}
+
       {entries.length > 0 && (
         <section className={s.section}>
           <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
@@ -199,6 +210,14 @@ export default function RoutineDetailPage() {
           onConfirm={confirmDelete}
           onCancel={() => setShowDeleteConfirm(false)}
           confirmLabel={t('routine.detail.delete')}
+        />
+      )}
+      {showAdvanceConfirm && (
+        <ConfirmModal
+          message={t('routine.detail.advanceConfirm')}
+          onConfirm={() => { setShowAdvanceConfirm(false); markDone() }}
+          onCancel={() => setShowAdvanceConfirm(false)}
+          confirmLabel={t('routine.detail.advance')}
         />
       )}
       {lotModal && (

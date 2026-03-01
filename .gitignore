@@ -217,6 +217,8 @@ pnpm-debug.log*
 
 # Vite / frontend build output
 frontend/dist/
+frontend/dev-dist/
+frontend/coverage/
 frontend/.vite/
 *.local
 

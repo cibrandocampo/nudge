@@ -17,13 +17,13 @@
   text-align: center;
 }
 
-.logo {
-  margin: 0 0 0.35rem;
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--c-text);
-  letter-spacing: -0.03em;
+.logoImg {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  margin-bottom: 1rem;
 }
+
 
 .tagline {
   margin: 0 0 2rem;

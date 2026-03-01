@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
+import LotSelectionModal from '../components/LotSelectionModal'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
 
@@ -25,6 +26,8 @@ export default function InventoryPage() {
   const [creating, setCreating] = useState(false)
 
   const [actionError, setActionError] = useState(null)
+  const [consuming, setConsuming] = useState(null) // stockId being consumed
+  const [lotModal, setLotModal] = useState(null) // { stockId, lots }
 
   // Per-stock "add lot" form: { [stockId]: { show, qty, expiry, lotNumber, adding } }
   const [addLot, setAddLot] = useState({})
@@ -74,6 +77,50 @@ export default function InventoryPage() {
     } catch {
       setActionError(t('common.actionError'))
     }
+  }
+
+  // ── Consume ───────────────────────────────────────────────────────────────
+
+  const doConsume = async (stockId, lotSelections = null) => {
+    setConsuming(stockId)
+    setActionError(null)
+    try {
+      const body = { quantity: 1 }
+      if (lotSelections) body.lot_selections = lotSelections
+      const res = await api.post(`/stock/${stockId}/consume/`, body)
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+    } catch {
+      setActionError(t('common.actionError'))
+    } finally {
+      setConsuming(null)
+    }
+  }
+
+  const handleConsume = async (stock) => {
+    if (consuming) return
+    if (stock.requires_lot_selection) {
+      setConsuming(stock.id)
+      try {
+        const res = await api.get(`/stock/${stock.id}/lots-for-selection/`)
+        if (!res.ok) throw new Error()
+        const lots = await res.json()
+        setLotModal({ stockId: stock.id, lots })
+      } catch {
+        setActionError(t('common.actionError'))
+      } finally {
+        setConsuming(null)
+      }
+      return
+    }
+    await doConsume(stock.id)
+  }
+
+  const handleLotConfirm = async (lotSelections) => {
+    const { stockId } = lotModal
+    setLotModal(null)
+    await doConsume(stockId, lotSelections)
   }
 
   // ── Lot CRUD ──────────────────────────────────────────────────────────────
@@ -186,7 +233,7 @@ export default function InventoryPage() {
       {stocks.map((stock) => {
         const form = lotForm(stock.id)
         return (
-          <div key={stock.id} className={s.productCard} data-testid="product-card">
+          <div key={stock.id} className={cx(s.productCard, stock.quantity === 0 ? s.cardDanger : stock.quantity <= 3 ? s.cardWarning : s.cardSuccess)} data-testid="product-card">
             {/* Product header */}
             <div className={s.productHeader}>
               <div className={s.productMeta}>
@@ -195,13 +242,25 @@ export default function InventoryPage() {
                   ({stock.quantity} {t('common.total')})
                 </span>
               </div>
-              <button
-                className={s.deleteBtn}
-                onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
-                title={t('inventory.deleteTooltip')}
-              >
-                ✕
-              </button>
+              <div className={s.headerActions}>
+                {stock.quantity > 0 && (
+                  <button
+                    className={cx(s.consumeBtn, consuming === stock.id && shared.disabled)}
+                    onClick={() => handleConsume(stock)}
+                    disabled={consuming === stock.id}
+                    title={t('inventory.consumeTooltip')}
+                  >
+                    {consuming === stock.id ? '…' : t('inventory.consumeOne')}
+                  </button>
+                )}
+                <button
+                  className={s.deleteBtn}
+                  onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
+                  title={t('inventory.deleteTooltip')}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Lot list */}
@@ -306,6 +365,16 @@ export default function InventoryPage() {
           onConfirm={doRemoveLot}
           onCancel={() => setConfirmRemoveLot(null)}
           confirmLabel={t('inventory.deleteTooltip')}
+        />
+      )}
+
+      {/* Lot selection modal for direct stock consume */}
+      {lotModal && (
+        <LotSelectionModal
+          routine={{ stock_usage: 1 }}
+          lots={lotModal.lots}
+          onConfirm={handleLotConfirm}
+          onCancel={() => setLotModal(null)}
         />
       )}
     </div>

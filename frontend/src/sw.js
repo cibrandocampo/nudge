@@ -14,7 +14,7 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body ?? '',
     icon: '/icons/pwa-192x192.png',
-    badge: '/icons/pwa-64x64.png',
+    badge: '/icons/badge.svg',
     data: data.data ?? {},
     actions: data.actions?.length
       ? data.actions
