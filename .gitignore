@@ -227,6 +227,7 @@ backend/staticfiles/
 
 # ── Internal task docs ───────────────────────────
 docs/tasks/
+tasks/
 
 # ── Local deployment configs ─────────────────────
 deploy/
@@ -247,3 +248,4 @@ Thumbs.db
 *.swo
 .claude/*
 !.claude/skills/
+!.claude/commands/

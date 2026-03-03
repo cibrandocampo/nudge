@@ -3,7 +3,6 @@ import os
 # Provide required env vars before importing the main settings
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from nudge.settings import *  # noqa: E402, F403
 

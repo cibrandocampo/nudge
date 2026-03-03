@@ -167,8 +167,10 @@ SIMPLE_JWT = {
 
 # ── Celery ────────────────────────────────────────────────────────────────────
 
-CELERY_BROKER_URL = env("REDIS_URL")
-CELERY_RESULT_BACKEND = env("REDIS_URL")
+_redis_password = env("REDIS_PASSWORD", default="")
+_redis_url = f"redis://:{_redis_password}@redis:6379/0" if _redis_password else "redis://redis:6379/0"
+CELERY_BROKER_URL = env("REDIS_URL", default=_redis_url)
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SERIALIZER = "json"
