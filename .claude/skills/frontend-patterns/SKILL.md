@@ -102,6 +102,15 @@ useEffect(() => {
 
 `requestAnimationFrame` is needed for client-side navigation timing.
 
+## Testing caveats
+
+- jsdom (used by Vitest) does NOT implement `scrollIntoView`, `IntersectionObserver`,
+  or other layout APIs. Guard these calls or use `requestAnimationFrame` wrappers.
+- Push notification tests mock `navigator.serviceWorker.ready` — the real SW is not
+  available in jsdom.
+- Frontend test helpers are in `frontend/src/test/helpers.jsx` with MSW handlers in
+  `frontend/src/test/mocks/handlers.js`.
+
 ## Service Worker
 
 `src/sw.js` handles push notification events (`push`, `notificationclick`).

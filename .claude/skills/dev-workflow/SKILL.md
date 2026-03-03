@@ -40,6 +40,15 @@ docker compose -f dev/docker-compose.yml exec backend python manage.py makemigra
 docker compose -f dev/docker-compose.yml exec backend python manage.py migrate
 docker compose -f dev/docker-compose.yml exec backend python manage.py createsuperuser
 
+# Tests — backend
+docker compose -f dev/docker-compose.yml exec backend python manage.py test                              # full suite
+docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.users                   # one app
+docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.users.tests.AdminAccessTest  # one class
+
+# Tests — frontend
+docker compose -f dev/docker-compose.yml exec frontend npx vitest run                                   # full suite
+docker compose -f dev/docker-compose.yml exec frontend npx vitest run src/pages/__tests__/SettingsPage.test.jsx  # one file
+
 # Frontend
 docker compose -f dev/docker-compose.yml exec frontend npm install
 docker compose -f dev/docker-compose.yml exec frontend npm run build
@@ -84,6 +93,35 @@ VitePWA is configured with `devOptions.enabled: true` so the SW registers in dev
 This is needed for push notification testing. The dev SW is served at
 `/dev-sw.js?dev-sw` (different from production's `/sw.js`).
 After changing `vite.config.js`, restart the frontend container.
+
+## E2E tests (Playwright — Docker, NOT host)
+
+Playwright runs in its own Docker image (`e2e/Dockerfile`). Use `--network host` so
+the container can reach `localhost:5173` (frontend) and `localhost:8000` (backend).
+Requires the full dev stack running first.
+
+**Build image** (only once, or after changing e2e/package.json):
+```bash
+docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
+```
+
+**Run all tests:**
+```bash
+docker run --rm --network host \
+  -e E2E_USERNAME=admin \
+  -e E2E_PASSWORD=<password> \
+  -e BASE_URL=http://localhost:5173 \
+  nudge-e2e npx playwright test
+```
+
+The password is in `.env` as `ADMIN_PASSWORD`.
+
+**Known pre-existing E2E failures (not our code):**
+- `admin login with correct credentials` — test hardcodes password `nudge-admin-2026`
+- `admin shows nudge models` — depends on admin login
+- `create a routine with preset interval` — expects `"Every 1 week"` but i18n returns `"Every week"`
+- `add a lot to a stock item` / `delete a lot` — expects `"3 ud."` but English locale returns `"3 u."`
+- `sign out clears session` — occasionally flaky (30s timeout)
 
 ## Environment variables
 

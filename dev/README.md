@@ -139,6 +139,6 @@ Custom skills are provided in `.claude/skills/` to help Claude understand the pr
 | `dev-workflow` | Docker commands, environment setup, debugging |
 | `django-admin` | Admin panel customization and branding |
 | `git-conventions` | Commit message format, branch naming |
-| `run-tests` | Test execution commands |
 
-These skills are automatically loaded when using Claude Code in this repository.
+Skills are loaded automatically. Commands (`/run-task`, `/general-plan`, etc.) are
+documented in [docs/development.md](../docs/development.md).

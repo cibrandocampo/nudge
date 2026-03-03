@@ -14,6 +14,7 @@ These must be set before first startup:
 |----------|-------------|
 | `DJANGO_SECRET_KEY` | Secret key for Django cryptographic signing. Generate with: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `POSTGRES_PASSWORD` | Password for the PostgreSQL database |
+| `REDIS_PASSWORD` | Password for Redis authentication |
 | `ADMIN_PASSWORD` | Password for the default admin user (created on first boot) |
 | `VAPID_PRIVATE_KEY` | Private key for Web Push notifications. Generate with: `pip install py-vapid && vapid --gen` |
 | `VAPID_PUBLIC_KEY` | Public key for Web Push notifications (generated with the private key) |
@@ -57,11 +58,11 @@ Log levels can be set independently for each service:
 
 Valid values: `debug`, `info`, `warning`, `error`, `critical`.
 
-### Log rotation and GUI log viewers
+### Log rotation
 
-The production `docker-compose.yml` does not configure a custom logging driver, so Docker uses its default `json-file` driver without size limits. This allows log management tools like **Portainer**, **Synology Container Manager**, **Dozzle**, or plain `docker logs` to work out of the box.
+The production `docker-compose.yml` does **not** configure a per-container logging driver. This is intentional: platforms like **Synology Container Manager**, **Portainer**, and **QNAP Container Station** manage log viewing and rotation themselves, and overriding the driver at the container level can interfere with their log viewers.
 
-If you want to cap disk usage, configure log rotation at the Docker daemon level rather than per-container. Edit (or create) `/etc/docker/daemon.json` on the host:
+If you run Docker **without** a management platform (plain `docker compose` on a Linux server), it is recommended to configure log rotation at the Docker daemon level to prevent unbounded disk growth. Edit (or create) `/etc/docker/daemon.json`:
 
 ```json
 {
@@ -79,13 +80,14 @@ Then restart the Docker daemon:
 sudo systemctl restart docker
 ```
 
-This applies the rotation policy to all containers globally without breaking GUI log viewers.
+This applies the rotation policy globally to all containers.
 
 ## Redis / Celery
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL for Celery |
+| `REDIS_PASSWORD` | — | Password for Redis authentication. Django builds the connection URL automatically from this value |
+| `REDIS_URL` | _(built from `REDIS_PASSWORD`)_ | Override only if Redis runs on a non-default host/port. Normally not needed |
 
 ## Web Push (VAPID)
 
