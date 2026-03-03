@@ -91,6 +91,7 @@ describe('api client', () => {
     expect(res.ok).toBe(true)
     expect(attempt).toBe(2)
     expect(localStorage.getItem('access_token')).toBe('new-access')
+    expect(localStorage.getItem('refresh_token')).toBe('new-refresh')
   })
 
   it('clears storage and redirects on failed refresh', async () => {

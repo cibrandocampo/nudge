@@ -26,6 +26,15 @@ function formatPresetLabel(hours, t) {
   return `${human.value} ${t(`routine.form.${human.unit}`)}`
 }
 
+function toLocalDateTimeString(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const h = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d}T${h}:${min}`
+}
+
 const EMPTY = { name: '', description: '', interval_hours: 24, stock: '', stock_usage: 1 }
 
 export default function RoutineFormPage() {
@@ -254,9 +263,7 @@ export default function RoutineFormPage() {
                 onChange={(e) => {
                   setLastDoneEnabled(e.target.checked)
                   if (e.target.checked && !lastDoneAt) {
-                    const now = new Date()
-                    now.setSeconds(0, 0)
-                    setLastDoneAt(now.toISOString().slice(0, 16))
+                    setLastDoneAt(toLocalDateTimeString(new Date()))
                   }
                 }}
               />
@@ -267,7 +274,7 @@ export default function RoutineFormPage() {
                 className={cx(shared.input, s.lastDoneInput)}
                 type="datetime-local"
                 value={lastDoneAt}
-                max={new Date().toISOString().slice(0, 16)}
+                max={toLocalDateTimeString(new Date())}
                 onChange={(e) => setLastDoneAt(e.target.value)}
               />
             )}

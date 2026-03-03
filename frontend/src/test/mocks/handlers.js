@@ -58,7 +58,7 @@ export const handlers = [
 
   http.post(`${BASE}/auth/token/`, () => HttpResponse.json({ access: 'fake-access', refresh: 'fake-refresh' })),
 
-  http.post(`${BASE}/auth/refresh/`, () => HttpResponse.json({ access: 'new-access' })),
+  http.post(`${BASE}/auth/refresh/`, () => HttpResponse.json({ access: 'new-access', refresh: 'new-refresh' })),
 
   http.patch(`${BASE}/auth/me/`, () => HttpResponse.json(mockUser)),
 
