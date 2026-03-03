@@ -120,7 +120,7 @@ From the output:
 
 **Passwords**
 
-Choose a strong random string for `POSTGRES_PASSWORD` and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD`.
+Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD` and `REDIS_URL` to match `REDIS_PASSWORD`.
 
 ### 3. Configure your domain
 
@@ -155,9 +155,7 @@ For all configuration options, see [docs/configuration.md](https://github.com/ci
 
 ### Logs
 
-All containers write to stdout and use Docker's default `json-file` logging driver, so tools like **Portainer**, **Synology Container Manager**, **Dozzle**, or plain `docker logs` work out of the box.
-
-To cap disk usage, configure log rotation once at the Docker daemon level (`/etc/docker/daemon.json`) instead of per-container — see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#logging) for details.
+All containers write to stdout using Docker's default `json-file` driver. Platforms like **Synology Container Manager** or **Portainer** handle log viewing and rotation automatically. If you run plain Docker without a management UI, consider configuring daemon-level log rotation — see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#log-rotation) for details.
 
 ---
 
@@ -194,6 +192,7 @@ See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.
 - [Configuration](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md)
 - [Architecture & technical design](https://github.com/cibrandocampo/nudge/blob/main/docs/ARCHITECTURE.md)
 - [Development setup](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md)
+- [Development — Claude Code workflow](https://github.com/cibrandocampo/nudge/blob/main/docs/development.md)
 - [Backup & restore](https://github.com/cibrandocampo/nudge/blob/main/docs/backup.md)
 - [Troubleshooting](https://github.com/cibrandocampo/nudge/blob/main/docs/troubleshooting.md)
 

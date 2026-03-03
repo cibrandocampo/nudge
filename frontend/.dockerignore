@@ -7,3 +7,4 @@ dist/
 *.md
 .DS_Store
 coverage/
+tasks/
