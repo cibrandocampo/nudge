@@ -120,7 +120,7 @@ From the output:
 
 **Passwords**
 
-Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD` and `REDIS_URL` to match `REDIS_PASSWORD`.
+Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD`.
 
 ### 3. Configure your domain
 

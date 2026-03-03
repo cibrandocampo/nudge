@@ -86,8 +86,8 @@ This applies the rotation policy globally to all containers.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_PASSWORD` | — | Password for Redis authentication |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL for Celery. Must include the password (e.g., `redis://:yourpassword@redis:6379/0`) |
+| `REDIS_PASSWORD` | — | Password for Redis authentication. Django builds the connection URL automatically from this value |
+| `REDIS_URL` | _(built from `REDIS_PASSWORD`)_ | Override only if Redis runs on a non-default host/port. Normally not needed |
 
 ## Web Push (VAPID)
 
