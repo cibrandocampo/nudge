@@ -95,6 +95,7 @@ export default function HistoryPage() {
       setConsumptions([])
     }
     Promise.all(promises).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeFilter, routineFilter, stockFilter, dateFrom, dateTo])
 
   const loadMore = async () => {
