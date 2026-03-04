@@ -18,6 +18,7 @@ export const mockRoutine = {
   interval_hours: 24,
   is_active: true,
   is_due: true,
+  is_overdue: true,
   hours_until_due: -2,
   next_due_at: new Date(Date.now() - 2 * 3600000).toISOString(),
   created_at: '2025-01-15T10:00:00Z',
@@ -40,9 +41,8 @@ export const handlers = [
 
   http.get(`${BASE}/routines/:id/lots-for-selection/`, () =>
     HttpResponse.json([
-      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 1 },
-      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 2 },
-      { lot_id: 2, lot_number: null, expiry_date: null, unit_index: 1 },
+      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 },
+      { lot_id: 2, lot_number: null, expiry_date: null, quantity: 1 },
     ]),
   ),
 
@@ -53,8 +53,67 @@ export const handlers = [
   http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
 
   http.get(`${BASE}/stock/:id/`, () =>
-    HttpResponse.json({ id: 1, name: 'Filters', quantity: 5, lots: [], expiring_lots: [], has_expiring_lots: false }),
+    HttpResponse.json({
+      id: 1,
+      name: 'Filters',
+      quantity: 5,
+      group: null,
+      group_name: null,
+      lots: [],
+      expiring_lots: [],
+      has_expiring_lots: false,
+    }),
   ),
+
+  http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),
+
+  http.patch(`${BASE}/stock-consumptions/:id/`, async ({ request, params }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: Number(params.id),
+      stock: 1,
+      stock_name: 'Filters',
+      quantity: 1,
+      consumed_lots: [],
+      notes: body.notes ?? '',
+      created_at: '2026-03-01T10:00:00Z',
+    })
+  }),
+
+  http.patch(`${BASE}/entries/:id/`, async ({ request, params }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: Number(params.id),
+      routine: 1,
+      routine_name: 'Take vitamins',
+      created_at: '2026-03-01T09:00:00Z',
+      notes: body.notes ?? '',
+      consumed_lots: [],
+    })
+  }),
+
+  http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: [] })),
+
+  http.post(`${BASE}/stock-groups/`, async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json(
+      { id: 99, name: body.name, display_order: body.display_order ?? 0, created_at: '2026-01-01T00:00:00Z' },
+      { status: 201 },
+    )
+  }),
+
+  http.patch(`${BASE}/stock-groups/:id/`, async ({ request, params }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: Number(params.id),
+      name: 'Group',
+      display_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      ...body,
+    })
+  }),
+
+  http.delete(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 204 })),
 
   http.post(`${BASE}/auth/token/`, () => HttpResponse.json({ access: 'fake-access', refresh: 'fake-refresh' })),
 
@@ -72,7 +131,16 @@ export const handlers = [
 
   http.post(`${BASE}/stock/`, () =>
     HttpResponse.json(
-      { id: 2, name: 'New Item', quantity: 0, lots: [], expiring_lots: [], has_expiring_lots: false },
+      {
+        id: 2,
+        name: 'New Item',
+        quantity: 0,
+        group: null,
+        group_name: null,
+        lots: [],
+        expiring_lots: [],
+        has_expiring_lots: false,
+      },
       { status: 201 },
     ),
   ),
@@ -90,6 +158,8 @@ export const handlers = [
       id: Number(params.id),
       name: 'Filters',
       quantity: 4,
+      group: null,
+      group_name: null,
       lots: [{ id: 100, quantity: 4, expiry_date: null, lot_number: '' }],
       expiring_lots: [],
       has_expiring_lots: false,
@@ -98,10 +168,7 @@ export const handlers = [
   ),
 
   http.get(`${BASE}/stock/:id/lots-for-selection/`, () =>
-    HttpResponse.json([
-      { lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 1 },
-      { lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', unit_index: 2 },
-    ]),
+    HttpResponse.json([{ lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 }]),
   ),
 
   http.get(`${BASE}/push/vapid-public-key/`, () => HttpResponse.json({ public_key: 'BFake-VAPID-Key' })),

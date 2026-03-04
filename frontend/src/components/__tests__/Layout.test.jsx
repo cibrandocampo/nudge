@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import Layout from '../Layout'
 
@@ -37,6 +37,24 @@ describe('Layout', () => {
     const { container } = renderWithProviders(<Layout />)
     const badge = container.querySelector('.badge')
     expect(badge).toBeInTheDocument()
+  })
+
+  it('updates push badge on window focus when permission changes', () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'default', requestPermission: vi.fn() },
+      writable: true,
+    })
+    const { container } = renderWithProviders(<Layout />)
+    expect(container.querySelector('.badge')).toBeInTheDocument()
+
+    // Simulate granting permission and refocusing
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'granted', requestPermission: vi.fn() },
+      writable: true,
+    })
+    fireEvent.focus(window)
+
+    expect(container.querySelector('.badge')).not.toBeInTheDocument()
   })
 
   it('hides push badge when notifications granted', () => {

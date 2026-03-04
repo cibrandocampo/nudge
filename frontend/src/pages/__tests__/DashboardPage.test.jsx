@@ -45,6 +45,7 @@ describe('DashboardPage', () => {
               next_due_at: new Date(Date.now() - 3600000).toISOString(),
               created_at: '2025-01-01T00:00:00Z',
               is_due: true,
+              is_overdue: true,
               hours_until_due: -1,
               stock_name: null,
               stock_quantity: null,
@@ -77,6 +78,7 @@ describe('DashboardPage', () => {
       next_due_at: new Date(Date.now() - 3600000).toISOString(),
       created_at: '2025-01-01T00:00:00Z',
       is_due: true,
+      is_overdue: true,
       hours_until_due: -1,
       stock_name: null,
       stock_quantity: null,
@@ -101,6 +103,7 @@ describe('DashboardPage', () => {
       next_due_at: new Date(Date.now() - 3600000).toISOString(),
       created_at: '2025-01-01T00:00:00Z',
       is_due: true,
+      is_overdue: true,
       hours_until_due: -1,
       stock_name: 'Filters',
       stock_quantity: 5,
@@ -124,6 +127,7 @@ describe('DashboardPage', () => {
       next_due_at: new Date(Date.now() - 3600000).toISOString(),
       created_at: '2025-01-01T00:00:00Z',
       is_due: true,
+      is_overdue: true,
       hours_until_due: -1,
       stock_name: 'Filters',
       stock_quantity: 5,
@@ -146,11 +150,59 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
 
     // Select one lot and confirm
-    await user.click(screen.getByText('LOT-A (1)'))
+    await user.click(screen.getByText('LOT-A'))
     await user.click(screen.getByText('Confirm'))
 
     await waitFor(() => expect(logBody).not.toBeNull())
     expect(logBody.lot_selections).toEqual([{ lot_id: 1, quantity: 1 }])
+  })
+
+  it('multi mode: pre-distributes and confirms with stepper', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      is_overdue: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 3,
+      requires_lot_selection: true,
+    }
+    let logBody = null
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.get(`${BASE}/routines/1/lots-for-selection/`, () =>
+        HttpResponse.json([
+          { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 },
+          { lot_id: 2, lot_number: 'LOT-B', expiry_date: '2027-06-01', quantity: 5 },
+        ]),
+      ),
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Done'))
+    await waitFor(() => expect(screen.getByText(/Distribute 3 units across lots/)).toBeInTheDocument())
+
+    // FEFO pre-distributes: LOT-A=2, LOT-B=1 → total=3/3
+    expect(screen.getByText(/3\/3/)).toBeInTheDocument()
+
+    // Confirm with pre-distributed values
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    expect(logBody.lot_selections).toEqual([
+      { lot_id: 1, quantity: 2 },
+      { lot_id: 2, quantity: 1 },
+    ])
   })
 
   it('cancels lot selection modal without logging', async () => {
@@ -160,6 +212,7 @@ describe('DashboardPage', () => {
       next_due_at: new Date(Date.now() - 3600000).toISOString(),
       created_at: '2025-01-01T00:00:00Z',
       is_due: true,
+      is_overdue: true,
       hours_until_due: -1,
       stock_name: 'Filters',
       stock_quantity: 5,
@@ -194,6 +247,7 @@ describe('DashboardPage', () => {
       next_due_at: new Date(Date.now() - 3600000).toISOString(),
       created_at: '2025-01-01T00:00:00Z',
       is_due: true,
+      is_overdue: true,
       hours_until_due: -1,
       stock_name: null,
       stock_quantity: null,

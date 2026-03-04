@@ -296,6 +296,124 @@ class ChangePasswordTest(APITestCase):
 # ── /api/auth/admin-access/ ─────────────────────────────────────────────────
 
 
+# ── /api/auth/contacts/ ───────────────────────────────────────────────────
+
+
+class ContactTest(APITestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass")
+        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.inactive = User.objects.create_user(username="inactive", password="pass", is_active=False)
+        self.client.force_authenticate(user=self.alice)
+        self.url = "/api/auth/contacts/"
+
+    def test_list_contacts_empty(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_add_contact(self):
+        response = self.client.post(self.url, {"username": "bob"})
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["username"], "bob")
+        self.assertEqual(data["id"], self.bob.pk)
+
+    def test_list_contacts_after_add(self):
+        self.alice.contacts.add(self.bob)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        usernames = [c["username"] for c in response.json()]
+        self.assertIn("bob", usernames)
+
+    def test_add_contact_case_insensitive(self):
+        response = self.client.post(self.url, {"username": "BOB"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["username"], "bob")
+
+    def test_add_self_returns_400(self):
+        response = self.client.post(self.url, {"username": "alice"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_add_nonexistent_user_returns_404(self):
+        response = self.client.post(self.url, {"username": "nobody"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_add_inactive_user_returns_404(self):
+        response = self.client.post(self.url, {"username": "inactive"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_add_duplicate_returns_400(self):
+        self.alice.contacts.add(self.bob)
+        response = self.client.post(self.url, {"username": "bob"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_bidirectional(self):
+        self.client.post(self.url, {"username": "bob"})
+        self.client.force_authenticate(user=self.bob)
+        response = self.client.get(self.url)
+        usernames = [c["username"] for c in response.json()]
+        self.assertIn("alice", usernames)
+
+    def test_remove_contact(self):
+        self.alice.contacts.add(self.bob)
+        response = self.client.delete(f"{self.url}{self.bob.pk}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(self.alice.contacts.filter(pk=self.bob.pk).exists())
+        self.assertFalse(self.bob.contacts.filter(pk=self.alice.pk).exists())
+
+    def test_remove_non_contact_returns_404(self):
+        response = self.client.delete(f"{self.url}{self.carol.pk}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_search_contacts(self):
+        response = self.client.get(f"{self.url}search/", {"q": "bo"})
+        self.assertEqual(response.status_code, 200)
+        usernames = [c["username"] for c in response.json()]
+        self.assertIn("bob", usernames)
+        self.assertNotIn("alice", usernames)
+
+    def test_search_excludes_self(self):
+        response = self.client.get(f"{self.url}search/", {"q": "ali"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_search_excludes_existing_contacts(self):
+        self.alice.contacts.add(self.bob)
+        response = self.client.get(f"{self.url}search/", {"q": "bo"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_search_excludes_inactive(self):
+        response = self.client.get(f"{self.url}search/", {"q": "inac"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_unauthenticated_list_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 401)
+
+    def test_unauthenticated_add_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(self.url, {"username": "bob"})
+        self.assertEqual(response.status_code, 401)
+
+    def test_unauthenticated_delete_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.delete(f"{self.url}{self.bob.pk}/")
+        self.assertEqual(response.status_code, 401)
+
+    def test_unauthenticated_search_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(f"{self.url}search/", {"q": "bo"})
+        self.assertEqual(response.status_code, 401)
+
+
+# ── /api/auth/admin-access/ ─────────────────────────────────────────────────
+
+
 class AdminAccessTest(APITestCase):
     def setUp(self):
         self.staff = User.objects.create_user(

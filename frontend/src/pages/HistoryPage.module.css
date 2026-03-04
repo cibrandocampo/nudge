@@ -2,6 +2,26 @@
   max-width: 540px;
 }
 
+.filterRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.filterLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+  padding-left: 0.4rem;
+}
+
 .filter {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--c-border);
@@ -34,21 +54,38 @@
 }
 
 .entry {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--c-border-inner);
   font-size: 0.875rem;
+  border-left: 3px solid var(--c-border);
+}
+
+.entryRoutine {
+  border-left-color: var(--c-primary);
 }
 
 .entry:last-child {
   border-bottom: none;
 }
 
+.entryMain {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entryBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-3);
+  min-width: 1.5rem;
+  text-align: center;
+}
+
 .entryName {
   color: var(--c-text);
   font-weight: 500;
+  flex: 1;
 }
 
 .entryTime {
@@ -56,6 +93,70 @@
   font-size: 0.8rem;
   white-space: nowrap;
 }
+
+/* ── Consumed stock info ────────────────────────────────────── */
+
+.consumedRow {
+  display: flex;
+  gap: 0.3rem;
+  padding-left: 2rem;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}
+
+.consumedLot {
+  color: var(--c-text-3);
+}
+
+.consumedQty {
+  color: var(--c-text-3);
+  font-weight: 600;
+}
+
+/* ── Notes ───────────────────────────────────────────────────── */
+
+.notesRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  padding-left: 2rem;
+}
+
+.notesBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--c-text-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.notesPlaceholder {
+  color: var(--c-muted);
+  font-style: italic;
+}
+
+.notesInput {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  outline: none;
+}
+
+.notesSaved {
+  font-size: 0.75rem;
+  color: var(--c-success);
+  font-weight: 500;
+}
+
+/* ── Load more ───────────────────────────────────────────────── */
 
 .moreBtn {
   display: block;

@@ -8,6 +8,7 @@ const baseRoutine = {
   next_due_at: new Date(Date.now() + 3600000).toISOString(),
   created_at: '2025-01-15T10:00:00Z',
   is_due: true,
+  is_overdue: true,
   hours_until_due: -2,
   stock_name: null,
   stock_quantity: null,
@@ -58,16 +59,23 @@ describe('RoutineCard', () => {
   })
 
   it('applies danger border class when overdue', () => {
-    const routine = { ...baseRoutine, is_due: true, hours_until_due: -2 }
+    const routine = { ...baseRoutine, is_due: true, is_overdue: true }
     const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     const row = container.firstChild
     expect(row.className).toContain('borderDanger')
   })
 
-  it('applies warning border class when due but hours_until_due is between -1 and 0', () => {
-    const routine = { ...baseRoutine, is_due: true, hours_until_due: -0.5 }
+  it('applies warning border class when due today but not yet overdue', () => {
+    const routine = { ...baseRoutine, is_due: true, is_overdue: false, hours_until_due: 3 }
     const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     const row = container.firstChild
     expect(row.className).toContain('borderWarning')
+  })
+
+  it('applies success border class when not due', () => {
+    const routine = { ...baseRoutine, is_due: false, is_overdue: false, hours_until_due: 24 }
+    const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const row = container.firstChild
+    expect(row.className).toContain('borderSuccess')
   })
 })

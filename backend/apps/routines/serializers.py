@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Routine, RoutineEntry, Stock, StockLot
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 
 
 class StockLotSerializer(serializers.ModelSerializer):
@@ -23,9 +23,17 @@ class StockLotSerializer(serializers.ModelSerializer):
         return value
 
 
+class StockGroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockGroup
+        fields = ["id", "name", "display_order", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
 class StockSerializer(serializers.ModelSerializer):
     lots = StockLotSerializer(many=True, read_only=True)
     quantity = serializers.SerializerMethodField()
+    group_name = serializers.CharField(source="group.name", read_only=True, default=None)
     has_expiring_lots = serializers.SerializerMethodField()
     expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
@@ -35,6 +43,8 @@ class StockSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "group",
+            "group_name",
             "quantity",
             "lots",
             "has_expiring_lots",
@@ -45,12 +55,19 @@ class StockSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "quantity",
+            "group_name",
             "lots",
             "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
             "updated_at",
         ]
+
+    def validate_group(self, value):
+        request = self.context.get("request")
+        if value and request and value.user != request.user:
+            raise serializers.ValidationError("Invalid stock group.")
+        return value
 
     def get_quantity(self, obj):
         # Use prefetched lots if available to avoid an extra aggregate query
@@ -80,6 +97,15 @@ class StockSerializer(serializers.ModelSerializer):
         return obj.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
 
 
+class StockConsumptionSerializer(serializers.ModelSerializer):
+    stock_name = serializers.CharField(source="stock.name", read_only=True)
+
+    class Meta:
+        model = StockConsumption
+        fields = ["id", "stock", "stock_name", "quantity", "consumed_lots", "notes", "created_at"]
+        read_only_fields = ["id", "stock", "stock_name", "quantity", "consumed_lots", "created_at"]
+
+
 class RoutineSerializer(serializers.ModelSerializer):
     # Read-only convenience field so the frontend doesn't need an extra request
     stock_name = serializers.CharField(source="stock.name", read_only=True)
@@ -89,6 +115,7 @@ class RoutineSerializer(serializers.ModelSerializer):
     last_entry_at = serializers.SerializerMethodField()
     next_due_at = serializers.SerializerMethodField()
     is_due = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
     hours_until_due = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
 
@@ -112,6 +139,7 @@ class RoutineSerializer(serializers.ModelSerializer):
             "last_entry_at",
             "next_due_at",
             "is_due",
+            "is_overdue",
             "hours_until_due",
             "requires_lot_selection",
             "last_done_at",
@@ -147,6 +175,9 @@ class RoutineSerializer(serializers.ModelSerializer):
     def get_is_due(self, obj):
         return obj.is_due()
 
+    def get_is_overdue(self, obj):
+        return obj.is_overdue()
+
     def get_hours_until_due(self, obj):
         due = obj.next_due_at()
         if due is None:
@@ -162,8 +193,9 @@ class RoutineSerializer(serializers.ModelSerializer):
 
 class RoutineEntrySerializer(serializers.ModelSerializer):
     routine_name = serializers.CharField(source="routine.name", read_only=True)
+    stock_name = serializers.CharField(source="routine.stock.name", read_only=True, default=None)
 
     class Meta:
         model = RoutineEntry
-        fields = ["id", "routine", "routine_name", "created_at", "notes", "consumed_lots"]
-        read_only_fields = ["id", "routine", "created_at", "consumed_lots"]
+        fields = ["id", "routine", "routine_name", "stock_name", "created_at", "notes", "consumed_lots"]
+        read_only_fields = ["id", "routine", "created_at", "consumed_lots", "stock_name"]

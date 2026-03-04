@@ -2,55 +2,73 @@ import logging
 
 from django.db import transaction
 from django.db.models import F, Prefetch
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.notifications.models import NotificationState
 
-from .models import Routine, RoutineEntry, Stock, StockLot
-from .serializers import RoutineEntrySerializer, RoutineSerializer, StockLotSerializer, StockSerializer
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
+from .serializers import (
+    RoutineEntrySerializer,
+    RoutineSerializer,
+    StockConsumptionSerializer,
+    StockGroupSerializer,
+    StockLotSerializer,
+    StockSerializer,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class StockGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = StockGroupSerializer
+
+    def get_queryset(self):
+        return StockGroup.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class StockViewSet(viewsets.ModelViewSet):
     serializer_class = StockSerializer
 
     def get_queryset(self):
-        return Stock.objects.filter(user=self.request.user).prefetch_related("lots").order_by("name")
+        return (
+            Stock.objects.filter(user=self.request.user)
+            .select_related("group")
+            .prefetch_related("lots")
+            .order_by("name")
+        )
 
     def perform_create(self, serializer):
         stock = serializer.save(user=self.request.user)
-        logger.info("Stock %s created by user %s.", stock.id, self.request.user.id)
+        logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
 
     def perform_destroy(self, instance):
-        logger.info("Stock %s deleted by user %s.", instance.id, self.request.user.id)
+        logger.info("Stock %r deleted (user %s).", instance.name, self.request.user.username)
         super().perform_destroy(instance)
 
     @action(detail=True, methods=["get"], url_path="lots-for-selection")
     def lots_for_selection(self, request, pk=None):
         """
-        Return available lots expanded into individual units (FEFO order).
+        Return available lots grouped (one row per lot, FEFO order).
         Used to populate the lot selection modal when consuming stock directly.
         """
         stock = self.get_object()
-        units = []
         lots = stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-        for lot in lots:
-            lot_number = lot.lot_number or None
-            expiry_date = lot.expiry_date.isoformat() if lot.expiry_date else None
-            for i in range(1, lot.quantity + 1):
-                units.append(
-                    {
-                        "lot_id": lot.id,
-                        "lot_number": lot_number,
-                        "expiry_date": expiry_date,
-                        "unit_index": i,
-                    }
-                )
-        return Response(units)
+        data = [
+            {
+                "lot_id": lot.id,
+                "lot_number": lot.lot_number or None,
+                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                "quantity": lot.quantity,
+            }
+            for lot in lots
+        ]
+        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="consume")
     def consume(self, request, pk=None):
@@ -69,6 +87,8 @@ class StockViewSet(viewsets.ModelViewSet):
         lot_selections = request.data.get("lot_selections")
 
         with transaction.atomic():
+            consumed_lots = []
+
             if lot_selections is not None:
                 total = sum(sel.get("quantity", 0) for sel in lot_selections)
                 if total != quantity:
@@ -89,8 +109,16 @@ class StockViewSet(viewsets.ModelViewSet):
                     if qty <= 0:
                         continue
                     lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=stock)
-                    lot.quantity -= min(lot.quantity, qty)
+                    consume_qty = min(lot.quantity, qty)
+                    lot.quantity -= consume_qty
                     lot.save(update_fields=["quantity"])
+                    consumed_lots.append(
+                        {
+                            "lot_number": lot.lot_number or None,
+                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                            "quantity": consume_qty,
+                        }
+                    )
             else:
                 remaining = quantity
                 for lot in (
@@ -104,10 +132,22 @@ class StockViewSet(viewsets.ModelViewSet):
                     lot.quantity -= consume
                     lot.save(update_fields=["quantity"])
                     remaining -= consume
+                    consumed_lots.append(
+                        {
+                            "lot_number": lot.lot_number or None,
+                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                            "quantity": consume,
+                        }
+                    )
 
+            StockConsumption.objects.create(
+                stock=stock,
+                quantity=quantity,
+                consumed_lots=consumed_lots,
+            )
             stock.save(update_fields=["updated_at"])
 
-        logger.info("Stock %s consumed %d unit(s) by user %s.", stock.id, quantity, request.user.id)
+        logger.info("Stock %r consumed %d unit(s) (user %s).", stock.name, quantity, request.user.username)
         stock.refresh_from_db()
         stock = Stock.objects.prefetch_related("lots").get(pk=stock.pk)
         return Response(StockSerializer(stock).data)
@@ -146,37 +186,33 @@ class RoutineViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         routine = serializer.save(user=self.request.user)
-        logger.info("Routine %s created by user %s.", routine.id, self.request.user.id)
+        logger.info("Routine %r created (user %s).", routine.name, self.request.user.username)
 
     def perform_destroy(self, instance):
-        logger.info("Routine %s deleted by user %s.", instance.id, self.request.user.id)
+        logger.info("Routine %r deleted (user %s).", instance.name, self.request.user.username)
         super().perform_destroy(instance)
 
     @action(detail=True, methods=["get"], url_path="lots-for-selection")
     def lots_for_selection(self, request, pk=None):
         """
-        Return the available lots expanded into individual units (FEFO order).
+        Return available lots grouped (one row per lot, FEFO order).
         Used to populate the lot selection modal on the frontend.
         """
         routine = self.get_object()
         if not routine.stock:
             return Response([])
 
-        units = []
         lots = routine.stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-        for lot in lots:
-            lot_number = lot.lot_number or None
-            expiry_date = lot.expiry_date.isoformat() if lot.expiry_date else None
-            for i in range(1, lot.quantity + 1):
-                units.append(
-                    {
-                        "lot_id": lot.id,
-                        "lot_number": lot_number,
-                        "expiry_date": expiry_date,
-                        "unit_index": i,
-                    }
-                )
-        return Response(units)
+        data = [
+            {
+                "lot_id": lot.id,
+                "lot_number": lot.lot_number or None,
+                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+                "quantity": lot.quantity,
+            }
+            for lot in lots
+        ]
+        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="log")
     def log(self, request, pk=None):
@@ -267,12 +303,7 @@ class RoutineViewSet(viewsets.ModelViewSet):
             state.last_reminder = None
             state.save(update_fields=["last_due_notification", "last_reminder"])
 
-        logger.info(
-            "Routine %s logged by user %s (entry %s).",
-            routine.id,
-            request.user.id,
-            entry.id,
-        )
+        logger.info("Routine %r logged (user %s).", routine.name, request.user.username)
         return Response(RoutineEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path="entries")
@@ -286,16 +317,48 @@ class RoutineViewSet(viewsets.ModelViewSet):
         return Response(RoutineEntrySerializer(qs, many=True).data)
 
 
-class RoutineEntryViewSet(viewsets.ReadOnlyModelViewSet):
+class StockConsumptionViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """List stock consumptions and edit notes."""
+
+    serializer_class = StockConsumptionSerializer
+
+    def get_queryset(self):
+        qs = StockConsumption.objects.filter(
+            stock__user=self.request.user,
+        ).select_related("stock")
+        stock_id = self.request.query_params.get("stock")
+        if stock_id:
+            qs = qs.filter(stock_id=stock_id)
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        return qs
+
+
+class RoutineEntryViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     """Global entry history for the authenticated user."""
 
     serializer_class = RoutineEntrySerializer
 
     def get_queryset(self):
-        qs = RoutineEntry.objects.filter(routine__user=self.request.user).select_related("routine")
+        qs = RoutineEntry.objects.filter(routine__user=self.request.user).select_related("routine", "routine__stock")
         routine_id = self.request.query_params.get("routine")
         if routine_id:
             qs = qs.filter(routine_id=routine_id)
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
         return qs
 
 

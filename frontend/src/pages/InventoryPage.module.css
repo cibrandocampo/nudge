@@ -277,3 +277,180 @@
   cursor: pointer;
   text-align: left;
 }
+
+/* ── Top actions ─────────────────────────────────────────────── */
+
+.topActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.groupsBtn {
+  padding: 0.4rem 0.875rem;
+  background: none;
+  color: var(--c-text-2);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ── Group select (on card header) ───────────────────────────── */
+
+.groupSelect {
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  background: var(--c-bg);
+  color: var(--c-text-2);
+  cursor: pointer;
+  max-width: 100px;
+}
+
+/* ── Collapsible group boxes ─────────────────────────────────── */
+
+.groupBox {
+  border: 1px solid color-mix(in srgb, var(--c-primary) 20%, var(--c-border));
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  background: color-mix(in srgb, var(--c-primary) 4%, var(--c-surface));
+  overflow: hidden;
+  padding: 0.25rem;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--c-text);
+}
+
+.groupToggle {
+  font-size: 0.7rem;
+  color: var(--c-primary);
+}
+
+.groupName {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--c-primary);
+}
+
+.groupCount {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}
+
+.ungroupedLabel {
+  color: var(--c-text-3);
+  font-style: italic;
+}
+
+/* ── Group manager modal ─────────────────────────────────────── */
+
+.groupManagerModal {
+  max-width: 380px;
+}
+
+.groupManagerTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+
+.groupManagerList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.groupManagerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--c-border-inner);
+}
+
+.groupManagerName {
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--c-text);
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.groupManagerName:hover .editHint {
+  opacity: 1;
+}
+
+.editHint {
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  opacity: 0.4;
+  margin-left: 0.25rem;
+  transition: opacity 0.15s;
+}
+
+.groupManagerActions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.moveBtn {
+  background: none;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--c-text-3);
+}
+
+.moveBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.groupManagerForm {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.groupManagerForm .input {
+  flex: 1;
+}
+
+/* ── Group tag button (on card header) ─────────────────────── */
+
+.groupTagBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.25rem;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.groupTagBtn:hover {
+  opacity: 1;
+}

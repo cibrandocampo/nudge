@@ -51,12 +51,7 @@ export default function ChangePasswordModal({ onClose }) {
               required
               autoFocus
             />
-            <PasswordInput
-              placeholder={t('header.newPassword')}
-              value={form.next}
-              onChange={set('next')}
-              required
-            />
+            <PasswordInput placeholder={t('header.newPassword')} value={form.next} onChange={set('next')} required />
             <PasswordInput
               placeholder={t('header.confirmPassword')}
               value={form.confirm}

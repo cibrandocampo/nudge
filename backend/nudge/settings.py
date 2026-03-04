@@ -224,5 +224,10 @@ LOGGING = {
             "level": _LOG_LEVEL,
             "propagate": False,
         },
+        "celery": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }

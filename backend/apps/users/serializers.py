@@ -19,6 +19,13 @@ class UserSerializer(serializers.ModelSerializer):
         return data
 
 
+class ContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username"]
+        read_only_fields = ["id", "username"]
+
+
 class UserUpdateSerializer(serializers.ModelSerializer):
     timezone = serializers.CharField(max_length=64)
 

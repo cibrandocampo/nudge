@@ -243,6 +243,12 @@ describe('RoutineFormPage', () => {
     expect(new Date(capturedBody.last_done_at).getTime()).not.toBeNaN()
   })
 
+  it('renders preset label for hours-based interval', async () => {
+    renderCreate()
+    // The 8 hours preset triggers hoursToHuman fallback (hours unit)
+    await waitFor(() => expect(screen.getByText('8 hours')).toBeInTheDocument())
+  })
+
   it('shows saving state on submit', async () => {
     let resolve
     server.use(
