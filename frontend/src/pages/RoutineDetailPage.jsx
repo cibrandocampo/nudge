@@ -215,7 +215,10 @@ export default function RoutineDetailPage() {
       {showAdvanceConfirm && (
         <ConfirmModal
           message={t('routine.detail.advanceConfirm')}
-          onConfirm={() => { setShowAdvanceConfirm(false); markDone() }}
+          onConfirm={() => {
+            setShowAdvanceConfirm(false)
+            markDone()
+          }}
           onCancel={() => setShowAdvanceConfirm(false)}
           confirmLabel={t('routine.detail.advance')}
         />

@@ -7,7 +7,7 @@ import s from './RoutineCard.module.css'
 
 function statusClass(routine) {
   if (!routine.is_due) return null
-  if (routine.hours_until_due === null || routine.hours_until_due < -1) return s.borderDanger
+  if (routine.is_overdue) return s.borderDanger
   return s.borderWarning
 }
 
@@ -40,15 +40,15 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   }
 
   return (
-    <div
-      className={cx(s.row, s.rowLink, statusClass(routine))}
-      onClick={() => navigate(`/routines/${routine.id}`)}
-    >
+    <div className={cx(s.row, s.rowLink, statusClass(routine))} onClick={() => navigate(`/routines/${routine.id}`)}>
       {info}
       <div className={s.actions}>
         <button
           className={cx(s.doneBtn, completing && shared.disabled)}
-          onClick={(e) => { e.stopPropagation(); onMarkDone(routine.id) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onMarkDone(routine.id)
+          }}
           disabled={completing}
         >
           {completing ? '…' : t('card.done')}

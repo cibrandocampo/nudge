@@ -15,7 +15,7 @@ from .push import notify_daily_heads_up, notify_due, notify_reminder
 
 logger = logging.getLogger(__name__)
 
-REMINDER_INTERVAL_HOURS = 8
+REMINDER_INTERVAL_HOURS = 2
 DAILY_WINDOW_MINUTES = 5  # tolerance around the user's configured time
 
 
@@ -29,7 +29,7 @@ def check_notifications():
     Runs every 5 minutes. For each active user:
       1. Daily heads-up  — once per day at the user's configured local time.
       2. Due notification — when a routine becomes overdue, once per cycle.
-      3. Reminder        — every 8h while the routine remains overdue.
+      3. Reminder        — every REMINDER_INTERVAL_HOURS while the routine remains overdue.
     """
     User = get_user_model()
     now_utc = timezone.now()
@@ -60,14 +60,16 @@ def check_notifications():
         try:
             user_tz = ZoneInfo(user.timezone)
         except (ZoneInfoNotFoundError, ValueError):
-            logger.warning('Invalid timezone "%s" for user %s — skipping.', user.timezone, user.id)
+            logger.warning("Invalid timezone %r for user %s — skipping.", user.timezone, user.id)
             continue
 
         now_local = now_utc.astimezone(user_tz)
+        routines = list(user.routines.all())
+        logger.debug("Checking user %s (%d active routines).", user.username, len(routines))
 
         _check_daily_heads_up(user, now_utc, now_local)
 
-        for routine in user.routines.all():
+        for routine in routines:
             try:
                 _check_due_notification(routine, now_utc)
                 _check_reminder(routine, now_utc)
@@ -107,10 +109,17 @@ def _check_daily_heads_up(user, now_utc, now_local):
     minute_match = abs(now_local.minute - target.minute) <= DAILY_WINDOW_MINUTES
 
     if not (hour_match and minute_match):
+        logger.debug(
+            "Daily heads-up: not in time window for user %s (now=%s, target=%s).",
+            user.username,
+            now_local.strftime("%H:%M"),
+            target.strftime("%H:%M"),
+        )
         return
 
     due_routines = [r for r in user.routines.all() if _is_due_today(r, now_local)]
     if not due_routines:
+        logger.debug("Daily heads-up: no routines due today for user %s.", user.username)
         return
 
     today_local = now_local.date()
@@ -122,10 +131,16 @@ def _check_daily_heads_up(user, now_utc, now_local):
         # Skip if we already sent the daily notification for any due routine today
         already_sent = any(states[r.id].last_daily_notification == today_local for r in due_routines)
         if already_sent:
+            logger.debug("Daily heads-up: already sent today for user %s.", user.username)
             return
 
         notify_daily_heads_up(user, due_count=len(due_routines), names=[r.name for r in due_routines])
-        logger.info("Daily heads-up sent to user %s (%d routines due).", user.id, len(due_routines))
+        logger.info(
+            "Daily heads-up sent to user %s (%d due: %s).",
+            user.username,
+            len(due_routines),
+            ", ".join(r.name for r in due_routines),
+        )
 
         # Mark all due routines as notified today
         for routine in due_routines:
@@ -139,7 +154,8 @@ def _check_due_notification(routine, now_utc):
     Send a 'due' notification when the routine first becomes overdue.
     Does not repeat within the same cycle (i.e. until the next RoutineEntry).
     """
-    if not routine.is_due():
+    if not routine.is_overdue():
+        logger.debug("Due: routine %r not overdue — skipped.", routine.name)
         return
 
     with transaction.atomic():
@@ -148,14 +164,14 @@ def _check_due_notification(routine, now_utc):
 
         if state.last_due_notification:
             if last_entry is None:
-                # Routine was never logged and we already notified — do not repeat
+                logger.debug("Due: routine %r never logged, already notified — skipped.", routine.name)
                 return
             if state.last_due_notification > last_entry.created_at:
-                # Already notified for this cycle
+                logger.debug("Due: routine %r already notified this cycle — skipped.", routine.name)
                 return
 
         notify_due(routine)
-        logger.info("Due notification sent for routine %s (user %s).", routine.id, routine.user_id)
+        logger.info("Due notification sent for routine %r (user %s).", routine.name, routine.user.username)
 
         state.last_due_notification = now_utc
         state.save(update_fields=["last_due_notification"])
@@ -166,19 +182,21 @@ def _check_reminder(routine, now_utc):
     Send a reminder every REMINDER_INTERVAL_HOURS while the routine remains overdue.
     Only fires after the initial 'due' notification has been sent.
     """
-    if not routine.is_due():
+    if not routine.is_overdue():
+        logger.debug("Reminder: routine %r not overdue — skipped.", routine.name)
         return
 
     with transaction.atomic():
         state = _get_or_create_state(routine, lock=True)
 
         if not state.last_due_notification:
-            # Due notification hasn't been sent yet — wait for it first
+            logger.debug("Reminder: routine %r waiting for due notification first — skipped.", routine.name)
             return
 
         last_notif = state.last_reminder or state.last_due_notification
 
         if (now_utc - last_notif) < timedelta(hours=REMINDER_INTERVAL_HOURS):
+            logger.debug("Reminder: routine %r too soon since last notification — skipped.", routine.name)
             return
 
         next_due = routine.next_due_at()
@@ -189,9 +207,9 @@ def _check_reminder(routine, now_utc):
 
         notify_reminder(routine, hours_overdue=hours_overdue)
         logger.info(
-            "Reminder sent for routine %s (user %s, overdue %dh).",
-            routine.id,
-            routine.user_id,
+            "Reminder sent for routine %r (user %s, %dh overdue).",
+            routine.name,
+            routine.user.username,
             hours_overdue,
         )
 

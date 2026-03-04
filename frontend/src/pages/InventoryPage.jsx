@@ -16,6 +16,7 @@ function formatExpiry(dateStr) {
 export default function InventoryPage() {
   const { t } = useTranslation()
   const [stocks, setStocks] = useState([])
+  const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [confirmRemove, setConfirmRemove] = useState(null) // { id, name }
   const [confirmRemoveLot, setConfirmRemoveLot] = useState(null) // { stockId, lotId }
@@ -32,12 +33,24 @@ export default function InventoryPage() {
   // Per-stock "add lot" form: { [stockId]: { show, qty, expiry, lotNumber, adding } }
   const [addLot, setAddLot] = useState({})
 
+  // Collapsible groups state
+  const [collapsed, setCollapsed] = useState({})
+
+  // Group manager modal
+  const [showGroupManager, setShowGroupManager] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const [editingGroup, setEditingGroup] = useState(null) // { id, name }
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // { id, name }
+  const [groupPickerOpen, setGroupPickerOpen] = useState(null) // stockId
+
   const load = () => {
     setLoading(true)
-    api
-      .get('/stock/')
-      .then((r) => r.json())
-      .then((d) => setStocks(d.results ?? d))
+    Promise.all([api.get('/stock/').then((r) => r.json()), api.get('/stock-groups/').then((r) => r.json())])
+      .then(([stockData, groupData]) => {
+        setStocks(stockData.results ?? stockData)
+        setGroups(groupData.results ?? groupData)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -175,11 +188,265 @@ export default function InventoryPage() {
     }
   }
 
+  // ── Group actions ─────────────────────────────────────────────────────────
+
+  const handleAssignGroup = async (stockId, groupId) => {
+    setActionError(null)
+    try {
+      const res = await api.patch(`/stock/${stockId}/`, { group: groupId })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+    } catch {
+      setActionError(t('common.actionError'))
+    }
+  }
+
+  const handleCreateGroup = async (e) => {
+    e.preventDefault()
+    if (!newGroupName.trim()) return
+    setCreatingGroup(true)
+    setActionError(null)
+    try {
+      const maxOrder = groups.reduce((max, g) => Math.max(max, g.display_order), -1)
+      const res = await api.post('/stock-groups/', { name: newGroupName.trim(), display_order: maxOrder + 1 })
+      if (!res.ok) throw new Error()
+      const group = await res.json()
+      setGroups((prev) => [...prev, group])
+      setNewGroupName('')
+    } catch {
+      setActionError(t('common.actionError'))
+    } finally {
+      setCreatingGroup(false)
+    }
+  }
+
+  const handleRenameGroup = async (id, name) => {
+    setEditingGroup(null)
+    if (!name.trim()) return
+    setActionError(null)
+    try {
+      const res = await api.patch(`/stock-groups/${id}/`, { name: name.trim() })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)))
+    } catch {
+      setActionError(t('common.actionError'))
+    }
+  }
+
+  const handleDeleteGroup = async () => {
+    const { id } = confirmDeleteGroup
+    setConfirmDeleteGroup(null)
+    setActionError(null)
+    try {
+      const res = await api.delete(`/stock-groups/${id}/`)
+      if (!res.ok && res.status !== 204) throw new Error()
+      setGroups((prev) => prev.filter((g) => g.id !== id))
+      // Un-group stocks locally
+      setStocks((prev) => prev.map((st) => (st.group === id ? { ...st, group: null, group_name: null } : st)))
+    } catch {
+      setActionError(t('common.actionError'))
+    }
+  }
+
+  const handleMoveGroup = async (id, direction) => {
+    const idx = groups.findIndex((g) => g.id === id)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= groups.length) return
+
+    const newGroups = [...groups]
+    const orderA = newGroups[idx].display_order
+    const orderB = newGroups[swapIdx].display_order
+    // If they have the same display_order, use index-based values
+    const realOrderA = orderA === orderB ? idx : orderA
+    const realOrderB = orderA === orderB ? swapIdx : orderB
+
+    newGroups[idx] = { ...newGroups[idx], display_order: realOrderB }
+    newGroups[swapIdx] = { ...newGroups[swapIdx], display_order: realOrderA }
+    newGroups.sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name))
+    setGroups(newGroups)
+
+    // Persist both changes
+    await Promise.all([
+      api.patch(`/stock-groups/${newGroups[idx].id}/`, { display_order: newGroups[idx].display_order }),
+      api.patch(`/stock-groups/${swapIdx < idx ? swapIdx : swapIdx}/`, {
+        display_order: newGroups[swapIdx]?.display_order,
+      }),
+    ]).catch(() => setActionError(t('common.actionError')))
+  }
+
+  const toggleCollapse = (key) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  // ── Render helpers ──────────────────────────────────────────────────────
+
+  const renderStockCard = (stock) => {
+    const form = lotForm(stock.id)
+    return (
+      <div
+        key={stock.id}
+        className={cx(
+          s.productCard,
+          stock.quantity === 0 ? s.cardDanger : stock.quantity <= 3 ? s.cardWarning : s.cardSuccess,
+        )}
+        data-testid="product-card"
+      >
+        {/* Product header */}
+        <div className={s.productHeader}>
+          <div className={s.productMeta}>
+            <span className={s.productName}>{stock.name}</span>
+            <span className={s.productTotal}>
+              ({stock.quantity} {t('common.total')})
+            </span>
+          </div>
+          <div className={s.headerActions}>
+            {stock.quantity > 0 && (
+              <button
+                className={cx(s.consumeBtn, consuming === stock.id && shared.disabled)}
+                onClick={() => handleConsume(stock)}
+                disabled={consuming === stock.id}
+                title={t('inventory.consumeTooltip')}
+              >
+                {consuming === stock.id ? '…' : t('inventory.consumeOne')}
+              </button>
+            )}
+            {groupPickerOpen === stock.id ? (
+              <select
+                className={s.groupSelect}
+                autoFocus
+                value={stock.group ?? ''}
+                onChange={(e) => {
+                  handleAssignGroup(stock.id, e.target.value ? Number(e.target.value) : null)
+                  setGroupPickerOpen(null)
+                }}
+                onBlur={() => setGroupPickerOpen(null)}
+                aria-label={t('inventory.assignGroup')}
+              >
+                <option value="">{t('inventory.noGroup')}</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <button
+                className={s.groupTagBtn}
+                onClick={() => setGroupPickerOpen(stock.id)}
+                title={t('inventory.assignGroup')}
+              >
+                🏷️
+              </button>
+            )}
+            <button
+              className={s.deleteBtn}
+              onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
+              title={t('inventory.deleteTooltip')}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Lot list */}
+        {stock.lots.length > 0 && (
+          <div className={s.lotList}>
+            {stock.lots.map((lot) => {
+              const expiring = stock.expiring_lots.some((el) => el.id === lot.id)
+              return (
+                <div key={lot.id} className={s.lotRow}>
+                  <div className={s.lotInfo}>
+                    {lot.lot_number && <span className={s.lotNumber}>{lot.lot_number}</span>}
+                    <span className={s.lotQty}>
+                      {lot.quantity} {t('common.unit')}
+                    </span>
+                    <span className={cx(s.lotExpiry, expiring && s.lotExpiryDanger)}>
+                      {lot.expiry_date ? formatExpiry(lot.expiry_date) : t('inventory.noExpiry')}
+                      {expiring && ' ⚠'}
+                    </span>
+                  </div>
+                  <button
+                    className={s.lotDeleteBtn}
+                    onClick={() => setConfirmRemoveLot({ stockId: stock.id, lotId: lot.id })}
+                    title={t('inventory.deleteTooltip')}
+                  >
+                    🗑
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Add lot form */}
+        {form.show ? (
+          <form onSubmit={(e) => submitAddLot(e, stock.id)} className={s.addLotForm}>
+            <div className={s.addLotRow}>
+              <div className={s.addLotField}>
+                <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
+                <input
+                  className={cx(s.input, s.inputNarrow)}
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={form.qty}
+                  onChange={(e) => setLotField(stock.id, 'qty', e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className={s.addLotField}>
+                <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
+                <input
+                  className={s.input}
+                  type="date"
+                  value={form.expiry}
+                  onChange={(e) => setLotField(stock.id, 'expiry', e.target.value)}
+                />
+              </div>
+              <div className={cx(s.addLotField, s.inputFlex)}>
+                <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
+                <input
+                  className={s.input}
+                  type="text"
+                  placeholder={t('inventory.lotNumber')}
+                  value={form.lotNumber}
+                  onChange={(e) => setLotField(stock.id, 'lotNumber', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className={s.addLotActions}>
+              <button type="submit" className={s.createBtn} disabled={form.adding}>
+                {form.adding ? t('inventory.adding') : t('inventory.addLot')}
+              </button>
+              <button type="button" className={s.cancelBtn} onClick={() => toggleAddLot(stock.id)}>
+                {t('inventory.cancel')}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button className={s.addLotBtn} onClick={() => toggleAddLot(stock.id)}>
+            + {t('inventory.addLot')}
+          </button>
+        )}
+      </div>
+    )
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
 
   const expiringStocks = stocks.filter((st) => st.has_expiring_lots)
+
+  // Build grouped sections
+  const groupedSections = groups.map((group) => ({
+    key: group.id,
+    label: group.name,
+    stocks: stocks.filter((st) => st.group === group.id),
+  }))
+  const ungroupedStocks = stocks.filter((st) => !st.group)
 
   return (
     <div className={s.container}>
@@ -187,9 +454,14 @@ export default function InventoryPage() {
       {/* Top bar */}
       <div className={shared.topBar}>
         <h1 className={shared.pageTitle}>{t('inventory.title')}</h1>
-        <button className={showNew ? s.cancelBtn : s.newBtn} onClick={() => setShowNew((v) => !v)}>
-          {showNew ? t('inventory.cancel') : t('inventory.newButton')}
-        </button>
+        <div className={s.topActions}>
+          <button className={s.groupsBtn} onClick={() => setShowGroupManager(true)}>
+            {t('inventory.manageGroups')}
+          </button>
+          <button className={showNew ? s.cancelBtn : s.newBtn} onClick={() => setShowNew((v) => !v)}>
+            {showNew ? t('inventory.cancel') : t('inventory.newButton')}
+          </button>
+        </div>
       </div>
 
       {/* New stock form */}
@@ -229,124 +501,23 @@ export default function InventoryPage() {
       {/* Empty state */}
       {stocks.length === 0 && !showNew && <p className={shared.muted}>{t('inventory.empty')}</p>}
 
-      {/* Product list */}
-      {stocks.map((stock) => {
-        const form = lotForm(stock.id)
-        return (
-          <div key={stock.id} className={cx(s.productCard, stock.quantity === 0 ? s.cardDanger : stock.quantity <= 3 ? s.cardWarning : s.cardSuccess)} data-testid="product-card">
-            {/* Product header */}
-            <div className={s.productHeader}>
-              <div className={s.productMeta}>
-                <span className={s.productName}>{stock.name}</span>
-                <span className={s.productTotal}>
-                  ({stock.quantity} {t('common.total')})
-                </span>
-              </div>
-              <div className={s.headerActions}>
-                {stock.quantity > 0 && (
-                  <button
-                    className={cx(s.consumeBtn, consuming === stock.id && shared.disabled)}
-                    onClick={() => handleConsume(stock)}
-                    disabled={consuming === stock.id}
-                    title={t('inventory.consumeTooltip')}
-                  >
-                    {consuming === stock.id ? '…' : t('inventory.consumeOne')}
-                  </button>
-                )}
-                <button
-                  className={s.deleteBtn}
-                  onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
-                  title={t('inventory.deleteTooltip')}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Lot list */}
-            {stock.lots.length > 0 && (
-              <div className={s.lotList}>
-                {stock.lots.map((lot) => {
-                  const expiring = stock.expiring_lots.some((el) => el.id === lot.id)
-                  return (
-                    <div key={lot.id} className={s.lotRow}>
-                      <div className={s.lotInfo}>
-                        {lot.lot_number && <span className={s.lotNumber}>{lot.lot_number}</span>}
-                        <span className={s.lotQty}>
-                          {lot.quantity} {t('common.unit')}
-                        </span>
-                        <span className={cx(s.lotExpiry, expiring && s.lotExpiryDanger)}>
-                          {lot.expiry_date ? formatExpiry(lot.expiry_date) : t('inventory.noExpiry')}
-                          {expiring && ' ⚠'}
-                        </span>
-                      </div>
-                      <button
-                        className={s.lotDeleteBtn}
-                        onClick={() => setConfirmRemoveLot({ stockId: stock.id, lotId: lot.id })}
-                        title={t('inventory.deleteTooltip')}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Add lot form */}
-            {form.show ? (
-              <form onSubmit={(e) => submitAddLot(e, stock.id)} className={s.addLotForm}>
-                <div className={s.addLotRow}>
-                  <div className={s.addLotField}>
-                    <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
-                    <input
-                      className={cx(s.input, s.inputNarrow)}
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      value={form.qty}
-                      onChange={(e) => setLotField(stock.id, 'qty', e.target.value)}
-                      required
-                      autoFocus
-                    />
-                  </div>
-                  <div className={s.addLotField}>
-                    <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
-                    <input
-                      className={s.input}
-                      type="date"
-                      value={form.expiry}
-                      onChange={(e) => setLotField(stock.id, 'expiry', e.target.value)}
-                    />
-                  </div>
-                  <div className={cx(s.addLotField, s.inputFlex)}>
-                    <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
-                    <input
-                      className={s.input}
-                      type="text"
-                      placeholder={t('inventory.lotNumber')}
-                      value={form.lotNumber}
-                      onChange={(e) => setLotField(stock.id, 'lotNumber', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className={s.addLotActions}>
-                  <button type="submit" className={s.createBtn} disabled={form.adding}>
-                    {form.adding ? t('inventory.adding') : t('inventory.addLot')}
-                  </button>
-                  <button type="button" className={s.cancelBtn} onClick={() => toggleAddLot(stock.id)}>
-                    {t('inventory.cancel')}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button className={s.addLotBtn} onClick={() => toggleAddLot(stock.id)}>
-                + {t('inventory.addLot')}
+      {/* Grouped stock sections */}
+      {groupedSections.map(
+        (section) =>
+          section.stocks.length > 0 && (
+            <div key={section.key} className={s.groupBox} data-testid="group-box">
+              <button className={s.groupHeader} onClick={() => toggleCollapse(section.key)}>
+                <span className={s.groupToggle}>{collapsed[section.key] ? '▶' : '▼'}</span>
+                <span className={s.groupName}>{section.label}</span>
+                <span className={s.groupCount}>({section.stocks.length})</span>
               </button>
-            )}
-          </div>
-        )
-      })}
+              {!collapsed[section.key] && section.stocks.map(renderStockCard)}
+            </div>
+          ),
+      )}
+
+      {/* Ungrouped stocks — rendered flat, no group box */}
+      {ungroupedStocks.map(renderStockCard)}
 
       {/* Confirm delete stock */}
       {confirmRemove && (
@@ -375,6 +546,95 @@ export default function InventoryPage() {
           lots={lotModal.lots}
           onConfirm={handleLotConfirm}
           onCancel={() => setLotModal(null)}
+        />
+      )}
+
+      {/* Group manager modal */}
+      {showGroupManager && (
+        <div className={shared.overlay} onClick={() => setShowGroupManager(false)} role="dialog" aria-modal="true">
+          <div className={cx(shared.modalBox, s.groupManagerModal)} onClick={(e) => e.stopPropagation()}>
+            <h2 className={s.groupManagerTitle}>{t('inventory.manageGroups')}</h2>
+
+            {groups.length === 0 && <p className={shared.muted}>{t('inventory.empty')}</p>}
+
+            <div className={s.groupManagerList}>
+              {groups.map((group, idx) => (
+                <div key={group.id} className={s.groupManagerRow}>
+                  {editingGroup?.id === group.id ? (
+                    <input
+                      className={s.input}
+                      defaultValue={group.name}
+                      autoFocus
+                      onBlur={(e) => handleRenameGroup(group.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameGroup(group.id, e.target.value)
+                        if (e.key === 'Escape') setEditingGroup(null)
+                      }}
+                    />
+                  ) : (
+                    <button
+                      className={s.groupManagerName}
+                      onClick={() => setEditingGroup({ id: group.id, name: group.name })}
+                    >
+                      {group.name} <span className={s.editHint}>✎</span>
+                    </button>
+                  )}
+                  <div className={s.groupManagerActions}>
+                    <button
+                      className={s.moveBtn}
+                      onClick={() => handleMoveGroup(group.id, 'up')}
+                      disabled={idx === 0}
+                      title={t('inventory.moveUp')}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      className={s.moveBtn}
+                      onClick={() => handleMoveGroup(group.id, 'down')}
+                      disabled={idx === groups.length - 1}
+                      title={t('inventory.moveDown')}
+                    >
+                      ▼
+                    </button>
+                    <button
+                      className={s.deleteBtn}
+                      onClick={() => setConfirmDeleteGroup({ id: group.id, name: group.name })}
+                      title={t('inventory.deleteGroup')}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleCreateGroup} className={s.groupManagerForm}>
+              <input
+                className={s.input}
+                placeholder={t('inventory.groupName')}
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                required
+              />
+              <button type="submit" className={s.createBtn} disabled={creatingGroup}>
+                {creatingGroup ? '…' : t('inventory.createGroup')}
+              </button>
+            </form>
+
+            <button className={s.cancelBtn} onClick={() => setShowGroupManager(false)}>
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete group */}
+      {confirmDeleteGroup && (
+        <ConfirmModal
+          message={t('inventory.confirmDeleteGroup', { name: confirmDeleteGroup.name })}
+          onConfirm={handleDeleteGroup}
+          onCancel={() => setConfirmDeleteGroup(null)}
+          confirmLabel={t('inventory.deleteGroup')}
         />
       )}
     </div>

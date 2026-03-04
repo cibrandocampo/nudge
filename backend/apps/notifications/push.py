@@ -78,11 +78,12 @@ def send_push_notification(user, *, title: str, body: str, type: str, data: dict
         data:  Optional extra payload passed to the service worker.
     """
     if not settings.VAPID_PRIVATE_KEY or not settings.VAPID_PUBLIC_KEY:
-        logger.warning("VAPID keys not configured — push notification skipped.")
+        logger.warning("VAPID keys not configured — push skipped (user=%s, type=%s).", user.username, type)
         return
 
     subscriptions = PushSubscription.objects.filter(user=user)
     if not subscriptions.exists():
+        logger.debug("No push subscriptions for user %s — skipped.", user.username)
         return
 
     payload = json.dumps(
@@ -115,13 +116,13 @@ def send_push_notification(user, *, title: str, body: str, type: str, data: dict
             )
             subscription.last_used = timezone.now()
             subscription.save(update_fields=["last_used"])
-            logger.debug("Push sent to subscription %s (user=%s)", subscription.id, user.username)
+            logger.info("Push delivered to subscription %s (user=%s, type=%s).", subscription.id, user.username, type)
 
         except WebPushException as exc:
             response = getattr(exc, "response", None)
             if response is not None and response.status_code in (404, 410):
-                logger.info(
-                    "Removing expired push subscription %s (user=%s, status=%s)",
+                logger.warning(
+                    "Removing expired subscription %s (user=%s, status=%s).",
                     subscription.id,
                     user.username,
                     response.status_code,

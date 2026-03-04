@@ -1,0 +1,133 @@
+.wrapper {
+  position: relative;
+}
+
+.trigger {
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: var(--c-primary);
+  color: #fff;
+  outline: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── Popover ──────────────────────────────────────────────── */
+
+.popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  display: flex;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+/* ── Quick ranges (left panel) ────────────────────────────── */
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-right: 1px solid var(--c-border);
+  min-width: 140px;
+}
+
+.presetBtn {
+  background: none;
+  border: none;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--c-text-2);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.presetBtn:hover {
+  background: var(--c-border);
+}
+
+.presetBtnActive {
+  background: var(--c-primary);
+  color: #fff;
+  font-weight: 500;
+}
+
+.presetBtnActive:hover {
+  background: var(--c-primary);
+}
+
+/* ── Custom range (right panel) ───────────────────────────── */
+
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  min-width: 170px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.fieldLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.dateInput {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  outline: none;
+}
+
+.applyBtn {
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: var(--c-primary);
+  color: #fff;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+
+.applyBtn:hover {
+  opacity: 0.9;
+}
+
+/* ── Mobile (<400px): stack panels vertically ─────────────── */
+
+@media (max-width: 399px) {
+  .popover {
+    flex-direction: column;
+    right: 0;
+    left: auto;
+  }
+
+  .presets {
+    border-right: none;
+    border-bottom: 1px solid var(--c-border);
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+}

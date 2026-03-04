@@ -8,15 +8,33 @@ import s from './LotSelectionModal.module.css'
  *
  * Props:
  *   routine  — object with { name, stock_usage, stock_name }
- *   lots     — expanded unit list from /lots-for-selection/ endpoint
- *   onConfirm(lotSelections) — called with [{lot_id, quantity}] grouped
+ *   lots     — grouped lot list from /lots-for-selection/ endpoint
+ *              [{lot_id, lot_number, expiry_date, quantity}]
+ *   onConfirm(lotSelections) — called with [{lot_id, quantity}]
  *   onCancel
  */
 export default function LotSelectionModal({ routine, lots, onConfirm, onCancel }) {
   const { t } = useTranslation()
-  const [selected, setSelected] = useState([]) // array of unit keys "lotId-unitIndex"
-  const [error, setError] = useState(null)
   const needed = routine.stock_usage
+  const isSingle = needed === 1
+
+  // Single mode state
+  const [selectedLotId, setSelectedLotId] = useState(null)
+
+  // Multi mode state — pre-distribute using FEFO order (lots come pre-sorted)
+  const [quantities, setQuantities] = useState(() => {
+    const init = Object.fromEntries(lots.map((lot) => [lot.lot_id, 0]))
+    let remaining = needed
+    for (const lot of lots) {
+      if (remaining <= 0) break
+      const take = Math.min(lot.quantity, remaining)
+      init[lot.lot_id] = take
+      remaining -= take
+    }
+    return init
+  })
+
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const onKey = (e) => {
@@ -26,77 +44,112 @@ export default function LotSelectionModal({ routine, lots, onConfirm, onCancel }
     return () => document.removeEventListener('keydown', onKey)
   }, [onCancel])
 
-  const unitKey = (unit) => `${unit.lot_id}-${unit.unit_index}`
+  const total = isSingle ? (selectedLotId != null ? 1 : 0) : Object.values(quantities).reduce((sum, q) => sum + q, 0)
 
-  const handleToggle = (unit) => {
-    const key = unitKey(unit)
-    if (needed === 1) {
-      // Single selection — radio-like behaviour
-      setSelected([key])
-      setError(null)
-      return
-    }
-    setSelected((prev) => {
-      if (prev.includes(key)) return prev.filter((k) => k !== key)
-      return [...prev, key]
+  const handleSelectRadio = (lotId) => {
+    setSelectedLotId(lotId)
+    setError(null)
+  }
+
+  const handleStep = (lotId, maxQty, delta) => {
+    setQuantities((prev) => {
+      const next = Math.max(0, Math.min(maxQty, prev[lotId] + delta))
+      return { ...prev, [lotId]: next }
     })
     setError(null)
   }
 
   const handleConfirm = () => {
-    if (selected.length !== needed) {
-      setError(t('lot.modal.errorCount', { count: needed }))
-      return
+    if (isSingle) {
+      if (selectedLotId == null) {
+        setError(t('lot.modal.errorTotal', { needed, total: 0 }))
+        return
+      }
+      onConfirm([{ lot_id: selectedLotId, quantity: 1 }])
+    } else {
+      if (total !== needed) {
+        setError(t('lot.modal.errorTotal', { needed, total }))
+        return
+      }
+      const selections = Object.entries(quantities)
+        .filter(([, qty]) => qty > 0)
+        .map(([lotId, qty]) => ({ lot_id: Number(lotId), quantity: qty }))
+      onConfirm(selections)
     }
-
-    // Group selected units by lot_id and count quantities
-    const counts = {}
-    for (const key of selected) {
-      const unit = lots.find((u) => unitKey(u) === key)
-      if (!unit) continue
-      counts[unit.lot_id] = (counts[unit.lot_id] || 0) + 1
-    }
-
-    const lotSelections = Object.entries(counts).map(([lot_id, quantity]) => ({
-      lot_id: Number(lot_id),
-      quantity,
-    }))
-
-    onConfirm(lotSelections)
   }
 
-  const lotLabel = (unit) => {
-    const id = unit.lot_number ?? t('lot.modal.noId')
-    return `${id} (${unit.unit_index})`
-  }
+  const lotLabel = (lot) => lot.lot_number ?? t('lot.modal.noId')
 
   return (
     <div className={shared.overlay} onClick={onCancel} role="dialog" aria-modal="true">
       <div className={s.box} onClick={(e) => e.stopPropagation()}>
         <h2 className={s.title}>{t('lot.modal.title')}</h2>
-        <p className={s.subtitle}>{t('lot.modal.subtitle', { count: needed })}</p>
+        <p className={s.subtitle}>
+          {isSingle ? t('lot.modal.subtitleSingle') : t('lot.modal.subtitleMulti', { count: needed })}
+        </p>
 
         <ul className={s.list}>
-          {lots.map((unit) => {
-            const key = unitKey(unit)
-            const isSelected = selected.includes(key)
-            return (
+          {lots.map((lot) =>
+            isSingle ? (
               <li
-                key={key}
-                className={`${s.item} ${isSelected ? s.itemSelected : ''}`}
-                onClick={() => handleToggle(unit)}
-                role={needed === 1 ? 'radio' : 'checkbox'}
-                aria-checked={isSelected}
+                key={lot.lot_id}
+                className={`${s.item} ${selectedLotId === lot.lot_id ? s.itemSelected : ''}`}
+                onClick={() => handleSelectRadio(lot.lot_id)}
+                role="radio"
+                aria-checked={selectedLotId === lot.lot_id}
                 tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleToggle(unit)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSelectRadio(lot.lot_id)}
               >
-                <span className={s.indicator}>{isSelected ? '✓' : ''}</span>
-                <span className={s.label}>{lotLabel(unit)}</span>
-                {unit.expiry_date && <span className={s.expiry}>{unit.expiry_date}</span>}
+                <span className={s.radio}>{selectedLotId === lot.lot_id ? '●' : ''}</span>
+                <span className={s.label}>{lotLabel(lot)}</span>
+                <span className={s.available}>
+                  {lot.quantity} {t('lot.modal.available')}
+                </span>
+                {lot.expiry_date && <span className={s.expiry}>{lot.expiry_date}</span>}
               </li>
-            )
-          })}
+            ) : (
+              <li key={lot.lot_id} className={s.itemMulti}>
+                <div className={s.lotHeader}>
+                  <span className={s.label}>{lotLabel(lot)}</span>
+                  <span className={s.available}>
+                    {lot.quantity} {t('lot.modal.available')}
+                  </span>
+                  {lot.expiry_date && <span className={s.expiry}>{lot.expiry_date}</span>}
+                </div>
+                <div className={s.qtyRow}>
+                  <button
+                    type="button"
+                    className={s.stepBtn}
+                    disabled={quantities[lot.lot_id] <= 0}
+                    onClick={() => handleStep(lot.lot_id, lot.quantity, -1)}
+                    aria-label="Decrease"
+                  >
+                    -
+                  </button>
+                  <span className={s.qtyValue}>{quantities[lot.lot_id]}</span>
+                  <button
+                    type="button"
+                    className={s.stepBtn}
+                    disabled={quantities[lot.lot_id] >= lot.quantity}
+                    onClick={() => handleStep(lot.lot_id, lot.quantity, 1)}
+                    aria-label="Increase"
+                  >
+                    +
+                  </button>
+                </div>
+              </li>
+            ),
+          )}
         </ul>
+
+        {!isSingle && (
+          <p className={s.totalRow}>
+            {t('lot.modal.total')}:{' '}
+            <span className={s.qty}>
+              {total}/{needed}
+            </span>
+          </p>
+        )}
 
         {error && <p className={s.error}>{error}</p>}
 
@@ -104,7 +157,7 @@ export default function LotSelectionModal({ routine, lots, onConfirm, onCancel }
           <button className={s.cancelBtn} onClick={onCancel}>
             {t('common.cancel')}
           </button>
-          <button className={s.confirmBtn} onClick={handleConfirm}>
+          <button className={s.confirmBtn} onClick={handleConfirm} disabled={!isSingle && total !== needed}>
             {t('lot.modal.confirm')}
           </button>
         </div>

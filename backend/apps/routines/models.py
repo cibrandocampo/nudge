@@ -1,10 +1,36 @@
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Sum
 from django.utils import timezone
+
+
+class StockGroup(models.Model):
+    """User-defined grouping for stock items (e.g. 'Diabetes', 'Household')."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stock_groups",
+    )
+    name = models.CharField(max_length=100)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                name="unique_stock_group_per_user",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
 
 
 class Stock(models.Model):
@@ -20,6 +46,13 @@ class Stock(models.Model):
         related_name="stocks",
     )
     name = models.CharField(max_length=200)
+    group = models.ForeignKey(
+        StockGroup,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stocks",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -59,6 +92,32 @@ class StockLot(models.Model):
     def __str__(self):
         label = self.lot_number or f"#{self.pk}"
         return f"{self.stock.name} — {label} ({self.quantity})"
+
+
+class StockConsumption(models.Model):
+    """Audit record of a direct stock consumption (outside routines)."""
+
+    stock = models.ForeignKey(
+        Stock,
+        on_delete=models.CASCADE,
+        related_name="consumptions",
+    )
+    quantity = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+    )
+    consumed_lots = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lots consumed: [{lot_number, expiry_date, quantity}]",
+    )
+    notes = models.CharField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.stock.name} — consumed {self.quantity} — {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class Routine(models.Model):
@@ -116,11 +175,22 @@ class Routine(models.Model):
             return None
         return last.created_at + timedelta(hours=self.interval_hours)
 
-    def is_due(self):
+    def is_overdue(self):
+        """True when the exact due time has passed (or routine was never logged)."""
         due = self.next_due_at()
         if due is None:
             return True
         return timezone.now() >= due
+
+    def is_due(self):
+        """True when the routine is due today or already overdue (user's local date)."""
+        due = self.next_due_at()
+        if due is None:
+            return True
+        user_tz = ZoneInfo(self.user.timezone)
+        due_date = due.astimezone(user_tz).date()
+        today = timezone.now().astimezone(user_tz).date()
+        return today >= due_date
 
 
 class RoutineEntry(models.Model):

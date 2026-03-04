@@ -24,9 +24,12 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const routineId = event.notification.data?.routine_id
-  const url = event.action === 'mark-done' && routineId
-    ? `/routines/${routineId}?action=mark-done`
-    : routineId ? `/routines/${routineId}` : '/'
+  const url =
+    event.action === 'mark-done' && routineId
+      ? `/routines/${routineId}?action=mark-done`
+      : routineId
+        ? `/routines/${routineId}`
+        : '/'
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
@@ -36,6 +39,6 @@ self.addEventListener('notificationclick', (event) => {
         return existing.focus()
       }
       return clients.openWindow(url)
-    })
+    }),
   )
 })

@@ -14,7 +14,14 @@ class UserAdmin(BaseUserAdmin):
                 "fields": ("timezone", "daily_notification_time", "language"),
             },
         ),
+        (
+            "Contacts",
+            {
+                "fields": ("contacts",),
+            },
+        ),
     )
+    filter_horizontal = ("contacts",)
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         (
             "Nudge settings",

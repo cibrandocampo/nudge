@@ -43,7 +43,7 @@ fi
 # Collect static files only for production (runserver serves them automatically)
 if [ "${1#*gunicorn}" != "$1" ]; then
     echo "==> Collecting static files..."
-    python manage.py collectstatic --noinput --clear
+    python manage.py collectstatic --noinput --clear --verbosity 0
 fi
 
 exec "$@"

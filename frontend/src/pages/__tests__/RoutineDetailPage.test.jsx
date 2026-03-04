@@ -24,6 +24,7 @@ const routine = {
   interval_hours: 24,
   is_active: true,
   is_due: true,
+  is_overdue: true,
   hours_until_due: -2,
   next_due_at: new Date(Date.now() - 2 * 3600000).toISOString(),
   created_at: '2025-01-15T10:00:00Z',
@@ -144,9 +145,7 @@ describe('RoutineDetailPage', () => {
   })
 
   it('shows lot selection modal when routine requires_lot_selection', async () => {
-    server.use(
-      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
-    )
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
 
@@ -156,9 +155,7 @@ describe('RoutineDetailPage', () => {
   })
 
   it('confirms lot selection and calls log with lot_selections', async () => {
-    server.use(
-      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
-    )
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
     let logBody = null
     server.use(
       http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
@@ -173,17 +170,53 @@ describe('RoutineDetailPage', () => {
     await user.click(screen.getByText('Mark as done'))
     await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
 
-    await user.click(screen.getByText('LOT-A (1)'))
+    await user.click(screen.getByText('LOT-A'))
     await user.click(screen.getByText('Confirm'))
 
     await waitFor(() => expect(logBody).not.toBeNull())
     expect(logBody.lot_selections).toEqual([{ lot_id: 1, quantity: 1 }])
   })
 
-  it('cancels lot selection modal without logging', async () => {
+  it('multi mode: pre-distributes and confirms with stepper', async () => {
     server.use(
-      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, stock_usage: 3, requires_lot_selection: true }),
+      ),
+      http.get(`${BASE}/routines/1/lots-for-selection/`, () =>
+        HttpResponse.json([
+          { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 },
+          { lot_id: 2, lot_number: 'LOT-B', expiry_date: '2027-06-01', quantity: 5 },
+        ]),
+      ),
     )
+    let logBody = null
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText(/Distribute 3 units across lots/)).toBeInTheDocument())
+
+    // FEFO pre-distributes: LOT-A=2, LOT-B=1 → total=3/3
+    expect(screen.getByText(/3\/3/)).toBeInTheDocument()
+
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    expect(logBody.lot_selections).toEqual([
+      { lot_id: 1, quantity: 2 },
+      { lot_id: 2, quantity: 1 },
+    ])
+  })
+
+  it('cancels lot selection modal without logging', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
     let logCalled = false
     server.use(
       http.post(`${BASE}/routines/1/log/`, () => {
@@ -202,6 +235,21 @@ describe('RoutineDetailPage', () => {
 
     expect(logCalled).toBe(false)
     expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+
+  it('shows error when delete fails', async () => {
+    server.use(http.delete(`${BASE}/routines/1/`, () => new HttpResponse(null, { status: 500 })))
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Delete')).toBeInTheDocument())
+    await user.click(screen.getByText('Delete'))
+    await user.click(screen.getAllByText('Delete').find((btn) => btn.closest('[role="dialog"]')))
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows interval in hours for non-standard intervals', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 8 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every 8h')).toBeInTheDocument())
   })
 
   it('renders back and edit links', async () => {
@@ -240,22 +288,14 @@ describe('RoutineDetailPage — advance button', () => {
   })
 
   it('does not show advance button when due', async () => {
-    server.use(
-      http.get(`${BASE}/routines/1/`, () =>
-        HttpResponse.json({ ...notDueRoutine, is_due: true }),
-      ),
-    )
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...notDueRoutine, is_due: true })))
     renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
     expect(screen.queryByText('Do it now')).not.toBeInTheDocument()
   })
 
   it('does not show advance button when inactive', async () => {
-    server.use(
-      http.get(`${BASE}/routines/1/`, () =>
-        HttpResponse.json({ ...notDueRoutine, is_active: false }),
-      ),
-    )
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...notDueRoutine, is_active: false })))
     renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
     expect(screen.queryByText('Do it now')).not.toBeInTheDocument()
@@ -300,9 +340,7 @@ describe('RoutineDetailPage — advance button', () => {
   })
 
   it('shows error when advance log fails', async () => {
-    server.use(
-      http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
-    )
+    server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
     await user.click(screen.getByText('Do it now'))

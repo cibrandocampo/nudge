@@ -31,6 +31,7 @@ class User(AbstractUser):
         default="08:30",
         help_text="Local time for the daily heads-up notification",
     )
+    contacts = models.ManyToManyField("self", symmetrical=True, blank=True)
 
     class Meta:
         verbose_name = "user"

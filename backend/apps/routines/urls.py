@@ -1,11 +1,21 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import RoutineEntryViewSet, RoutineViewSet, StockLotViewSet, StockViewSet, dashboard
+from .views import (
+    RoutineEntryViewSet,
+    RoutineViewSet,
+    StockConsumptionViewSet,
+    StockGroupViewSet,
+    StockLotViewSet,
+    StockViewSet,
+    dashboard,
+)
 
 router = DefaultRouter()
 router.register(r"routines", RoutineViewSet, basename="routine")
 router.register(r"stock", StockViewSet, basename="stock")
+router.register(r"stock-groups", StockGroupViewSet, basename="stockgroup")
+router.register(r"stock-consumptions", StockConsumptionViewSet, basename="stockconsumption")
 router.register(r"entries", RoutineEntryViewSet, basename="entry")
 
 # Nested router for lots: /api/stock/{stock_pk}/lots/

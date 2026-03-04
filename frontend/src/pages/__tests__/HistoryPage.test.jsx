@@ -1,10 +1,64 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import HistoryPage from '../HistoryPage'
 
 const BASE = 'http://localhost/api'
+
+const mockEntries = [
+  {
+    id: 1,
+    routine: 1,
+    routine_name: 'Take vitamins',
+    stock_name: 'Vitamin D',
+    created_at: '2026-03-01T09:00:00Z',
+    notes: 'morning dose',
+    consumed_lots: [{ lot_number: 'LOT-V1', expiry_date: '2027-01-01', quantity: 1 }],
+  },
+  {
+    id: 2,
+    routine: 2,
+    routine_name: 'Water filter',
+    stock_name: null,
+    created_at: '2026-03-01T15:00:00Z',
+    notes: '',
+    consumed_lots: [],
+  },
+]
+
+const mockConsumptions = [
+  {
+    id: 1,
+    stock: 1,
+    stock_name: 'Insulin pens',
+    quantity: 1,
+    consumed_lots: [{ lot_number: null, expiry_date: '2026-06-01', quantity: 1 }],
+    notes: '',
+    created_at: '2026-03-01T10:00:00Z',
+  },
+]
+
+const mockStocks = [{ id: 1, name: 'Insulin pens', quantity: 5, lots: [], expiring_lots: [], has_expiring_lots: false }]
+
+function setupHandlers({ entries = mockEntries, consumptions = mockConsumptions, stocks = mockStocks } = {}) {
+  server.use(
+    http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: entries, next: null })),
+    http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: consumptions, next: null })),
+    http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: stocks })),
+    http.get(`${BASE}/routines/`, () =>
+      HttpResponse.json([
+        { id: 1, name: 'Take vitamins' },
+        { id: 2, name: 'Water filter' },
+      ]),
+    ),
+  )
+}
+
+/** Get entry names from .entryName spans (avoids matching <option> elements). */
+function getEntryNames(container) {
+  return [...container.querySelectorAll('.entryName')].map((el) => el.textContent)
+}
 
 describe('HistoryPage', () => {
   it('shows loading state initially', () => {
@@ -24,31 +78,14 @@ describe('HistoryPage', () => {
   })
 
   it('renders entries grouped by date', async () => {
-    server.use(
-      http.get(`${BASE}/entries/`, () =>
-        HttpResponse.json({
-          results: [
-            { id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z' },
-            { id: 2, routine_name: 'Water filter', created_at: '2025-02-20T15:00:00Z' },
-          ],
-          next: null,
-        }),
-      ),
-    )
-    renderWithProviders(<HistoryPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-    expect(screen.getByText('Water filter')).toBeInTheDocument()
+    setupHandlers({ consumptions: [] })
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+    expect(getEntryNames(container)).toContain('Water filter')
   })
 
   it('renders routine filter dropdown', async () => {
-    server.use(
-      http.get(`${BASE}/routines/`, () =>
-        HttpResponse.json([
-          { id: 1, name: 'Vitamins' },
-          { id: 2, name: 'Water filter' },
-        ]),
-      ),
-    )
+    setupHandlers()
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('All routines')).toBeInTheDocument())
   })
@@ -57,7 +94,9 @@ describe('HistoryPage', () => {
     server.use(
       http.get(`${BASE}/entries/`, () =>
         HttpResponse.json({
-          results: [{ id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z' }],
+          results: [
+            { id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z', notes: '', consumed_lots: [] },
+          ],
           next: '/api/entries/?page=2',
         }),
       ),
@@ -67,31 +106,266 @@ describe('HistoryPage', () => {
   })
 
   it('loads more entries when button clicked', async () => {
-    let page = 1
     server.use(
       http.get(`${BASE}/entries/`, ({ request }) => {
         const url = new URL(request.url)
         const p = url.searchParams.get('page') || '1'
         if (p === '1') {
           return HttpResponse.json({
-            results: [{ id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z' }],
+            results: [
+              { id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z', notes: '', consumed_lots: [] },
+            ],
             next: '/api/entries/?page=2',
           })
         }
         return HttpResponse.json({
-          results: [{ id: 2, routine_name: 'Water filter', created_at: '2025-02-19T09:00:00Z' }],
+          results: [
+            {
+              id: 2,
+              routine_name: 'Replaced filter',
+              created_at: '2025-02-19T09:00:00Z',
+              notes: '',
+              consumed_lots: [],
+            },
+          ],
           next: null,
         })
       }),
     )
-    const { user } = renderWithProviders(<HistoryPage />)
+    const { user, container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Load more')).toBeInTheDocument())
     await user.click(screen.getByText('Load more'))
-    await waitFor(() => expect(screen.getByText('Water filter')).toBeInTheDocument())
+    await waitFor(() => expect(getEntryNames(container)).toContain('Replaced filter'))
   })
 
   it('renders History title', async () => {
     renderWithProviders(<HistoryPage />)
     expect(screen.getByText('History')).toBeInTheDocument()
+  })
+})
+
+describe('HistoryPage — date range', () => {
+  it('applies a date range via the picker', async () => {
+    setupHandlers()
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container).length).toBeGreaterThan(0))
+
+    // Open date range picker by clicking the trigger button (shows "Last 15 days" default)
+    const toggleBtn = screen.getByText('Last 15 days')
+    await user.click(toggleBtn)
+
+    // Select "Last 30 days" preset
+    await user.click(screen.getByText('Last 30 days'))
+
+    // After applying, the entries should re-render (with same mock data)
+    await waitFor(() => expect(getEntryNames(container).length).toBeGreaterThan(0))
+  })
+})
+
+describe('HistoryPage — type filter', () => {
+  it('default shows both routines and consumptions', async () => {
+    setupHandlers()
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => {
+      const names = getEntryNames(container)
+      expect(names).toContain('Take vitamins')
+      expect(names).toContain('Insulin pens')
+    })
+  })
+
+  it('filter by routines only hides consumptions', async () => {
+    setupHandlers()
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+
+    const typeSelect = screen.getByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'routines')
+
+    await waitFor(() => {
+      const names = getEntryNames(container)
+      expect(names).toContain('Take vitamins')
+      expect(names).not.toContain('Insulin pens')
+    })
+  })
+
+  it('filter by consumptions only hides routine entries', async () => {
+    setupHandlers()
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+
+    const typeSelect = screen.getByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'consumptions')
+
+    await waitFor(() => {
+      const names = getEntryNames(container)
+      expect(names).toContain('Insulin pens')
+      expect(names).not.toContain('Take vitamins')
+    })
+  })
+
+  it('stock filter appears when consumptions or all selected', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('All items')).toBeInTheDocument())
+  })
+
+  it('stock filter hidden when routines only selected', async () => {
+    setupHandlers()
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+
+    const typeSelect = screen.getByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'routines')
+
+    await waitFor(() => {
+      expect(screen.queryByText('All items')).not.toBeInTheDocument()
+    })
+  })
+})
+
+describe('HistoryPage — consumption entries display', () => {
+  it('consumption entries show stock name and −1 badge', async () => {
+    setupHandlers({ entries: [] })
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Insulin pens'))
+    expect(screen.getByText('−1')).toBeInTheDocument()
+  })
+
+  it('routine entries show ✓ badge', async () => {
+    setupHandlers({ consumptions: [] })
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+    const badges = screen.getAllByText('✓')
+    expect(badges.length).toBeGreaterThan(0)
+  })
+
+  it('routine entries show consumed stock as "N × name (lot)"', async () => {
+    setupHandlers({ consumptions: [] })
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+    // Take vitamins consumed 1 unit of Vitamin D from LOT-V1
+    expect(screen.getByText(/1 × Vitamin D/)).toBeInTheDocument()
+    expect(screen.getByText(/LOT-V1/)).toBeInTheDocument()
+  })
+
+  it('merged list sorted by created_at descending', async () => {
+    setupHandlers()
+    const { container } = renderWithProviders(<HistoryPage />)
+    // All on same date (2026-03-01): Water filter 15:00 > Insulin pens 10:00 > Take vitamins 09:00
+    await waitFor(() => expect(getEntryNames(container).length).toBe(3))
+    const names = getEntryNames(container)
+    expect(names.indexOf('Water filter')).toBeLessThan(names.indexOf('Insulin pens'))
+    expect(names.indexOf('Insulin pens')).toBeLessThan(names.indexOf('Take vitamins'))
+  })
+})
+
+describe('HistoryPage — notes editing', () => {
+  it('shows notes placeholder for entries without notes', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => {
+      const placeholders = screen.getAllByText('Add a note…')
+      expect(placeholders.length).toBeGreaterThan(0)
+    })
+  })
+
+  it('shows existing notes text', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+  })
+
+  it('edit notes on routine entry via click and blur', async () => {
+    let patchCalled = false
+    server.use(
+      http.patch(`${BASE}/entries/:id/`, async ({ request }) => {
+        const body = await request.json()
+        patchCalled = true
+        return HttpResponse.json({
+          id: 1,
+          routine: 1,
+          routine_name: 'Take vitamins',
+          created_at: '2026-03-01T09:00:00Z',
+          notes: body.notes,
+          consumed_lots: [],
+        })
+      }),
+    )
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+
+    // Click notes to enter edit mode
+    await user.click(screen.getByText('morning dose'))
+
+    // Should now have an input
+    const input = screen.getByDisplayValue('morning dose')
+    await user.clear(input)
+    await user.type(input, 'updated note')
+    input.blur()
+
+    await waitFor(() => expect(patchCalled).toBe(true))
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument())
+  })
+
+  it('saves note on Enter key press', async () => {
+    let patchCalled = false
+    server.use(
+      http.patch(`${BASE}/entries/:id/`, async ({ request }) => {
+        const body = await request.json()
+        patchCalled = true
+        return HttpResponse.json({
+          id: 1,
+          routine: 1,
+          routine_name: 'Take vitamins',
+          created_at: '2026-03-01T09:00:00Z',
+          notes: body.notes,
+          consumed_lots: [],
+        })
+      }),
+    )
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+
+    await user.click(screen.getByText('morning dose'))
+    const input = screen.getByDisplayValue('morning dose')
+    await user.clear(input)
+    await user.type(input, 'enter note{Enter}')
+
+    await waitFor(() => expect(patchCalled).toBe(true))
+  })
+
+  it('edit notes on consumption entry', async () => {
+    let patchCalled = false
+    server.use(
+      http.patch(`${BASE}/stock-consumptions/:id/`, async ({ request }) => {
+        const body = await request.json()
+        patchCalled = true
+        return HttpResponse.json({
+          id: 1,
+          stock: 1,
+          stock_name: 'Insulin pens',
+          quantity: 1,
+          consumed_lots: [],
+          notes: body.notes,
+          created_at: '2026-03-01T10:00:00Z',
+        })
+      }),
+    )
+    // Use only consumption entries (no routine entries) to avoid ambiguity
+    setupHandlers({ entries: [] })
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Insulin pens'))
+
+    // Consumption has empty notes, click the placeholder
+    const placeholder = screen.getByText('Add a note…')
+    await user.click(placeholder)
+
+    const input = screen.getByPlaceholderText('Add a note…')
+    await user.type(input, 'my consumption note')
+    input.blur()
+
+    await waitFor(() => expect(patchCalled).toBe(true))
   })
 })
