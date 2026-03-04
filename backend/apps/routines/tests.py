@@ -1,4 +1,6 @@
+import datetime as dt
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -7,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .models import Routine, RoutineEntry, Stock, StockLot
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
 User = get_user_model()
@@ -53,6 +55,46 @@ def make_entry(routine, offset_hours=0, notes=""):
         RoutineEntry.objects.filter(pk=entry.pk).update(created_at=timezone.now() + timedelta(hours=offset_hours))
         entry.refresh_from_db()
     return entry
+
+
+def make_stock_group(user, name="Diabetes", display_order=0):
+    return StockGroup.objects.create(user=user, name=name, display_order=display_order)
+
+
+def make_stock_consumption(stock, quantity=1, notes=""):
+    return StockConsumption.objects.create(stock=stock, quantity=quantity, notes=notes)
+
+
+# ── StockGroup model ────────────────────────────────────────────────────────
+
+
+class StockGroupModelTest(TestCase):
+    def setUp(self):
+        self.user = make_user()
+
+    def test_str(self):
+        group = make_stock_group(self.user, name="Diabetes")
+        self.assertEqual(str(group), "Diabetes")
+
+    def test_ordering_by_display_order_then_name(self):
+        make_stock_group(self.user, name="Zzz", display_order=0)
+        make_stock_group(self.user, name="Aaa", display_order=1)
+        make_stock_group(self.user, name="Mmm", display_order=0)
+        names = list(StockGroup.objects.filter(user=self.user).values_list("name", flat=True))
+        self.assertEqual(names, ["Mmm", "Zzz", "Aaa"])
+
+    def test_unique_name_per_user(self):
+        make_stock_group(self.user, name="Diabetes")
+        from django.db import IntegrityError
+
+        with self.assertRaises(IntegrityError):
+            make_stock_group(self.user, name="Diabetes")
+
+    def test_same_name_different_user(self):
+        other = make_user(username="other")
+        make_stock_group(self.user, name="Diabetes")
+        group2 = make_stock_group(other, name="Diabetes")
+        self.assertEqual(group2.name, "Diabetes")
 
 
 # ── Stock model ──────────────────────────────────────────────────────────────
@@ -175,6 +217,30 @@ class RoutineModelTest(TestCase):
         r = make_routine(self.user, interval_hours=24)
         make_entry(r)  # entry just now
         self.assertFalse(r.is_due())
+
+    def test_is_due_true_when_due_today_but_not_yet_overdue(self):
+        """Routine due later today should appear as is_due=True."""
+        # Pin to 10:00 UTC so entry at 05:00 → due at 13:00 (same day)
+        fixed_now = dt.datetime(2026, 3, 4, 10, 0, tzinfo=dt.timezone.utc)
+        with patch("django.utils.timezone.now", return_value=fixed_now):
+            r = make_routine(self.user, interval_hours=8)
+            make_entry(r, offset_hours=-5)
+            self.assertTrue(r.is_due())
+            self.assertFalse(r.is_overdue())
+
+    def test_is_overdue_true_when_time_passed(self):
+        r = make_routine(self.user, interval_hours=1)
+        make_entry(r, offset_hours=-2)  # entry 2 hours ago → overdue 1 hour
+        self.assertTrue(r.is_overdue())
+
+    def test_is_overdue_false_when_time_not_passed(self):
+        r = make_routine(self.user, interval_hours=8)
+        make_entry(r, offset_hours=-5)  # due in 3 hours
+        self.assertFalse(r.is_overdue())
+
+    def test_is_overdue_true_when_never_logged(self):
+        r = make_routine(self.user, interval_hours=24)
+        self.assertTrue(r.is_overdue())
 
     def test_ordering_by_name(self):
         make_routine(self.user, name="Zzz")
@@ -634,16 +700,15 @@ class StockConsumeTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
 
-    def test_lots_for_selection_expands_units(self):
-        make_lot(self.stock, quantity=3, lot_number="LOT-1")
+    def test_lots_for_selection_returns_grouped_lots(self):
+        lot = make_lot(self.stock, quantity=3, lot_number="LOT-1")
         response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(len(data), 3)
-        self.assertEqual(data[0]["unit_index"], 1)
-        self.assertEqual(data[1]["unit_index"], 2)
-        self.assertEqual(data[2]["unit_index"], 3)
-        self.assertTrue(all(u["lot_number"] == "LOT-1" for u in data))
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["lot_id"], lot.id)
+        self.assertEqual(data[0]["lot_number"], "LOT-1")
+        self.assertEqual(data[0]["quantity"], 3)
 
     def test_lots_for_selection_fefo_order(self):
         later = date.today() + timedelta(days=90)
@@ -660,8 +725,9 @@ class StockConsumeTest(APITestCase):
         make_lot(self.stock, quantity=2, lot_number="FULL")
         response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
         data = response.json()
-        self.assertEqual(len(data), 2)
-        self.assertTrue(all(u["lot_number"] == "FULL" for u in data))
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["lot_number"], "FULL")
+        self.assertEqual(data[0]["quantity"], 2)
 
     def test_lots_for_selection_other_users_stock_returns_404(self):
         stock = make_stock(self.other)
@@ -930,19 +996,18 @@ class RoutineViewSetTest(APITestCase):
 
     # ── lots_for_selection action ─────────────────────────────────────────────
 
-    def test_lots_for_selection_returns_expanded_units(self):
-        """Each unit in a lot becomes its own entry with unit_index."""
+    def test_lots_for_selection_returns_grouped_lots(self):
+        """Each lot becomes one row with its quantity."""
         stock = make_stock(self.user)
         lot = make_lot(stock, quantity=2, lot_number="LOT-A")
         r = make_routine(self.user, stock=stock)
         response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(len(data), 2)
+        self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["lot_id"], lot.id)
         self.assertEqual(data[0]["lot_number"], "LOT-A")
-        self.assertEqual(data[0]["unit_index"], 1)
-        self.assertEqual(data[1]["unit_index"], 2)
+        self.assertEqual(data[0]["quantity"], 2)
 
     def test_lots_for_selection_fefo_order(self):
         """Lots are returned in FEFO order (sooner expiry first)."""
@@ -964,8 +1029,9 @@ class RoutineViewSetTest(APITestCase):
         r = make_routine(self.user, stock=stock)
         response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
         data = response.json()
-        self.assertEqual(len(data), 3)
-        self.assertTrue(all(u["lot_number"] == "FULL" for u in data))
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["lot_number"], "FULL")
+        self.assertEqual(data[0]["quantity"], 3)
 
     def test_lots_for_selection_no_stock_returns_empty(self):
         """Routine without stock → empty list."""
@@ -1159,8 +1225,8 @@ class DashboardViewTest(APITestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_upcoming_sorted_by_next_due_at(self):
-        r1 = make_routine(self.user, name="Soon", interval_hours=10)
-        r2 = make_routine(self.user, name="Later", interval_hours=100)
+        r1 = make_routine(self.user, name="Soon", interval_hours=48)
+        r2 = make_routine(self.user, name="Later", interval_hours=200)
         make_entry(r1)
         make_entry(r2)
         response = self.client.get("/api/dashboard/")
@@ -1175,3 +1241,307 @@ class DashboardViewTest(APITestCase):
         data = response.json()
         all_names = [r["name"] for r in data["due"] + data["upcoming"]]
         self.assertNotIn("Not mine", all_names)
+
+    def test_due_today_before_time_appears_in_due(self):
+        """A routine due later today should appear in 'due', not 'upcoming'."""
+        # Pin to 10:00 UTC so due at 13:00 is still today
+        fixed_now = dt.datetime(2026, 3, 4, 10, 0, tzinfo=dt.timezone.utc)
+        with patch("django.utils.timezone.now", return_value=fixed_now):
+            r = make_routine(self.user, name="Due later today", interval_hours=8)
+            make_entry(r, offset_hours=-5)
+            response = self.client.get("/api/dashboard/")
+            data = response.json()
+            due_names = [r["name"] for r in data["due"]]
+            upcoming_names = [r["name"] for r in data["upcoming"]]
+            self.assertIn("Due later today", due_names)
+            self.assertNotIn("Due later today", upcoming_names)
+
+    def test_due_today_has_is_overdue_false(self):
+        """A routine due later today should have is_overdue=False."""
+        # Pin to 10:00 UTC so due at 13:00 is still today
+        fixed_now = dt.datetime(2026, 3, 4, 10, 0, tzinfo=dt.timezone.utc)
+        with patch("django.utils.timezone.now", return_value=fixed_now):
+            r = make_routine(self.user, name="Not yet overdue", interval_hours=8)
+            make_entry(r, offset_hours=-5)  # due in 3 hours
+            response = self.client.get("/api/dashboard/")
+            routine_data = response.json()["due"][0]
+            self.assertTrue(routine_data["is_due"])
+            self.assertFalse(routine_data["is_overdue"])
+
+    def test_overdue_has_is_overdue_true(self):
+        """A routine past its due time should have is_overdue=True."""
+        r = make_routine(self.user, name="Already overdue", interval_hours=1)
+        make_entry(r, offset_hours=-3)  # due 2 hours ago
+        response = self.client.get("/api/dashboard/")
+        routine_data = response.json()["due"][0]
+        self.assertTrue(routine_data["is_due"])
+        self.assertTrue(routine_data["is_overdue"])
+
+    def test_is_overdue_field_present_in_response(self):
+        """The is_overdue field must be present in all routine responses."""
+        make_routine(self.user, name="Test", interval_hours=24)
+        response = self.client.get("/api/dashboard/")
+        routine_data = response.json()["due"][0]
+        self.assertIn("is_overdue", routine_data)
+
+
+# ── StockGroup API ──────────────────────────────────────────────────────────
+
+
+class StockGroupAPITest(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.other = make_user(username="other")
+        self.client.force_authenticate(user=self.user)
+
+    def test_list_groups(self):
+        make_stock_group(self.user, name="Mine")
+        make_stock_group(self.other, name="Theirs")
+        response = self.client.get("/api/stock-groups/")
+        self.assertEqual(response.status_code, 200)
+        names = [g["name"] for g in response.json()["results"]]
+        self.assertIn("Mine", names)
+        self.assertNotIn("Theirs", names)
+
+    def test_create_group(self):
+        response = self.client.post("/api/stock-groups/", {"name": "Household"})
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(StockGroup.objects.filter(name="Household", user=self.user).exists())
+
+    def test_update_group(self):
+        group = make_stock_group(self.user, name="Old name")
+        response = self.client.patch(f"/api/stock-groups/{group.id}/", {"name": "New name"})
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.name, "New name")
+
+    def test_delete_group_ungroups_stocks(self):
+        group = make_stock_group(self.user, name="Deletable")
+        stock = make_stock(self.user, name="Item")
+        stock.group = group
+        stock.save()
+        response = self.client.delete(f"/api/stock-groups/{group.id}/")
+        self.assertEqual(response.status_code, 204)
+        stock.refresh_from_db()
+        self.assertIsNone(stock.group)
+
+    def test_cannot_access_other_users_groups(self):
+        group = make_stock_group(self.other, name="Secret")
+        response = self.client.get(f"/api/stock-groups/{group.id}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_assign_group_to_stock(self):
+        group = make_stock_group(self.user, name="Diabetes")
+        stock = make_stock(self.user, name="Insulin")
+        response = self.client.patch(f"/api/stock/{stock.id}/", {"group": group.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["group"], group.id)
+        self.assertEqual(response.json()["group_name"], "Diabetes")
+
+    def test_assign_other_users_group_returns_400(self):
+        group = make_stock_group(self.other, name="Not mine")
+        stock = make_stock(self.user, name="Mine")
+        response = self.client.patch(f"/api/stock/{stock.id}/", {"group": group.id})
+        self.assertEqual(response.status_code, 400)
+
+    def test_stock_without_group_returns_null(self):
+        stock = make_stock(self.user, name="Ungrouped")
+        response = self.client.get(f"/api/stock/{stock.id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["group"])
+        self.assertIsNone(response.json()["group_name"])
+
+    def test_reorder_group(self):
+        group = make_stock_group(self.user, name="Reorder me", display_order=0)
+        response = self.client.patch(f"/api/stock-groups/{group.id}/", {"display_order": 5})
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.display_order, 5)
+
+
+# ── StockConsumption model ─────────────────────────────────────────────────
+
+
+class StockConsumptionModelTest(TestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.stock = make_stock(self.user)
+        make_lot(self.stock, quantity=10)
+
+    def test_str(self):
+        c = make_stock_consumption(self.stock, quantity=2)
+        self.assertIn("Filter", str(c))
+        self.assertIn("consumed 2", str(c))
+
+    def test_ordering_newest_first(self):
+        c1 = make_stock_consumption(self.stock, quantity=1)
+        c2 = make_stock_consumption(self.stock, quantity=2)
+        # Force c1 to be older
+        StockConsumption.objects.filter(pk=c1.pk).update(created_at=timezone.now() - timedelta(hours=1))
+        qs = list(StockConsumption.objects.filter(stock=self.stock))
+        self.assertEqual(qs[0], c2)
+        self.assertEqual(qs[1], c1)
+
+
+# ── Stock consume audit trail ──────────────────────────────────────────────
+
+
+class StockConsumeAuditTest(APITestCase):
+    """Tests that consume() creates StockConsumption audit records."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+
+    def test_consume_creates_audit_record(self):
+        make_lot(self.stock, quantity=10)
+        self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 2})
+        self.assertEqual(StockConsumption.objects.count(), 1)
+        c = StockConsumption.objects.first()
+        self.assertEqual(c.stock, self.stock)
+        self.assertEqual(c.quantity, 2)
+
+    def test_consume_with_lot_selections_creates_audit_record(self):
+        lot = make_lot(self.stock, quantity=5, lot_number="LOT-A", expiry_date=date.today() + timedelta(days=60))
+        self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 2, "lot_selections": [{"lot_id": lot.id, "quantity": 2}]},
+            format="json",
+        )
+        self.assertEqual(StockConsumption.objects.count(), 1)
+        c = StockConsumption.objects.first()
+        self.assertEqual(c.quantity, 2)
+        self.assertEqual(len(c.consumed_lots), 1)
+        self.assertEqual(c.consumed_lots[0]["lot_number"], "LOT-A")
+        self.assertEqual(c.consumed_lots[0]["quantity"], 2)
+
+    def test_consume_fefo_creates_audit_record(self):
+        soon = date.today() + timedelta(days=10)
+        later = date.today() + timedelta(days=100)
+        make_lot(self.stock, quantity=3, expiry_date=soon, lot_number="SOON")
+        make_lot(self.stock, quantity=5, expiry_date=later, lot_number="LATER")
+        self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 4})
+        c = StockConsumption.objects.first()
+        self.assertEqual(c.quantity, 4)
+        self.assertEqual(len(c.consumed_lots), 2)
+        # FEFO: SOON consumed first (3 units), then LATER (1 unit)
+        self.assertEqual(c.consumed_lots[0]["lot_number"], "SOON")
+        self.assertEqual(c.consumed_lots[0]["quantity"], 3)
+        self.assertEqual(c.consumed_lots[1]["lot_number"], "LATER")
+        self.assertEqual(c.consumed_lots[1]["quantity"], 1)
+
+
+# ── StockConsumption API ───────────────────────────────────────────────────
+
+
+class StockConsumptionAPITest(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.other = make_user(username="other")
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+
+    def test_list_consumptions(self):
+        make_stock_consumption(self.stock, quantity=1)
+        make_stock_consumption(self.stock, quantity=2)
+        response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual(len(results), 2)
+
+    def test_filter_by_stock(self):
+        other_stock = make_stock(self.user, name="Other")
+        make_stock_consumption(self.stock, quantity=1)
+        make_stock_consumption(other_stock, quantity=1)
+        response = self.client.get(f"/api/stock-consumptions/?stock={self.stock.id}")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["stock"], self.stock.id)
+
+    def test_consumptions_scoped_to_user(self):
+        other_stock = make_stock(self.other, name="Secret")
+        make_stock_consumption(other_stock, quantity=1)
+        response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 0)
+
+    def test_patch_notes(self):
+        c = make_stock_consumption(self.stock, quantity=1)
+        response = self.client.patch(
+            f"/api/stock-consumptions/{c.id}/",
+            {"notes": "edited note"},
+        )
+        self.assertEqual(response.status_code, 200)
+        c.refresh_from_db()
+        self.assertEqual(c.notes, "edited note")
+
+    def test_cannot_patch_quantity(self):
+        c = make_stock_consumption(self.stock, quantity=3)
+        self.client.patch(
+            f"/api/stock-consumptions/{c.id}/",
+            {"quantity": 999},
+        )
+        c.refresh_from_db()
+        self.assertEqual(c.quantity, 3)
+
+    def test_empty_consumptions(self):
+        response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 0)
+
+    def test_cannot_patch_other_users_consumption(self):
+        other_stock = make_stock(self.other, name="Other")
+        c = make_stock_consumption(other_stock, quantity=1)
+        response = self.client.patch(
+            f"/api/stock-consumptions/{c.id}/",
+            {"notes": "hacked"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_stock_name_in_response(self):
+        make_stock_consumption(self.stock, quantity=1)
+        response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.json()["results"][0]["stock_name"], "Filter")
+
+
+# ── RoutineEntry notes editing ─────────────────────────────────────────────
+
+
+class RoutineEntryNotesTest(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.other = make_user(username="other")
+        self.client.force_authenticate(user=self.user)
+        self.routine = make_routine(self.user)
+
+    def test_patch_notes(self):
+        entry = make_entry(self.routine, notes="original")
+        response = self.client.patch(
+            f"/api/entries/{entry.id}/",
+            {"notes": "edited"},
+        )
+        self.assertEqual(response.status_code, 200)
+        entry.refresh_from_db()
+        self.assertEqual(entry.notes, "edited")
+
+    def test_cannot_patch_created_at(self):
+        entry = make_entry(self.routine)
+        original_ts = entry.created_at
+        response = self.client.patch(
+            f"/api/entries/{entry.id}/",
+            {"created_at": "2020-01-01T00:00:00Z"},
+        )
+        self.assertEqual(response.status_code, 200)
+        entry.refresh_from_db()
+        self.assertAlmostEqual(entry.created_at.timestamp(), original_ts.timestamp(), delta=1)
+
+    def test_cannot_patch_other_users_entry(self):
+        other_routine = make_routine(self.other)
+        entry = make_entry(other_routine)
+        response = self.client.patch(
+            f"/api/entries/{entry.id}/",
+            {"notes": "hacked"},
+        )
+        self.assertEqual(response.status_code, 404)

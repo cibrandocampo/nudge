@@ -54,8 +54,9 @@ async function doRefresh() {
 
   if (!res.ok) return false
 
-  const { access } = await res.json()
+  const { access, refresh: newRefresh } = await res.json()
   localStorage.setItem('access_token', access)
+  if (newRefresh) localStorage.setItem('refresh_token', newRefresh)
   return true
 }
 

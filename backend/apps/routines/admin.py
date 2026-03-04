@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Routine, RoutineEntry, Stock, StockLot
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 
 
 class RoutineEntryInline(admin.TabularInline):
@@ -18,13 +18,28 @@ class StockLotInline(admin.TabularInline):
     ordering = ["expiry_date", "created_at"]
 
 
-@admin.register(Stock)
-class StockAdmin(admin.ModelAdmin):
-    list_display = ["name", "user", "total_quantity", "updated_at"]
+@admin.register(StockGroup)
+class StockGroupAdmin(admin.ModelAdmin):
+    list_display = ["name", "user", "display_order", "created_at"]
     list_filter = ["user"]
     search_fields = ["name"]
+    readonly_fields = ["created_at"]
+
+
+class StockConsumptionInline(admin.TabularInline):
+    model = StockConsumption
+    extra = 0
+    readonly_fields = ["created_at", "quantity", "consumed_lots", "notes"]
+    ordering = ["-created_at"]
+
+
+@admin.register(Stock)
+class StockAdmin(admin.ModelAdmin):
+    list_display = ["name", "user", "group", "total_quantity", "updated_at"]
+    list_filter = ["user", "group"]
+    search_fields = ["name"]
     readonly_fields = ["updated_at"]
-    inlines = [StockLotInline]
+    inlines = [StockLotInline, StockConsumptionInline]
 
     @admin.display(description="Total quantity")
     def total_quantity(self, obj):
@@ -38,6 +53,14 @@ class RoutineAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     readonly_fields = ["created_at", "updated_at"]
     inlines = [RoutineEntryInline]
+
+
+@admin.register(StockConsumption)
+class StockConsumptionAdmin(admin.ModelAdmin):
+    list_display = ["stock", "quantity", "notes", "created_at"]
+    list_filter = ["stock__user", "stock"]
+    search_fields = ["stock__name", "notes"]
+    readonly_fields = ["created_at"]
 
 
 @admin.register(RoutineEntry)

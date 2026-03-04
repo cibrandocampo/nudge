@@ -9,9 +9,7 @@ describe('PasswordInput', () => {
   })
 
   it('toggles to text type when eye button clicked', async () => {
-    const { user } = renderWithProviders(
-      <PasswordInput placeholder="Password" value="" onChange={() => {}} />,
-    )
+    const { user } = renderWithProviders(<PasswordInput placeholder="Password" value="" onChange={() => {}} />)
     const input = screen.getByPlaceholderText('Password')
     const toggle = screen.getByRole('button')
 
@@ -21,9 +19,7 @@ describe('PasswordInput', () => {
   })
 
   it('toggles back to password type on second click', async () => {
-    const { user } = renderWithProviders(
-      <PasswordInput placeholder="Password" value="" onChange={() => {}} />,
-    )
+    const { user } = renderWithProviders(<PasswordInput placeholder="Password" value="" onChange={() => {}} />)
     const toggle = screen.getByRole('button')
 
     await user.click(toggle)
@@ -37,18 +33,14 @@ describe('PasswordInput', () => {
   })
 
   it('toggle button has correct aria-label when visible', async () => {
-    const { user } = renderWithProviders(
-      <PasswordInput placeholder="Password" value="" onChange={() => {}} />,
-    )
+    const { user } = renderWithProviders(<PasswordInput placeholder="Password" value="" onChange={() => {}} />)
     await user.click(screen.getByRole('button'))
     expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'Hide password')
   })
 
   it('calls onChange when typing', async () => {
     const onChange = vi.fn()
-    const { user } = renderWithProviders(
-      <PasswordInput placeholder="Password" value="" onChange={onChange} />,
-    )
+    const { user } = renderWithProviders(<PasswordInput placeholder="Password" value="" onChange={onChange} />)
     await user.type(screen.getByPlaceholderText('Password'), 'a')
     expect(onChange).toHaveBeenCalled()
   })

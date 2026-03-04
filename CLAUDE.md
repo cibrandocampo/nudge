@@ -7,3 +7,7 @@ Always use `dev/docker-compose.yml` (bind mounts — local changes reflected ins
 The root `docker-compose.yml` is for **production** only (uses COPY, no live reload).
 
 For commands, services, and setup details, see the `dev-workflow` skill.
+
+## Git workflow
+
+**ALWAYS run the `git-conventions` skill before creating any commit or branch.**

@@ -46,7 +46,7 @@ It is better to ask 5 questions now than to rewrite a plan later.
 
 ## Phase 3 — Write the proposal
 
-Create a document at `docs/plans/YYYY-MM-DD-feature-name.md` with this structure:
+Create the plan document at `tasks/plan-<feature-name>.md` with this structure:
 
 ```markdown
 # Feature name
@@ -54,6 +54,12 @@ Create a document at `docs/plans/YYYY-MM-DD-feature-name.md` with this structure
 ## Context
 
 What problem it solves. Why it is needed now.
+
+## Decisions confirmed with user
+
+| Topic | Decision |
+|-------|----------|
+| ... | ... |
 
 ## Design proposal
 
@@ -78,6 +84,16 @@ architecture decisions.
 | Infrastructure (Docker) | ... |
 | Database (PostgreSQL) | ... |
 
+## Implementation order
+
+Numbered list of high-level steps, backend before frontend.
+
+## Critical files
+
+| File | Changes |
+|------|---------|
+| ... | ... |
+
 ## Risks and considerations
 
 - ...
@@ -95,7 +111,7 @@ Present the document to the user and ask for feedback.
 
 - If the user has feedback, adjust the document.
 - If there are open decisions, close them with `AskUserQuestion`.
-- Once approved, confirm to the user that the next step is `/create-tasks` to divide the plan into executable tasks.
+- Once approved, tell the user: **"Plan saved. Next step: `/create-tasks tasks/plan-<feature-name>.md`"**
 
 ---
 
