@@ -40,10 +40,4 @@ if [ "${1#*gunicorn}" != "$1" ] || [ "${1#*runserver}" != "$1" ]; then
     python manage.py ensure_admin
 fi
 
-# Collect static files only for production (runserver serves them automatically)
-if [ "${1#*gunicorn}" != "$1" ]; then
-    echo "==> Collecting static files..."
-    python manage.py collectstatic --noinput --clear --verbosity 0
-fi
-
 exec "$@"

@@ -77,7 +77,7 @@ backend/
 │   ├── users/           # Custom user model + auth views
 │   ├── routines/        # Domain models and API
 │   └── notifications/   # Push subscription + Celery tasks
-├── entrypoint.sh        # Runs migrations + ensure_admin on startup
+├── entrypoint.sh        # Runs migrations + ensure_admin on startup (collectstatic runs at build time)
 └── requirements.txt
 ```
 
@@ -214,7 +214,7 @@ The frontend Dockerfile is multi-stage:
 1. **builder** — Node 20, runs `npm run build`, produces `dist/`
 2. **prod** — nginx:alpine, serves `dist/` and proxies `/api/` to `backend:8000`
 
-The backend Dockerfile uses Python 3.12-slim with a non-root user (`appuser`, uid 1001). The entrypoint runs `migrate` and `ensure_admin` before handing off to Gunicorn.
+The backend Dockerfile uses Python 3.12-slim with a non-root user (`appuser`, uid 1001). `collectstatic` runs at image build time (baked into the image). The entrypoint runs `migrate` and `ensure_admin` before handing off to Gunicorn.
 
 ### Development (`dev/docker-compose.yml`)
 

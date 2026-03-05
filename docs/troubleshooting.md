@@ -58,7 +58,7 @@ docker compose restart backend
 
 1. Check that Celery is running: `docker compose ps celery`
 2. Check Celery logs for errors: `docker compose logs celery`
-3. Verify Redis is healthy: `docker compose exec redis redis-cli -a $REDIS_PASSWORD ping` (should return `PONG`)
+3. Verify Redis is healthy: `docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping` (should return `PONG`)
 
 ### Database migration errors on startup
 

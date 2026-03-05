@@ -12,7 +12,7 @@ These must be set before first startup:
 
 | Variable | Description |
 |----------|-------------|
-| `DJANGO_SECRET_KEY` | Secret key for Django cryptographic signing. Generate with: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
+| `DJANGO_SECRET_KEY` | Secret key for Django cryptographic signing. Generate with: `openssl rand -hex 50` (avoid keys with `$` or `&` — they break Docker Compose variable interpolation) |
 | `POSTGRES_PASSWORD` | Password for the PostgreSQL database |
 | `REDIS_PASSWORD` | Password for Redis authentication |
 | `ADMIN_PASSWORD` | Password for the default admin user (created on first boot) |
@@ -33,7 +33,7 @@ The admin user is created automatically on first startup if no superuser exists.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DJANGO_SECRET_KEY` | — | Secret key for cryptographic signing |
+| `DJANGO_SECRET_KEY` | — | Secret key for cryptographic signing. Use `openssl rand -hex 50` to generate |
 | `DJANGO_DEBUG` | `False` | Enable debug mode. **Must be `False` in production** |
 | `DJANGO_ALLOWED_HOSTS` | `localhost` | Comma-separated list of allowed hostnames |
 | `CORS_ALLOWED_ORIGINS` | — | Comma-separated list of allowed CORS origins (e.g., `https://yourdomain.com`) |
