@@ -549,7 +549,7 @@ class CheckDueNotificationTest(TestCase):
         now = timezone.now()
         with patch("apps.notifications.tasks.notify_due") as mock_notify:
             _check_due_notification(routine, now)
-            mock_notify.assert_called_once_with(routine)
+            mock_notify.assert_called_once_with(routine, target_user=self.user)
 
     def test_does_not_repeat_for_same_cycle(self):
         routine = make_routine(self.user, interval_hours=1)
@@ -1076,3 +1076,139 @@ class DSTDailyHeadsUpTest(TestCase):
         # In Madrid it's already Jan 15 — routine should be due today
         self.assertEqual(now_local.date().day, 15)
         self.assertTrue(_is_due_today(routine, now_local))
+
+
+# ── Shared Routine Notifications ─────────────────────────────────────────────
+
+
+@override_settings(
+    VAPID_PRIVATE_KEY="fake-private-key",
+    VAPID_PUBLIC_KEY="fake-public-key",
+    VAPID_CLAIMS_EMAIL="test@example.com",
+)
+class SharedRoutineNotificationTest(TestCase):
+    def setUp(self):
+        self.owner = make_user(username="owner")
+        self.shared_user = make_user(username="shared_user")
+        make_subscription(self.owner, endpoint="https://example.com/push/owner")
+        make_subscription(self.shared_user, endpoint="https://example.com/push/shared")
+        self.routine = make_routine(self.owner, interval_hours=1)
+        self.routine.shared_with.add(self.shared_user)
+        # Make routine overdue (entry 2h ago)
+        make_entry(self.routine, offset_hours=-2)
+
+    @patch("apps.notifications.push.webpush")
+    def test_due_notification_sends_to_all_members(self, mock_webpush):
+        now = timezone.now()
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            _check_due_notification(self.routine, now)
+            self.assertEqual(mock_notify.call_count, 2)
+            called_users = {c.kwargs["target_user"] for c in mock_notify.call_args_list}
+            self.assertEqual(called_users, {self.owner, self.shared_user})
+
+    @patch("apps.notifications.push.webpush")
+    def test_due_notification_only_fires_once(self, mock_webpush):
+        now = timezone.now()
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            _check_due_notification(self.routine, now)
+            self.assertEqual(mock_notify.call_count, 2)
+        # Second call should skip (already notified this cycle)
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            _check_due_notification(self.routine, now + timedelta(minutes=1))
+            mock_notify.assert_not_called()
+
+    @patch("apps.notifications.push.webpush")
+    def test_reminder_sends_to_all_members(self, mock_webpush):
+        now = timezone.now()
+        # First set up due notification state
+        NotificationState.objects.create(
+            routine=self.routine,
+            last_due_notification=now - timedelta(hours=3),
+        )
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(self.routine, now)
+            self.assertEqual(mock_notify.call_count, 2)
+            called_users = {c.kwargs["target_user"] for c in mock_notify.call_args_list}
+            self.assertEqual(called_users, {self.owner, self.shared_user})
+
+    @patch("apps.notifications.push.webpush")
+    def test_completion_stops_notifications_for_all(self, mock_webpush):
+        now = timezone.now()
+        # Send due notification first
+        with patch("apps.notifications.tasks.notify_due"):
+            _check_due_notification(self.routine, now)
+        # Owner completes the routine
+        RoutineEntry.objects.create(routine=self.routine, completed_by=self.owner)
+        # Reset notification state (as done in log view)
+        state = NotificationState.objects.get(routine=self.routine)
+        state.last_due_notification = None
+        state.last_reminder = None
+        state.save()
+        # Refresh routine to clear cached last_entry
+        self.routine.refresh_from_db()
+        if hasattr(self.routine, "_last_entry_cache"):
+            del self.routine._last_entry_cache
+        # Routine is no longer overdue, so no notifications should be sent
+        self.assertFalse(self.routine.is_overdue())
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            _check_due_notification(self.routine, now + timedelta(minutes=1))
+            mock_notify.assert_not_called()
+
+    @patch("apps.notifications.push.webpush")
+    def test_daily_heads_up_includes_shared_routines(self, mock_webpush):
+        # Create a routine owned by owner but shared with shared_user
+        routine = make_routine(self.owner, name="Shared daily", interval_hours=24)
+        routine.shared_with.add(self.shared_user)
+        # Make routine overdue (never logged)
+
+        now = timezone.now()
+        # Set shared_user's notification time to now
+        self.shared_user.daily_notification_time = now.time()
+        self.shared_user.save()
+
+        # Include routine in all_routines
+        all_routines = [routine]
+        with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
+            _check_daily_heads_up(self.shared_user, now, now, all_routines)
+            mock_notify.assert_called_once()
+            call_args = mock_notify.call_args
+            self.assertEqual(call_args.kwargs["due_count"], 1)
+            self.assertIn("Shared daily", call_args.kwargs["names"])
+
+    @patch("apps.notifications.push.webpush")
+    def test_no_duplicate_processing(self, mock_webpush):
+        """Shared routine is not processed twice via processed_routines set."""
+        now = timezone.now()
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            # Simulate the dedup logic from check_notifications
+            processed_routines = set()
+            # First processing (as owner)
+            if self.routine.id not in processed_routines:
+                processed_routines.add(self.routine.id)
+                _check_due_notification(self.routine, now)
+            # Second processing (as shared_user) — should be skipped
+            if self.routine.id not in processed_routines:
+                _check_due_notification(self.routine, now)
+            # Only called once (2 members), not twice (4 calls)
+            self.assertEqual(mock_notify.call_count, 2)
+
+    @patch("apps.notifications.push.webpush")
+    def test_shared_user_without_subscription_not_notified(self, mock_webpush):
+        # Remove shared_user's subscription
+        PushSubscription.objects.filter(user=self.shared_user).delete()
+        now = timezone.now()
+        # notify_due sends to all members, but send_push_notification
+        # for shared_user will be a no-op (no subscriptions)
+        _check_due_notification(self.routine, now)
+        # webpush is only called for owner's subscription
+        self.assertEqual(mock_webpush.call_count, 1)
+
+    @patch("apps.notifications.push.webpush")
+    def test_unsharing_stops_notifications(self, mock_webpush):
+        # Remove shared_user from shared_with
+        self.routine.shared_with.remove(self.shared_user)
+        now = timezone.now()
+        with patch("apps.notifications.tasks.notify_due") as mock_notify:
+            _check_due_notification(self.routine, now)
+            # Only owner should be notified
+            mock_notify.assert_called_once_with(self.routine, target_user=self.owner)

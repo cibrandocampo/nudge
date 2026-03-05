@@ -1,7 +1,7 @@
 import logging
 
 from django.db import transaction
-from django.db.models import F, Prefetch
+from django.db.models import F, Prefetch, Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
@@ -37,9 +37,10 @@ class StockViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (
-            Stock.objects.filter(user=self.request.user)
-            .select_related("group")
-            .prefetch_related("lots")
+            Stock.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
+            .distinct()
+            .select_related("group", "user")
+            .prefetch_related("lots", "shared_with")
             .order_by("name")
         )
 
@@ -47,9 +48,18 @@ class StockViewSet(viewsets.ModelViewSet):
         stock = serializer.save(user=self.request.user)
         logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
 
-    def perform_destroy(self, instance):
-        logger.info("Stock %r deleted (user %s).", instance.name, self.request.user.username)
-        super().perform_destroy(instance)
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({"detail": "Only the owner can edit this stock."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({"detail": "Only the owner can delete this stock."}, status=status.HTTP_403_FORBIDDEN)
+        logger.info("Stock %r deleted (user %s).", instance.name, request.user.username)
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["get"], url_path="lots-for-selection")
     def lots_for_selection(self, request, pk=None):
@@ -142,6 +152,7 @@ class StockViewSet(viewsets.ModelViewSet):
 
             StockConsumption.objects.create(
                 stock=stock,
+                consumed_by=request.user,
                 quantity=quantity,
                 consumed_lots=consumed_lots,
             )
@@ -160,9 +171,9 @@ class StockLotViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         stock_pk = self.kwargs.get("stock_pk")
         return StockLot.objects.filter(
-            stock__user=self.request.user,
+            Q(stock__user=self.request.user) | Q(stock__shared_with=self.request.user),
             stock_id=stock_pk,
-        )
+        ).distinct()
 
     def perform_create(self, serializer):
         stock_pk = self.kwargs.get("stock_pk")
@@ -182,15 +193,29 @@ class RoutineViewSet(viewsets.ModelViewSet):
             queryset=RoutineEntry.objects.order_by("-created_at"),
             to_attr="_prefetched_entries",
         )
-        return Routine.objects.filter(user=self.request.user).select_related("stock").prefetch_related(latest_entry)
+        return (
+            Routine.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
+            .distinct()
+            .select_related("stock", "user")
+            .prefetch_related(latest_entry, "shared_with")
+        )
 
     def perform_create(self, serializer):
         routine = serializer.save(user=self.request.user)
         logger.info("Routine %r created (user %s).", routine.name, self.request.user.username)
 
-    def perform_destroy(self, instance):
-        logger.info("Routine %r deleted (user %s).", instance.name, self.request.user.username)
-        super().perform_destroy(instance)
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({"detail": "Only the owner can edit this routine."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({"detail": "Only the owner can delete this routine."}, status=status.HTTP_403_FORBIDDEN)
+        logger.info("Routine %r deleted (user %s).", instance.name, request.user.username)
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["get"], url_path="lots-for-selection")
     def lots_for_selection(self, request, pk=None):
@@ -228,6 +253,7 @@ class RoutineViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             entry = RoutineEntry.objects.create(
                 routine=routine,
+                completed_by=request.user,
                 notes=request.data.get("notes", ""),
             )
             # Invalidate cached last_entry so subsequent calls see the new entry
@@ -323,9 +349,13 @@ class StockConsumptionViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, vi
     serializer_class = StockConsumptionSerializer
 
     def get_queryset(self):
-        qs = StockConsumption.objects.filter(
-            stock__user=self.request.user,
-        ).select_related("stock")
+        qs = (
+            StockConsumption.objects.filter(
+                Q(stock__user=self.request.user) | Q(stock__shared_with=self.request.user),
+            )
+            .distinct()
+            .select_related("stock", "consumed_by")
+        )
         stock_id = self.request.query_params.get("stock")
         if stock_id:
             qs = qs.filter(stock_id=stock_id)
@@ -349,7 +379,13 @@ class RoutineEntryViewSet(
     serializer_class = RoutineEntrySerializer
 
     def get_queryset(self):
-        qs = RoutineEntry.objects.filter(routine__user=self.request.user).select_related("routine", "routine__stock")
+        qs = (
+            RoutineEntry.objects.filter(
+                Q(routine__user=self.request.user) | Q(routine__shared_with=self.request.user),
+            )
+            .distinct()
+            .select_related("routine", "routine__stock", "completed_by")
+        )
         routine_id = self.request.query_params.get("routine")
         if routine_id:
             qs = qs.filter(routine_id=routine_id)
@@ -375,7 +411,13 @@ def dashboard(request):
         to_attr="_prefetched_entries",
     )
     routines = (
-        Routine.objects.filter(user=request.user, is_active=True).select_related("stock").prefetch_related(latest_entry)
+        Routine.objects.filter(
+            Q(user=request.user) | Q(shared_with=request.user),
+            is_active=True,
+        )
+        .distinct()
+        .select_related("stock", "user")
+        .prefetch_related(latest_entry, "shared_with")
     )
 
     due = []

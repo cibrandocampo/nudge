@@ -78,4 +78,42 @@ describe('RoutineCard', () => {
     const row = container.firstChild
     expect(row.className).toContain('borderSuccess')
   })
+
+  // ── Sharing ────────────────────────────────────────────────────────────────
+
+  it('shows share button when owner with contacts', () => {
+    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_username: 'testuser' }
+    const contacts = [{ id: 10, username: 'alice' }]
+    renderWithProviders(
+      <RoutineCard
+        routine={routine}
+        onMarkDone={vi.fn()}
+        completing={false}
+        contacts={contacts}
+        onToggleShare={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Share')).toBeInTheDocument()
+  })
+
+  it('hides share button when not owner', () => {
+    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'other' }
+    const contacts = [{ id: 10, username: 'alice' }]
+    renderWithProviders(
+      <RoutineCard
+        routine={routine}
+        onMarkDone={vi.fn()}
+        completing={false}
+        contacts={contacts}
+        onToggleShare={vi.fn()}
+      />,
+    )
+    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument()
+  })
+
+  it('shows owner label when not owner', () => {
+    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'other' }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    expect(screen.getByText('other')).toBeInTheDocument()
+  })
 })

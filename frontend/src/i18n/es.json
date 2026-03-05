@@ -156,6 +156,15 @@
   "settings.pushTestSend": "Enviar notificación de prueba",
   "settings.pushTestSent": "¡Enviada!",
   "settings.pushTestError": "Error — inténtalo de nuevo",
+  "settings.contacts": "Contactos",
+  "settings.noContacts": "Sin contactos",
+  "settings.searchUsers": "Buscar usuarios...",
+  "settings.removeContact": "Eliminar contacto",
+  "settings.confirmRemoveContact": "Eliminar este contacto? Las rutinas y stocks compartidos dejaran de estarlo.",
+  "settings.contactAdded": "Contacto añadido",
+  "settings.contactRemoved": "Contacto eliminado",
+  "settings.contactAlreadyExists": "Ya es un contacto",
+  "settings.contactNotFound": "Usuario no encontrado",
   "settings.pushError": "No se pudieron cambiar las notificaciones. Revisa la consola.",
   "header.changePassword": "Cambiar contraseña",
   "header.signOut": "Cerrar sesión",
@@ -192,5 +201,11 @@
   "time.inMin": "En {{n}} min",
   "time.inHours": "En {{n}}h",
   "time.inDays": "En {{n}} días",
-  "time.inDay": "En 1 día"
+  "time.inDay": "En 1 día",
+  "sharing.shareWith": "Compartir con",
+  "sharing.sharedWith": "Compartido con",
+  "sharing.notShared": "No compartido",
+  "sharing.owner": "Propietario",
+  "sharing.completedBy": "por {{username}}",
+  "sharing.consumedBy": "por {{username}}"
 }

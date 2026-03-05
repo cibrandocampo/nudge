@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
 import LotSelectionModal from '../components/LotSelectionModal'
+import SharePopover from '../components/SharePopover'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
 
@@ -29,6 +30,7 @@ export default function InventoryPage() {
   const [actionError, setActionError] = useState(null)
   const [consuming, setConsuming] = useState(null) // stockId being consumed
   const [lotModal, setLotModal] = useState(null) // { stockId, lots }
+  const [flashId, setFlashId] = useState(null) // stockId that just consumed
 
   // Per-stock "add lot" form: { [stockId]: { show, qty, expiry, lotNumber, adding } }
   const [addLot, setAddLot] = useState({})
@@ -43,6 +45,7 @@ export default function InventoryPage() {
   const [editingGroup, setEditingGroup] = useState(null) // { id, name }
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // { id, name }
   const [groupPickerOpen, setGroupPickerOpen] = useState(null) // stockId
+  const [contacts, setContacts] = useState([])
 
   const load = () => {
     setLoading(true)
@@ -56,6 +59,11 @@ export default function InventoryPage() {
 
   useEffect(() => {
     load()
+    api
+      .get('/auth/contacts/')
+      .then((r) => r.json())
+      .then(setContacts)
+      .catch(() => {})
   }, [])
 
   // ── Stock CRUD ────────────────────────────────────────────────────────────
@@ -104,6 +112,8 @@ export default function InventoryPage() {
       if (!res.ok) throw new Error()
       const updated = await res.json()
       setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+      setFlashId(stockId)
+      setTimeout(() => setFlashId(null), 600)
     } catch {
       setActionError(t('common.actionError'))
     } finally {
@@ -194,6 +204,22 @@ export default function InventoryPage() {
     setActionError(null)
     try {
       const res = await api.patch(`/stock/${stockId}/`, { group: groupId })
+      if (!res.ok) throw new Error()
+      const updated = await res.json()
+      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+    } catch {
+      setActionError(t('common.actionError'))
+    }
+  }
+
+  const handleToggleStockShare = async (stockId, userId) => {
+    const stock = stocks.find((st) => st.id === stockId)
+    if (!stock) return
+    const current = stock.shared_with || []
+    const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
+    setActionError(null)
+    try {
+      const res = await api.patch(`/stock/${stockId}/`, { shared_with: newShared })
       if (!res.ok) throw new Error()
       const updated = await res.json()
       setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
@@ -296,7 +322,7 @@ export default function InventoryPage() {
         <div className={s.productHeader}>
           <div className={s.productMeta}>
             <span className={s.productName}>{stock.name}</span>
-            <span className={s.productTotal}>
+            <span className={cx(s.productTotal, flashId === stock.id && s.productTotalFlash)}>
               ({stock.quantity} {t('common.total')})
             </span>
           </div>
@@ -339,6 +365,12 @@ export default function InventoryPage() {
                 🏷️
               </button>
             )}
+            <SharePopover
+              sharedWith={stock.shared_with}
+              contacts={contacts}
+              isOwner={stock.is_owner}
+              onToggleShare={(userId) => handleToggleStockShare(stock.id, userId)}
+            />
             <button
               className={s.deleteBtn}
               onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
@@ -348,6 +380,9 @@ export default function InventoryPage() {
             </button>
           </div>
         </div>
+        {stock.is_owner === false && stock.owner_username && (
+          <span className={s.ownerLabel}>{stock.owner_username}</span>
+        )}
 
         {/* Lot list */}
         {stock.lots.length > 0 && (

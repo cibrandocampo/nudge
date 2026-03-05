@@ -1545,3 +1545,226 @@ class RoutineEntryNotesTest(APITestCase):
             {"notes": "hacked"},
         )
         self.assertEqual(response.status_code, 404)
+
+
+# ── Shared Routines ─────────────────────────────────────────────────────────
+
+
+class SharedRoutineTest(APITestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass")
+        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.carol = User.objects.create_user(username="carol", password="pass")
+        # alice and bob are contacts
+        self.alice.contacts.add(self.bob)
+        self.routine = make_routine(self.alice, name="Shared routine")
+        self.stock = make_stock(self.alice, name="Shared filter")
+        make_lot(self.stock, quantity=100)
+        self.routine.stock = self.stock
+        self.routine.save()
+        self.routine.shared_with.add(self.bob)
+        self.client.force_authenticate(user=self.bob)
+
+    def test_list_includes_shared_routines(self):
+        response = self.client.get("/api/routines/")
+        self.assertEqual(response.status_code, 200)
+        names = [r["name"] for r in response.json()["results"]]
+        self.assertIn("Shared routine", names)
+
+    def test_create_is_personal(self):
+        response = self.client.post(
+            "/api/routines/",
+            {
+                "name": "Bob's routine",
+                "interval_hours": 24,
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        routine = Routine.objects.get(name="Bob's routine")
+        self.assertEqual(routine.user, self.bob)
+
+    def test_share_with_contact(self):
+        self.client.force_authenticate(user=self.alice)
+        routine = make_routine(self.alice, name="New shared")
+        response = self.client.patch(
+            f"/api/routines/{routine.id}/",
+            {"shared_with": [self.bob.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.bob, routine.shared_with.all())
+
+    def test_share_with_non_contact(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.patch(
+            f"/api/routines/{self.routine.id}/",
+            {"shared_with": [self.carol.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_owner_can_update(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.patch(
+            f"/api/routines/{self.routine.id}/",
+            {"name": "Updated name"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_shared_user_cannot_update(self):
+        response = self.client.patch(
+            f"/api/routines/{self.routine.id}/",
+            {"name": "Hacked name"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_delete(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.delete(f"/api/routines/{self.routine.id}/")
+        self.assertEqual(response.status_code, 204)
+
+    def test_shared_user_cannot_delete(self):
+        response = self.client.delete(f"/api/routines/{self.routine.id}/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_shared_user_can_log(self):
+        response = self.client.post(f"/api/routines/{self.routine.id}/log/")
+        self.assertEqual(response.status_code, 201)
+
+    def test_log_sets_completed_by(self):
+        self.client.post(f"/api/routines/{self.routine.id}/log/")
+        entry = RoutineEntry.objects.filter(routine=self.routine).order_by("-created_at").first()
+        self.assertEqual(entry.completed_by, self.bob)
+
+    def test_dashboard_includes_shared_routines(self):
+        response = self.client.get("/api/dashboard/")
+        self.assertEqual(response.status_code, 200)
+        all_names = [r["name"] for r in response.json()["due"] + response.json()["upcoming"]]
+        self.assertIn("Shared routine", all_names)
+
+    def test_entries_include_shared_routine_entries(self):
+        RoutineEntry.objects.create(routine=self.routine, completed_by=self.alice)
+        response = self.client.get("/api/entries/")
+        self.assertEqual(response.status_code, 200)
+        routine_ids = [e["routine"] for e in response.json()["results"]]
+        self.assertIn(self.routine.id, routine_ids)
+
+
+# ── Shared Stocks ────────────────────────────────────────────────────────────
+
+
+class SharedStockTest(APITestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass")
+        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.alice.contacts.add(self.bob)
+        self.stock = make_stock(self.alice, name="Shared stock")
+        make_lot(self.stock, quantity=50)
+        self.stock.shared_with.add(self.bob)
+        self.client.force_authenticate(user=self.bob)
+
+    def test_list_includes_shared_stocks(self):
+        response = self.client.get("/api/stock/")
+        self.assertEqual(response.status_code, 200)
+        names = [s["name"] for s in response.json()["results"]]
+        self.assertIn("Shared stock", names)
+
+    def test_share_with_contact(self):
+        self.client.force_authenticate(user=self.alice)
+        stock = make_stock(self.alice, name="New shared stock")
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"shared_with": [self.bob.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.bob, stock.shared_with.all())
+
+    def test_share_with_non_contact(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/",
+            {"shared_with": [self.carol.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_owner_can_update(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/",
+            {"name": "Updated stock"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_shared_user_cannot_update(self):
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/",
+            {"name": "Hacked stock"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_delete(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.delete(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(response.status_code, 204)
+
+    def test_shared_user_cannot_delete(self):
+        response = self.client.delete(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_shared_user_can_consume(self):
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_consume_sets_consumed_by(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1},
+        )
+        consumption = StockConsumption.objects.filter(stock=self.stock).order_by("-created_at").first()
+        self.assertEqual(consumption.consumed_by, self.bob)
+
+    def test_consumptions_include_shared_stock(self):
+        StockConsumption.objects.create(stock=self.stock, consumed_by=self.alice, quantity=1)
+        response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.status_code, 200)
+        stock_ids = [c["stock"] for c in response.json()["results"]]
+        self.assertIn(self.stock.id, stock_ids)
+
+
+# ── Contact Removal Cascade ─────────────────────────────────────────────────
+
+
+class ContactRemovalCascadeTest(APITestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass")
+        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.alice.contacts.add(self.bob)
+
+        self.alice_routine = make_routine(self.alice, name="Alice routine")
+        self.alice_routine.shared_with.add(self.bob)
+        self.alice_stock = make_stock(self.alice, name="Alice stock")
+        self.alice_stock.shared_with.add(self.bob)
+
+        self.bob_routine = make_routine(self.bob, name="Bob routine")
+        self.bob_routine.shared_with.add(self.alice)
+        self.bob_stock = make_stock(self.bob, name="Bob stock")
+        self.bob_stock.shared_with.add(self.alice)
+
+    def test_remove_contact_cascades_shared_with(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.delete(f"/api/auth/contacts/{self.bob.pk}/")
+        self.assertEqual(response.status_code, 204)
+
+        # Bob removed from Alice's shared items
+        self.assertFalse(self.alice_routine.shared_with.filter(pk=self.bob.pk).exists())
+        self.assertFalse(self.alice_stock.shared_with.filter(pk=self.bob.pk).exists())
+
+        # Alice removed from Bob's shared items
+        self.assertFalse(self.bob_routine.shared_with.filter(pk=self.alice.pk).exists())
+        self.assertFalse(self.bob_stock.shared_with.filter(pk=self.alice.pk).exists())

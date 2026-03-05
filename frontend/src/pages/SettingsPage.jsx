@@ -34,6 +34,12 @@ export default function SettingsPage() {
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
 
+  const [contacts, setContacts] = useState([])
+  const [contactQuery, setContactQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [contactError, setContactError] = useState('')
+  const searchTimer = useRef(null)
+
   useEffect(() => {
     if (user) {
       // If timezone is still the default 'UTC', pre-fill with browser timezone
@@ -51,6 +57,11 @@ export default function SettingsPage() {
         .then((reg) => reg.pushManager.getSubscription())
         .then((sub) => setPushSubscribed(Boolean(sub)))
     }
+    api
+      .get('/auth/contacts/')
+      .then((r) => r.json())
+      .then(setContacts)
+      .catch(() => {})
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (e) => {
@@ -96,6 +107,51 @@ export default function SettingsPage() {
     },
     [i18n],
   )
+
+  const handleContactSearch = useCallback((query) => {
+    clearTimeout(searchTimer.current)
+    if (query.length < 2) {
+      setSearchResults([])
+      return
+    }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/auth/contacts/search/?q=${encodeURIComponent(query)}`)
+        setSearchResults(await res.json())
+      } catch {
+        setSearchResults([])
+      }
+    }, 300)
+  }, [])
+
+  const handleAddContact = async (contactUser) => {
+    setContactError('')
+    try {
+      const res = await api.post('/auth/contacts/', { username: contactUser.username })
+      if (res.ok) {
+        const added = await res.json()
+        setContacts((prev) => [...prev, added])
+        setContactQuery('')
+        setSearchResults([])
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setContactError(data.detail || t('common.actionError'))
+      }
+    } catch {
+      setContactError(t('common.actionError'))
+    }
+  }
+
+  const handleRemoveContact = async (contactId) => {
+    if (!window.confirm(t('settings.confirmRemoveContact'))) return
+    setContactError('')
+    try {
+      await api.delete(`/auth/contacts/${contactId}/`)
+      setContacts((prev) => prev.filter((c) => c.id !== contactId))
+    } catch {
+      setContactError(t('common.actionError'))
+    }
+  }
 
   const filteredTz = tzFilter ? TIMEZONES.filter((tz) => tz.toLowerCase().includes(tzFilter.toLowerCase())) : TIMEZONES
 
@@ -192,6 +248,58 @@ export default function SettingsPage() {
           loading={pushLoading}
           onToggle={togglePush}
         />
+      </Section>
+
+      <hr className={s.divider} />
+
+      <Section title={t('settings.contacts')}>
+        {contacts.length === 0 ? (
+          <p className={s.hint}>{t('settings.noContacts')}</p>
+        ) : (
+          <ul className={s.contactList}>
+            {contacts.map((c) => (
+              <li key={c.id} className={s.contactItem}>
+                <span className={s.contactName}>{c.username}</span>
+                <button
+                  className={s.contactRemoveBtn}
+                  onClick={() => handleRemoveContact(c.id)}
+                  title={t('settings.removeContact')}
+                >
+                  &times;
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className={s.contactSearch}>
+          <input
+            type="text"
+            className={s.contactInput}
+            placeholder={t('settings.searchUsers')}
+            value={contactQuery}
+            onChange={(e) => {
+              setContactQuery(e.target.value)
+              handleContactSearch(e.target.value)
+            }}
+          />
+          {searchResults.length > 0 && (
+            <ul className={s.contactResults}>
+              {searchResults.map((u) => (
+                <li key={u.id}>
+                  <button onClick={() => handleAddContact(u)} className={s.contactResultBtn}>
+                    {u.username}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {contactError && (
+          <p className={s.hint} style={{ color: 'var(--c-danger)' }}>
+            {contactError}
+          </p>
+        )}
       </Section>
     </div>
   )

@@ -60,14 +60,15 @@ describe('LotSelectionModal', () => {
     expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 2, quantity: 1 }])
   })
 
-  // 5. Single mode — error if confirming without selection
-  it('single mode: shows error when confirming without selection', async () => {
+  // 5. Single mode — first lot is pre-selected
+  it('single mode: first lot is pre-selected and confirm works immediately', async () => {
     const { user } = renderWithProviders(
       <LotSelectionModal routine={singleRoutine} lots={mockLots} onConfirm={onConfirm} onCancel={onCancel} />,
     )
+    const firstItem = screen.getByText('LOT-A').closest('[role="radio"]')
+    expect(firstItem).toHaveAttribute('aria-checked', 'true')
     await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText(/Total must be 1/)).toBeInTheDocument()
-    expect(onConfirm).not.toHaveBeenCalled()
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 1, quantity: 1 }])
   })
 
   // 6. Multi mode — renders stepper controls

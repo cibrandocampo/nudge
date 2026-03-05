@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
+import SharePopover from './SharePopover'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './RoutineCard.module.css'
@@ -11,7 +12,7 @@ function statusClass(routine) {
   return s.borderWarning
 }
 
-export default function RoutineCard({ routine, onMarkDone, completing }) {
+export default function RoutineCard({ routine, onMarkDone, completing, contacts, onToggleShare }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const timeLabel = routine.next_due_at
@@ -27,6 +28,9 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
           {t('card.stock')} {routine.stock_quantity} · {routine.stock_name}
         </span>
       )}
+      {routine.is_owner === false && routine.owner_username && (
+        <span className={s.ownerLabel}>{routine.owner_username}</span>
+      )}
     </div>
   )
 
@@ -34,7 +38,15 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     return (
       <Link to={`/routines/${routine.id}`} className={cx(s.row, s.rowLink, s.borderSuccess)}>
         {info}
-        <span className={s.chevron}>›</span>
+        <div className={s.actions}>
+          <SharePopover
+            sharedWith={routine.shared_with}
+            contacts={contacts}
+            isOwner={routine.is_owner}
+            onToggleShare={(userId) => onToggleShare && onToggleShare(routine.id, userId)}
+          />
+          <span className={s.chevron}>›</span>
+        </div>
       </Link>
     )
   }
@@ -43,6 +55,12 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     <div className={cx(s.row, s.rowLink, statusClass(routine))} onClick={() => navigate(`/routines/${routine.id}`)}>
       {info}
       <div className={s.actions}>
+        <SharePopover
+          sharedWith={routine.shared_with}
+          contacts={contacts}
+          isOwner={routine.is_owner}
+          onToggleShare={(userId) => onToggleShare && onToggleShare(routine.id, userId)}
+        />
         <button
           className={cx(s.doneBtn, completing && shared.disabled)}
           onClick={(e) => {

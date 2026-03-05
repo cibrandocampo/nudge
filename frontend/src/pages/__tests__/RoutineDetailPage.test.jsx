@@ -246,6 +246,54 @@ describe('RoutineDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
+  it('auto-marks done when opened with action=mark-done', async () => {
+    let logCalled = false
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    renderWithProviders(
+      <Routes>
+        <Route path="/routines/:id" element={<RoutineDetailPage />} />
+        <Route path="/" element={<div>Home</div>} />
+      </Routes>,
+      { initialEntries: ['/routines/1?action=mark-done'] },
+    )
+    await waitFor(() => expect(logCalled).toBe(true))
+  })
+
+  it('shows error when lot selection fetch fails', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      http.get(`${BASE}/routines/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when lot confirm log fails', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, requires_lot_selection: true, stock_usage: 1 }),
+      ),
+      http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('LOT-A'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
   it('shows interval in hours for non-standard intervals', async () => {
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 8 })))
     renderDetail()

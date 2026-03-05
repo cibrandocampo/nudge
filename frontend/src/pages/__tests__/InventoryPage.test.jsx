@@ -573,4 +573,132 @@ describe('InventoryPage — stock groups', () => {
     // Alert should come before the first group box in document order
     expect(alertBox.compareDocumentPosition(groupBoxes[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
+
+  // ── Sharing ────────────────────────────────────────────────────────────────
+
+  it('shows share popover button on stock cards when contacts exist', async () => {
+    const sharingStock = {
+      ...stockItem,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
+    }
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([sharingStock])),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+    )
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.getByLabelText('Share')).toBeInTheDocument()
+  })
+
+  it('toggles share on a stock via the share popover', async () => {
+    let patchBody = null
+    const sharingStock = {
+      ...stockItem,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
+    }
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([sharingStock])),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.patch(`${BASE}/stock/:id/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({ ...sharingStock, shared_with: [10] })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => expect(patchBody).not.toBeNull())
+    expect(patchBody.shared_with).toEqual([10])
+  })
+
+  it('moves a group up', async () => {
+    const patchCalls = []
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.patch(`${BASE}/stock-groups/:id/`, async ({ request, params }) => {
+        const body = await request.json()
+        patchCalls.push({ id: Number(params.id), ...body })
+        return HttpResponse.json({
+          id: Number(params.id),
+          name: 'Group',
+          display_order: body.display_order,
+          created_at: '2026-01-01T00:00:00Z',
+        })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByText('Household')).toBeInTheDocument())
+
+    // Click move up on the second group (Household)
+    const dialog = screen.getByRole('dialog')
+    const moveUpBtns = within(dialog).getAllByTitle('Move up')
+    await user.click(moveUpBtns[1])
+
+    await waitFor(() => expect(patchCalls.length).toBe(2))
+  })
+
+  it('shows error when share toggle fails', async () => {
+    const sharingStock2 = {
+      ...stockItem,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
+    }
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([sharingStock2])),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.patch(`${BASE}/stock/:id/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when assign group fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([ungroupedStock])),
+      http.patch(`${BASE}/stock/:id/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Loose item')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Category'))
+    const select = screen.getByLabelText('Category')
+    await user.selectOptions(select, '1')
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows owner label on shared stock where user is not owner', async () => {
+    const sharedStock = {
+      ...stockItem,
+      shared_with: [1],
+      shared_with_details: [{ id: 1, username: 'testuser' }],
+      is_owner: false,
+      owner_username: 'alice',
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([sharedStock])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
 })

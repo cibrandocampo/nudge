@@ -369,3 +369,41 @@ describe('HistoryPage — notes editing', () => {
     await waitFor(() => expect(patchCalled).toBe(true))
   })
 })
+
+describe('HistoryPage — sharing', () => {
+  it('shows completed_by username on routine entries', async () => {
+    const entriesWithUser = [
+      {
+        ...mockEntries[0],
+        completed_by_username: 'alice',
+      },
+    ]
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: entriesWithUser, next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    expect(screen.getByText(/by alice/)).toBeInTheDocument()
+  })
+
+  it('shows consumed_by username on stock consumptions', async () => {
+    const consumptionsWithUser = [
+      {
+        ...mockConsumptions[0],
+        consumed_by_username: 'bob',
+      },
+    ]
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: consumptionsWithUser, next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('Insulin pens')).toBeInTheDocument())
+    expect(screen.getByText(/by bob/)).toBeInTheDocument()
+  })
+})
