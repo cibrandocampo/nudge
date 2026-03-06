@@ -46,6 +46,11 @@ class Stock(models.Model):
         related_name="stocks",
     )
     name = models.CharField(max_length=200)
+    shared_with = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="shared_stocks",
+    )
     group = models.ForeignKey(
         StockGroup,
         null=True,
@@ -102,6 +107,13 @@ class StockConsumption(models.Model):
         on_delete=models.CASCADE,
         related_name="consumptions",
     )
+    consumed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stock_consumptions",
+    )
     quantity = models.PositiveIntegerField(
         validators=[MinValueValidator(1)],
     )
@@ -130,6 +142,11 @@ class Routine(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="routines",
+    )
+    shared_with = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="shared_routines",
     )
     name = models.CharField(max_length=200)
     description = models.CharField(max_length=1000, blank=True)
@@ -203,6 +220,13 @@ class RoutineEntry(models.Model):
         Routine,
         on_delete=models.CASCADE,
         related_name="entries",
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="completed_entries",
     )
     created_at = models.DateTimeField(default=timezone.now)
     notes = models.CharField(max_length=1000, blank=True)

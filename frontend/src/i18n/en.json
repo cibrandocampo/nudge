@@ -156,6 +156,15 @@
   "settings.pushTestSend": "Send test notification",
   "settings.pushTestSent": "Sent!",
   "settings.pushTestError": "Failed — try again",
+  "settings.contacts": "Contacts",
+  "settings.noContacts": "No contacts yet",
+  "settings.searchUsers": "Search users...",
+  "settings.removeContact": "Remove contact",
+  "settings.confirmRemoveContact": "Remove this contact? Shared routines and stocks will be unshared.",
+  "settings.contactAdded": "Contact added",
+  "settings.contactRemoved": "Contact removed",
+  "settings.contactAlreadyExists": "Already a contact",
+  "settings.contactNotFound": "User not found",
   "settings.pushError": "Could not toggle notifications. Check the console for details.",
   "header.changePassword": "Change password",
   "header.signOut": "Sign out",
@@ -192,5 +201,11 @@
   "time.inMin": "In {{n}} min",
   "time.inHours": "In {{n}}h",
   "time.inDays": "In {{n}} days",
-  "time.inDay": "In 1 day"
+  "time.inDay": "In 1 day",
+  "sharing.shareWith": "Share with",
+  "sharing.sharedWith": "Shared with",
+  "sharing.notShared": "Not shared",
+  "sharing.owner": "Owner",
+  "sharing.completedBy": "by {{username}}",
+  "sharing.consumedBy": "by {{username}}"
 }

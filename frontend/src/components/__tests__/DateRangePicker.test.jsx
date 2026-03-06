@@ -112,6 +112,24 @@ describe('DateRangePicker', () => {
     expect(btn.className).toMatch(/presetBtnActive/)
   })
 
+  it('shows "All time" label when both dates empty', () => {
+    renderPicker({ dateFrom: '', dateTo: '' })
+    const trigger = screen.getByRole('button')
+    expect(trigger.textContent).toBe('All time')
+  })
+
+  it('shows "..." for missing from/to in custom label', () => {
+    renderPicker({ dateFrom: '', dateTo: '2026-01-31' })
+    const trigger = screen.getByRole('button')
+    expect(trigger.textContent).toMatch(/\.\.\./)
+  })
+
+  it('shows "..." for missing to date in custom label', () => {
+    renderPicker({ dateFrom: '2026-01-01', dateTo: '' })
+    const trigger = screen.getByRole('button')
+    expect(trigger.textContent).toMatch(/\.\.\./)
+  })
+
   it('shows all 5 presets', async () => {
     const { user } = renderPicker()
     await user.click(screen.getByRole('button', { name: /Last 15 days/i }))

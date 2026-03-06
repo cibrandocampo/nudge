@@ -162,8 +162,8 @@ def notify_daily_heads_up(user, due_count: int, names: list = None):
     )
 
 
-def notify_due(routine):
-    user = routine.user
+def notify_due(routine, *, target_user=None):
+    user = target_user or routine.user
     if routine.description:
         body = routine.description
     else:
@@ -184,8 +184,8 @@ def notify_due(routine):
     )
 
 
-def notify_reminder(routine, hours_overdue: int):
-    user = routine.user
+def notify_reminder(routine, hours_overdue: int, *, target_user=None):
+    user = target_user or routine.user
     send_push_notification(
         user,
         title=_m(user, "reminder_title", name=routine.name),

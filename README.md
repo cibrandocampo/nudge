@@ -21,9 +21,9 @@ Nudge is a personal PWA that sends you a quiet push notification when something 
 <p align="center">
   <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/>
   &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Inventory"/>
   &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-inventory.png" width="260" alt="Inventory"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Shared dashboard"/>
 </p>
 
 ---
@@ -55,7 +55,10 @@ Anything you do on a schedule, Nudge can track.
 
 - **Push notifications** — Browser web push when something comes due. No app store required.
 - **Three-stage alerts** — A daily heads-up at your chosen time, a due alert when the interval expires, and follow-up reminders every 8 hours until you mark it done.
+- **Sharing** — Share routines and stock items with other users. Shared routines appear on their dashboard with an owner label, and they can mark them as done too.
+- **Contacts** — Add trusted users as contacts to quickly share routines and inventory with them via a simple popover.
 - **Inventory tracking** — Optionally attach a consumable to a routine (medication packs, filter cartridges, oil bottles). Each time you log the task, stock decrements automatically using FEFO order (First Expired, First Out).
+- **Stock groups** — Organize your inventory into categories (Health, Home, Pets, etc.) for a cleaner overview.
 - **Expiry tracking** — Add lot numbers and expiry dates to your stock. Nudge warns you 90 days before anything expires.
 - **Timezone-aware** — Your notification schedule follows your local time and adjusts automatically for daylight saving.
 - **Multilingual** — English, Spanish, and Galician.
@@ -70,15 +73,17 @@ Anything you do on a schedule, Nudge can track.
   <tr>
     <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" width="260" alt="Login"/><br/><b>Login</b></td>
     <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/><br/><b>Dashboard</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Sharing popover"/><br/><b>Sharing</b></td>
   </tr>
   <tr>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-history.png" width="260" alt="History"/><br/><b>History</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
   </tr>
   <tr>
-    <td colspan="3" align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-history.png" width="260" alt="History"/><br/><b>History</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Shared dashboard"/><br/><b>Shared dashboard</b></td>
   </tr>
 </table>
 
@@ -214,7 +219,7 @@ Images are also rebuilt weekly to pick up base-image and dependency security pat
 
 ## Built with Claude Code
 
-This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills are provided in `.claude/skills/` to maintain project conventions. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md#claude-code) for details.
+This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills and commands are provided in `.claude/` to maintain project conventions. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md#claude-code) for details.
 
 ---
 

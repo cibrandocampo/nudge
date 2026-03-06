@@ -30,9 +30,24 @@ def check_notifications():
       1. Daily heads-up  — once per day at the user's configured local time.
       2. Due notification — when a routine becomes overdue, once per cycle.
       3. Reminder        — every REMINDER_INTERVAL_HOURS while the routine remains overdue.
+
+    Shared routines are included: due/reminder notifications are sent to all
+    members (owner + shared_with). A processed_routines set prevents duplicate
+    processing when the same routine appears for multiple users.
     """
     User = get_user_model()
     now_utc = timezone.now()
+
+    entry_prefetch = Prefetch(
+        "entries",
+        queryset=RoutineEntry.objects.order_by("-created_at"),
+        to_attr="_prefetched_entries",
+    )
+    active_routines_qs = (
+        Routine.objects.filter(is_active=True)
+        .select_related("stock", "user")
+        .prefetch_related(entry_prefetch, "shared_with")
+    )
 
     users = (
         User.objects.filter(
@@ -41,20 +56,12 @@ def check_notifications():
         )
         .distinct()
         .prefetch_related(
-            Prefetch(
-                "routines",
-                queryset=Routine.objects.filter(is_active=True)
-                .select_related("stock")
-                .prefetch_related(
-                    Prefetch(
-                        "entries",
-                        queryset=RoutineEntry.objects.order_by("-created_at"),
-                        to_attr="_prefetched_entries",
-                    )
-                ),
-            ),
+            Prefetch("routines", queryset=active_routines_qs),
+            Prefetch("shared_routines", queryset=active_routines_qs),
         )
     )
+
+    processed_routines = set()
 
     for user in users:
         try:
@@ -64,12 +71,18 @@ def check_notifications():
             continue
 
         now_local = now_utc.astimezone(user_tz)
-        routines = list(user.routines.all())
-        logger.debug("Checking user %s (%d active routines).", user.username, len(routines))
 
-        _check_daily_heads_up(user, now_utc, now_local)
+        # Combine owned + shared routines, deduplicate
+        all_routines = _unique_routines(user)
 
-        for routine in routines:
+        logger.debug("Checking user %s (%d active routines).", user.username, len(all_routines))
+
+        _check_daily_heads_up(user, now_utc, now_local, all_routines)
+
+        for routine in all_routines:
+            if routine.id in processed_routines:
+                continue
+            processed_routines.add(routine.id)
             try:
                 _check_due_notification(routine, now_utc)
                 _check_reminder(routine, now_utc)
@@ -78,6 +91,24 @@ def check_notifications():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _unique_routines(user):
+    """Return deduplicated list of owned + shared routines from prefetch cache."""
+    seen = set()
+    result = []
+    for r in list(user.routines.all()) + list(user.shared_routines.all()):
+        if r.id not in seen:
+            seen.add(r.id)
+            result.append(r)
+    return result
+
+
+def _get_routine_members(routine):
+    """Return all users who have access to this routine (owner + shared_with)."""
+    members = [routine.user]
+    members.extend(routine.shared_with.all())
+    return members
 
 
 def _get_or_create_state(routine, *, lock=False):
@@ -97,7 +128,7 @@ def _is_due_today(routine, now_local):
     return next_due_local.date() <= now_local.date()
 
 
-def _check_daily_heads_up(user, now_utc, now_local):
+def _check_daily_heads_up(user, now_utc, now_local, all_routines=None):
     """
     Send the daily heads-up if:
       - The current local time matches the user's configured time (±DAILY_WINDOW_MINUTES).
@@ -117,7 +148,10 @@ def _check_daily_heads_up(user, now_utc, now_local):
         )
         return
 
-    due_routines = [r for r in user.routines.all() if _is_due_today(r, now_local)]
+    if all_routines is None:
+        all_routines = _unique_routines(user)
+
+    due_routines = [r for r in all_routines if _is_due_today(r, now_local)]
     if not due_routines:
         logger.debug("Daily heads-up: no routines due today for user %s.", user.username)
         return
@@ -153,6 +187,7 @@ def _check_due_notification(routine, now_utc):
     """
     Send a 'due' notification when the routine first becomes overdue.
     Does not repeat within the same cycle (i.e. until the next RoutineEntry).
+    Sends to all members (owner + shared_with).
     """
     if not routine.is_overdue():
         logger.debug("Due: routine %r not overdue — skipped.", routine.name)
@@ -170,7 +205,9 @@ def _check_due_notification(routine, now_utc):
                 logger.debug("Due: routine %r already notified this cycle — skipped.", routine.name)
                 return
 
-        notify_due(routine)
+        members = _get_routine_members(routine)
+        for member in members:
+            notify_due(routine, target_user=member)
         logger.info("Due notification sent for routine %r (user %s).", routine.name, routine.user.username)
 
         state.last_due_notification = now_utc
@@ -181,6 +218,7 @@ def _check_reminder(routine, now_utc):
     """
     Send a reminder every REMINDER_INTERVAL_HOURS while the routine remains overdue.
     Only fires after the initial 'due' notification has been sent.
+    Sends to all members (owner + shared_with).
     """
     if not routine.is_overdue():
         logger.debug("Reminder: routine %r not overdue — skipped.", routine.name)
@@ -205,7 +243,9 @@ def _check_reminder(routine, now_utc):
         else:
             hours_overdue = round((now_utc - state.last_due_notification).total_seconds() / 3600)
 
-        notify_reminder(routine, hours_overdue=hours_overdue)
+        members = _get_routine_members(routine)
+        for member in members:
+            notify_reminder(routine, hours_overdue=hours_overdue, target_user=member)
         logger.info(
             "Reminder sent for routine %r (user %s, %dh overdue).",
             routine.name,

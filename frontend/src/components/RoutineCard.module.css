@@ -71,6 +71,12 @@
   padding: 0 0.25rem;
 }
 
+.ownerLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-style: italic;
+}
+
 .doneBtn {
   flex-shrink: 0;
   padding: 0.35rem 0.9rem;

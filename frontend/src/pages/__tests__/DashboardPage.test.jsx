@@ -268,4 +268,204 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(screen.getByText('All caught up!')).toBeInTheDocument())
   })
+
+  // ── Sharing ────────────────────────────────────────────────────────────────
+
+  it('shows share popover button on routine cards when contacts exist', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({
+          due: [
+            {
+              id: 1,
+              name: 'Vitamins',
+              next_due_at: new Date(Date.now() - 3600000).toISOString(),
+              created_at: '2025-01-01T00:00:00Z',
+              is_due: true,
+              is_overdue: true,
+              hours_until_due: -1,
+              stock_name: null,
+              stock_quantity: null,
+              shared_with: [],
+              shared_with_details: [],
+              is_owner: true,
+              owner_username: 'testuser',
+            },
+          ],
+          upcoming: [],
+        }),
+      ),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+    )
+    renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+    expect(screen.getByLabelText('Share')).toBeInTheDocument()
+  })
+
+  it('toggles share on a routine via the share popover', async () => {
+    let patchBody = null
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({
+          due: [
+            {
+              id: 1,
+              name: 'Vitamins',
+              next_due_at: new Date(Date.now() - 3600000).toISOString(),
+              created_at: '2025-01-01T00:00:00Z',
+              is_due: true,
+              is_overdue: true,
+              hours_until_due: -1,
+              stock_name: null,
+              stock_quantity: null,
+              shared_with: [],
+              shared_with_details: [],
+              is_owner: true,
+              owner_username: 'testuser',
+            },
+          ],
+          upcoming: [],
+        }),
+      ),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({})
+      }),
+    )
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    // Open share popover
+    await user.click(screen.getByLabelText('Share'))
+    // Toggle alice checkbox
+    await user.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => expect(patchBody).not.toBeNull())
+    expect(patchBody.shared_with).toEqual([10])
+  })
+
+  it('shows error when lot selection fetch fails on dashboard', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      is_overdue: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 1,
+      requires_lot_selection: true,
+    }
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.get(`${BASE}/routines/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+    await user.click(screen.getByText('Done'))
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when lot confirm log fails on dashboard', async () => {
+    const dueRoutine = {
+      id: 1,
+      name: 'Vitamins',
+      next_due_at: new Date(Date.now() - 3600000).toISOString(),
+      created_at: '2025-01-01T00:00:00Z',
+      is_due: true,
+      is_overdue: true,
+      hours_until_due: -1,
+      stock_name: 'Filters',
+      stock_quantity: 5,
+      stock_usage: 1,
+      requires_lot_selection: true,
+    }
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('LOT-A'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('toggles share on routine with null shared_with', async () => {
+    let patchBody = null
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({
+          due: [
+            {
+              id: 1,
+              name: 'Vitamins',
+              next_due_at: new Date(Date.now() - 3600000).toISOString(),
+              created_at: '2025-01-01T00:00:00Z',
+              is_due: true,
+              is_overdue: true,
+              hours_until_due: -1,
+              stock_name: null,
+              stock_quantity: null,
+              shared_with: null,
+              shared_with_details: [],
+              is_owner: true,
+              owner_username: 'testuser',
+            },
+          ],
+          upcoming: [],
+        }),
+      ),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({})
+      }),
+    )
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => expect(patchBody).not.toBeNull())
+    expect(patchBody.shared_with).toEqual([10])
+  })
+
+  it('shows owner label on shared routine where user is not owner', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({
+          due: [],
+          upcoming: [
+            {
+              id: 2,
+              name: 'Shared routine',
+              next_due_at: new Date(Date.now() + 86400000).toISOString(),
+              created_at: '2025-01-01T00:00:00Z',
+              is_due: false,
+              hours_until_due: 24,
+              stock_name: null,
+              stock_quantity: null,
+              shared_with: [1],
+              shared_with_details: [{ id: 1, username: 'testuser' }],
+              is_owner: false,
+              owner_username: 'alice',
+            },
+          ],
+        }),
+      ),
+    )
+    renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Shared routine')).toBeInTheDocument())
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
 })
