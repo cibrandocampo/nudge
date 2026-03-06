@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/helpers'
 import RoutineCard from '../RoutineCard'
 
@@ -109,6 +110,71 @@ describe('RoutineCard', () => {
       />,
     )
     expect(screen.queryByLabelText('Share')).not.toBeInTheDocument()
+  })
+
+  it('clicking a due card row navigates to routine detail', async () => {
+    const routine = { ...baseRoutine, is_due: true, is_overdue: false }
+    const { user } = renderWithProviders(
+      <Routes>
+        <Route path="/" element={<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />} />
+        <Route path="/routines/:id" element={<div>Detail page</div>} />
+      </Routes>,
+      { initialEntries: ['/'] },
+    )
+    // Click the card (not the Done button)
+    const card = screen.getByText('Take vitamins').closest('[class*="row"]')
+    await user.click(card)
+    await waitFor(() => expect(screen.getByText('Detail page')).toBeInTheDocument())
+  })
+
+  it('calls onToggleShare when share checkbox toggled on due routine', async () => {
+    const onToggleShare = vi.fn()
+    const routine = {
+      ...baseRoutine,
+      is_due: true,
+      is_overdue: true,
+      shared_with: [],
+      is_owner: true,
+      owner_username: 'testuser',
+    }
+    const contacts = [{ id: 10, username: 'alice' }]
+    const { user } = renderWithProviders(
+      <RoutineCard
+        routine={routine}
+        onMarkDone={vi.fn()}
+        completing={false}
+        contacts={contacts}
+        onToggleShare={onToggleShare}
+      />,
+    )
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+    expect(onToggleShare).toHaveBeenCalledWith(1, 10)
+  })
+
+  it('calls onToggleShare when share checkbox toggled on not-due routine', async () => {
+    const onToggleShare = vi.fn()
+    const routine = {
+      ...baseRoutine,
+      is_due: false,
+      is_overdue: false,
+      shared_with: [],
+      is_owner: true,
+      owner_username: 'testuser',
+    }
+    const contacts = [{ id: 10, username: 'alice' }]
+    const { user } = renderWithProviders(
+      <RoutineCard
+        routine={routine}
+        onMarkDone={vi.fn()}
+        completing={false}
+        contacts={contacts}
+        onToggleShare={onToggleShare}
+      />,
+    )
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+    expect(onToggleShare).toHaveBeenCalledWith(1, 10)
   })
 
   it('shows owner label when not owner', () => {

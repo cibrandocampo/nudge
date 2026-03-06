@@ -300,6 +300,66 @@ describe('RoutineDetailPage', () => {
     await waitFor(() => expect(screen.getByText('Every 8h')).toBeInTheDocument())
   })
 
+  it('shows "Due now" when next_due_at is null', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, next_due_at: null })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Due now')).toBeInTheDocument())
+  })
+
+  it('shows notes on entries that have notes', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/entries/`, () =>
+        HttpResponse.json([{ id: 10, created_at: '2025-02-20T09:00:00Z', notes: 'took with meal' }]),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('took with meal')).toBeInTheDocument())
+  })
+
+  it('does not show stock info when stock_name is null', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, stock_name: null })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    expect(screen.queryByText(/Vitamin D/)).not.toBeInTheDocument()
+  })
+
+  it('shows interval in weeks', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 168 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every week')).toBeInTheDocument())
+  })
+
+  it('shows interval in months', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 720 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every month')).toBeInTheDocument())
+  })
+
+  it('shows interval in years', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 8760 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every year')).toBeInTheDocument())
+  })
+
+  it('shows advance button when routine is not due but active', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, is_due: false, is_overdue: false, hours_until_due: 12 }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+  })
+
+  it('shows inactive status and activate button', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, is_active: false, is_due: false })),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Inactive')).toBeInTheDocument())
+    expect(screen.getByText('Activate')).toBeInTheDocument()
+  })
+
   it('renders back and edit links', async () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('← Back')).toBeInTheDocument())

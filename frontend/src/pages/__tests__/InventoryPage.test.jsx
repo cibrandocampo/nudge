@@ -688,6 +688,212 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
+  it('shows error when add lot fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([{ ...stockItem, lots: [] }])),
+      http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('+ Add batch')).toBeInTheDocument())
+
+    await user.click(screen.getByText('+ Add batch'))
+    await user.type(screen.getByPlaceholderText('0'), '5')
+    await user.click(screen.getByText('Add batch'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when remove lot fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
+      http.delete(`${BASE}/stock/1/lots/:lotId/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('LOT-A')).toBeInTheDocument())
+
+    const lotDeleteBtns = screen.getAllByTitle('Delete')
+    await user.click(lotDeleteBtns[1])
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByText('Delete'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when remove stock fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
+      http.delete(`${BASE}/stock/1/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+
+    const deleteBtns = screen.getAllByTitle('Delete')
+    await user.click(deleteBtns[0])
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByText('Delete'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when create group fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: [] })),
+      http.post(`${BASE}/stock-groups/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByPlaceholderText('Category name')).toBeInTheDocument())
+
+    await user.type(screen.getByPlaceholderText('Category name'), 'Fail Group')
+    await user.click(screen.getByText('Create'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('does not submit empty stock name', async () => {
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('+ New')).toBeInTheDocument())
+
+    await user.click(screen.getByText('+ New'))
+    // Leave name empty and click create — form should remain open
+    await user.click(screen.getByText('Create item'))
+    expect(screen.getByPlaceholderText('Item name (e.g. Water filters)')).toBeInTheDocument()
+  })
+
+  it('does not rename group with empty name', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByText('Diabetes')).toBeInTheDocument())
+
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByText('Diabetes'))
+
+    const input = screen.getByDisplayValue('Diabetes')
+    await user.clear(input)
+    await user.type(input, '{Enter}')
+
+    // Should exit edit mode without error
+    expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument()
+  })
+
+  it('un-assigns group from a stock (set to no group)', async () => {
+    let patchBody = null
+    const groupedItem = { ...stockItem, group: 1, group_name: 'Diabetes' }
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([groupedItem])),
+      http.patch(`${BASE}/stock/:id/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({ ...groupedItem, group: null, group_name: null })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Category'))
+    const select = screen.getByLabelText('Category')
+    await user.selectOptions(select, '')
+
+    await waitFor(() => expect(patchBody).not.toBeNull())
+    expect(patchBody.group).toBeNull()
+  })
+
+  it('shows error when lot-selection fetch fails during consume', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockWithLots])),
+      http.get(`${BASE}/stock/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Consume 1 unit'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows warning card style when quantity is low (1-3)', async () => {
+    const lowStock = { ...stockItem, quantity: 2 }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([lowStock])))
+    const { container } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    const card = container.querySelector('.cardWarning')
+    expect(card).toBeInTheDocument()
+  })
+
+  it('moves groups with same display_order using index-based values', async () => {
+    const sameOrderGroups = [
+      { id: 1, name: 'Alpha', display_order: 0, created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, name: 'Beta', display_order: 0, created_at: '2026-01-01T00:00:00Z' },
+    ]
+    const patchCalls = []
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: sameOrderGroups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.patch(`${BASE}/stock-groups/:id/`, async ({ request, params }) => {
+        const body = await request.json()
+        patchCalls.push({ id: Number(params.id), ...body })
+        return HttpResponse.json({
+          id: Number(params.id),
+          name: 'Group',
+          display_order: body.display_order,
+          created_at: '2026-01-01T00:00:00Z',
+        })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+
+    const dialog = screen.getByRole('dialog')
+    const moveDownBtns = within(dialog).getAllByTitle('Move down')
+    await user.click(moveDownBtns[0])
+
+    await waitFor(() => expect(patchCalls.length).toBe(2))
+  })
+
+  it('closes group manager modal by clicking overlay', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    // Click the overlay to close
+    await user.click(screen.getByRole('dialog'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('closes group picker on blur', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([ungroupedStock])),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Loose item')).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Category'))
+    const select = screen.getByLabelText('Category')
+    expect(select).toBeInTheDocument()
+
+    // Blur the select to close the picker
+    select.blur()
+    await waitFor(() => expect(screen.queryByLabelText('Category')).not.toBeInTheDocument())
+  })
+
   it('shows owner label on shared stock where user is not owner', async () => {
     const sharedStock = {
       ...stockItem,

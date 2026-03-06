@@ -399,6 +399,47 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
+  it('toggles share on routine with null shared_with', async () => {
+    let patchBody = null
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({
+          due: [
+            {
+              id: 1,
+              name: 'Vitamins',
+              next_due_at: new Date(Date.now() - 3600000).toISOString(),
+              created_at: '2025-01-01T00:00:00Z',
+              is_due: true,
+              is_overdue: true,
+              hours_until_due: -1,
+              stock_name: null,
+              stock_quantity: null,
+              shared_with: null,
+              shared_with_details: [],
+              is_owner: true,
+              owner_username: 'testuser',
+            },
+          ],
+          upcoming: [],
+        }),
+      ),
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({})
+      }),
+    )
+    const { user } = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('checkbox'))
+
+    await waitFor(() => expect(patchBody).not.toBeNull())
+    expect(patchBody.shared_with).toEqual([10])
+  })
+
   it('shows owner label on shared routine where user is not owner', async () => {
     server.use(
       http.get(`${BASE}/dashboard/`, () =>
