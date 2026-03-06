@@ -11,11 +11,12 @@ afterAll(() => {
   server.listen()
 })
 
-const mockFetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+const mockFetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })))
 
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch)
   mockFetch.mockClear()
+  mockFetch.mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })))
 })
 
 afterEach(() => {
@@ -56,6 +57,13 @@ describe('subscribeToPush', () => {
     await subscribeToPush('BFake-VAPID-Key')
     expect(reg.pushManager.subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }))
   })
+
+  it('throws when backend returns non-ok response', async () => {
+    localStorage.setItem('access_token', 'tok')
+    // subscribeToPush calls api.post which calls fetch once for /push/subscribe/
+    mockFetch.mockImplementation(() => Promise.resolve(new Response('error', { status: 500 })))
+    await expect(subscribeToPush('BFake-VAPID-Key')).rejects.toThrow('Failed to register push subscription')
+  })
 })
 
 describe('unsubscribeFromPush', () => {
@@ -81,6 +89,19 @@ describe('unsubscribeFromPush', () => {
     expect(call).toBeTruthy()
     expect(call[1].method).toBe('DELETE')
     expect(mockUnsub).toHaveBeenCalled()
+  })
+
+  it('throws when backend returns non-ok and non-204 response', async () => {
+    const mockSub = {
+      endpoint: 'https://push.example.com/sub/789',
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    }
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce(mockSub)
+
+    localStorage.setItem('access_token', 'tok')
+    mockFetch.mockImplementation(() => Promise.resolve(new Response('error', { status: 500 })))
+    await expect(unsubscribeFromPush()).rejects.toThrow('Failed to unregister push subscription')
   })
 
   it('sends endpoint in body when unsubscribing', async () => {

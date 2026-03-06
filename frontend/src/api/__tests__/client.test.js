@@ -104,6 +104,26 @@ describe('api client', () => {
     expect(window.location.href).toBe('/login')
   })
 
+  it('deduplicates concurrent refresh token requests', async () => {
+    let refreshCount = 0
+    let attempt = 0
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => {
+        attempt++
+        if (attempt <= 2) return new HttpResponse(null, { status: 401 })
+        return HttpResponse.json({ due: [], upcoming: [] })
+      }),
+      http.post(`${BASE}/auth/refresh/`, () => {
+        refreshCount++
+        return HttpResponse.json({ access: 'new-access', refresh: 'new-refresh' })
+      }),
+    )
+    // Fire two requests concurrently that both get 401
+    const [res1, res2] = await Promise.all([api.get('/dashboard/'), api.get('/dashboard/')])
+    // Only one refresh call should have been made (mutex deduplicated)
+    expect(refreshCount).toBe(1)
+  })
+
   it('clears storage when no refresh token available', async () => {
     localStorage.removeItem('refresh_token')
     server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 401 })))

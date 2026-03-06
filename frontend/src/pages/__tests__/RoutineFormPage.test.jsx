@@ -249,6 +249,16 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByText('8 hours')).toBeInTheDocument())
   })
 
+  it('handles zero interval_hours in edit mode gracefully', async () => {
+    const zeroRoutine = { ...editRoutine, interval_hours: 0 }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(zeroRoutine)))
+    renderEdit()
+    await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+    // The interval should show "0 hours" in the custom input
+    const valueInput = screen.getByRole('spinbutton')
+    expect(valueInput.value).toBe('0')
+  })
+
   it('shows saving state on submit', async () => {
     let resolve
     server.use(

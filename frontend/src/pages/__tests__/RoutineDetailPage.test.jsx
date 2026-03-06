@@ -246,10 +246,118 @@ describe('RoutineDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
+  it('auto-marks done when opened with action=mark-done', async () => {
+    let logCalled = false
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    renderWithProviders(
+      <Routes>
+        <Route path="/routines/:id" element={<RoutineDetailPage />} />
+        <Route path="/" element={<div>Home</div>} />
+      </Routes>,
+      { initialEntries: ['/routines/1?action=mark-done'] },
+    )
+    await waitFor(() => expect(logCalled).toBe(true))
+  })
+
+  it('shows error when lot selection fetch fails', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      http.get(`${BASE}/routines/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('shows error when lot confirm log fails', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, requires_lot_selection: true, stock_usage: 1 }),
+      ),
+      http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Mark as done'))
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+
+    await user.click(screen.getByText('LOT-A'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
   it('shows interval in hours for non-standard intervals', async () => {
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 8 })))
     renderDetail()
     await waitFor(() => expect(screen.getByText('Every 8h')).toBeInTheDocument())
+  })
+
+  it('shows "Due now" when next_due_at is null', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, next_due_at: null })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Due now')).toBeInTheDocument())
+  })
+
+  it('shows notes on entries that have notes', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/entries/`, () =>
+        HttpResponse.json([{ id: 10, created_at: '2025-02-20T09:00:00Z', notes: 'took with meal' }]),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('took with meal')).toBeInTheDocument())
+  })
+
+  it('does not show stock info when stock_name is null', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, stock_name: null })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    expect(screen.queryByText(/Vitamin D/)).not.toBeInTheDocument()
+  })
+
+  it('shows interval in weeks', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 168 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every week')).toBeInTheDocument())
+  })
+
+  it('shows interval in months', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 720 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every month')).toBeInTheDocument())
+  })
+
+  it('shows interval in years', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, interval_hours: 8760 })))
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Every year')).toBeInTheDocument())
+  })
+
+  it('shows advance button when routine is not due but active', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, is_due: false, is_overdue: false, hours_until_due: 12 }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+  })
+
+  it('shows inactive status and activate button', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, is_active: false, is_due: false })),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Inactive')).toBeInTheDocument())
+    expect(screen.getByText('Activate')).toBeInTheDocument()
   })
 
   it('renders back and edit links', async () => {

@@ -26,6 +26,10 @@ export const mockRoutine = {
   stock_quantity: null,
   stock_usage: 1,
   stock: null,
+  shared_with: [],
+  shared_with_details: [],
+  is_owner: true,
+  owner_username: 'testuser',
 }
 
 export const handlers = [
@@ -62,6 +66,10 @@ export const handlers = [
       lots: [],
       expiring_lots: [],
       has_expiring_lots: false,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
     }),
   ),
 
@@ -115,6 +123,22 @@ export const handlers = [
 
   http.delete(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 204 })),
 
+  http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([])),
+
+  http.post(`${BASE}/auth/contacts/`, async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 50, username: body.username }, { status: 201 })
+  }),
+
+  http.delete(`${BASE}/auth/contacts/:id/`, () => new HttpResponse(null, { status: 204 })),
+
+  http.get(`${BASE}/auth/contacts/search/`, ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q') || ''
+    if (!q) return HttpResponse.json([])
+    return HttpResponse.json([{ id: 50, username: 'bob' }])
+  }),
+
   http.post(`${BASE}/auth/token/`, () => HttpResponse.json({ access: 'fake-access', refresh: 'fake-refresh' })),
 
   http.post(`${BASE}/auth/refresh/`, () => HttpResponse.json({ access: 'new-access', refresh: 'new-refresh' })),
@@ -125,7 +149,10 @@ export const handlers = [
 
   http.post(`${BASE}/routines/`, () => HttpResponse.json({ ...mockRoutine, id: 99 }, { status: 201 })),
 
-  http.patch(`${BASE}/routines/:id/`, () => HttpResponse.json(mockRoutine)),
+  http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ ...mockRoutine, ...body })
+  }),
 
   http.delete(`${BASE}/routines/:id/`, () => new HttpResponse(null, { status: 204 })),
 
@@ -140,10 +167,33 @@ export const handlers = [
         lots: [],
         expiring_lots: [],
         has_expiring_lots: false,
+        shared_with: [],
+        shared_with_details: [],
+        is_owner: true,
+        owner_username: 'testuser',
       },
       { status: 201 },
     ),
   ),
+
+  http.patch(`${BASE}/stock/:id/`, async ({ request, params }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: Number(params.id),
+      name: 'Filters',
+      quantity: 5,
+      group: null,
+      group_name: null,
+      lots: [],
+      expiring_lots: [],
+      has_expiring_lots: false,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
+      ...body,
+    })
+  }),
 
   http.delete(`${BASE}/stock/:id/`, () => new HttpResponse(null, { status: 204 })),
 
@@ -164,6 +214,10 @@ export const handlers = [
       expiring_lots: [],
       has_expiring_lots: false,
       requires_lot_selection: false,
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: true,
+      owner_username: 'testuser',
     }),
   ),
 

@@ -212,7 +212,21 @@ export default function HistoryPage() {
                     <div key={key} className={cx(s.entry, e._type === 'routine' && s.entryRoutine)}>
                       <div className={s.entryMain}>
                         <span className={s.entryBadge}>{e._type === 'routine' ? '✓' : `−${e.quantity}`}</span>
-                        <span className={s.entryName}>{e._type === 'routine' ? e.routine_name : e.stock_name}</span>
+                        <span className={s.entryName}>
+                          {e._type === 'routine' ? e.routine_name : e.stock_name}
+                          {e._type === 'routine' && e.completed_by_username && (
+                            <span className={s.completedBy}>
+                              {' '}
+                              {t('sharing.completedBy', { username: e.completed_by_username })}
+                            </span>
+                          )}
+                          {e._type === 'consumption' && e.consumed_by_username && (
+                            <span className={s.completedBy}>
+                              {' '}
+                              {t('sharing.consumedBy', { username: e.consumed_by_username })}
+                            </span>
+                          )}
+                        </span>
                         <span className={s.entryTime}>{formatTime(e.created_at)}</span>
                       </div>
                       {e.consumed_lots && e.consumed_lots.length > 0 && (

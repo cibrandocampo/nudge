@@ -5,7 +5,6 @@
 .filterRow {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: wrap;
   margin-bottom: 1rem;
 }
 
@@ -13,6 +12,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .filterLabel {
@@ -23,6 +24,7 @@
 }
 
 .filter {
+  width: 100%;
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--c-border);
   border-radius: 8px;
@@ -31,6 +33,7 @@
   color: var(--c-text-2);
   outline: none;
   cursor: pointer;
+  text-overflow: ellipsis;
 }
 
 .group {
@@ -92,6 +95,13 @@
   color: var(--c-muted);
   font-size: 0.8rem;
   white-space: nowrap;
+}
+
+.completedBy {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-style: italic;
+  margin-left: 0.3rem;
 }
 
 /* ── Consumed stock info ────────────────────────────────────── */

@@ -1,9 +1,12 @@
 from datetime import date, timedelta
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
+
+User = get_user_model()
 
 
 class StockLotSerializer(serializers.ModelSerializer):
@@ -37,6 +40,14 @@ class StockSerializer(serializers.ModelSerializer):
     has_expiring_lots = serializers.SerializerMethodField()
     expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
+    shared_with = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.all(),
+        required=False,
+    )
+    shared_with_details = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+    owner_username = serializers.CharField(source="user.username", read_only=True)
 
     class Meta:
         model = Stock
@@ -50,6 +61,10 @@ class StockSerializer(serializers.ModelSerializer):
             "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
+            "shared_with",
+            "shared_with_details",
+            "is_owner",
+            "owner_username",
             "updated_at",
         ]
         read_only_fields = [
@@ -60,6 +75,9 @@ class StockSerializer(serializers.ModelSerializer):
             "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
+            "shared_with_details",
+            "is_owner",
+            "owner_username",
             "updated_at",
         ]
 
@@ -68,6 +86,27 @@ class StockSerializer(serializers.ModelSerializer):
         if value and request and value.user != request.user:
             raise serializers.ValidationError("Invalid stock group.")
         return value
+
+    def validate_shared_with(self, value):
+        request = self.context.get("request")
+        if not request:
+            return value
+        if self.instance and self.instance.user != request.user:
+            raise serializers.ValidationError("Only the owner can modify shared_with.")
+        contact_ids = set(request.user.contacts.values_list("pk", flat=True))
+        for user in value:
+            if user.pk not in contact_ids:
+                raise serializers.ValidationError(f"User {user.pk} is not in your contacts.")
+        return value
+
+    def get_shared_with_details(self, obj):
+        return [{"id": u.pk, "username": u.username} for u in obj.shared_with.all()]
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return True
+        return obj.user == request.user
 
     def get_quantity(self, obj):
         # Use prefetched lots if available to avoid an extra aggregate query
@@ -99,11 +138,29 @@ class StockSerializer(serializers.ModelSerializer):
 
 class StockConsumptionSerializer(serializers.ModelSerializer):
     stock_name = serializers.CharField(source="stock.name", read_only=True)
+    consumed_by_username = serializers.CharField(source="consumed_by.username", read_only=True, default=None)
 
     class Meta:
         model = StockConsumption
-        fields = ["id", "stock", "stock_name", "quantity", "consumed_lots", "notes", "created_at"]
-        read_only_fields = ["id", "stock", "stock_name", "quantity", "consumed_lots", "created_at"]
+        fields = [
+            "id",
+            "stock",
+            "stock_name",
+            "quantity",
+            "consumed_lots",
+            "notes",
+            "consumed_by_username",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "stock",
+            "stock_name",
+            "quantity",
+            "consumed_lots",
+            "consumed_by_username",
+            "created_at",
+        ]
 
 
 class RoutineSerializer(serializers.ModelSerializer):
@@ -118,6 +175,16 @@ class RoutineSerializer(serializers.ModelSerializer):
     is_overdue = serializers.SerializerMethodField()
     hours_until_due = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
+
+    # Sharing fields
+    shared_with = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.all(),
+        required=False,
+    )
+    shared_with_details = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+    owner_username = serializers.CharField(source="user.username", read_only=True)
 
     # Write-only: backdates the first entry so the routine isn't immediately overdue
     last_done_at = serializers.DateTimeField(write_only=True, required=False, allow_null=True)
@@ -142,16 +209,50 @@ class RoutineSerializer(serializers.ModelSerializer):
             "is_overdue",
             "hours_until_due",
             "requires_lot_selection",
+            "shared_with",
+            "shared_with_details",
+            "is_owner",
+            "owner_username",
             "last_done_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "stock_name", "stock_quantity", "requires_lot_selection"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+            "stock_name",
+            "stock_quantity",
+            "requires_lot_selection",
+            "shared_with_details",
+            "is_owner",
+            "owner_username",
+        ]
 
     def validate_stock(self, value):
-        # Ensure the stock item belongs to the requesting user
         request = self.context.get("request")
         if value and request and value.user != request.user:
             raise serializers.ValidationError("Invalid stock item.")
         return value
+
+    def validate_shared_with(self, value):
+        request = self.context.get("request")
+        if not request:
+            return value
+        if self.instance and self.instance.user != request.user:
+            raise serializers.ValidationError("Only the owner can modify shared_with.")
+        contact_ids = set(request.user.contacts.values_list("pk", flat=True))
+        for user in value:
+            if user.pk not in contact_ids:
+                raise serializers.ValidationError(f"User {user.pk} is not in your contacts.")
+        return value
+
+    def get_shared_with_details(self, obj):
+        return [{"id": u.pk, "username": u.username} for u in obj.shared_with.all()]
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return True
+        return obj.user == request.user
 
     def validate_last_done_at(self, value):
         if value and value > timezone.now():
@@ -194,8 +295,25 @@ class RoutineSerializer(serializers.ModelSerializer):
 class RoutineEntrySerializer(serializers.ModelSerializer):
     routine_name = serializers.CharField(source="routine.name", read_only=True)
     stock_name = serializers.CharField(source="routine.stock.name", read_only=True, default=None)
+    completed_by_username = serializers.CharField(source="completed_by.username", read_only=True, default=None)
 
     class Meta:
         model = RoutineEntry
-        fields = ["id", "routine", "routine_name", "stock_name", "created_at", "notes", "consumed_lots"]
-        read_only_fields = ["id", "routine", "created_at", "consumed_lots", "stock_name"]
+        fields = [
+            "id",
+            "routine",
+            "routine_name",
+            "stock_name",
+            "completed_by_username",
+            "created_at",
+            "notes",
+            "consumed_lots",
+        ]
+        read_only_fields = [
+            "id",
+            "routine",
+            "created_at",
+            "consumed_lots",
+            "stock_name",
+            "completed_by_username",
+        ]

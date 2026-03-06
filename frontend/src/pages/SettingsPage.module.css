@@ -165,3 +165,74 @@
   cursor: pointer;
   align-self: flex-start;
 }
+
+/* ── Contacts ──────────────────────────────────────────────── */
+
+.contactList {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.contactItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.contactName {
+  font-size: 0.85rem;
+}
+
+.contactRemoveBtn {
+  background: none;
+  border: none;
+  color: var(--c-danger);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.contactSearch {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.contactInput {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: var(--c-bg);
+  box-sizing: border-box;
+}
+
+.contactResults {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  list-style: none;
+  padding: 0.25rem 0;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.contactResultBtn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.contactResultBtn:hover {
+  background: var(--c-bg);
+}

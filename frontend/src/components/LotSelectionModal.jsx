@@ -19,7 +19,7 @@ export default function LotSelectionModal({ routine, lots, onConfirm, onCancel }
   const isSingle = needed === 1
 
   // Single mode state
-  const [selectedLotId, setSelectedLotId] = useState(null)
+  const [selectedLotId, setSelectedLotId] = useState(isSingle && lots.length > 0 ? lots[0].lot_id : null)
 
   // Multi mode state — pre-distribute using FEFO order (lots come pre-sorted)
   const [quantities, setQuantities] = useState(() => {

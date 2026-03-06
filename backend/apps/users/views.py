@@ -9,6 +9,8 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.routines.models import Routine, Stock
+
 from .models import User
 from .serializers import ContactSerializer, UserSerializer, UserUpdateSerializer
 
@@ -91,7 +93,17 @@ def contact_delete(request, pk):
         return Response({"detail": "Contact not found."}, status=status.HTTP_404_NOT_FOUND)
 
     request.user.contacts.remove(target)
-    # TODO TASK-08: cascade cleanup shared_with on contact removal
+
+    # Cascade: remove sharing between both users
+    for routine in Routine.objects.filter(user=request.user, shared_with=target):
+        routine.shared_with.remove(target)
+    for stock in Stock.objects.filter(user=request.user, shared_with=target):
+        stock.shared_with.remove(target)
+    for routine in Routine.objects.filter(user=target, shared_with=request.user):
+        routine.shared_with.remove(request.user)
+    for stock in Stock.objects.filter(user=target, shared_with=request.user):
+        stock.shared_with.remove(request.user)
+
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

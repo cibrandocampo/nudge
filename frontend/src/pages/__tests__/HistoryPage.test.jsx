@@ -369,3 +369,122 @@ describe('HistoryPage — notes editing', () => {
     await waitFor(() => expect(patchCalled).toBe(true))
   })
 })
+
+describe('HistoryPage — consumption fetch edge cases', () => {
+  it('handles consumptions API failure gracefully', async () => {
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: mockEntries, next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => new HttpResponse(null, { status: 500 })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: mockStocks })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([{ id: 1, name: 'Take vitamins' }])),
+    )
+    const { container } = renderWithProviders(<HistoryPage />)
+    // Should still show routine entries even if consumptions fail
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+  })
+
+  it('handles consumptions response without results wrapper', async () => {
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json(mockConsumptions)),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: mockStocks })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Insulin pens'))
+  })
+})
+
+describe('HistoryPage — note editing edge cases', () => {
+  it('cancels note editing on Escape key', async () => {
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+
+    await user.click(screen.getByText('morning dose'))
+    const input = screen.getByDisplayValue('morning dose')
+    await user.keyboard('{Escape}')
+
+    // Should exit edit mode — input should be gone
+    expect(screen.queryByDisplayValue('morning dose')).not.toBeInTheDocument()
+    // Notes text should still show
+    expect(screen.getByText('morning dose')).toBeInTheDocument()
+  })
+
+  it('does not save when API returns error', async () => {
+    server.use(http.patch(`${BASE}/entries/:id/`, () => new HttpResponse(null, { status: 500 })))
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+
+    await user.click(screen.getByText('morning dose'))
+    const input = screen.getByDisplayValue('morning dose')
+    await user.clear(input)
+    await user.type(input, 'fail note')
+    input.blur()
+
+    // "Saved" should NOT appear since API returned 500
+    await waitFor(() => expect(screen.queryByText('Saved')).not.toBeInTheDocument())
+  })
+
+  it('filters stock consumptions by stock', async () => {
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('All items')).toBeInTheDocument())
+
+    const stockSelect = screen.getByDisplayValue('All items')
+    await user.selectOptions(stockSelect, '1')
+
+    // Should still show the page (API re-fetches)
+    await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument())
+  })
+
+  it('filters routine entries by routine', async () => {
+    setupHandlers()
+    const { user, container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
+
+    const routineSelect = screen.getByDisplayValue('All routines')
+    await user.selectOptions(routineSelect, '1')
+
+    await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument())
+  })
+})
+
+describe('HistoryPage — sharing', () => {
+  it('shows completed_by username on routine entries', async () => {
+    const entriesWithUser = [
+      {
+        ...mockEntries[0],
+        completed_by_username: 'alice',
+      },
+    ]
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: entriesWithUser, next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    expect(screen.getByText(/by alice/)).toBeInTheDocument()
+  })
+
+  it('shows consumed_by username on stock consumptions', async () => {
+    const consumptionsWithUser = [
+      {
+        ...mockConsumptions[0],
+        consumed_by_username: 'bob',
+      },
+    ]
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: consumptionsWithUser, next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('Insulin pens')).toBeInTheDocument())
+    expect(screen.getByText(/by bob/)).toBeInTheDocument()
+  })
+})

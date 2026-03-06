@@ -60,14 +60,15 @@ describe('LotSelectionModal', () => {
     expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 2, quantity: 1 }])
   })
 
-  // 5. Single mode — error if confirming without selection
-  it('single mode: shows error when confirming without selection', async () => {
+  // 5. Single mode — first lot is pre-selected
+  it('single mode: first lot is pre-selected and confirm works immediately', async () => {
     const { user } = renderWithProviders(
       <LotSelectionModal routine={singleRoutine} lots={mockLots} onConfirm={onConfirm} onCancel={onCancel} />,
     )
+    const firstItem = screen.getByText('LOT-A').closest('[role="radio"]')
+    expect(firstItem).toHaveAttribute('aria-checked', 'true')
     await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText(/Total must be 1/)).toBeInTheDocument()
-    expect(onConfirm).not.toHaveBeenCalled()
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 1, quantity: 1 }])
   })
 
   // 6. Multi mode — renders stepper controls
@@ -188,7 +189,28 @@ describe('LotSelectionModal', () => {
     ])
   })
 
-  // 16. Single mode — Enter key on radio item selects it
+  // 16. Single mode — error when no lots and confirming (null selection path)
+  it('single mode: shows error when confirming with empty lots', async () => {
+    const { user } = renderWithProviders(
+      <LotSelectionModal routine={singleRoutine} lots={[]} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  // 17. Multi mode — error when total doesn't match (via confirm with 0 distributed)
+  it('multi mode: shows error text when confirming with wrong total', async () => {
+    const lots = [{ lot_id: 1, lot_number: 'LOT-A', expiry_date: null, quantity: 1 }]
+    const routine = { name: 'Test', stock_usage: 3, stock_name: 'Filters' }
+    const { user } = renderWithProviders(
+      <LotSelectionModal routine={routine} lots={lots} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    // Pre-distributed: lot1=1 (max), but needed=3 → total=1/3 → confirm disabled
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('Confirm')).toBeDisabled()
+  })
+
+  // 18. Single mode — Enter key on radio item selects it
   it('single mode: Enter key on item selects it', async () => {
     const { user } = renderWithProviders(
       <LotSelectionModal routine={singleRoutine} lots={mockLots} onConfirm={onConfirm} onCancel={onCancel} />,

@@ -1,0 +1,56 @@
+.wrap {
+  position: relative;
+}
+
+.shareBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.25rem;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.shareBtn:hover {
+  opacity: 1;
+}
+
+.shareBtnActive {
+  opacity: 1;
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 0.4rem;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-width: 140px;
+}
+
+.popoverItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.popoverItem:hover {
+  background: var(--c-bg);
+  border-radius: 4px;
+}
+
+.checkbox {
+  accent-color: var(--c-primary);
+}

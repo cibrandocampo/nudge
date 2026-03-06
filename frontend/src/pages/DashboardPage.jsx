@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [completing, setCompleting] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [lotModal, setLotModal] = useState(null) // null | { routine, lots }
+  const [contacts, setContacts] = useState([])
   const { t } = useTranslation()
 
   const fetchDashboard = useCallback(async () => {
@@ -26,6 +27,11 @@ export default function DashboardPage() {
     fetchDashboard()
       .catch(() => setError(true))
       .finally(() => setLoading(false))
+    api
+      .get('/auth/contacts/')
+      .then((r) => r.json())
+      .then(setContacts)
+      .catch(() => {})
   }, [fetchDashboard])
 
   const markDone = async (routineId) => {
@@ -75,6 +81,15 @@ export default function DashboardPage() {
     }
   }
 
+  const handleToggleShare = async (routineId, userId) => {
+    const routine = [...data.due, ...data.upcoming].find((r) => r.id === routineId)
+    if (!routine) return
+    const current = routine.shared_with || []
+    const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
+    await api.patch(`/routines/${routineId}/`, { shared_with: newShared })
+    await fetchDashboard()
+  }
+
   if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
   if (error) return <p className={shared.muted}>{t('common.error')}</p>
 
@@ -92,8 +107,17 @@ export default function DashboardPage() {
         onMarkDone={markDone}
         completing={completing}
         emptyMessage={t('dashboard.empty')}
+        contacts={contacts}
+        onToggleShare={handleToggleShare}
       />
-      <Section title={t('dashboard.upcoming')} routines={data.upcoming} onMarkDone={markDone} completing={completing} />
+      <Section
+        title={t('dashboard.upcoming')}
+        routines={data.upcoming}
+        onMarkDone={markDone}
+        completing={completing}
+        contacts={contacts}
+        onToggleShare={handleToggleShare}
+      />
       {lotModal && (
         <LotSelectionModal
           routine={lotModal.routine}
@@ -106,7 +130,7 @@ export default function DashboardPage() {
   )
 }
 
-function Section({ title, routines, onMarkDone, completing, emptyMessage }) {
+function Section({ title, routines, onMarkDone, completing, emptyMessage, contacts, onToggleShare }) {
   return (
     <section className={s.section}>
       <h2 className={shared.sectionTitle}>{title}</h2>
@@ -115,7 +139,14 @@ function Section({ title, routines, onMarkDone, completing, emptyMessage }) {
       ) : routines.length > 0 ? (
         <div className={s.list}>
           {routines.map((r) => (
-            <RoutineCard key={r.id} routine={r} onMarkDone={onMarkDone} completing={completing === r.id} />
+            <RoutineCard
+              key={r.id}
+              routine={r}
+              onMarkDone={onMarkDone}
+              completing={completing === r.id}
+              contacts={contacts}
+              onToggleShare={onToggleShare}
+            />
           ))}
         </div>
       ) : null}
