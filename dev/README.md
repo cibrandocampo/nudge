@@ -66,10 +66,17 @@ docker compose -f dev/docker-compose.yml exec backend ruff check --fix .
 docker compose -f dev/docker-compose.yml exec backend ruff format .
 ```
 
-### Frontend (ESLint)
+### Frontend (ESLint + Prettier)
 
 ```bash
 docker compose -f dev/docker-compose.yml exec frontend npx eslint src/
+docker compose -f dev/docker-compose.yml exec frontend npm run format:check
+```
+
+Auto-fix issues:
+
+```bash
+docker compose -f dev/docker-compose.yml exec frontend npm run format
 ```
 
 ## Git hooks
@@ -140,5 +147,14 @@ Custom skills are provided in `.claude/skills/` to help Claude understand the pr
 | `django-admin` | Admin panel customization and branding |
 | `git-conventions` | Commit message format, branch naming |
 
-Skills are loaded automatically. Commands (`/run-task`, `/general-plan`, etc.) are
-documented in [docs/development.md](../docs/development.md).
+Skills are loaded automatically. Commands are documented in [docs/development.md](../docs/development.md).
+
+| Command | Purpose |
+|---------|---------|
+| `/dev-1-plan` | Plan a new feature — design doc in `docs/plans/` |
+| `/dev-2-tasks` | Break a plan into executable task files |
+| `/dev-3-run` | Implement a single task |
+| `/dev-4-qa` | Forensic QA — independent verification with evidence |
+| `/push` | Commit, create PR, and verify CI pipeline |
+| `/fix` | Quick fix — focused bug fix or small change |
+| `/audit` | Structured audit of a code area |
