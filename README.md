@@ -1,91 +1,124 @@
 # Nudge
 
-<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/frontend/public/icons/pwa-512x512.png" width="96" alt="Nudge app icon"/>
-
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/cibrandocampo/nudge)
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-backend-blue?logo=docker)](https://hub.docker.com/r/cibrandocampo/nudge-backend)
-[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-frontend-blue?logo=docker)](https://hub.docker.com/r/cibrandocampo/nudge-frontend)
-[![GitHub release](https://img.shields.io/github/v/release/cibrandocampo/nudge)](https://github.com/cibrandocampo/nudge/releases)
-[![CI](https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml/badge.svg)](https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.12-blue?logo=python)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/django-5.2-green?logo=django)](https://www.djangoproject.com/)
-[![React](https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff)](https://vitejs.dev/)
-[![codecov](https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg)](https://codecov.io/gh/cibrandocampo/nudge)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cibrandocampo/nudge/blob/main/LICENSE)
-
-> A gentle reminder for recurring things.
-
-Nudge is a personal PWA that sends you a quiet push notification when something you do regularly is due again — without you having to think about it.
+<p align="center">
+  <a href="https://github.com/cibrandocampo/nudge"><img src="https://img.shields.io/badge/GitHub-Repository-blue?logo=github" alt="GitHub"/></a>
+  <a href="https://hub.docker.com/r/cibrandocampo/nudge-backend"><img src="https://img.shields.io/badge/Docker%20Hub-backend-blue?logo=docker" alt="Docker Hub backend"/></a>
+  <a href="https://hub.docker.com/r/cibrandocampo/nudge-frontend"><img src="https://img.shields.io/badge/Docker%20Hub-frontend-blue?logo=docker" alt="Docker Hub frontend"/></a>
+  <a href="https://github.com/cibrandocampo/nudge/releases"><img src="https://img.shields.io/github/v/release/cibrandocampo/nudge" alt="GitHub release"/></a>
+  <a href="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml"><img src="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue?logo=python" alt="Python"/></a>
+  <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/django-5.2-green?logo=django" alt="Django"/></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000" alt="React"/></a>
+  <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff" alt="Vite"/></a>
+  <a href="https://codecov.io/gh/cibrandocampo/nudge"><img src="https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg" alt="codecov"/></a>
+  <a href="https://github.com/cibrandocampo/nudge/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"/></a>
+</p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Inventory"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Shared dashboard"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/frontend/public/icons/pwa-512x512.png" width="96" alt="Nudge app icon"/>
+  <br/><br/>
+  <i>A gentle reminder for recurring things.</i>
+  <br/>
+  Set the interval once. Get nudged at the right moment. Your server, your rules.
 </p>
 
 ---
 
-## What problem does it solve?
+## A closer look - How it works?
 
-Most of us have recurring tasks that are easy to forget, not because they are complicated, but because the interval between them is too long to keep in mind, and too short to leave a mark on a calendar. Nudge keeps track of that gap for you.
+### Access — secure by default
 
-You define the task once, tell it how often it should happen, and then you just live your life. When it is time, it nudges you.
+<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" align="right" width="260" alt="Nudge login screen with username and password fields"/>
+
+Nudge has no public registration. Accounts are created by an admin, keeping the instance private and under your control. Authentication uses short-lived JWT access tokens and a rotating refresh token — sessions stay alive without prompting for credentials repeatedly, and the API rejects any unauthenticated request.
+
+The backend and database are never exposed outside the Docker network. Only the frontend container has a public-facing port.
+
+<br clear="right"/>
 
 ---
 
-## Examples
+### Dashboard and routine detail — your schedule, always in view
 
-| What | Interval |
-|------|----------|
-| Take medication | Every 12 hours |
-| Water the plants | Every 3 days |
-| Change HVAC filter | Every 90 days |
-| Deworm the cat | Every 90 days |
-| Rotate API keys | Every 90 days |
-| Review backups | Every 7 days |
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Nudge dashboard showing due and upcoming recurring tasks with push notification indicators"/>
+  &nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-routine-detail.png" width="260" alt="Nudge routine detail page showing next due date, linked stock usage, and completion history"/>
+</p>
 
-Anything you do on a schedule, Nudge can track.
+The dashboard is the heart of Nudge — a single view of what is due now and what is coming up. Each routine card shows how overdue or how close to due it is. Tapping one opens the detail view, where you see the exact next due date alongside a human-readable relative time (e.g. "In 3 days · 13 Mar, 10:30"), the full completion history, and the current stock level if a consumable is attached.
+
+Notifications work in three stages: a daily heads-up at your chosen time, a due alert the moment the interval expires, and follow-up reminders every 8 hours until you mark the task as done.
+
+---
+
+### Creating a routine — simple by design
+
+<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-new-routine.png" align="left" width="260" alt="Nudge form for creating a new recurring task with name, interval, and optional stock link"/>
+
+Setting up a routine takes seconds. Give it a name, set the interval in hours (or days — the form converts automatically), and optionally link a consumable stock item with the amount used per completion. That is all Nudge needs to start tracking and notifying.
+
+Routines can be paused at any time without losing their history, and re-activated when needed.
+
+<br clear="left"/>
+
+---
+
+### Inventory — track what you consume
+
+<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" align="right" width="260" alt="Nudge inventory screen with stock items, lot numbers, quantities, and expiry dates grouped by category"/>
+
+Attach a consumable to any routine and Nudge will decrement stock automatically each time you log a completion, using FEFO order (First Expired, First Out) across lots. Stock can be organized into categories — Health, Home, Pets, or any group you define — and each lot can carry an expiry date. Nudge warns you 90 days before anything expires so you always have time to restock.
+
+<br clear="right"/>
+
+---
+
+### Sharing — built for households and teams
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Nudge sharing modal showing a list of contacts to share a routine with, with selected contacts highlighted"/>
+  &nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Nudge dashboard from a recipient's perspective showing routines shared by another user with an owner label"/>
+</p>
+
+Share any routine or stock item with people you trust. A full-screen sharing modal lets you pick contacts with a single tap — no accidental navigation on mobile. The recipient gets a push notification the moment something is shared with them, and the shared item appears on their dashboard with an owner label. They can mark it as done too, which counts for both of you.
+
+---
+
+### History and settings — full control, zero friction
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-history.png" width="260" alt="Nudge history page showing a paginated log of all completed routines with timestamps and notes"/>
+  &nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Nudge settings page with language selector, timezone picker, and daily notification time input"/>
+</p>
+
+The history page gives you a paginated log of every completion across all routines. Settings let each user independently choose their language (English, Spanish, or Galician), their local timezone — so notifications fire at the right clock time year-round, DST included — and their preferred daily heads-up time.
 
 ---
 
 ## Features
 
-- **Push notifications** — Browser web push when something comes due. No app store required.
-- **Three-stage alerts** — A daily heads-up at your chosen time, a due alert when the interval expires, and follow-up reminders every 8 hours until you mark it done.
-- **Sharing** — Share routines and stock items with other users. Shared routines appear on their dashboard with an owner label, and they can mark them as done too.
-- **Contacts** — Add trusted users as contacts to quickly share routines and inventory with them via a simple popover.
-- **Inventory tracking** — Optionally attach a consumable to a routine (medication packs, filter cartridges, oil bottles). Each time you log the task, stock decrements automatically using FEFO order (First Expired, First Out).
-- **Stock groups** — Organize your inventory into categories (Health, Home, Pets, etc.) for a cleaner overview.
-- **Expiry tracking** — Add lot numbers and expiry dates to your stock. Nudge warns you 90 days before anything expires.
+- **Push notifications** — Browser web push when something comes due. Daily heads-up at your chosen time, a due alert when the interval expires, and follow-up reminders every 8 hours until you mark it done. No app store, no account required beyond your own server.
+- **Sharing** — Share routines and stock items with trusted contacts. Shared items appear on the recipient's dashboard with an owner label — they can see progress and mark tasks as done too. Everyone gets a push notification when they're added as a contact or when something new is shared with them.
+- **Inventory tracking** — Attach a consumable to a routine (medication packs, filter cartridges, oil bottles). Each time you log the task, stock decrements automatically using FEFO order (First Expired, First Out). Organize into categories and get an expiry warning 90 days in advance.
+- **Installable PWA** — Works offline, installs to your home screen on iOS and Android. Feels like a native app — because the web platform is good enough now.
 - **Timezone-aware** — Your notification schedule follows your local time and adjusts automatically for daylight saving.
 - **Multilingual** — English, Spanish, and Galician.
-- **Installable PWA** — Works offline, installs to your home screen on iOS and Android.
-- **Multi-user** — Accounts are managed by an admin. There is no public registration, keeping the instance clean.
+- **Multi-user** — Accounts are managed by an admin. There is no public registration, keeping the instance clean and yours.
 
 ---
 
-## Screenshots
+## Quality
 
-<table>
-  <tr>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" width="260" alt="Login"/><br/><b>Login</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Dashboard"/><br/><b>Dashboard</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Sharing popover"/><br/><b>Sharing</b></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-routine-detail.png" width="260" alt="Routine detail"/><br/><b>Routine detail</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-new-routine.png" width="260" alt="New routine"/><br/><b>New routine</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Inventory"/><br/><b>Inventory</b></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-history.png" width="260" alt="History"/><br/><b>History</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Settings"/><br/><b>Settings</b></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Shared dashboard"/><br/><b>Shared dashboard</b></td>
-  </tr>
-</table>
+Every change goes through a CI pipeline (GitHub Actions) with no shortcuts:
+
+- **Backend**: ruff (lint + format) and the full Django test suite with coverage.
+- **Frontend**: ESLint, Prettier, and Vitest with coverage.
+- **Coverage gate**: [Codecov](https://codecov.io/gh/cibrandocampo/nudge) enforces that every modified line is covered by tests. A pull request that leaves any touched line uncovered is blocked from merging. Defensive guards that can't be reached must be removed, not exempted.
+
+The Codecov badge at the top of this page reflects the current state.
 
 ---
 

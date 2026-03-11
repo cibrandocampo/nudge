@@ -60,7 +60,7 @@ Browser / Mobile
 | Testing (backend) | unittest + coverage.py | — |
 | Testing (frontend) | Vitest + Testing Library + MSW | Vitest 2.x |
 | Linting (backend) | ruff (check + format) | 0.8+ |
-| Linting (frontend) | ESLint 9 (flat config) | 9.x |
+| Linting (frontend) | ESLint 9 (flat config) + Prettier | 9.x |
 | Deploy | Docker Compose | — |
 
 ---
@@ -109,6 +109,7 @@ StockLot
  ├── expiry_date (nullable)
  ├── lot_number
  └── created_at
+ (auto-deleted via post_save signal when quantity reaches zero)
 
 PushSubscription
  ├── user
@@ -263,20 +264,23 @@ docker compose -f dev/docker-compose.yml exec backend ruff check .
 docker compose -f dev/docker-compose.yml exec backend ruff format --check .
 ```
 
-### Frontend — ESLint 9
+### Frontend — ESLint 9 + Prettier
 
 ESLint 9 with flat config (`frontend/eslint.config.js`):
 
 - Plugins: `react-hooks` (recommended rules), `react-refresh`
 - Browser globals enabled
 
+Prettier handles code formatting (configured in `frontend/.prettierrc`).
+
 ```bash
 docker compose -f dev/docker-compose.yml exec frontend npx eslint src/
+docker compose -f dev/docker-compose.yml exec frontend npm run format:check
 ```
 
 ### Pre-commit hook
 
-A git pre-commit hook runs both linters inside the dev Docker containers, blocking the commit if any check fails.
+A git pre-commit hook runs ruff, ESLint, and Prettier inside the dev Docker containers, blocking the commit if any check fails.
 
 ```bash
 bash scripts/install-hooks.sh   # one-time setup
@@ -289,7 +293,7 @@ bash scripts/install-hooks.sh   # one-time setup
 ### `ci.yml` — runs on every push to `main`, every PR, and on release
 
 1. **test-backend** — Python 3.12, spins up PostgreSQL 16 + Redis 7 as services, runs ruff (check + format), then `python manage.py test` with coverage. Uploads report to Codecov (flag: `backend`).
-2. **test-frontend** — Node 20, runs ESLint (`--max-warnings 0`), then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
+2. **test-frontend** — Node 20, runs ESLint (`--max-warnings 0`), Prettier check, then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
 3. **build-backend** — Docker multi-arch build (`linux/amd64` + `linux/arm64`), pushed to `cibrandocampo/nudge-backend`. Requires both test jobs to pass.
 4. **build-frontend** — Same, pushed to `cibrandocampo/nudge-frontend`.
 
