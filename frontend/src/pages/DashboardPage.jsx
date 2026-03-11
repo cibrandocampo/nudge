@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import RoutineCard from '../components/RoutineCard'
 import LotSelectionModal from '../components/LotSelectionModal'
+import ShareModal from '../components/ShareModal'
 import shared from '../styles/shared.module.css'
 import s from './DashboardPage.module.css'
 
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [completing, setCompleting] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [lotModal, setLotModal] = useState(null) // null | { routine, lots }
+  const [shareRoutineId, setShareRoutineId] = useState(null)
   const [contacts, setContacts] = useState([])
   const { t } = useTranslation()
 
@@ -81,16 +83,17 @@ export default function DashboardPage() {
     }
   }
 
-  const handleToggleShare = async (routineId, userId) => {
-    const routine = [...data.due, ...data.upcoming].find((r) => r.id === routineId)
+  const handleToggleShare = async (userId) => {
+    if (!shareRoutineId) return
+    const routine = [...data.due, ...data.upcoming].find((r) => r.id === shareRoutineId)
     if (!routine) return
     const current = routine.shared_with || []
     const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
-    await api.patch(`/routines/${routineId}/`, { shared_with: newShared })
+    await api.patch(`/routines/${shareRoutineId}/`, { shared_with: newShared })
     await fetchDashboard()
   }
 
-  if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
+  if (loading) return <div className={shared.spinner} data-testid="spinner" />
   if (error) return <p className={shared.muted}>{t('common.error')}</p>
 
   return (
@@ -108,7 +111,7 @@ export default function DashboardPage() {
         completing={completing}
         emptyMessage={t('dashboard.empty')}
         contacts={contacts}
-        onToggleShare={handleToggleShare}
+        onShare={setShareRoutineId}
       />
       <Section
         title={t('dashboard.upcoming')}
@@ -116,7 +119,7 @@ export default function DashboardPage() {
         onMarkDone={markDone}
         completing={completing}
         contacts={contacts}
-        onToggleShare={handleToggleShare}
+        onShare={setShareRoutineId}
       />
       {lotModal && (
         <LotSelectionModal
@@ -126,11 +129,23 @@ export default function DashboardPage() {
           onCancel={() => setLotModal(null)}
         />
       )}
+      {shareRoutineId &&
+        (() => {
+          const shareRoutine = [...data.due, ...data.upcoming].find((r) => r.id === shareRoutineId)
+          return shareRoutine ? (
+            <ShareModal
+              contacts={contacts}
+              sharedWith={shareRoutine.shared_with}
+              onToggle={handleToggleShare}
+              onClose={() => setShareRoutineId(null)}
+            />
+          ) : null
+        })()}
     </div>
   )
 }
 
-function Section({ title, routines, onMarkDone, completing, emptyMessage, contacts, onToggleShare }) {
+function Section({ title, routines, onMarkDone, completing, emptyMessage, contacts, onShare }) {
   return (
     <section className={s.section}>
       <h2 className={shared.sectionTitle}>{title}</h2>
@@ -145,7 +160,7 @@ function Section({ title, routines, onMarkDone, completing, emptyMessage, contac
               onMarkDone={onMarkDone}
               completing={completing === r.id}
               contacts={contacts}
-              onToggleShare={onToggleShare}
+              onShare={onShare}
             />
           ))}
         </div>

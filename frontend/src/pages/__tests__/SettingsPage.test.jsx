@@ -273,6 +273,16 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('contact search results list renders above the input', async () => {
+    const { user } = renderWithProviders(<SettingsPage />)
+    await screen.findByText('Contacts')
+    await user.type(screen.getByPlaceholderText('Search users...'), 'bob')
+    await waitFor(() => expect(screen.getByText('bob')).toBeInTheDocument())
+    const list = screen.getByRole('list', { name: (_, el) => el.className?.includes('contactResults') })
+    expect(list).toBeInTheDocument()
+    expect(list.className).toMatch(/contactResults/)
+  })
+
   it('removes contact with confirmation', async () => {
     server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])))
     window.confirm = vi.fn(() => true)

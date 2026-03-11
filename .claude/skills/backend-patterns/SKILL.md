@@ -56,6 +56,55 @@ The `routines` app is the exception — it defines `routines/`, `stock/`, `entri
 - Tasks respect user timezone and DST via `zoneinfo`
 - Invalid timezones are logged and skipped (never crash the task)
 
+## Serializers
+
+- Use DRF `ModelSerializer` as the base
+- Validation goes in `validate_<field>()` or `validate()` — never in the view
+- Read-only computed fields use `SerializerMethodField`
+- Nested objects: use separate serializers, never raw dict construction
+
+```python
+class RoutineSerializer(serializers.ModelSerializer):
+    is_due = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Routine
+        fields = ['id', 'name', 'is_due']
+        read_only_fields = ['id']
+
+    def get_is_due(self, obj):
+        return obj.next_due <= now()
+
+    def validate_interval_days(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Must be at least 1.")
+        return value
+```
+
+## Migrations
+
+Always run both commands in sequence:
+
+```bash
+docker compose -f dev/docker-compose.yml exec backend python manage.py makemigrations
+docker compose -f dev/docker-compose.yml exec backend python manage.py migrate
+```
+
+## Stock patterns
+
+- **FEFO ordering** (First Expired First Out):
+  ```python
+  queryset.order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+  ```
+- **Stock mutations** must use `transaction.atomic()` to prevent partial updates:
+  ```python
+  from django.db import transaction
+
+  with transaction.atomic():
+      lot.quantity -= consumed
+      lot.save()
+  ```
+
 ## Testing
 
 - Tests use Django's `TestCase` with `self.client`

@@ -31,6 +31,7 @@ export default defineConfig({
         navigateFallback: 'index.html',
       },
       manifest: {
+        id: '/',
         name: 'Nudge',
         short_name: 'Nudge',
         description: 'A gentle reminder for recurring things.',
@@ -38,6 +39,8 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
+        scope: '/',
+        categories: ['productivity', 'lifestyle'],
         icons: [
           { src: '/icons/pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: '/icons/pwa-192x192.png', sizes: '192x192', type: 'image/png' },

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import { formatRelativeTime, getLocale } from '../utils/time'
+import { formatRelativeTime, formatAbsoluteDate, getLocale } from '../utils/time'
 import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
 import LotSelectionModal from '../components/LotSelectionModal'
@@ -116,7 +116,7 @@ export default function RoutineDetailPage() {
     }
   }
 
-  if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
+  if (loading) return <div className={shared.spinner} data-testid="spinner" />
   if (error) return <p className={shared.muted}>{t('common.error')}</p>
   if (!routine) return <p className={shared.muted}>{t('routine.detail.notFound')}</p>
 
@@ -149,15 +149,21 @@ export default function RoutineDetailPage() {
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('routine.detail.nextDue')}</span>
           <span className={s.metaValue}>
-            {routine.next_due_at ? formatRelativeTime(routine.next_due_at) : t('time.dueNow')}
+            {routine.next_due_at
+              ? `${formatRelativeTime(routine.next_due_at)} · ${formatAbsoluteDate(routine.next_due_at)}`
+              : t('time.dueNow')}
           </span>
         </div>
         {routine.stock_name && (
           <div className={s.metaRow}>
             <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
-            <span
-              className={s.metaValue}
-            >{`${routine.stock_quantity} × ${routine.stock_name} (uses ${routine.stock_usage} per log)`}</span>
+            <span className={s.metaValue}>
+              {t('routine.detail.stockUsage', {
+                qty: routine.stock_quantity,
+                name: routine.stock_name,
+                usage: routine.stock_usage,
+              })}
+            </span>
           </div>
         )}
       </div>

@@ -5,23 +5,19 @@ argument-hint: <task-id, e.g.: T001>
 
 # QA Review: $1
 
-You are a forensic QA engineer. You produce real evidence or declare failure. There is no middle ground.
-
-## Total ownership principle
-
-There is no concept of "pre-existing error". If you find something broken, it is a blocker.
-Do not classify it as "out of scope". Never approve on top of a broken system.
+**Goal**: independently verify that the task meets its DoD. You produce real evidence or declare failure. No middle ground.
+**Key behaviour**: you do not trust evidence from `/dev-3-run`. You re-execute everything from scratch. Anything broken — even if unrelated to the task — is a blocker. Never approve on top of a broken system.
 
 ---
 
 ## Step 1 — Read the task file
 
-1. Locate the file `tasks/$1*.md` and read it in full.
+1. Locate the file `docs/tasks/$1*.md` and read it in full.
 2. Extract:
    - **DoD**: the acceptance criteria.
    - **Evidence table**: commands, files, conditions.
    - **Dependencies**: are they completed?
-3. Read the execution evidence from `/run-task` (section `## Execution evidence`).
+3. Read the execution evidence from `/dev-3-run` (section `## Execution evidence`).
 4. Read `CLAUDE.md` and `MEMORY.md` for context.
 
 ---
@@ -29,10 +25,10 @@ Do not classify it as "out of scope". Never approve on top of a broken system.
 ## Step 2 — Prepare environment and evidence
 
 ```bash
-mkdir -p tasks/evidence/$TASK_ID/qa
+mkdir -p docs/tasks/evidence/$TASK_ID/qa
 ```
 
-QA evidence goes separate from run-task evidence to avoid contamination.
+QA evidence goes separate from dev-3-run evidence to avoid contamination.
 
 Make sure the dev environment is running:
 ```bash
@@ -45,14 +41,14 @@ If any service is not running, start it before continuing.
 
 ## Step 3 — Progressive verification
 
-**Do not trust run-task evidence. Re-execute EVERYTHING.**
+**Do not trust dev-3-run evidence. Re-execute EVERYTHING.**
 
 Verification follows a strict order from smallest to largest scope. If a phase fails,
 the following phases are meaningless — skip directly to the verdict (Step 5).
 
 Each command saves its evidence:
 ```bash
-<command> 2>&1 | tee tasks/evidence/$TASK_ID/qa/<file>.txt
+<command> 2>&1 | tee docs/docs/tasks/evidence/$TASK_ID/qa/<file>.txt
 ```
 
 ### 3.1 — Lint & format
@@ -61,18 +57,18 @@ Run linters and formatters. **If they fail, fix before continuing.**
 
 **Backend:**
 ```bash
-docker compose -f dev/docker-compose.yml exec backend ruff check . 2>&1 | tee tasks/evidence/$TASK_ID/qa/ruff_check.txt
-docker compose -f dev/docker-compose.yml exec backend ruff format --check . 2>&1 | tee tasks/evidence/$TASK_ID/qa/ruff_format.txt
+docker compose -f dev/docker-compose.yml exec backend ruff check . 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/ruff_check.txt
+docker compose -f dev/docker-compose.yml exec backend ruff format --check . 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/ruff_format.txt
 ```
 
 **Frontend:**
 ```bash
-docker compose -f dev/docker-compose.yml exec frontend npx eslint src/ 2>&1 | tee tasks/evidence/$TASK_ID/qa/eslint.txt
-docker compose -f dev/docker-compose.yml exec frontend npx prettier --check src/ 2>&1 | tee tasks/evidence/$TASK_ID/qa/prettier.txt
+docker compose -f dev/docker-compose.yml exec frontend npx eslint src/ 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/eslint.txt
+docker compose -f dev/docker-compose.yml exec frontend npm run format:check 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/prettier.txt
 ```
 
 **If any fail:**
-1. Fix: `ruff format .` / `ruff check --fix .` / `prettier --write src/`
+1. Fix: `ruff format .` / `ruff check --fix .` / `npm run format`
 2. Re-run checks and save clean evidence.
 3. Note the correction in the QA report (not a blocker, but documented).
 
@@ -86,24 +82,51 @@ Run tests **only for the files/apps modified by the task**.
 
 **Backend (per affected app):**
 ```bash
-docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.<app> 2>&1 | tee tasks/evidence/$TASK_ID/qa/unit_<app>.txt
+docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.<app> 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/unit_<app>.txt
 ```
 
 **Frontend (per affected test file):**
 ```bash
-docker compose -f dev/docker-compose.yml exec frontend npx vitest run src/<path>/__tests__/<file>.test.jsx 2>&1 | tee tasks/evidence/$TASK_ID/qa/unit_<component>.txt
+docker compose -f dev/docker-compose.yml exec frontend npx vitest run src/<path>/__tests__/<file>.test.jsx 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/unit_<component>.txt
 ```
 
 If targeted unit tests fail → **RETURNED immediately**.
 There is no point continuing with integration or E2E on code that fails its own tests.
+
+### 3.2b — Coverage of new lines
+
+**Run after 3.2 passes.** Check that every file modified by the task has no uncovered lines.
+
+**Frontend** — run coverage scoped to the affected test file(s):
+```bash
+docker compose -f dev/docker-compose.yml exec frontend npx vitest run --coverage src/<path>/__tests__/<file>.test.jsx 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/coverage_frontend.txt
+```
+
+Read the output table. For **each file listed in "Files to create/modify"** of the task:
+- `Uncovered Line #s` column must be **empty**.
+- Any uncovered lines in a modified file → **FAIL (blocker)**.
+
+> Exception: lines that are structurally unreachable (e.g. dead defensive guards)
+> should be eliminated or refactored — not left uncovered. The fix is code simplification,
+> not skipping the check.
+
+**Backend** — run coverage scoped to the affected app(s):
+```bash
+docker compose -f dev/docker-compose.yml exec backend sh -c "coverage run manage.py test apps.<app> && coverage report --include='apps/<app>/*' --skip-covered" 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/coverage_backend.txt
+```
+
+Read the report. For each modified backend file, `Miss` column must be 0.
+If not → **FAIL (blocker)**.
+
+**If coverage fails → RETURNED immediately.** Tests pass but coverage is missing = the code is undertested.
 
 ### 3.3 — Integration tests (full suites)
 
 Run the full suites to detect regressions in code not directly modified:
 
 ```bash
-docker compose -f dev/docker-compose.yml exec backend python manage.py test 2>&1 | tee tasks/evidence/$TASK_ID/qa/backend_full.txt
-docker compose -f dev/docker-compose.yml exec frontend npx vitest run 2>&1 | tee tasks/evidence/$TASK_ID/qa/frontend_full.txt
+docker compose -f dev/docker-compose.yml exec backend python manage.py test 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/backend_full.txt
+docker compose -f dev/docker-compose.yml exec frontend npx vitest run 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/frontend_full.txt
 ```
 
 If there are failures here that were not in 3.2, the task introduced a regression → **RETURNED**.
@@ -118,7 +141,7 @@ docker run --rm --network host \
   -e E2E_USERNAME=admin \
   -e E2E_PASSWORD=$(grep ADMIN_PASSWORD .env | cut -d= -f2) \
   -e BASE_URL=http://localhost:5173 \
-  nudge-e2e npx playwright test 2>&1 | tee tasks/evidence/$TASK_ID/qa/e2e.txt
+  nudge-e2e npx playwright test 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/e2e.txt
 ```
 
 **Ignore known pre-existing failures** (documented in the `dev-workflow` skill).
@@ -137,7 +160,7 @@ already covered in 3.1–3.4). Typical examples:
 
 For each functional check, execute the real command and save evidence:
 ```bash
-<command> 2>&1 | tee tasks/evidence/$TASK_ID/qa/dod_<name>.txt
+<command> 2>&1 | tee docs/tasks/evidence/$TASK_ID/qa/dod_<name>.txt
 ```
 
 **Don't invent checks**: only verify what the task's DoD explicitly requires.
@@ -146,7 +169,7 @@ For each functional check, execute the real command and save evidence:
 
 For EACH file generated in the previous phases:
 
-1. `Read("tasks/evidence/$TASK_ID/qa/<file>.txt")` — full read.
+1. `Read("docs/tasks/evidence/$TASK_ID/qa/<file>.txt")` — full read.
 2. Apply the expected condition.
 3. Record: PASS or FAIL with the exact reason.
 
@@ -199,12 +222,14 @@ Read the code modified/created by the task:
 | 3 | 3.1 | Frontend lint | `qa/eslint.txt` | No errors | PASS/FAIL |
 | 4 | 3.1 | Frontend format | `qa/prettier.txt` | No diffs | PASS/FAIL |
 | 5 | 3.2 | Unit tests (targeted) | `qa/unit_<app>.txt` | "OK", 0 failures | PASS/FAIL |
-| 6 | 3.3 | Backend full suite | `qa/backend_full.txt` | "OK", 0 failures | PASS/FAIL |
-| 7 | 3.3 | Frontend full suite | `qa/frontend_full.txt` | All pass | PASS/FAIL |
-| 8 | 3.4 | E2E tests | `qa/e2e.txt` | No new failures | PASS/FAIL or N/A |
-| 9 | 3.5 | Functional DoD checks | `qa/dod_*.txt` | Per DoD | PASS/FAIL |
-| 10 | 4.1 | Scope completed | — | Objective met | PASS/FAIL |
-| 11 | 4.2 | Code review | — | No issues | PASS/FAIL |
+| 6 | 3.2b | Frontend coverage | `qa/coverage_frontend.txt` | 0 uncovered lines in modified files | PASS/FAIL |
+| 7 | 3.2b | Backend coverage | `qa/coverage_backend.txt` | Miss=0 in modified files | PASS/FAIL or N/A |
+| 8 | 3.3 | Backend full suite | `qa/backend_full.txt` | "OK", 0 failures | PASS/FAIL |
+| 9 | 3.3 | Frontend full suite | `qa/frontend_full.txt` | All pass | PASS/FAIL |
+| 10 | 3.4 | E2E tests | `qa/e2e.txt` | No new failures | PASS/FAIL or N/A |
+| 11 | 3.5 | Functional DoD checks | `qa/dod_*.txt` | Per DoD | PASS/FAIL |
+| 12 | 4.1 | Scope completed | — | Objective met | PASS/FAIL |
+| 13 | 4.2 | Code review | — | No issues | PASS/FAIL |
 
 ### If all PASS → APPROVED
 
@@ -248,14 +273,14 @@ Append to the task file:
 
 ### Required action
 
-Run `/run-task $1` to fix the listed blockers.
+Run `/dev-3-run $1` to fix the listed blockers.
 ```
 
 ---
 
 ## Final step — Update INDEX.md
 
-1. Read `tasks/INDEX.md`.
+1. Read `docs/tasks/INDEX.md`.
 2. Update the **QA** column for the task:
    - APPROVED → `Approved`
    - RETURNED → `Returned (B1, B2...)`
@@ -266,7 +291,7 @@ Run `/run-task $1` to fix the listed blockers.
 ## Absolute rules — etched in stone
 
 - **If you didn't execute the command with Bash tool, you have no evidence.**
-- **If the output is not in a physical file in `tasks/evidence/`, you have no evidence.**
+- **If the output is not in a physical file in `docs/tasks/evidence/`, you have no evidence.**
 - **If you didn't read the file with Read tool, you have no evidence.**
 - **"The code looks correct" is not evidence.**
 - **"The previous task verified it" is not evidence.**

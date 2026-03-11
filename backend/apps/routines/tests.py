@@ -168,6 +168,21 @@ class StockLotModelTest(TestCase):
         self.assertEqual(lots[0], early_lot)
         self.assertEqual(lots[1], late_lot)
 
+    def test_lot_auto_deleted_when_quantity_reaches_zero(self):
+        """Saving a lot with quantity=0 triggers post_save and deletes it."""
+        lot = make_lot(self.stock, quantity=3)
+        lot_id = lot.pk
+        lot.quantity = 0
+        lot.save(update_fields=["quantity"])
+        self.assertFalse(StockLot.objects.filter(pk=lot_id).exists())
+
+    def test_lot_not_deleted_when_quantity_positive(self):
+        """Saving a lot with quantity>0 does not delete it."""
+        lot = make_lot(self.stock, quantity=3)
+        lot.quantity = 2
+        lot.save(update_fields=["quantity"])
+        self.assertTrue(StockLot.objects.filter(pk=lot.pk).exists())
+
 
 # ── Routine model ────────────────────────────────────────────────────────────
 
@@ -909,14 +924,15 @@ class RoutineViewSetTest(APITestCase):
         """FEFO: continues into next lot when first is exhausted."""
         stock = make_stock(self.user)
         early = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=30))
+        early_id = early.pk
         late = make_lot(stock, quantity=10, expiry_date=date.today() + timedelta(days=120))
         r = make_routine(self.user, stock=stock)
         r.stock_usage = 5
         r.save()
         self.client.post(f"/api/routines/{r.id}/log/", {})
-        early.refresh_from_db()
+        # early lot was fully consumed → auto-deleted
+        self.assertFalse(StockLot.objects.filter(pk=early_id).exists())
         late.refresh_from_db()
-        self.assertEqual(early.quantity, 0)  # fully consumed
         self.assertEqual(late.quantity, 7)  # 10 - 3 (remaining after early)
 
     def test_log_fefo_no_expiry_lots_consumed_last(self):
@@ -924,25 +940,27 @@ class RoutineViewSetTest(APITestCase):
         stock = make_stock(self.user)
         no_expiry = make_lot(stock, quantity=10)
         with_expiry = make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=60))
+        with_expiry_id = with_expiry.pk
         r = make_routine(self.user, stock=stock)
         r.stock_usage = 3
         r.save()
         self.client.post(f"/api/routines/{r.id}/log/", {})
-        with_expiry.refresh_from_db()
+        # with_expiry lot was fully consumed → auto-deleted
+        self.assertFalse(StockLot.objects.filter(pk=with_expiry_id).exists())
         no_expiry.refresh_from_db()
-        self.assertEqual(with_expiry.quantity, 0)  # consumed first
         self.assertEqual(no_expiry.quantity, 10)  # untouched
 
     def test_log_does_not_decrement_below_zero(self):
         """Total consumption is capped by available stock."""
         stock = make_stock(self.user)
         lot = make_lot(stock, quantity=2)
+        lot_id = lot.pk
         r = make_routine(self.user, stock=stock)
         r.stock_usage = 10
         r.save()
         self.client.post(f"/api/routines/{r.id}/log/", {})
-        lot.refresh_from_db()
-        self.assertEqual(lot.quantity, 0)
+        # lot was fully consumed → auto-deleted
+        self.assertFalse(StockLot.objects.filter(pk=lot_id).exists())
         self.assertEqual(stock.quantity, 0)
 
     def test_log_resets_notification_state(self):

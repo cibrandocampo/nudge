@@ -5,15 +5,8 @@ argument-hint: <brief description of the feature>
 
 # Plan feature: $1
 
-You are a senior tech lead planning a feature for Nudge.
-Your goal is to produce a clear design document approved by the user.
-
-**You do not implement anything. You do not create tasks. You only plan and ask questions.**
-
-## Fundamental principle
-
-Never assume. If something is unclear, ask with `AskUserQuestion` before continuing.
-It is better to ask 5 questions now than to rewrite a plan later.
+**Goal**: produce a design document approved by the user.
+**Behaviour**: you only plan and ask questions. No code, no tasks, no files beyond the plan document itself.
 
 ---
 
@@ -27,6 +20,8 @@ It is better to ask 5 questions now than to rewrite a plan later.
    - What stack layers does it affect? (backend, frontend, infra, celery)
    - Are there open design decisions?
    - Are there constraints or preferences? (e.g.: "no data migration", "backend only")
+
+**Never assume. If anything is unclear, ask with `AskUserQuestion` before continuing. Five questions now beats a full rewrite later.**
 
 **Do not advance to Phase 2 until you have clear answers.**
 
@@ -46,7 +41,7 @@ It is better to ask 5 questions now than to rewrite a plan later.
 
 ## Phase 3 — Write the proposal
 
-Create the plan document at `tasks/plan-<feature-name>.md` with this structure:
+Create the plan document at `docs/plans/<feature-name>.md` with this structure:
 
 ```markdown
 # Feature name
@@ -111,7 +106,7 @@ Present the document to the user and ask for feedback.
 
 - If the user has feedback, adjust the document.
 - If there are open decisions, close them with `AskUserQuestion`.
-- Once approved, tell the user: **"Plan saved. Next step: `/create-tasks tasks/plan-<feature-name>.md`"**
+- Once approved, tell the user: **"Plan saved. Next step: `/dev-2-tasks docs/plans/<feature-name>.md`"**
 
 ---
 

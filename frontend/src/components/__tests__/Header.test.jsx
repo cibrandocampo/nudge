@@ -125,6 +125,20 @@ describe('Header', () => {
     await waitFor(() => expect(screen.getByText('Wrong password')).toBeInTheDocument())
   })
 
+  it('shows generic error when API returns error without detail', async () => {
+    server.use(http.post(`${BASE}/auth/change-password/`, () => HttpResponse.json({}, { status: 400 })))
+    const { user } = renderWithProviders(<Header />)
+    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByText('Change password'))
+
+    await user.type(screen.getByPlaceholderText('Current password'), 'wrong')
+    await user.type(screen.getByPlaceholderText('New password'), 'newpass')
+    await user.type(screen.getByPlaceholderText('Confirm new password'), 'newpass')
+    await user.click(screen.getByRole('button', { name: 'Change password' }))
+
+    await waitFor(() => expect(screen.getByText('Incorrect current password')).toBeInTheDocument())
+  })
+
   it('calls logout and navigates on Sign out', async () => {
     const logout = vi.fn()
     const { user } = renderWithProviders(<Header />, { auth: { logout } })

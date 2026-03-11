@@ -127,8 +127,8 @@ describe('RoutineCard', () => {
     await waitFor(() => expect(screen.getByText('Detail page')).toBeInTheDocument())
   })
 
-  it('calls onToggleShare when share checkbox toggled on due routine', async () => {
-    const onToggleShare = vi.fn()
+  it('calls onShare with routine id when share button clicked on due routine', async () => {
+    const onShare = vi.fn()
     const routine = {
       ...baseRoutine,
       is_due: true,
@@ -139,21 +139,14 @@ describe('RoutineCard', () => {
     }
     const contacts = [{ id: 10, username: 'alice' }]
     const { user } = renderWithProviders(
-      <RoutineCard
-        routine={routine}
-        onMarkDone={vi.fn()}
-        completing={false}
-        contacts={contacts}
-        onToggleShare={onToggleShare}
-      />,
+      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
     )
     await user.click(screen.getByLabelText('Share'))
-    await user.click(screen.getByRole('checkbox'))
-    expect(onToggleShare).toHaveBeenCalledWith(1, 10)
+    expect(onShare).toHaveBeenCalledWith(1)
   })
 
-  it('calls onToggleShare when share checkbox toggled on not-due routine', async () => {
-    const onToggleShare = vi.fn()
+  it('calls onShare with routine id when share button clicked on not-due routine', async () => {
+    const onShare = vi.fn()
     const routine = {
       ...baseRoutine,
       is_due: false,
@@ -164,22 +157,33 @@ describe('RoutineCard', () => {
     }
     const contacts = [{ id: 10, username: 'alice' }]
     const { user } = renderWithProviders(
-      <RoutineCard
-        routine={routine}
-        onMarkDone={vi.fn()}
-        completing={false}
-        contacts={contacts}
-        onToggleShare={onToggleShare}
-      />,
+      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
     )
     await user.click(screen.getByLabelText('Share'))
-    await user.click(screen.getByRole('checkbox'))
-    expect(onToggleShare).toHaveBeenCalledWith(1, 10)
+    expect(onShare).toHaveBeenCalledWith(1)
   })
 
   it('shows owner label when not owner', () => {
     const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'other' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.getByText('other')).toBeInTheDocument()
+  })
+
+  it('shows shareBtnActive class on due routine when already shared', () => {
+    const routine = { ...baseRoutine, is_due: true, is_overdue: true, shared_with: [10], is_owner: true }
+    const contacts = [{ id: 10, username: 'alice' }]
+    const { container } = renderWithProviders(
+      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
+    )
+    expect(container.querySelector('[aria-label="Share"]').className).toContain('shareBtnActive')
+  })
+
+  it('shows shareBtnActive class on non-due routine when already shared', () => {
+    const routine = { ...baseRoutine, is_due: false, is_overdue: false, shared_with: [10], is_owner: true }
+    const contacts = [{ id: 10, username: 'alice' }]
+    const { container } = renderWithProviders(
+      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
+    )
+    expect(container.querySelector('[aria-label="Share"]').className).toContain('shareBtnActive')
   })
 })

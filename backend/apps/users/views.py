@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.notifications.push import notify_contact_added
 from apps.routines.models import Routine, Stock
 
 from .models import User
@@ -83,6 +84,7 @@ def contact_list_create(request):
         return Response({"detail": "Already a contact."}, status=status.HTTP_400_BAD_REQUEST)
 
     request.user.contacts.add(target)
+    notify_contact_added(request.user, target)
     return Response(ContactSerializer(target).data, status=status.HTTP_201_CREATED)
 
 
