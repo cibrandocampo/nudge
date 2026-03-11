@@ -79,12 +79,34 @@
 
 .doneBtn {
   flex-shrink: 0;
-  padding: 0.35rem 0.9rem;
+  padding: 0.4rem 0.875rem;
   background: var(--c-primary);
   color: var(--c-surface);
   border: none;
-  border-radius: 20px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.shareBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.35rem;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+
+.shareBtn:hover {
+  opacity: 0.7;
+}
+
+.shareBtnActive {
+  opacity: 1;
+}
+
+.shareBtnActive:hover {
+  opacity: 1;
 }

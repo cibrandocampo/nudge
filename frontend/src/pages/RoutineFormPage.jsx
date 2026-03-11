@@ -133,7 +133,7 @@ export default function RoutineFormPage() {
     }
   }
 
-  if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
+  if (loading) return <div className={shared.spinner} />
   if (loadError) return <p className={shared.muted}>{t('common.error')}</p>
 
   const displayIntervalValue = intervalDraft !== null ? intervalDraft : String(intervalValue)

@@ -1,5 +1,5 @@
 .container {
-  max-width: 480px;
+  max-width: 540px;
 }
 
 .form {
@@ -40,22 +40,22 @@
 }
 
 .langBtn {
-  padding: 0.45rem 0.875rem;
+  padding: 0.4rem 0.875rem;
   border: 1px solid var(--c-border);
   border-radius: 8px;
   background: var(--c-surface);
   color: var(--c-text-2);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   cursor: pointer;
 }
 
 .langBtnActive {
-  padding: 0.45rem 0.875rem;
+  padding: 0.4rem 0.875rem;
   border: 1px solid var(--c-primary);
   border-radius: 8px;
   background: var(--c-primary-bg);
   color: var(--c-primary);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -72,7 +72,7 @@
   color: var(--c-surface);
   border: none;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -183,7 +183,7 @@
 }
 
 .contactName {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
 }
 
 .contactRemoveBtn {
@@ -201,11 +201,11 @@
 
 .contactInput {
   width: 100%;
-  padding: 0.4rem 0.6rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid var(--c-border);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  background: var(--c-bg);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: var(--c-surface);
   box-sizing: border-box;
 }
 
@@ -219,8 +219,11 @@
   border-radius: 6px;
   list-style: none;
   padding: 0.25rem 0;
+  margin-top: 0.25rem;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .contactResultBtn {
@@ -230,7 +233,7 @@
   border: none;
   padding: 0.4rem 0.6rem;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
 }
 
 .contactResultBtn:hover {

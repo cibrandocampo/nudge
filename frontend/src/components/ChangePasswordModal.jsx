@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import PasswordInput from './PasswordInput'
 import shared from '../styles/shared.module.css'
-import s from './Header.module.css'
+import s from './ChangePasswordModal.module.css'
 
 export default function ChangePasswordModal({ onClose }) {
   const { t } = useTranslation()
@@ -37,13 +37,13 @@ export default function ChangePasswordModal({ onClose }) {
   }
 
   return (
-    <div className={s.modalOverlay} onMouseDown={onClose}>
-      <div className={s.modalBox} onMouseDown={(e) => e.stopPropagation()}>
-        <h3 className={s.modalTitle}>{t('header.changePassword')}</h3>
+    <div className={shared.overlay} onMouseDown={onClose}>
+      <div className={shared.modalBox} onMouseDown={(e) => e.stopPropagation()}>
+        <h3 className={shared.modalTitle}>{t('header.changePassword')}</h3>
         {saved ? (
           <p className={s.success}>{t('header.passwordSaved')}</p>
         ) : (
-          <form onSubmit={handle} className={s.modalForm}>
+          <form onSubmit={handle} className={s.form}>
             <PasswordInput
               placeholder={t('header.currentPassword')}
               value={form.current}
@@ -59,11 +59,11 @@ export default function ChangePasswordModal({ onClose }) {
               required
             />
             {error && <p className={shared.error}>{error}</p>}
-            <div className={s.modalActions}>
-              <button type="button" className={s.modalCancelBtn} onClick={onClose}>
+            <div className={s.actions}>
+              <button type="button" className={s.cancelBtn} onClick={onClose}>
                 {t('common.cancel')}
               </button>
-              <button type="submit" className={s.modalSaveBtn} disabled={saving}>
+              <button type="submit" className={s.saveBtn} disabled={saving}>
                 {saving ? t('header.saving') : t('header.save')}
               </button>
             </div>

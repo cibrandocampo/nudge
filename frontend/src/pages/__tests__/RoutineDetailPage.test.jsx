@@ -46,7 +46,7 @@ describe('RoutineDetailPage', () => {
 
   it('shows loading state', () => {
     renderDetail()
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByTestId('spinner')).toBeInTheDocument()
   })
 
   it('shows error state on API failure', async () => {
@@ -364,6 +364,28 @@ describe('RoutineDetailPage', () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('← Back')).toBeInTheDocument())
     expect(screen.getByText('Edit')).toBeInTheDocument()
+  })
+
+  it('shows next due with both relative and absolute datetime', async () => {
+    const futureDate = new Date(Date.now() + 3 * 24 * 3600000) // ~3 days from now
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, next_due_at: futureDate.toISOString(), is_due: false }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    // Should contain the separator · between relative and absolute parts
+    const nextDueValue = screen.getByText(/·/)
+    expect(nextDueValue).toBeInTheDocument()
+  })
+
+  it('shows stock usage with translated format', async () => {
+    const { container } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    // "10 × Vitamin D (uses 1 per log)"
+    expect(container.textContent).toMatch(/Vitamin D/)
+    expect(container.textContent).toMatch(/uses 1 per log/)
   })
 })
 

@@ -192,7 +192,7 @@ export default function HistoryPage() {
       </div>
 
       {loading ? (
-        <p className={shared.muted}>{t('common.loading')}</p>
+        <div className={shared.spinner} data-testid="spinner" />
       ) : error ? (
         <p className={shared.muted}>{t('common.error')}</p>
       ) : isEmpty ? (

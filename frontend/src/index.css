@@ -14,6 +14,7 @@
   --c-danger-bg: #fecaca;
   --c-danger-text: #991b1b;
   --c-success: #10b981;
+  --c-success-bg: rgba(16, 185, 129, 0.15);
   --c-success-text: #065f46;
   --c-warning: #f59e0b;
   --c-warning-text: #92400e;
@@ -52,4 +53,13 @@ input[type='number'] {
 :focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
+}
+
+/* Prevent iOS Safari auto-zoom on input focus (requires font-size >= 16px) */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: max(1rem, 1em);
+  }
 }

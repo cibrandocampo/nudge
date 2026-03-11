@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Sum
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -97,6 +99,12 @@ class StockLot(models.Model):
     def __str__(self):
         label = self.lot_number or f"#{self.pk}"
         return f"{self.stock.name} — {label} ({self.quantity})"
+
+
+@receiver(post_save, sender=StockLot)
+def delete_empty_lot(sender, instance, **kwargs):
+    if instance.quantity == 0:
+        instance.delete()
 
 
 class StockConsumption(models.Model):

@@ -1,5 +1,5 @@
 .container {
-  max-width: 480px;
+  max-width: 540px;
 }
 
 .back {
@@ -45,7 +45,7 @@
 .presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.5rem;
   margin-bottom: 0.65rem;
 }
 
@@ -55,7 +55,7 @@
   border: 1px solid var(--c-border);
   background: var(--c-surface);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--c-text-3);
   font-weight: 500;
 }
@@ -112,7 +112,7 @@
   color: var(--c-surface);
   border: none;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -124,6 +124,6 @@
   color: var(--c-text-3);
   border: 1px solid var(--c-border);
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   cursor: pointer;
 }

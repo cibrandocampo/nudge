@@ -32,7 +32,7 @@ const emptyStock = { ...stockItem, quantity: 0, lots: [] }
 describe('InventoryPage', () => {
   it('shows loading state initially', () => {
     renderWithProviders(<InventoryPage />)
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByTestId('spinner')).toBeInTheDocument()
   })
 
   it('shows empty state when no stocks', async () => {
@@ -158,6 +158,21 @@ describe('InventoryPage', () => {
     expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
   })
 
+  it('submits lot with expiry date', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([{ ...stockItem, lots: [] }])))
+    const { user, container } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('+ Add batch')).toBeInTheDocument())
+
+    await user.click(screen.getByText('+ Add batch'))
+    await user.type(screen.getByPlaceholderText('0'), '3')
+
+    const dateInput = container.querySelector('input[type="date"]')
+    await user.type(dateInput, '2027-12-31')
+
+    await user.click(screen.getByText('Add batch'))
+    await waitFor(() => expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument())
+  })
+
   it('submits lot with lot number', async () => {
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([{ ...stockItem, lots: [] }])))
     const { user } = renderWithProviders(<InventoryPage />)
@@ -207,6 +222,27 @@ describe('InventoryPage — consume button', () => {
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
     renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+  })
+
+  it('ignores consume click while already consuming', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
+      http.post(`${BASE}/stock/:id/consume/`, async () => {
+        await new Promise((r) => setTimeout(r, 100))
+        return HttpResponse.json({ ...stockItem, quantity: 9 })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+
+    // Click twice rapidly — second click should be ignored
+    const btn = screen.getByTitle('Consume 1 unit')
+    await user.click(btn)
+    await user.click(btn)
+
+    // Only one consume should have gone through
+    await waitFor(() => expect(screen.getByText('(9 total)')).toBeInTheDocument())
+    expect(screen.queryByText('(8 total)')).not.toBeInTheDocument()
   })
 
   it('does not show −1 button when stock quantity is 0', async () => {
@@ -404,7 +440,7 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(deleteCalled).toBe(true))
   })
 
-  it('assigns a group to a stock via the tag button dropdown', async () => {
+  it('assigns a group to a stock via the group picker modal', async () => {
     let patchBody = null
     server.use(
       http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
@@ -417,10 +453,9 @@ describe('InventoryPage — stock groups', () => {
     const { user } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Loose item')).toBeInTheDocument())
 
-    // Click the tag button to reveal the category select
     await user.click(screen.getByTitle('Category'))
-    const select = screen.getByLabelText('Category')
-    await user.selectOptions(select, '1')
+    const modal = screen.getByRole('dialog')
+    await user.click(within(modal).getByText('Diabetes'))
 
     await waitFor(() => expect(patchBody).not.toBeNull())
     expect(patchBody.group).toBe(1)
@@ -576,7 +611,7 @@ describe('InventoryPage — stock groups', () => {
 
   // ── Sharing ────────────────────────────────────────────────────────────────
 
-  it('shows share popover button on stock cards when contacts exist', async () => {
+  it('shows share button on stock cards when contacts exist', async () => {
     const sharingStock = {
       ...stockItem,
       shared_with: [],
@@ -590,10 +625,10 @@ describe('InventoryPage — stock groups', () => {
     )
     renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
-    expect(screen.getByLabelText('Share')).toBeInTheDocument()
+    expect(screen.getByTitle('Share with')).toBeInTheDocument()
   })
 
-  it('toggles share on a stock via the share popover', async () => {
+  it('toggles share on a stock via the share modal', async () => {
     let patchBody = null
     const sharingStock = {
       ...stockItem,
@@ -613,8 +648,9 @@ describe('InventoryPage — stock groups', () => {
     const { user } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
 
-    await user.click(screen.getByLabelText('Share'))
-    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByTitle('Share with'))
+    const modal = screen.getByRole('dialog')
+    await user.click(within(modal).getByText('alice'))
 
     await waitFor(() => expect(patchBody).not.toBeNull())
     expect(patchBody.shared_with).toEqual([10])
@@ -666,8 +702,9 @@ describe('InventoryPage — stock groups', () => {
     const { user } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
 
-    await user.click(screen.getByLabelText('Share'))
-    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByTitle('Share with'))
+    const modal = screen.getByRole('dialog')
+    await user.click(within(modal).getByText('alice'))
 
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
@@ -682,8 +719,8 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText('Loose item')).toBeInTheDocument())
 
     await user.click(screen.getByTitle('Category'))
-    const select = screen.getByLabelText('Category')
-    await user.selectOptions(select, '1')
+    const modal = screen.getByRole('dialog')
+    await user.click(within(modal).getByText('Diabetes'))
 
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
@@ -799,8 +836,8 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
 
     await user.click(screen.getByTitle('Category'))
-    const select = screen.getByLabelText('Category')
-    await user.selectOptions(select, '')
+    const modal = screen.getByRole('dialog')
+    await user.click(within(modal).getByText('None'))
 
     await waitFor(() => expect(patchBody).not.toBeNull())
     expect(patchBody.group).toBeNull()
@@ -826,6 +863,25 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
     const card = container.querySelector('.cardWarning')
     expect(card).toBeInTheDocument()
+  })
+
+  it('shows error when move group fails', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.patch(`${BASE}/stock-groups/:id/`, () => HttpResponse.error()),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByText('Diabetes')).toBeInTheDocument())
+
+    const dialog = screen.getByRole('dialog')
+    const moveDownBtns = within(dialog).getAllByTitle('Move down')
+    await user.click(moveDownBtns[0])
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
   it('moves groups with same display_order using index-based values', async () => {
@@ -877,7 +933,7 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('closes group picker on blur', async () => {
+  it('closes group picker modal on Escape', async () => {
     server.use(
       http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
       http.get(`${BASE}/stock/`, () => HttpResponse.json([ungroupedStock])),
@@ -886,12 +942,10 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText('Loose item')).toBeInTheDocument())
 
     await user.click(screen.getByTitle('Category'))
-    const select = screen.getByLabelText('Category')
-    expect(select).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    // Blur the select to close the picker
-    select.blur()
-    await waitFor(() => expect(screen.queryByLabelText('Category')).not.toBeInTheDocument())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('shows owner label on shared stock where user is not owner', async () => {
