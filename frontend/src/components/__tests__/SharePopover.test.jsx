@@ -63,6 +63,15 @@ describe('SharePopover', () => {
     expect(onToggle).toHaveBeenCalledWith(10)
   })
 
+  it('handles null sharedWith gracefully', async () => {
+    const { user } = renderWithProviders(
+      <SharePopover sharedWith={null} contacts={contacts} isOwner={true} onToggleShare={vi.fn()} />,
+    )
+    await user.click(screen.getByLabelText('Share'))
+    const checkboxes = screen.getAllByRole('checkbox')
+    checkboxes.forEach((cb) => expect(cb).not.toBeChecked())
+  })
+
   it('closes on outside click', async () => {
     const { user } = renderWithProviders(
       <div>

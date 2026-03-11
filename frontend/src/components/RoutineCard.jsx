@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
-import SharePopover from './SharePopover'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './RoutineCard.module.css'
@@ -12,7 +11,7 @@ function statusClass(routine) {
   return s.borderWarning
 }
 
-export default function RoutineCard({ routine, onMarkDone, completing, contacts, onToggleShare }) {
+export default function RoutineCard({ routine, onMarkDone, completing, contacts, onShare }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const timeLabel = routine.next_due_at
@@ -39,12 +38,20 @@ export default function RoutineCard({ routine, onMarkDone, completing, contacts,
       <Link to={`/routines/${routine.id}`} className={cx(s.row, s.rowLink, s.borderSuccess)}>
         {info}
         <div className={s.actions}>
-          <SharePopover
-            sharedWith={routine.shared_with}
-            contacts={contacts}
-            isOwner={routine.is_owner}
-            onToggleShare={(userId) => onToggleShare && onToggleShare(routine.id, userId)}
-          />
+          {routine.is_owner !== false && contacts?.length > 0 && (
+            <button
+              type="button"
+              className={cx(s.shareBtn, routine.shared_with?.length > 0 && s.shareBtnActive)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onShare && onShare(routine.id)
+              }}
+              aria-label="Share"
+            >
+              👥
+            </button>
+          )}
           <span className={s.chevron}>›</span>
         </div>
       </Link>
@@ -55,12 +62,19 @@ export default function RoutineCard({ routine, onMarkDone, completing, contacts,
     <div className={cx(s.row, s.rowLink, statusClass(routine))} onClick={() => navigate(`/routines/${routine.id}`)}>
       {info}
       <div className={s.actions}>
-        <SharePopover
-          sharedWith={routine.shared_with}
-          contacts={contacts}
-          isOwner={routine.is_owner}
-          onToggleShare={(userId) => onToggleShare && onToggleShare(routine.id, userId)}
-        />
+        {routine.is_owner !== false && contacts?.length > 0 && (
+          <button
+            type="button"
+            className={cx(s.shareBtn, routine.shared_with?.length > 0 && s.shareBtnActive)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onShare && onShare(routine.id)
+            }}
+            aria-label="Share"
+          >
+            👥
+          </button>
+        )}
         <button
           className={cx(s.doneBtn, completing && shared.disabled)}
           onClick={(e) => {

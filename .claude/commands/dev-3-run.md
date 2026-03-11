@@ -5,27 +5,25 @@ argument-hint: <task-id, e.g.: T001, T005_celery>
 
 # Execute task: $1
 
-You are a senior developer executing a task from Nudge's backlog.
-**Your goal is to get it right the first time to avoid QA cycles.**
+**Goal**: implement a backlog task and leave it ready for QA. Getting it right the first time minimises review cycles.
 
-## Total ownership principle
+## Total ownership
 
-We are a one-person team. **There is no concept of "pre-existing error".** If during execution you encounter a system error — even if not caused by your code — it is YOUR responsibility to fix it before continuing.
+This is a one-person team. **There is no such thing as a "pre-existing error".** If you encounter a system error during execution — even if unrelated to your code — it is your responsibility to fix it before continuing.
 
-Derived rules:
-- If while verifying the DoD you find an unrelated error (broken test, crashed service, JS exception): **stop, diagnose, fix, then continue.**
-- Never document an error as "pre-existing" to dodge responsibility.
-- Evidence built on a broken system has no validity.
+- If a DoD verification uncovers an unrelated failure (broken test, crashed service, JS exception): **stop, diagnose, fix, then continue.**
+- Never label an error as "pre-existing" to avoid responsibility.
+- Evidence built on a broken system is invalid.
 
 ---
 
 ## Step 0 — Locate the task
 
-Search in `tasks/` (project root) for a file matching `$1`. It can be:
-- Exact ID: `T001` → search `tasks/T001*.md`
-- Partial name: `T001_celery` → search `tasks/T001_celery*.md`
+Search in `docs/tasks/` for a file matching `$1`. It can be:
+- Exact ID: `T001` → search `docs/tasks/T001*.md`
+- Partial name: `T001_celery` → search `docs/tasks/T001_celery*.md`
 
-If no match is found, list available files in `tasks/` and ask the user to choose.
+If no match is found, list available files in `docs/tasks/` and ask the user to choose.
 
 ---
 
@@ -44,7 +42,7 @@ If any dependency is unresolved, inform the user and stop.
 ## Step 2 — Execution plan
 
 1. Analyze each DoD item — these are your non-negotiable acceptance criteria.
-2. Create a TaskCreate for each DoD deliverable. Use TaskUpdate to track progress.
+2. Create a single TaskCreate for this execution. Use TaskUpdate to report progress as steps complete.
 3. Review MEMORY.md for known pitfalls in this area.
 4. If there are non-trivial design decisions, explain them to the user before proceeding.
 
@@ -77,12 +75,12 @@ Go through EACH DoD item and verify by executing real commands.
 ### Save evidence to files
 
 ```bash
-mkdir -p tasks/evidence/$TASK_ID
+mkdir -p docs/tasks/evidence/$TASK_ID
 ```
 
 For each DoD verification:
 ```bash
-<command> 2>&1 | tee tasks/evidence/$TASK_ID/<file>.txt
+<command> 2>&1 | tee docs/tasks/evidence/$TASK_ID/<file>.txt
 ```
 
 Then, read each file with Read tool and verify the condition.
@@ -122,7 +120,7 @@ Append to the task file:
 
 | # | Deliverable | Evidence file | Result |
 |---|------------|---------------|--------|
-| 1 | Backend tests pass | `tasks/evidence/TXXX/backend_tests.txt` | PASS |
+| 1 | Backend tests pass | `docs/tasks/evidence/TXXX/backend_tests.txt` | PASS |
 | 2 | ... | ... | ... |
 
 ### Design decisions
@@ -135,7 +133,7 @@ Append to the task file:
 ## Step 6 — Update state
 
 1. **MEMORY.md**: if you discovered new patterns or pitfalls, update. Don't add redundant info.
-2. **tasks/INDEX.md**: mark the task as "Completed" in the Status column.
+2. **docs/tasks/INDEX.md**: mark the task as "Completed" in the Status column.
 
 ---
 
@@ -145,8 +143,8 @@ Append to the task file:
 - Never write evidence without a real command executed and saved to file.
 - **Read before writing**: never modify code you haven't read.
 - **Review after writing**: always re-read the produced code.
-- **Do NOT commit**: that is `/push-and-verify`'s responsibility.
-- **Do NOT push**: that is `/push-and-verify`'s responsibility.
+- **Do NOT commit**: that is `/push`'s responsibility.
+- **Do NOT push**: that is `/push`'s responsibility.
 - If you get blocked, ask the user instead of simplifying.
 - Follow existing patterns; consult MEMORY.md and the project skills.
 - Documentation language: English. Code language: English.

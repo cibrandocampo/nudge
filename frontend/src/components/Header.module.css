@@ -13,7 +13,7 @@
 
 .logo {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: var(--c-primary);
   letter-spacing: -0.02em;
 }
@@ -77,82 +77,11 @@
   background: none;
   border: none;
   text-align: left;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--c-text);
   cursor: pointer;
 }
 
 .dropItemDanger {
   color: var(--c-danger);
-}
-
-/* ── Change Password Modal ───────────────────────────────────── */
-
-.modalOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-  padding: 1rem;
-}
-
-.modalBox {
-  background: var(--c-surface);
-  border-radius: 12px;
-  padding: 1.5rem;
-  width: 100%;
-  max-width: 360px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
-
-.modalTitle {
-  margin: 0 0 1.25rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--c-text);
-}
-
-.modalForm {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.success {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--c-success);
-  text-align: center;
-  padding: 0.5rem 0;
-}
-
-.modalActions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 0.25rem;
-}
-
-.modalCancelBtn {
-  padding: 0.6rem 1rem;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  background: none;
-  font-size: 0.875rem;
-  cursor: pointer;
-  color: var(--c-text-2);
-}
-
-.modalSaveBtn {
-  padding: 0.6rem 1.25rem;
-  border: none;
-  border-radius: 8px;
-  background: var(--c-primary);
-  color: var(--c-surface);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
 }

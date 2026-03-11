@@ -226,8 +226,8 @@ frontend/.vite/
 backend/staticfiles/
 
 # ── Internal task docs ───────────────────────────
+docs/plans/
 docs/tasks/
-tasks/
 
 # ── Local deployment configs ─────────────────────
 deploy/

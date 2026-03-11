@@ -22,6 +22,28 @@ description: Git commit message conventions and branch naming standards for Nudg
 5. **Language**: always English, even if the conversation was in Spanish/Galician
 6. **Author/Committer**: always use the git config from the current PC (never hardcode or use other identities). New commits automatically use `git config user.name` and `git config user.email`. When amending, use `--reset-author` to update to current PC config.
 
+## Branch naming
+
+```
+feat/<slug>    # new feature
+fix/<slug>     # bug fix
+chore/<slug>   # maintenance, refactor, tooling
+```
+
+Examples: `feat/lot-selection-modal`, `fix/push-token-refresh`, `chore/docker-hardening`
+
+## PR workflow
+
+`main` is protected — direct push is rejected. Always:
+
+```bash
+git checkout -b <type>/<slug>
+git push -u origin <type>/<slug>
+gh pr create --title "<concise title>" --body "..."
+```
+
+Never `push --force`. If there are conflicts, resolve with merge.
+
 ### Pre-commit hook
 
 The project has a pre-commit hook (`scripts/pre-commit`) that runs:
@@ -31,7 +53,7 @@ The project has a pre-commit hook (`scripts/pre-commit`) that runs:
 If the hook fails, **fix the issue and create a NEW commit** (never `--amend`).
 To format before committing:
 - `docker compose -f dev/docker-compose.yml exec backend ruff format .`
-- `docker compose -f dev/docker-compose.yml exec frontend npx prettier --write src/`
+- `docker compose -f dev/docker-compose.yml exec frontend npm run format`
 
 ### Example
 

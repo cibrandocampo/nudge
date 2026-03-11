@@ -9,7 +9,12 @@ precacheAndRoute(self.__WB_MANIFEST)
 // ── Push notifications ────────────────────────────────────────────────────────
 
 self.addEventListener('push', (event) => {
-  const data = event.data?.json() ?? {}
+  let data = {}
+  try {
+    data = event.data?.json() ?? {}
+  } catch {
+    console.error('[SW] Push data parse error:', event.data?.text())
+  }
   const title = data.title ?? 'Nudge'
   const options = {
     body: data.body ?? '',

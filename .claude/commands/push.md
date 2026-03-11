@@ -3,10 +3,10 @@ description: Update documentation, commit with pre-commit, create PR, and verify
 argument-hint: <change description or task-id (optional)>
 ---
 
-# Push and Verify: $1
+# Push: $1
 
-You are a senior developer closing a work cycle. Your goal is to leave the code
-ready for merge: documentation updated, clean commit, PR created, and pipeline green.
+**Goal**: close the work cycle — documentation updated, clean commit, PR created, pipeline green.
+**Behaviour**: you are the last gate before code reaches review. Never commit with broken tests. Never ignore CI failures.
 
 ---
 
@@ -14,7 +14,11 @@ ready for merge: documentation updated, clean commit, PR created, and pipeline g
 
 1. Run `git status` to see modified, added, and untracked files.
 2. Run `git diff --stat` to see a summary of changes.
-3. If `$1` references a task-id, read the task file for commit context.
+3. If `$1` references a task-id, read `docs/tasks/$1*.md` in full:
+   - Extract commit context (objective, modified files, design decisions).
+   - **Check for `## Code Review — APPROVED`**. If it is missing, warn the user:
+     > "This task has not been QA-approved. Run `/dev-4-qa $1` first, or confirm you want to push anyway."
+   - Do not proceed until the user confirms.
 4. If there is no `$1`, review modified files to understand what changed.
 
 If there are no changes, inform the user and stop.
@@ -44,9 +48,9 @@ Ask the user with `AskUserQuestion` if there is anything additional to document.
 
 ## Step 3 — Verify tests locally
 
-**Before committing, verify that everything passes locally.**
+**Skip this step if `$1` has `## Code Review — APPROVED`** — QA already ran the full suite.
 
-Make sure the dev environment is running:
+Otherwise, make sure the dev environment is running:
 ```bash
 docker compose -f dev/docker-compose.yml ps --format '{{.Service}} {{.State}}'
 ```

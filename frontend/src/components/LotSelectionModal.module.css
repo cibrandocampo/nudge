@@ -21,7 +21,7 @@
 
 .subtitle {
   margin: 0 0 1rem;
-  font-size: 0.825rem;
+  font-size: 0.8rem;
   color: var(--c-muted);
 }
 
@@ -47,8 +47,8 @@
   cursor: pointer;
   user-select: none;
   transition:
-    border-color 0.12s,
-    background 0.12s;
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .item:hover {
@@ -61,14 +61,14 @@
 }
 
 .radio {
-  width: 1.1rem;
-  height: 1.1rem;
-  border: 1.5px solid var(--c-border);
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--c-border);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.6rem;
+  font-size: 1.1rem;
   color: var(--c-primary);
   flex-shrink: 0;
 }
@@ -122,14 +122,14 @@
 }
 
 .stepBtn {
-  width: 2rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--c-surface);
   border: none;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--c-primary);
   cursor: pointer;
@@ -146,14 +146,14 @@
 }
 
 .qtyValue {
-  width: 2rem;
+  width: 2.75rem;
   text-align: center;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--c-text);
   border-left: 1px solid var(--c-border);
   border-right: 1px solid var(--c-border);
-  line-height: 2rem;
+  line-height: 2.75rem;
 }
 
 .totalRow {
@@ -180,7 +180,7 @@
 }
 
 .cancelBtn {
-  padding: 0.6rem 1.2rem;
+  padding: 0.6rem 1.25rem;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 8px;
@@ -190,11 +190,11 @@
 }
 
 .confirmBtn {
-  padding: 0.6rem 1.2rem;
+  padding: 0.6rem 1.25rem;
   background: var(--c-primary);
   border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--c-surface);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;

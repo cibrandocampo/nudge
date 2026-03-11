@@ -4,6 +4,16 @@ import { login } from './helpers.js'
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
+    // Reset language to English so all text assertions work regardless of stored preference
+    await page.evaluate(async () => {
+      const token = localStorage.getItem('access_token')
+      await fetch('/api/auth/me/', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: 'en' }),
+      })
+    })
+    await page.reload()
     await page.getByRole('link', { name: 'Settings' }).click()
     await expect(page).toHaveURL('/settings')
   })

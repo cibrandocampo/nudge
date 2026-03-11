@@ -15,6 +15,9 @@ TYPE_DAILY = "daily_heads_up"
 TYPE_DUE = "due"
 TYPE_REMINDER = "reminder"
 TYPE_TEST = "test"
+TYPE_CONTACT_ADDED = "contact_added"
+TYPE_ROUTINE_SHARED = "routine_shared"
+TYPE_STOCK_SHARED = "stock_shared"
 
 _MSGS = {
     "en": {
@@ -28,6 +31,12 @@ _MSGS = {
         "action_dismiss": "Dismiss",
         "test_title": "Push test",
         "test_body": "It works!",
+        "contact_added_title": "New contact",
+        "contact_added_body": "{owner} added you as a contact",
+        "routine_shared_title": "{name}",
+        "routine_shared_body": "{owner} shared this routine with you",
+        "stock_shared_title": "{name}",
+        "stock_shared_body": "{owner} shared this item with you",
     },
     "es": {
         "daily_one": "1 tarea hoy",
@@ -40,6 +49,12 @@ _MSGS = {
         "action_dismiss": "Ignorar",
         "test_title": "Prueba push",
         "test_body": "¡Funciona!",
+        "contact_added_title": "Nuevo contacto",
+        "contact_added_body": "{owner} te ha añadido como contacto",
+        "routine_shared_title": "{name}",
+        "routine_shared_body": "{owner} ha compartido esta rutina contigo",
+        "stock_shared_title": "{name}",
+        "stock_shared_body": "{owner} ha compartido este artículo contigo",
     },
     "gl": {
         "daily_one": "1 tarefa hoxe",
@@ -52,6 +67,12 @@ _MSGS = {
         "action_dismiss": "Ignorar",
         "test_title": "Proba push",
         "test_body": "Funciona!",
+        "contact_added_title": "Novo contacto",
+        "contact_added_body": "{owner} engadiuche como contacto",
+        "routine_shared_title": "{name}",
+        "routine_shared_body": "{owner} compartiu esta rutina contigo",
+        "stock_shared_title": "{name}",
+        "stock_shared_body": "{owner} compartiu este artigo contigo",
     },
 }
 
@@ -202,4 +223,32 @@ def notify_test(user):
         title=_m(user, "test_title"),
         body=_m(user, "test_body"),
         type=TYPE_TEST,
+    )
+
+
+def notify_contact_added(requester, target):
+    send_push_notification(
+        target,
+        title=_m(target, "contact_added_title"),
+        body=_m(target, "contact_added_body", owner=requester.username),
+        type=TYPE_CONTACT_ADDED,
+    )
+
+
+def notify_routine_shared(routine, new_user):
+    send_push_notification(
+        new_user,
+        title=_m(new_user, "routine_shared_title", name=routine.name),
+        body=_m(new_user, "routine_shared_body", owner=routine.user.username),
+        type=TYPE_ROUTINE_SHARED,
+        data={"routine_id": routine.id},
+    )
+
+
+def notify_stock_shared(stock, new_user):
+    send_push_notification(
+        new_user,
+        title=_m(new_user, "stock_shared_title", name=stock.name),
+        body=_m(new_user, "stock_shared_body", owner=stock.user.username),
+        type=TYPE_STOCK_SHARED,
     )

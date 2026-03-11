@@ -6,17 +6,23 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.routines.models import Routine, RoutineEntry
+from apps.routines.models import Routine, RoutineEntry, Stock
 
 from .models import NotificationState, PushSubscription
 from .push import (
+    TYPE_CONTACT_ADDED,
     TYPE_DAILY,
     TYPE_DUE,
     TYPE_REMINDER,
+    TYPE_ROUTINE_SHARED,
+    TYPE_STOCK_SHARED,
     TYPE_TEST,
+    notify_contact_added,
     notify_daily_heads_up,
     notify_due,
     notify_reminder,
+    notify_routine_shared,
+    notify_stock_shared,
     notify_test,
     send_push_notification,
 )
@@ -391,6 +397,41 @@ class PushHelperTest(TestCase):
             args = mock_send.call_args
             self.assertEqual(args[1]["type"], TYPE_TEST)
             self.assertIn("Push test", args[1]["title"])
+
+    def test_notify_contact_added(self):
+        requester = make_user(username="alice")
+        target = make_user(username="bob")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_contact_added(requester, target)
+            args = mock_send.call_args
+            self.assertEqual(args[0][0], target)
+            self.assertEqual(args[1]["type"], TYPE_CONTACT_ADDED)
+            self.assertIn("alice", args[1]["body"])
+
+    def test_notify_routine_shared(self):
+        owner = make_user(username="alice")
+        recipient = make_user(username="bob")
+        routine = make_routine(owner, name="Water filter")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_routine_shared(routine, recipient)
+            args = mock_send.call_args
+            self.assertEqual(args[0][0], recipient)
+            self.assertEqual(args[1]["type"], TYPE_ROUTINE_SHARED)
+            self.assertIn("Water filter", args[1]["title"])
+            self.assertIn("alice", args[1]["body"])
+            self.assertEqual(args[1]["data"]["routine_id"], routine.id)
+
+    def test_notify_stock_shared(self):
+        owner = make_user(username="alice")
+        recipient = make_user(username="bob")
+        stock = Stock.objects.create(user=owner, name="Insulin pens")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_stock_shared(stock, recipient)
+            args = mock_send.call_args
+            self.assertEqual(args[0][0], recipient)
+            self.assertEqual(args[1]["type"], TYPE_STOCK_SHARED)
+            self.assertIn("Insulin pens", args[1]["title"])
+            self.assertIn("alice", args[1]["body"])
 
 
 # ── tasks helpers ─────────────────────────────────────────────────────────────

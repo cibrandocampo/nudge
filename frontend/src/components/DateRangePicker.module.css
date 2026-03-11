@@ -3,13 +3,13 @@
 }
 
 .trigger {
-  padding: 0.45rem 0.75rem;
+  padding: 0.4rem 0.875rem;
   border: none;
   border-radius: 8px;
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--c-primary);
-  color: #fff;
+  color: var(--c-surface);
   outline: none;
   cursor: pointer;
   white-space: nowrap;
@@ -58,7 +58,7 @@
 
 .presetBtnActive {
   background: var(--c-primary);
-  color: #fff;
+  color: var(--c-surface);
   font-weight: 500;
 }
 
@@ -93,7 +93,7 @@
   border: 1px solid var(--c-border);
   border-radius: 6px;
   font-size: 0.8rem;
-  background: var(--c-bg);
+  background: var(--c-surface);
   color: var(--c-text);
   outline: none;
 }
@@ -101,11 +101,11 @@
 .applyBtn {
   padding: 0.4rem 0.75rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--c-primary);
-  color: #fff;
+  color: var(--c-surface);
   cursor: pointer;
   margin-top: 0.25rem;
 }

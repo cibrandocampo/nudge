@@ -63,7 +63,7 @@ function getEntryNames(container) {
 describe('HistoryPage', () => {
   it('shows loading state initially', () => {
     renderWithProviders(<HistoryPage />)
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(screen.getByTestId('spinner')).toBeInTheDocument()
   })
 
   it('shows error state on API failure', async () => {
@@ -486,5 +486,31 @@ describe('HistoryPage — sharing', () => {
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Insulin pens')).toBeInTheDocument())
     expect(screen.getByText(/by bob/)).toBeInTheDocument()
+  })
+})
+
+describe('HistoryPage — API format variants', () => {
+  it('handles routines paginated response format', async () => {
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json({ results: [{ id: 1, name: 'Take vitamins' }], count: 1 })),
+    )
+    renderWithProviders(<HistoryPage />)
+    // Wait for the routine filter to appear (populated from API response)
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+  })
+
+  it('handles stocks plain array response format', async () => {
+    server.use(
+      http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([{ id: 1, name: 'Filters', quantity: 5 }])),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    renderWithProviders(<HistoryPage />)
+    // Wait for the stock filter to appear (populated from API response)
+    await waitFor(() => expect(screen.getByText('Filters')).toBeInTheDocument())
   })
 })

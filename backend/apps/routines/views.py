@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import F, Prefetch, Q
 from rest_framework import mixins, status, viewsets
@@ -8,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.notifications.models import NotificationState
+from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 from .serializers import (
@@ -52,7 +54,15 @@ class StockViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.user != request.user:
             return Response({"detail": "Only the owner can edit this stock."}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+        previous_shared = set(instance.shared_with.values_list("pk", flat=True))
+        response = super().update(request, *args, **kwargs)
+        instance.refresh_from_db()
+        new_shared = set(instance.shared_with.values_list("pk", flat=True))
+        for user_pk in new_shared - previous_shared:
+            new_user = get_user_model().objects.filter(pk=user_pk).first()
+            if new_user:
+                notify_stock_shared(instance, new_user)
+        return response
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -208,7 +218,15 @@ class RoutineViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.user != request.user:
             return Response({"detail": "Only the owner can edit this routine."}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+        previous_shared = set(instance.shared_with.values_list("pk", flat=True))
+        response = super().update(request, *args, **kwargs)
+        instance.refresh_from_db()
+        new_shared = set(instance.shared_with.values_list("pk", flat=True))
+        for user_pk in new_shared - previous_shared:
+            new_user = get_user_model().objects.filter(pk=user_pk).first()
+            if new_user:
+                notify_routine_shared(instance, new_user)
+        return response
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()

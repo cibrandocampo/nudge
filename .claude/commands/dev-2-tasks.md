@@ -5,10 +5,8 @@ argument-hint: <path to plan or feature name>
 
 # Create tasks: $1
 
-You are a senior tech lead dividing a feature plan into self-contained tasks.
-Each task must be executable with `/run-task` in a single Claude session.
-
-**You do not implement anything. You only plan, divide, and generate task files.**
+**Goal**: split a plan into self-contained tasks, each executable with `/dev-3-run` in a single session.
+**Behaviour**: you only divide and generate task files. No code, no implementation.
 
 ---
 
@@ -16,8 +14,8 @@ Each task must be executable with `/run-task` in a single Claude session.
 
 1. If `$1` is a path, read it directly.
 2. If it is a name, search `docs/plans/` for a matching file.
-3. If there is no plan, inform the user: "No plan found. Run `/general-plan` first to create one."
-4. Read `CLAUDE.md`, `MEMORY.md`, and `tasks/INDEX.md` (if it exists) for context and to avoid ID collisions.
+3. If there is no plan, inform the user: "No plan found. Run `/dev-1-plan` first to create one."
+4. Read `CLAUDE.md`, `MEMORY.md`, and `docs/tasks/INDEX.md` (if it exists) for context and to avoid ID collisions.
 
 ---
 
@@ -26,7 +24,7 @@ Each task must be executable with `/run-task` in a single Claude session.
 ### Criteria for each task
 
 - **Self-contained**: executable without additional context beyond what the .md says.
-- **One Claude session**: scope achievable in a single `/run-task` execution.
+- **One Claude session**: scope achievable in a single `/dev-3-run` execution.
 - **Explicit dependencies**: if it depends on another task, it must be declared.
 - **Verifiable**: each task has a DoD with real commands and an evidence table.
 
@@ -49,8 +47,8 @@ Each task must be executable with `/run-task` in a single Claude session.
 ### Assign IDs
 
 - Format: `TXXX` (e.g.: T001, T002... or T018, T019 if there are prior tasks).
-- Read `tasks/INDEX.md` to find the last used ID. If it doesn't exist, start at T001.
-- Filename: `tasks/TXXX_descriptive-name.md`
+- Read `docs/tasks/INDEX.md` to find the last used ID. If it doesn't exist, start at T001.
+- Filename: `docs/tasks/TXXX_descriptive-name.md`
 
 ### Required structure for each task
 
@@ -113,7 +111,7 @@ Never vague items like "works correctly" — always concrete.
 
 ## Phase 4 — Create/update INDEX.md
 
-Create or update `tasks/INDEX.md` with the following structure:
+Create or update `docs/tasks/INDEX.md` with the following structure:
 
 ```markdown
 # Task index — Nudge
@@ -136,6 +134,8 @@ T001 ──→ T002 ──→ T004
 
 If INDEX.md already exists with previous series, add the new series without deleting existing ones.
 
+> `INDEX.md` is only used by the `dev-X` path. `/fix` and `/audit` do not produce task files and do not touch INDEX.md.
+
 ---
 
 ## Final validation
@@ -144,7 +144,7 @@ Present the user with the complete summary:
 
 - N tasks generated with their dependencies.
 - INDEX.md updated.
-- Next step: `/run-task TXXX` to execute the first task.
+- Next step: `/dev-3-run TXXX` to execute the first task.
 
 Ask if they want to adjust anything. Iterate until approval.
 
@@ -154,7 +154,7 @@ Ask if they want to adjust anything. Iterate until approval.
 
 - **Ask before assuming**: if in doubt, use `AskUserQuestion`.
 - **Do not write files until you have approval** of the division (Phase 2).
-- **Each task must be executable with `/run-task TXXX`** without additional context.
+- **Each task must be executable with `/dev-3-run TXXX`** without additional context.
 - **Be critical of your own division**: is any task too large? Split it. Is any trivial? Merge.
 - **Don't invent work**: if the plan says "no migrations", don't add a migration task.
 - **Read the actual code** before deciding which files are modified in each task.

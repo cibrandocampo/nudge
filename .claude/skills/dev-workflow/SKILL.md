@@ -55,7 +55,7 @@ docker compose -f dev/docker-compose.yml exec frontend npm run build
 
 # Formatting (needed before commits)
 docker compose -f dev/docker-compose.yml exec backend ruff format .
-docker compose -f dev/docker-compose.yml exec frontend npx prettier --write src/
+docker compose -f dev/docker-compose.yml exec frontend npm run format
 
 # Logs
 docker compose -f dev/docker-compose.yml logs backend --tail=50
@@ -122,6 +122,15 @@ The password is in `.env` as `ADMIN_PASSWORD`.
 - `create a routine with preset interval` — expects `"Every 1 week"` but i18n returns `"Every week"`
 - `add a lot to a stock item` / `delete a lot` — expects `"3 ud."` but English locale returns `"3 u."`
 - `sign out clears session` — occasionally flaky (30s timeout)
+
+## When port 8000 is busy
+
+If another container already binds port 8000, use `run --rm` instead of `exec` — it starts a one-off container without binding host ports:
+
+```bash
+docker compose -f dev/docker-compose.yml run --rm backend python manage.py migrate
+docker compose -f dev/docker-compose.yml run --rm backend python manage.py shell
+```
 
 ## Environment variables
 

@@ -4,7 +4,8 @@ import { api } from '../api/client'
 import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
 import LotSelectionModal from '../components/LotSelectionModal'
-import SharePopover from '../components/SharePopover'
+import ShareModal from '../components/ShareModal'
+import GroupPickerModal from '../components/GroupPickerModal'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
 
@@ -45,6 +46,7 @@ export default function InventoryPage() {
   const [editingGroup, setEditingGroup] = useState(null) // { id, name }
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // { id, name }
   const [groupPickerOpen, setGroupPickerOpen] = useState(null) // stockId
+  const [shareStockId, setShareStockId] = useState(null) // stockId
   const [contacts, setContacts] = useState([])
 
   const load = () => {
@@ -212,17 +214,18 @@ export default function InventoryPage() {
     }
   }
 
-  const handleToggleStockShare = async (stockId, userId) => {
-    const stock = stocks.find((st) => st.id === stockId)
+  const handleToggleStockShare = async (userId) => {
+    if (!shareStockId) return
+    const stock = stocks.find((st) => st.id === shareStockId)
     if (!stock) return
     const current = stock.shared_with || []
     const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
     setActionError(null)
     try {
-      const res = await api.patch(`/stock/${stockId}/`, { shared_with: newShared })
+      const res = await api.patch(`/stock/${shareStockId}/`, { shared_with: newShared })
       if (!res.ok) throw new Error()
       const updated = await res.json()
-      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+      setStocks((prev) => prev.map((st) => (st.id === shareStockId ? updated : st)))
     } catch {
       setActionError(t('common.actionError'))
     }
@@ -337,40 +340,24 @@ export default function InventoryPage() {
                 {consuming === stock.id ? '…' : t('inventory.consumeOne')}
               </button>
             )}
-            {groupPickerOpen === stock.id ? (
-              <select
-                className={s.groupSelect}
-                autoFocus
-                value={stock.group ?? ''}
-                onChange={(e) => {
-                  handleAssignGroup(stock.id, e.target.value ? Number(e.target.value) : null)
-                  setGroupPickerOpen(null)
-                }}
-                onBlur={() => setGroupPickerOpen(null)}
-                aria-label={t('inventory.assignGroup')}
-              >
-                <option value="">{t('inventory.noGroup')}</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
+            {stock.is_owner !== false && (
               <button
-                className={s.groupTagBtn}
+                className={cx(s.groupTagBtn, stock.group && s.groupTagBtnActive)}
                 onClick={() => setGroupPickerOpen(stock.id)}
                 title={t('inventory.assignGroup')}
               >
                 🏷️
               </button>
             )}
-            <SharePopover
-              sharedWith={stock.shared_with}
-              contacts={contacts}
-              isOwner={stock.is_owner}
-              onToggleShare={(userId) => handleToggleStockShare(stock.id, userId)}
-            />
+            {stock.is_owner !== false && contacts.length > 0 && (
+              <button
+                className={cx(s.groupTagBtn, stock.shared_with?.length > 0 && s.groupTagBtnActive)}
+                onClick={() => setShareStockId(stock.id)}
+                title={t('sharing.shareWith')}
+              >
+                👥
+              </button>
+            )}
             <button
               className={s.deleteBtn}
               onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
@@ -471,7 +458,7 @@ export default function InventoryPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (loading) return <p className={shared.muted}>{t('common.loading')}</p>
+  if (loading) return <div className={shared.spinner} data-testid="spinner" />
 
   const expiringStocks = stocks.filter((st) => st.has_expiring_lots)
 
@@ -588,7 +575,16 @@ export default function InventoryPage() {
       {showGroupManager && (
         <div className={shared.overlay} onClick={() => setShowGroupManager(false)} role="dialog" aria-modal="true">
           <div className={cx(shared.modalBox, s.groupManagerModal)} onClick={(e) => e.stopPropagation()}>
-            <h2 className={s.groupManagerTitle}>{t('inventory.manageGroups')}</h2>
+            <div className={s.groupManagerHeader}>
+              <h2 className={s.groupManagerTitle}>{t('inventory.manageGroups')}</h2>
+              <button
+                className={s.groupManagerClose}
+                onClick={() => setShowGroupManager(false)}
+                aria-label={t('common.close')}
+              >
+                ✕
+              </button>
+            </div>
 
             {groups.length === 0 && <p className={shared.muted}>{t('inventory.empty')}</p>}
 
@@ -655,12 +651,31 @@ export default function InventoryPage() {
                 {creatingGroup ? '…' : t('inventory.createGroup')}
               </button>
             </form>
-
-            <button className={s.cancelBtn} onClick={() => setShowGroupManager(false)}>
-              {t('common.cancel')}
-            </button>
           </div>
         </div>
+      )}
+
+      {/* Group picker modal */}
+      {groupPickerOpen && stocks.find((st) => st.id === groupPickerOpen) && (
+        <GroupPickerModal
+          groups={groups}
+          currentGroupId={stocks.find((st) => st.id === groupPickerOpen).group}
+          onSelect={(groupId) => {
+            handleAssignGroup(groupPickerOpen, groupId)
+            setGroupPickerOpen(null)
+          }}
+          onClose={() => setGroupPickerOpen(null)}
+        />
+      )}
+
+      {/* Share stock modal */}
+      {shareStockId && stocks.find((st) => st.id === shareStockId) && (
+        <ShareModal
+          contacts={contacts}
+          sharedWith={stocks.find((st) => st.id === shareStockId).shared_with}
+          onToggle={handleToggleStockShare}
+          onClose={() => setShareStockId(null)}
+        />
       )}
 
       {/* Confirm delete group */}

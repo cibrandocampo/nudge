@@ -13,6 +13,7 @@ description: Frontend architecture patterns and conventions for Nudge. Use when 
 - **Auth**: JWT stored in `localStorage`, managed by `AuthContext`
 - **i18n**: `react-i18next` with JSON translation files in `src/i18n/`
 - **API client**: custom fetch wrapper in `src/api/client.js`
+- **Icons**: `lucide-react` — use named imports: `import { Plus, X, ChevronDown } from 'lucide-react'`
 
 ## API client
 
@@ -38,9 +39,55 @@ const res = await api.delete('/push/unsubscribe/', { endpoint })
 - Design tokens as CSS custom properties in `src/index.css`:
   - `--c-primary: #6366f1` (indigo)
   - `--c-text`, `--c-text-2`, `--c-text-3` (grays)
+  - `--c-muted` (secondary text)
   - `--c-danger`, `--c-success`, `--c-warning`
   - `--c-bg`, `--c-surface`, `--c-border`
 - Use `cx()` utility (`src/utils/cx.js`) for conditional classes
+- **Never use `--c-accent`** — use `--c-primary` instead
+
+### Typography scale (6 values only)
+
+| Value | Use |
+|-------|-----|
+| `0.7rem` | Section labels (`shared.sectionTitle`) |
+| `0.8rem` | Error/muted small text |
+| `0.875rem` | Body text, inputs, list items |
+| `0.9rem` | Secondary labels |
+| `1rem` | Modal/card titles |
+| `1.25rem` | Page titles (`shared.pageTitle`) |
+
+### Layout
+
+- All page containers: `max-width: 540px` (enforced in `Layout.module.css`)
+- Page top bar: use `shared.topBar` (flex, space-between, `margin-bottom: 1.5rem`)
+
+### Buttons — 3 standard sizes
+
+```css
+/* CTA / primary action */
+padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.875rem;
+
+/* Inline / secondary */
+padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem;
+
+/* Modal action (confirm/cancel pair) */
+padding: 0.6rem 1.25rem; border-radius: 8px; font-size: 0.875rem;
+```
+
+### Inputs
+
+- Always use `background: var(--c-surface)` (never `var(--c-bg)` or `white`)
+- Use `shared.input` for standard text inputs
+
+### Spinner (loading state)
+
+Use `shared.spinner` div with `data-testid="spinner"`:
+
+```jsx
+<div className={shared.spinner} data-testid="spinner" />
+```
+
+Tests must query by `data-testid="spinner"`, NOT by "Loading…" text.
 
 ## i18n
 
@@ -65,6 +112,81 @@ Tests in `src/pages/__tests__/`.
 
 In `src/components/`. Each has its own `.module.css`.
 Tests in `src/components/__tests__/`.
+
+### Modal pattern
+
+Always use `shared.overlay` + `shared.modalBox`. Modal structure:
+
+```jsx
+<div className={shared.overlay} onClick={onClose} role="dialog" aria-modal="true">
+  <div className={shared.modalBox} onClick={e => e.stopPropagation()}>
+    <div className={s.header}>
+      <h2 className={s.title}>{t('...')}</h2>
+      <button className={s.xBtn} onClick={onClose}>✕</button>
+    </div>
+    <p className={s.subtitle}>{t('...')}</p>
+    {/* content */}
+  </div>
+</div>
+```
+
+- **No "Cancel" button inside modals** — use an ✕ button in the top-right of the header instead
+- Add a subtitle (`<p className={s.subtitle}>`) below the title for context
+- `shared.modalBox` is `max-width: 360px`, `border-radius: 12px`, `padding: 1.5rem`
+- Use `shared.modalTitle` for the title if no custom header layout is needed
+
+Header + xBtn pattern CSS:
+
+```css
+.header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.25rem; }
+.title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--c-text); letter-spacing: -0.01em; }
+.xBtn { background: none; border: none; font-size: 1rem; color: var(--c-text-3); cursor: pointer; padding: 0.1rem 0.25rem; line-height: 1; }
+.xBtn:hover { color: var(--c-text); }
+.subtitle { margin: -0.5rem 0 1rem; font-size: 0.825rem; color: var(--c-muted); }
+```
+
+### Selectable list items (radio / multi-select)
+
+Used in LotSelectionModal, GroupPickerModal, ShareModal. Standard row:
+
+```css
+.item {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--c-border); border-radius: 8px;
+  cursor: pointer; user-select: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+.item:hover { border-color: var(--c-primary); }
+
+/* Radio (single-select): tinted background */
+.itemSelected { border-color: var(--c-primary); background: color-mix(in srgb, var(--c-primary) 8%, transparent); }
+
+/* Toggle (multi-select): full primary fill */
+.itemSelected { border-color: var(--c-primary); background: var(--c-primary); }
+.itemSelected .name { color: var(--c-surface); font-weight: 600; }
+```
+
+Radio indicator dot:
+
+```css
+.radio {
+  width: 1.75rem; height: 1.75rem;
+  border: 2px solid var(--c-border); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: var(--c-primary); flex-shrink: 0;
+}
+.itemSelected .radio { border-color: var(--c-primary); }
+```
+
+### Active-state buttons (share / group tag)
+
+Buttons that reflect an active/assigned state use opacity:
+
+```css
+.btn { opacity: 0.3; }
+.btnActive { opacity: 1; }
+```
 
 ### Testing
 

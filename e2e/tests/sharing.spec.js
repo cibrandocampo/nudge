@@ -15,7 +15,7 @@ import { login, loginAs, CREDS, ensureContact } from './helpers.js'
 
 const USER2 = {
   username: process.env.E2E_USER2_USERNAME ?? 'e2e-user2',
-  password: process.env.E2E_USER2_PASSWORD ?? '',
+  password: process.env.E2E_USER2_PASSWORD ?? 'e2e-pass2',
 }
 
 test.describe('Sharing — Routines', () => {
@@ -47,10 +47,10 @@ test.describe('Sharing — Routines', () => {
     // Click the first share button
     await page.getByRole('button', { name: 'Share' }).first().click()
 
-    // Popover should open with a checkbox for the contact
-    const popover = page.getByTestId('share-popover')
-    await expect(popover).toBeVisible()
-    await expect(popover.getByText(USER2.username)).toBeVisible()
+    // Modal should open with a contact listed
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(USER2.username)).toBeVisible()
   })
 
   test('share routine via API and verify dashboard reflects it', async ({ page }) => {
@@ -85,16 +85,16 @@ test.describe('Sharing — Routines', () => {
       { rid: routineId, contactUsername: USER2.username },
     )
 
-    // Go to dashboard and verify the share button is active (shared state)
+    // Go to dashboard and find the specific routine card
     await page.goto('/')
-    const shareBtn = page.getByRole('button', { name: 'Share' }).first()
-    await expect(shareBtn).toBeVisible()
+    const card = page.locator('[class*="row"]').filter({ hasText: routineName })
+    await expect(card).toBeVisible()
 
-    // Open popover and verify checkbox is checked
-    await shareBtn.click()
-    const popover = page.getByTestId('share-popover')
-    await expect(popover).toBeVisible()
-    await expect(popover.locator('input[type="checkbox"]').first()).toBeChecked()
+    // Open share modal for this specific routine and verify contact is selected
+    await card.getByRole('button', { name: 'Share' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('li').first()).toHaveClass(/itemSelected/)
   })
 
   test('shared routine visible to second user', async ({ page, context }) => {
@@ -163,14 +163,14 @@ test.describe('Sharing — Inventory', () => {
     await expect(card).toBeVisible()
 
     // Share button should be on the card
-    const shareBtn = card.getByRole('button', { name: 'Share' })
+    const shareBtn = card.getByTitle('Share with')
     await expect(shareBtn).toBeVisible()
 
-    // Click to open popover
+    // Click to open modal
     await shareBtn.click()
-    const popover = page.getByTestId('share-popover')
-    await expect(popover).toBeVisible()
-    await expect(popover.getByText(USER2.username)).toBeVisible()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(USER2.username)).toBeVisible()
   })
 
   test('share stock with contact via popover', async ({ page }) => {
@@ -183,17 +183,17 @@ test.describe('Sharing — Inventory', () => {
     const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(card).toBeVisible()
 
-    // Open share popover and check the contact
-    await card.getByRole('button', { name: 'Share' }).click()
-    const popover = page.getByTestId('share-popover')
-    await popover.locator('input[type="checkbox"]').first().click()
+    // Open share modal and select the contact
+    await card.getByTitle('Share with').click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('li').first().click()
     await page.waitForTimeout(1000)
 
-    // Re-open and verify checkbox is checked
-    await page.locator('body').click()
-    await card.getByRole('button', { name: 'Share' }).click()
-    const reopened = page.getByTestId('share-popover')
-    await expect(reopened.locator('input[type="checkbox"]').first()).toBeChecked()
+    // Close modal with Escape, re-open and verify contact is selected
+    await page.keyboard.press('Escape')
+    await card.getByTitle('Share with').click()
+    const reopened = page.getByRole('dialog')
+    await expect(reopened.locator('li').first()).toHaveClass(/itemSelected/)
   })
 
   test('shared stock visible to second user with owner label', async ({ page, context }) => {
@@ -206,12 +206,12 @@ test.describe('Sharing — Inventory', () => {
     const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(card).toBeVisible()
 
-    // Wait for PATCH to confirm sharing was saved
-    await card.getByRole('button', { name: 'Share' }).click()
-    const popover = page.getByTestId('share-popover')
+    // Open share modal and wait for PATCH to confirm sharing was saved
+    await card.getByTitle('Share with').click()
+    const dialog = page.getByRole('dialog')
     await Promise.all([
       page.waitForResponse((res) => res.url().includes('/stock/') && res.request().method() === 'PATCH'),
-      popover.locator('input[type="checkbox"]').first().click(),
+      dialog.locator('li').first().click(),
     ])
 
     // Login as second user
@@ -228,7 +228,7 @@ test.describe('Sharing — Inventory', () => {
     await expect(sharedCard.getByText(CREDS.username)).toBeVisible()
 
     // Share button should NOT appear (user2 is not the owner)
-    await expect(sharedCard.getByRole('button', { name: 'Share' })).not.toBeVisible()
+    await expect(sharedCard.getByTitle('Share with')).not.toBeVisible()
 
     await page2.close()
   })

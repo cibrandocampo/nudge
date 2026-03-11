@@ -279,4 +279,12 @@ describe('RoutineFormPage', () => {
     expect(screen.getByText('Saving…')).toBeDisabled()
     resolve(HttpResponse.json({ id: 99 }, { status: 201 }))
   })
+
+  it('interval input blur without prior focus does not throw', async () => {
+    renderCreate()
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toBeInTheDocument())
+    // Fire blur directly without focus so intervalDraft remains null
+    fireEvent.blur(screen.getByRole('spinbutton'))
+    expect(screen.getByRole('spinbutton')).toBeInTheDocument()
+  })
 })
