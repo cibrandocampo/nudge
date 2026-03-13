@@ -94,7 +94,7 @@ test.describe('Sharing — Routines', () => {
     await card.getByRole('button', { name: 'Share' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.locator('li').first()).toHaveClass(/itemSelected/)
+    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
   })
 
   test('shared routine visible to second user', async ({ page, context }) => {
@@ -186,14 +186,17 @@ test.describe('Sharing — Inventory', () => {
     // Open share modal and select the contact
     await card.getByTitle('Share with').click()
     const dialog = page.getByRole('dialog')
-    await dialog.locator('li').first().click()
-    await page.waitForTimeout(1000)
+    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toBeVisible()
+    await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/stock/') && res.request().method() === 'PATCH'),
+      dialog.locator('li').filter({ hasText: USER2.username }).click(),
+    ])
 
     // Close modal with Escape, re-open and verify contact is selected
     await page.keyboard.press('Escape')
     await card.getByTitle('Share with').click()
     const reopened = page.getByRole('dialog')
-    await expect(reopened.locator('li').first()).toHaveClass(/itemSelected/)
+    await expect(reopened.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
   })
 
   test('shared stock visible to second user with owner label', async ({ page, context }) => {
@@ -209,9 +212,10 @@ test.describe('Sharing — Inventory', () => {
     // Open share modal and wait for PATCH to confirm sharing was saved
     await card.getByTitle('Share with').click()
     const dialog = page.getByRole('dialog')
+    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toBeVisible()
     await Promise.all([
       page.waitForResponse((res) => res.url().includes('/stock/') && res.request().method() === 'PATCH'),
-      dialog.locator('li').first().click(),
+      dialog.locator('li').filter({ hasText: USER2.username }).click(),
     ])
 
     // Login as second user
