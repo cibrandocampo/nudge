@@ -463,12 +463,14 @@ export default function InventoryPage() {
   const expiringStocks = stocks.filter((st) => st.has_expiring_lots)
 
   // Build grouped sections
+  const knownGroupIds = new Set(groups.map((g) => g.id))
   const groupedSections = groups.map((group) => ({
     key: group.id,
     label: group.name,
     stocks: stocks.filter((st) => st.group === group.id),
   }))
-  const ungroupedStocks = stocks.filter((st) => !st.group)
+  // Stocks with no group, or whose group belongs to another user (shared stocks), go ungrouped
+  const ungroupedStocks = stocks.filter((st) => !st.group || !knownGroupIds.has(st.group))
 
   return (
     <div className={s.container}>
