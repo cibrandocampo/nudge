@@ -221,7 +221,7 @@ Once installed, open Nudge from the home screen icon and enable push notificatio
 
 ## Development
 
-See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
+A `Makefile` is provided for common tasks — run `make help` to see all available targets. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
 
 ---
 
