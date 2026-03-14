@@ -5,10 +5,37 @@
 - Docker and Docker Compose installed on your machine.
 - A `.env` file at the project root (copy `.env.example` and fill in the values).
 
+## Makefile
+
+All common tasks have a `make` shortcut. Run `make help` to see the full list.
+
+| Target | Description |
+|--------|-------------|
+| `make dev-up` | Start dev environment |
+| `make dev-down` | Stop dev environment |
+| `make dev-logs` | Tail dev logs (`make dev-logs s=backend`) |
+| `make dev-ps` | Show container status |
+| `make test` | Run all tests (backend + frontend) |
+| `make test-backend` | Run backend tests |
+| `make test-frontend` | Run frontend tests with coverage |
+| `make test-e2e` | Run Playwright e2e tests |
+| `make lint` | Check lint (backend + frontend) |
+| `make format` | Auto-format (backend + frontend) |
+| `make format-check` | Check formatting without applying |
+| `make qa` | Full QA pipeline: lint + format-check + test |
+| `make db-migrate` | Apply migrations |
+| `make db-makemigrations` | Create new migrations |
+| `make db-shell` | Open PostgreSQL shell |
+| `make shell-backend` | Open shell in backend container |
+| `make django-shell` | Open Django interactive shell |
+| `make hooks` | Install git pre-commit hook |
+
+The raw `docker compose` commands are documented below for reference.
+
 ## Start the environment
 
 ```bash
-docker compose -f dev/docker-compose.yml up
+make dev-up
 ```
 
 Available services:
@@ -25,66 +52,32 @@ The backend runs migrations and creates the admin user automatically on first st
 
 ## Run tests
 
-### Backend
-
 ```bash
-docker compose -f dev/docker-compose.yml exec backend python manage.py test
+make test          # backend + frontend
+make test-backend  # backend only
+make test-frontend # frontend only (with coverage)
+make qa            # lint + format-check + test (mirrors CI)
 ```
 
-With coverage report:
+With manual coverage report (backend):
 
 ```bash
 docker compose -f dev/docker-compose.yml exec backend coverage run manage.py test
 docker compose -f dev/docker-compose.yml exec backend coverage report
 ```
 
-### Frontend
-
-```bash
-docker compose -f dev/docker-compose.yml exec frontend npm test
-```
-
-With coverage report:
-
-```bash
-docker compose -f dev/docker-compose.yml exec frontend npm run test:coverage
-```
-
 ## Linting
 
-### Backend (ruff)
-
 ```bash
-docker compose -f dev/docker-compose.yml exec backend ruff check .
-docker compose -f dev/docker-compose.yml exec backend ruff format --check .
-```
-
-Auto-fix issues:
-
-```bash
-docker compose -f dev/docker-compose.yml exec backend ruff check --fix .
-docker compose -f dev/docker-compose.yml exec backend ruff format .
-```
-
-### Frontend (ESLint + Prettier)
-
-```bash
-docker compose -f dev/docker-compose.yml exec frontend npx eslint src/
-docker compose -f dev/docker-compose.yml exec frontend npm run format:check
-```
-
-Auto-fix issues:
-
-```bash
-docker compose -f dev/docker-compose.yml exec frontend npm run format
+make lint         # check lint (backend + frontend)
+make format-check # check formatting without applying
+make format       # auto-format (backend + frontend)
 ```
 
 ## Git hooks
 
-Install the pre-commit hook to run linters automatically before each commit:
-
 ```bash
-bash scripts/install-hooks.sh
+make hooks
 ```
 
 The hook runs `ruff check`, `ruff format --check`, and `eslint` inside the dev containers. The dev environment must be running for it to work.
@@ -92,17 +85,8 @@ The hook runs `ruff check`, `ruff format --check`, and `eslint` inside the dev c
 ## Other useful commands
 
 ```bash
-# Create a migration
-docker compose -f dev/docker-compose.yml exec backend python manage.py makemigrations
-
-# Open the Django shell
-docker compose -f dev/docker-compose.yml exec backend python manage.py shell
-
 # Trigger a Celery task manually
 docker compose -f dev/docker-compose.yml exec celery celery -A nudge call apps.notifications.tasks.check_notifications
-
-# Open psql
-docker compose -f dev/docker-compose.yml exec db psql -U nudge nudge
 ```
 
 ## Regenerate PWA icons
