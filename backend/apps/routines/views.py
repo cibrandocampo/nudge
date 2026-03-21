@@ -185,13 +185,33 @@ class StockLotViewSet(viewsets.ModelViewSet):
             stock_id=stock_pk,
         ).distinct()
 
-    def perform_create(self, serializer):
+    def _get_stock_for_create(self):
         stock_pk = self.kwargs.get("stock_pk")
         try:
-            stock = Stock.objects.get(pk=stock_pk, user=self.request.user)
+            return Stock.objects.get(pk=stock_pk, user=self.request.user)
         except Stock.DoesNotExist:
             raise PermissionDenied("Stock item not found.")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        stock = self._get_stock_for_create()
+        data = serializer.validated_data
+        existing = StockLot.objects.filter(
+            stock=stock,
+            lot_number=data.get("lot_number", ""),
+            expiry_date=data.get("expiry_date"),
+        ).first()
+        if existing:
+            existing.quantity = F("quantity") + data["quantity"]
+            existing.save(update_fields=["quantity"])
+            existing.refresh_from_db()
+            return Response(
+                StockLotSerializer(existing).data,
+                status=status.HTTP_201_CREATED,
+            )
         serializer.save(stock=stock)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class RoutineViewSet(viewsets.ModelViewSet):

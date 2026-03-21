@@ -606,6 +606,92 @@ class StockLotViewSetTest(APITestCase):
         response = self.client.post(f"/api/stock/{self.stock.id}/lots/", {"quantity": 1})
         self.assertEqual(response.status_code, 401)
 
+    # ── Lot dedup (T012) ────────────────────────────────────────────────────
+
+    def test_create_lot_merges_same_lot_number_and_expiry(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "lot_number": "LOT-A", "expiry_date": "2027-06-01"},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "lot_number": "LOT-A", "expiry_date": "2027-06-01"},
+        )
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.first().quantity, 8)
+
+    def test_create_lot_different_expiry_creates_new(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "lot_number": "LOT-A", "expiry_date": "2027-06-01"},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "lot_number": "LOT-A", "expiry_date": "2027-12-01"},
+        )
+        self.assertEqual(self.stock.lots.count(), 2)
+
+    def test_create_lot_empty_lot_number_same_expiry_merges(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "expiry_date": "2027-06-01"},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "expiry_date": "2027-06-01"},
+        )
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.first().quantity, 8)
+
+    def test_create_lot_empty_lot_number_different_expiry_creates_new(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "expiry_date": "2027-06-01"},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "expiry_date": "2027-12-01"},
+        )
+        self.assertEqual(self.stock.lots.count(), 2)
+
+    def test_create_lot_empty_lot_number_null_expiry_merges(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3},
+        )
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.first().quantity, 8)
+
+    def test_create_lot_same_lot_number_no_expiry_merges(self):
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "lot_number": "LOT-A"},
+        )
+        self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "lot_number": "LOT-A"},
+        )
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.first().quantity, 8)
+
+    def test_create_lot_merge_returns_updated_data(self):
+        res1 = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 5, "lot_number": "LOT-A", "expiry_date": "2027-06-01"},
+        )
+        original_id = res1.data["id"]
+        res2 = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "lot_number": "LOT-A", "expiry_date": "2027-06-01"},
+        )
+        self.assertEqual(res2.status_code, 201)
+        self.assertEqual(res2.data["id"], original_id)
+        self.assertEqual(res2.data["quantity"], 8)
+
 
 # ── Stock consume / lots-for-selection ───────────────────────────────────────
 
