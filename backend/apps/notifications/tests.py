@@ -1,5 +1,6 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -270,6 +271,51 @@ class TestPushViewTest(APITestCase):
         self.assertEqual(response.status_code, 401)
 
 
+class TestPushScheduledViewTest(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+
+    def test_returns_404_when_no_subscriptions(self):
+        response = self.client.post("/api/push/test/scheduled/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_schedules_test_notification(self):
+        make_subscription(self.user)
+        with patch("apps.notifications.views.send_scheduled_test") as mock_task:
+            mock_task.apply_async = MagicMock()
+            response = self.client.post("/api/push/test/scheduled/")
+        self.assertEqual(response.status_code, 202)
+        mock_task.apply_async.assert_called_once_with(
+            args=[self.user.id],
+            countdown=300,
+        )
+
+    def test_unauthenticated_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post("/api/push/test/scheduled/")
+        self.assertEqual(response.status_code, 401)
+
+
+class SendScheduledTestTaskTest(TestCase):
+    @override_settings(VAPID_PRIVATE_KEY="priv", VAPID_PUBLIC_KEY="pub", VAPID_CLAIMS_EMAIL="test@x.com")
+    def test_calls_notify_test_for_existing_user(self):
+        from .tasks import send_scheduled_test
+
+        user = make_user()
+        make_subscription(user)
+        with patch("apps.notifications.tasks.notify_test") as mock_notify:
+            send_scheduled_test(user.id)
+        mock_notify.assert_called_once_with(user)
+
+    def test_does_nothing_for_nonexistent_user(self):
+        from .tasks import send_scheduled_test
+
+        with patch("apps.notifications.tasks.notify_test") as mock_notify:
+            send_scheduled_test(99999)
+        mock_notify.assert_not_called()
+
+
 # ── send_push_notification ────────────────────────────────────────────────────
 
 
@@ -458,21 +504,57 @@ class IsDueTodayTest(TestCase):
         user = make_user(tz="UTC")
         routine = make_routine(user, interval_hours=24)
         now_local = timezone.now()
-        self.assertTrue(_is_due_today(routine, now_local))
+        self.assertTrue(_is_due_today(routine, now_local, ZoneInfo("UTC")))
 
     def test_returns_true_when_due_today(self):
         user = make_user(tz="UTC")
         routine = make_routine(user, interval_hours=1)
         make_entry(routine, offset_hours=-2)  # 2h ago → due 1h ago
         now_local = timezone.now()
-        self.assertTrue(_is_due_today(routine, now_local))
+        self.assertTrue(_is_due_today(routine, now_local, ZoneInfo("UTC")))
 
     def test_returns_false_when_due_in_future(self):
         user = make_user(tz="UTC")
         routine = make_routine(user, interval_hours=100)
         make_entry(routine)  # just now → not due for 100h
         now_local = timezone.now()
-        self.assertFalse(_is_due_today(routine, now_local))
+        self.assertFalse(_is_due_today(routine, now_local, ZoneInfo("UTC")))
+
+    def test_uses_recipient_timezone_not_owner(self):
+        """Owner in UTC, recipient in Auckland (+13). Same moment in time
+        yields different 'due today' results depending on recipient timezone."""
+        owner = make_user(username="owner_tz", tz="UTC")
+        routine = make_routine(owner, interval_hours=24)
+        # Entry at Jan 14 10:00 UTC → next_due = Jan 15 10:00 UTC
+        entry = make_entry(routine)
+        entry_time = datetime(2025, 1, 14, 10, 0, tzinfo=ZoneInfo("UTC"))
+        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        # Re-fetch routine to clear any cached last_entry
+        routine = Routine.objects.get(pk=routine.pk)
+
+        # Now at Jan 14 23:00 UTC.
+        # UTC perspective: today is Jan 14, due date is Jan 15 → NOT due today.
+        # Auckland (+13): today is Jan 15, due date in Auckland is Jan 15 → due today.
+        now_utc = datetime(2025, 1, 14, 23, 0, tzinfo=ZoneInfo("UTC"))
+        now_auckland = now_utc.astimezone(ZoneInfo("Pacific/Auckland"))
+
+        self.assertFalse(_is_due_today(routine, now_utc, ZoneInfo("UTC")))
+        self.assertTrue(_is_due_today(routine, now_auckland, ZoneInfo("Pacific/Auckland")))
+
+    def test_owner_timezone_ignored(self):
+        """Changing owner timezone should not affect result when user_tz differs."""
+        owner = make_user(username="owner_ig", tz="US/Eastern")
+        routine = make_routine(owner, interval_hours=24)
+        entry = make_entry(routine)
+        entry_time = datetime(2025, 1, 14, 10, 0, tzinfo=ZoneInfo("UTC"))
+        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        routine = Routine.objects.get(pk=routine.pk)
+
+        now_utc = datetime(2025, 1, 14, 23, 0, tzinfo=ZoneInfo("UTC"))
+        now_local = now_utc.astimezone(ZoneInfo("Pacific/Auckland"))
+        result = _is_due_today(routine, now_local, ZoneInfo("Pacific/Auckland"))
+        # Owner is US/Eastern but we pass Auckland — owner tz is irrelevant
+        self.assertTrue(result)
 
 
 class CheckDailyHeadsUpTest(TestCase):
@@ -487,7 +569,7 @@ class CheckDailyHeadsUpTest(TestCase):
         make_routine(self.user)
         now = self._now_at(10, 0)  # configured time is 08:30
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_not_called()
 
     def test_does_not_send_when_no_due_routines(self):
@@ -496,14 +578,14 @@ class CheckDailyHeadsUpTest(TestCase):
         make_entry(routine)
         now = self._now_at(8, 30)
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_not_called()
 
     def test_sends_when_at_configured_time_with_due_routines(self):
         make_routine(self.user, interval_hours=1)  # never logged → due
         now = self._now_at(8, 30)
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_called_once()
 
     def test_does_not_repeat_if_already_sent_today(self):
@@ -514,7 +596,7 @@ class CheckDailyHeadsUpTest(TestCase):
             last_daily_notification=now.date(),
         )
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_not_called()
 
     def test_marks_all_due_routines_as_notified(self):
@@ -523,7 +605,7 @@ class CheckDailyHeadsUpTest(TestCase):
         now = self._now_at(8, 30)
         expected_date = now.date()
         with patch("apps.notifications.tasks.notify_daily_heads_up"):
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
         for routine in [r1, r2]:
             state = NotificationState.objects.get(routine=routine)
             self.assertEqual(state.last_daily_notification, expected_date)
@@ -533,7 +615,7 @@ class CheckDailyHeadsUpTest(TestCase):
         make_routine(self.user, interval_hours=1)
         now = self._now_at(8, 25)
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_called_once()
 
     def test_window_tolerance_at_plus_5_minutes(self):
@@ -541,7 +623,7 @@ class CheckDailyHeadsUpTest(TestCase):
         make_routine(self.user, interval_hours=1)
         now = self._now_at(8, 35)
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_called_once()
 
     def test_outside_window_does_not_trigger(self):
@@ -549,7 +631,25 @@ class CheckDailyHeadsUpTest(TestCase):
         make_routine(self.user, interval_hours=1)
         now = self._now_at(8, 36)
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
+            mock_notify.assert_not_called()
+
+    def test_window_cross_hour_boundary(self):
+        """Target 08:58, now 09:01 — 3 min apart, should trigger."""
+        user = make_user(username="cross_hr", tz="UTC", daily_time="08:58")
+        make_routine(user, interval_hours=1)
+        now = self._now_at(9, 1)
+        with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
+            _check_daily_heads_up(user, now, now, ZoneInfo("UTC"))
+            mock_notify.assert_called_once()
+
+    def test_window_cross_hour_boundary_outside(self):
+        """Target 08:50, now 09:01 — 11 min apart, should NOT trigger."""
+        user = make_user(username="cross_hr_out", tz="UTC", daily_time="08:50")
+        make_routine(user, interval_hours=1)
+        now = self._now_at(9, 1)
+        with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
+            _check_daily_heads_up(user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_not_called()
 
     def test_does_not_send_twice_when_new_routine_enters_due_state(self):
@@ -568,7 +668,7 @@ class CheckDailyHeadsUpTest(TestCase):
         # r2 has no state yet (new)
 
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.user, now, now)
+            _check_daily_heads_up(self.user, now, now, ZoneInfo("UTC"))
             mock_notify.assert_not_called()
 
 
@@ -1043,65 +1143,56 @@ class DSTDailyHeadsUpTest(TestCase):
 
     def test_daily_heads_up_europe_madrid_summer(self):
         """In CEST (UTC+2), 08:30 local = 06:30 UTC."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         user = make_user(username="madrid", tz="Europe/Madrid", daily_time="08:30")
         make_routine(user, interval_hours=1)  # never logged → due
 
         # July 15 at 06:30 UTC = 08:30 CEST
         now_utc = datetime(2025, 7, 15, 6, 30, tzinfo=ZoneInfo("UTC"))
-        now_local = now_utc.astimezone(ZoneInfo("Europe/Madrid"))
+        user_tz = ZoneInfo("Europe/Madrid")
+        now_local = now_utc.astimezone(user_tz)
 
         self.assertEqual(now_local.hour, 8)
         self.assertEqual(now_local.minute, 30)
 
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(user, now_utc, now_local)
+            _check_daily_heads_up(user, now_utc, now_local, user_tz)
             mock_notify.assert_called_once()
 
     def test_daily_heads_up_europe_madrid_winter(self):
         """In CET (UTC+1), 08:30 local = 07:30 UTC."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         user = make_user(username="madrid_w", tz="Europe/Madrid", daily_time="08:30")
         make_routine(user, interval_hours=1)  # never logged → due
 
         # January 15 at 07:30 UTC = 08:30 CET
         now_utc = datetime(2025, 1, 15, 7, 30, tzinfo=ZoneInfo("UTC"))
-        now_local = now_utc.astimezone(ZoneInfo("Europe/Madrid"))
+        user_tz = ZoneInfo("Europe/Madrid")
+        now_local = now_utc.astimezone(user_tz)
 
         self.assertEqual(now_local.hour, 8)
         self.assertEqual(now_local.minute, 30)
 
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(user, now_utc, now_local)
+            _check_daily_heads_up(user, now_utc, now_local, user_tz)
             mock_notify.assert_called_once()
 
     def test_wrong_utc_offset_does_not_trigger(self):
         """06:30 UTC is NOT 08:30 in Madrid during winter (CET, UTC+1)."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         user = make_user(username="madrid_no", tz="Europe/Madrid", daily_time="08:30")
         make_routine(user, interval_hours=1)
 
         # January 15 at 06:30 UTC = 07:30 CET (not 08:30)
         now_utc = datetime(2025, 1, 15, 6, 30, tzinfo=ZoneInfo("UTC"))
-        now_local = now_utc.astimezone(ZoneInfo("Europe/Madrid"))
+        user_tz = ZoneInfo("Europe/Madrid")
+        now_local = now_utc.astimezone(user_tz)
 
         self.assertEqual(now_local.hour, 7)  # too early
 
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(user, now_utc, now_local)
+            _check_daily_heads_up(user, now_utc, now_local, user_tz)
             mock_notify.assert_not_called()
 
     def test_is_due_today_across_timezone(self):
         """A routine due at 23:00 UTC on Jan 14 is due on Jan 15 in Madrid (00:00 CET)."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         user = make_user(username="madrid_due", tz="Europe/Madrid")
         routine = make_routine(user, interval_hours=24)
 
@@ -1109,6 +1200,7 @@ class DSTDailyHeadsUpTest(TestCase):
         entry = make_entry(routine)
         entry_time = datetime(2025, 1, 13, 22, 30, tzinfo=ZoneInfo("UTC"))
         RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        routine = Routine.objects.get(pk=routine.pk)  # clear last_entry cache
 
         # Jan 14 at 23:30 UTC = Jan 15 at 00:30 CET
         now_utc = datetime(2025, 1, 14, 23, 30, tzinfo=ZoneInfo("UTC"))
@@ -1116,7 +1208,7 @@ class DSTDailyHeadsUpTest(TestCase):
 
         # In Madrid it's already Jan 15 — routine should be due today
         self.assertEqual(now_local.date().day, 15)
-        self.assertTrue(_is_due_today(routine, now_local))
+        self.assertTrue(_is_due_today(routine, now_local, ZoneInfo("Europe/Madrid")))
 
 
 # ── Shared Routine Notifications ─────────────────────────────────────────────
@@ -1210,7 +1302,7 @@ class SharedRoutineNotificationTest(TestCase):
         # Include routine in all_routines
         all_routines = [routine]
         with patch("apps.notifications.tasks.notify_daily_heads_up") as mock_notify:
-            _check_daily_heads_up(self.shared_user, now, now, all_routines)
+            _check_daily_heads_up(self.shared_user, now, now, ZoneInfo("UTC"), all_routines)
             mock_notify.assert_called_once()
             call_args = mock_notify.call_args
             self.assertEqual(call_args.kwargs["due_count"], 1)

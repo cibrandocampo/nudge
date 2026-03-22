@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from .models import PushSubscription
 from .push import notify_test
 from .serializers import PushSubscriptionSerializer
+from .tasks import send_scheduled_test
 
 
 @api_view(["POST"])
@@ -51,6 +52,18 @@ def test_push(request):
         )
     notify_test(request.user)
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+def test_push_scheduled(request):
+    """Schedule a test push notification via Celery (fires in ~5 minutes)."""
+    if not PushSubscription.objects.filter(user=request.user).exists():
+        return Response(
+            {"detail": "No push subscriptions found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    send_scheduled_test.apply_async(args=[request.user.id], countdown=300)
+    return Response(status=status.HTTP_202_ACCEPTED)
 
 
 @api_view(["GET"])
