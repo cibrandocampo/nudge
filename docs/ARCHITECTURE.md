@@ -143,6 +143,8 @@ Celery beat runs `check_notifications` every 5 minutes. For each active routine 
 
 `NotificationState` tracks the last send time for each type, preventing duplicates.
 
+Additionally, `send_scheduled_test` is a one-off Celery task (not periodic) that sends a test push notification to a given user. It is enqueued via `POST /api/push/test/scheduled/` with a 5-minute countdown, allowing verification that the full Celery → Redis → Web Push pipeline is working.
+
 ### Authentication
 
 Username + password login returns a JWT access token and a refresh token (simplejwt). Tokens are stored in `localStorage` — acceptable for a private, personal instance. The API client automatically refreshes the access token on 401 and retries the original request.
@@ -162,6 +164,9 @@ Username + password login returns a JWT access token and a refresh token (simple
 | GET/POST/PATCH/DELETE | `/api/stock/` | Inventory CRUD |
 | POST/PATCH/DELETE | `/api/stock/{id}/lots/` | Lot management |
 | POST | `/api/push/subscribe/` | Register push endpoint |
+| DELETE | `/api/push/unsubscribe/` | Remove push endpoint |
+| POST | `/api/push/test/` | Send instant test notification |
+| POST | `/api/push/test/scheduled/` | Schedule test notification via Celery (5 min) |
 | GET | `/api/push/vapid-public-key/` | VAPID public key |
 
 ---
