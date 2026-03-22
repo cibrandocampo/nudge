@@ -209,6 +209,63 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
   })
 
+  it('schedules test notification successfully', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'granted', requestPermission: vi.fn() },
+      writable: true,
+    })
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce({
+      endpoint: 'https://push.example.com/sub/123',
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    })
+
+    server.use(http.post(`${BASE}/push/test/scheduled/`, () => new HttpResponse(null, { status: 202 })))
+
+    const { user } = renderWithProviders(<SettingsPage />)
+    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
+    await user.click(screen.getByText('Schedule test (5 min)'))
+    await waitFor(() => expect(screen.getByText('Scheduled!')).toBeInTheDocument())
+  })
+
+  it('shows error when scheduled test notification throws network error', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'granted', requestPermission: vi.fn() },
+      writable: true,
+    })
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce({
+      endpoint: 'https://push.example.com/sub/123',
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    })
+
+    server.use(http.post(`${BASE}/push/test/scheduled/`, () => HttpResponse.error()))
+
+    const { user } = renderWithProviders(<SettingsPage />)
+    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
+    await user.click(screen.getByText('Schedule test (5 min)'))
+    await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
+  })
+
+  it('shows error when scheduled test notification fails', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'granted', requestPermission: vi.fn() },
+      writable: true,
+    })
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce({
+      endpoint: 'https://push.example.com/sub/123',
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    })
+
+    server.use(http.post(`${BASE}/push/test/scheduled/`, () => new HttpResponse(null, { status: 500 })))
+
+    const { user } = renderWithProviders(<SettingsPage />)
+    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
+    await user.click(screen.getByText('Schedule test (5 min)'))
+    await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
+  })
+
   it('shows active state and disable button when subscribed', async () => {
     Object.defineProperty(window, 'Notification', {
       value: { permission: 'granted', requestPermission: vi.fn() },
