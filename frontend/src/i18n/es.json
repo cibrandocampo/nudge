@@ -158,6 +158,8 @@
   "settings.pushTestSend": "Enviar notificación de prueba",
   "settings.pushTestSent": "¡Enviada!",
   "settings.pushTestError": "Error — inténtalo de nuevo",
+  "settings.pushTestSchedule": "Programar prueba (5 min)",
+  "settings.pushTestScheduled": "¡Programada!",
   "settings.contacts": "Contactos",
   "settings.noContacts": "Sin contactos",
   "settings.searchUsers": "Buscar usuarios...",

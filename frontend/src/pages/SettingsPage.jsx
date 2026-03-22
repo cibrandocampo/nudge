@@ -309,6 +309,8 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
   const { t } = useTranslation()
   const [testLoading, setTestLoading] = useState(false)
   const [testStatus, setTestStatus] = useState(null) // 'sent' | 'error'
+  const [schedLoading, setSchedLoading] = useState(false)
+  const [schedStatus, setSchedStatus] = useState(null) // 'scheduled' | 'error'
 
   const active = permission === 'granted' && subscribed
   const denied = permission === 'denied'
@@ -335,6 +337,20 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
     } finally {
       setTestLoading(false)
       setTimeout(() => setTestStatus(null), 3000)
+    }
+  }
+
+  const scheduleTest = async () => {
+    setSchedLoading(true)
+    setSchedStatus(null)
+    try {
+      const res = await api.post('/push/test/scheduled/', {})
+      setSchedStatus(res.ok || res.status === 202 ? 'scheduled' : 'error')
+    } catch {
+      setSchedStatus('error')
+    } finally {
+      setSchedLoading(false)
+      setTimeout(() => setSchedStatus(null), 5000)
     }
   }
 
@@ -381,6 +397,20 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
                 : testStatus === 'error'
                   ? t('settings.pushTestError')
                   : t('settings.pushTestSend')}
+          </button>
+          <button
+            className={cx(s.pushBtnGhost, schedLoading && shared.disabled)}
+            type="button"
+            onClick={scheduleTest}
+            disabled={schedLoading}
+          >
+            {schedLoading
+              ? '…'
+              : schedStatus === 'scheduled'
+                ? t('settings.pushTestScheduled')
+                : schedStatus === 'error'
+                  ? t('settings.pushTestError')
+                  : t('settings.pushTestSchedule')}
           </button>
         </>
       )}

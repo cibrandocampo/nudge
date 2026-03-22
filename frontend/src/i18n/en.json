@@ -158,6 +158,8 @@
   "settings.pushTestSend": "Send test notification",
   "settings.pushTestSent": "Sent!",
   "settings.pushTestError": "Failed — try again",
+  "settings.pushTestSchedule": "Schedule test (5 min)",
+  "settings.pushTestScheduled": "Scheduled!",
   "settings.contacts": "Contacts",
   "settings.noContacts": "No contacts yet",
   "settings.searchUsers": "Search users...",

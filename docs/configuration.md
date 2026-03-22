@@ -51,12 +51,14 @@ The admin user is created automatically on first startup if no superuser exists.
 
 Log levels can be set independently for each service:
 
-| Variable | Default | Controls |
-|----------|---------|---------|
-| `DJANGO_LOG_LEVEL` | `info` | Django application and apps loggers |
-| `CELERY_LOG_LEVEL` | `info` | Celery worker |
-
-Valid values: `debug`, `info`, `warning`, `error`, `critical`.
+| Variable | Default | Controls | Valid values |
+|----------|---------|---------|-------------|
+| `DJANGO_LOG_LEVEL` | `info` | Django application and apps loggers | `debug`, `info`, `warning`, `error`, `critical` |
+| `CELERY_LOG_LEVEL` | `info` | Celery worker and beat scheduler | `debug`, `info`, `warning`, `error`, `critical` |
+| `GUNICORN_LOG_LEVEL` | `info` | Gunicorn HTTP server | `debug`, `info`, `warning`, `error`, `critical` |
+| `REDIS_LOG_LEVEL` | `notice` | Redis server | `debug`, `verbose`, `notice`, `warning` |
+| `POSTGRES_LOG_LEVEL` | `warning` | PostgreSQL `log_min_messages` | `debug5`..`debug1`, `info`, `notice`, `warning`, `error`, `log`, `fatal`, `panic` |
+| `NGINX_LOG_LEVEL` | `warn` | Nginx error log | `debug`, `info`, `notice`, `warn`, `error`, `crit`, `alert`, `emerg` |
 
 ### Log rotation
 

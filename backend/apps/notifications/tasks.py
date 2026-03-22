@@ -1,5 +1,6 @@
 import logging
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery import shared_task
@@ -11,7 +12,7 @@ from django.utils import timezone
 from apps.routines.models import Routine, RoutineEntry
 
 from .models import NotificationState
-from .push import notify_daily_heads_up, notify_due, notify_reminder
+from .push import notify_daily_heads_up, notify_due, notify_reminder, notify_test
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def check_notifications():
     """
     User = get_user_model()
     now_utc = timezone.now()
+    start_time = time.monotonic()
 
     entry_prefetch = Prefetch(
         "entries",
@@ -77,7 +79,7 @@ def check_notifications():
 
         logger.debug("Checking user %s (%d active routines).", user.username, len(all_routines))
 
-        _check_daily_heads_up(user, now_utc, now_local, all_routines)
+        _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines)
 
         for routine in all_routines:
             if routine.id in processed_routines:
@@ -88,6 +90,31 @@ def check_notifications():
                 _check_reminder(routine, now_utc)
             except Exception:
                 logger.exception("Error processing routine %s for user %s.", routine.id, user.id)
+
+    elapsed_ms = round((time.monotonic() - start_time) * 1000)
+    logger.info(
+        "check_notifications completed: %d users, %d routines in %dms.",
+        len(users),
+        len(processed_routines),
+        elapsed_ms,
+    )
+
+
+@shared_task(
+    name="apps.notifications.tasks.send_scheduled_test",
+    time_limit=30,
+    soft_time_limit=25,
+)
+def send_scheduled_test(user_id):
+    """Send a test push notification via Celery (used to verify the worker pipeline)."""
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        logger.warning("send_scheduled_test: user %s not found.", user_id)
+        return
+    notify_test(user)
+    logger.info("Scheduled test notification sent to user %s.", user.username)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -118,17 +145,16 @@ def _get_or_create_state(routine, *, lock=False):
     return state
 
 
-def _is_due_today(routine, now_local):
-    """True if the routine is due today or already overdue (in the user's local date)."""
+def _is_due_today(routine, now_local, user_tz):
+    """True if the routine is due today or already overdue (in the recipient's local date)."""
     next_due = routine.next_due_at()
     if next_due is None:
         return True  # Never logged — always due
-    user_tz = ZoneInfo(routine.user.timezone)
     next_due_local = next_due.astimezone(user_tz)
     return next_due_local.date() <= now_local.date()
 
 
-def _check_daily_heads_up(user, now_utc, now_local, all_routines=None):
+def _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines=None):
     """
     Send the daily heads-up if:
       - The current local time matches the user's configured time (±DAILY_WINDOW_MINUTES).
@@ -136,10 +162,10 @@ def _check_daily_heads_up(user, now_utc, now_local, all_routines=None):
       - It hasn't been sent yet today for those routines.
     """
     target = user.daily_notification_time
-    hour_match = now_local.hour == target.hour
-    minute_match = abs(now_local.minute - target.minute) <= DAILY_WINDOW_MINUTES
+    target_dt = datetime.combine(now_local.date(), target, tzinfo=now_local.tzinfo)
+    diff_seconds = abs((now_local - target_dt).total_seconds())
 
-    if not (hour_match and minute_match):
+    if diff_seconds > DAILY_WINDOW_MINUTES * 60:
         logger.debug(
             "Daily heads-up: not in time window for user %s (now=%s, target=%s).",
             user.username,
@@ -151,7 +177,7 @@ def _check_daily_heads_up(user, now_utc, now_local, all_routines=None):
     if all_routines is None:
         all_routines = _unique_routines(user)
 
-    due_routines = [r for r in all_routines if _is_due_today(r, now_local)]
+    due_routines = [r for r in all_routines if _is_due_today(r, now_local, user_tz)]
     if not due_routines:
         logger.debug("Daily heads-up: no routines due today for user %s.", user.username)
         return
@@ -202,7 +228,12 @@ def _check_due_notification(routine, now_utc):
                 logger.debug("Due: routine %r never logged, already notified — skipped.", routine.name)
                 return
             if state.last_due_notification > last_entry.created_at:
-                logger.debug("Due: routine %r already notified this cycle — skipped.", routine.name)
+                logger.debug(
+                    "Due: routine %r already notified this cycle (last_due=%s, last_entry=%s) — skipped.",
+                    routine.name,
+                    state.last_due_notification.isoformat(),
+                    last_entry.created_at.isoformat(),
+                )
                 return
 
         members = _get_routine_members(routine)
@@ -234,7 +265,13 @@ def _check_reminder(routine, now_utc):
         last_notif = state.last_reminder or state.last_due_notification
 
         if (now_utc - last_notif) < timedelta(hours=REMINDER_INTERVAL_HOURS):
-            logger.debug("Reminder: routine %r too soon since last notification — skipped.", routine.name)
+            remaining = timedelta(hours=REMINDER_INTERVAL_HOURS) - (now_utc - last_notif)
+            logger.debug(
+                "Reminder: routine %r too soon (last_notif=%s, remaining=%s) — skipped.",
+                routine.name,
+                last_notif.isoformat(),
+                remaining,
+            )
             return
 
         next_due = routine.next_due_at()
@@ -247,10 +284,11 @@ def _check_reminder(routine, now_utc):
         for member in members:
             notify_reminder(routine, hours_overdue=hours_overdue, target_user=member)
         logger.info(
-            "Reminder sent for routine %r (user %s, %dh overdue).",
+            "Reminder sent for routine %r (user %s, %dh overdue, last_notif=%s).",
             routine.name,
             routine.user.username,
             hours_overdue,
+            last_notif.isoformat(),
         )
 
         state.last_reminder = now_utc
