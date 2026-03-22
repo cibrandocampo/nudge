@@ -297,6 +297,25 @@ class TestPushScheduledViewTest(APITestCase):
         self.assertEqual(response.status_code, 401)
 
 
+class SendScheduledTestTaskTest(TestCase):
+    @override_settings(VAPID_PRIVATE_KEY="priv", VAPID_PUBLIC_KEY="pub", VAPID_CLAIMS_EMAIL="test@x.com")
+    def test_calls_notify_test_for_existing_user(self):
+        from .tasks import send_scheduled_test
+
+        user = make_user()
+        make_subscription(user)
+        with patch("apps.notifications.tasks.notify_test") as mock_notify:
+            send_scheduled_test(user.id)
+        mock_notify.assert_called_once_with(user)
+
+    def test_does_nothing_for_nonexistent_user(self):
+        from .tasks import send_scheduled_test
+
+        with patch("apps.notifications.tasks.notify_test") as mock_notify:
+            send_scheduled_test(99999)
+        mock_notify.assert_not_called()
+
+
 # ── send_push_notification ────────────────────────────────────────────────────
 
 
