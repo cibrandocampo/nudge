@@ -20,6 +20,8 @@ self.addEventListener('push', (event) => {
     body: data.body ?? '',
     icon: '/icons/pwa-192x192.png',
     badge: '/icons/badge.svg',
+    tag: data.data?.routine_id ? `${data.type}-${data.data.routine_id}` : data.type,
+    renotify: true,
     data: data.data ?? {},
     actions: data.actions ?? [],
   }

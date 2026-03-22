@@ -226,7 +226,7 @@ LOGGING = {
         },
         "celery": {
             "handlers": ["console"],
-            "level": "WARNING",
+            "level": env("CELERY_LOG_LEVEL", default="INFO").upper(),
             "propagate": False,
         },
     },
