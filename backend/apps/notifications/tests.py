@@ -287,7 +287,8 @@ class TestPushScheduledViewTest(APITestCase):
             response = self.client.post("/api/push/test/scheduled/")
         self.assertEqual(response.status_code, 202)
         mock_task.apply_async.assert_called_once_with(
-            args=[self.user.id], countdown=300,
+            args=[self.user.id],
+            countdown=300,
         )
 
     def test_unauthenticated_returns_401(self):
