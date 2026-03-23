@@ -44,8 +44,7 @@ The admin user is created automatically on first startup if no superuser exists.
 |----------|---------|-------------|
 | `POSTGRES_DB` | `nudge` | Database name |
 | `POSTGRES_USER` | `nudge` | Database user |
-| `POSTGRES_PASSWORD` | — | Database password |
-| `DATABASE_URL` | — | Full connection URL (e.g., `postgresql://nudge:password@db:5432/nudge`) |
+| `POSTGRES_PASSWORD` | — | Database password. Use alphanumeric characters — `DATABASE_URL` is constructed automatically by Docker Compose from this value, and special characters can break URL parsing |
 
 ## Logging
 
@@ -88,8 +87,7 @@ This applies the rotation policy globally to all containers.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_PASSWORD` | — | Password for Redis authentication. Django builds the connection URL automatically from this value |
-| `REDIS_URL` | _(built from `REDIS_PASSWORD`)_ | Override only if Redis runs on a non-default host/port. Normally not needed |
+| `REDIS_PASSWORD` | — | Password for Redis authentication. Use alphanumeric characters — `REDIS_URL` is constructed automatically by Docker Compose from this value, and special characters can break URL parsing |
 
 ## Web Push (VAPID)
 
