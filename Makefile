@@ -1,5 +1,5 @@
 PROD := docker compose
-DEV  := docker compose -f dev/docker-compose.yml
+DEV  := docker compose -f dev/docker-compose.yml --env-file .env
 
 # ── Production ────────────────────────────────────────────────────────────────
 

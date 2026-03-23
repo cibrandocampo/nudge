@@ -158,7 +158,7 @@ From the output:
 
 **Passwords**
 
-Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Remember to update `DATABASE_URL` to match `POSTGRES_PASSWORD`.
+Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Use alphanumeric characters — `DATABASE_URL` and `REDIS_URL` are constructed automatically by Docker Compose from these values, and special characters can break URL parsing.
 
 ### 3. Configure your domain
 

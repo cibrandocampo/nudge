@@ -59,6 +59,9 @@ services:
     init: true
     command: gunicorn nudge.wsgi:application --bind 0.0.0.0:${BACKEND_PORT:-8000} --workers ${GUNICORN_WORKERS:-2} --log-level ${GUNICORN_LOG_LEVEL:-info}
     env_file: .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
     networks:
       - nudge_net
     depends_on:
@@ -89,6 +92,9 @@ services:
     init: true
     command: celery -A nudge worker -B --loglevel=${CELERY_LOG_LEVEL:-info} --schedule /tmp/celerybeat-schedule
     env_file: .env
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
     networks:
       - nudge_net
     depends_on:
@@ -144,6 +150,7 @@ services:
       - /tmp
       - /var/cache/nginx
       - /var/run
+      - /etc/nginx/conf.d
     restart: unless-stopped
 
 networks:
