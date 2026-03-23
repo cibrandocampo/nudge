@@ -1,5 +1,8 @@
+-include .env
+
 PROD := docker compose
 DEV  := docker compose -f dev/docker-compose.yml --env-file .env
+E2E_PASSWORD ?= $(ADMIN_PASSWORD)
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -83,7 +86,8 @@ test-backend:   ## Run backend tests
 test-frontend:  ## Run frontend tests
 	$(DEV) exec frontend npm run test:coverage
 
-test-e2e:       ## Run Playwright e2e tests. Requires E2E_PASSWORD env var
+test-e2e:       ## Run Playwright e2e tests (reads credentials from .env)
+	$(DEV) exec -T backend python manage.py ensure_e2e_users
 	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
 	docker run --rm --network host \
 		-e E2E_USERNAME=admin \
