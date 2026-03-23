@@ -150,6 +150,7 @@ services:
       - /tmp
       - /var/cache/nginx
       - /var/run
+      - /etc/nginx/conf.d
     restart: unless-stopped
 
 networks:
