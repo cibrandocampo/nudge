@@ -62,8 +62,8 @@ make qa            # lint + format-check + test (mirrors CI)
 With manual coverage report (backend):
 
 ```bash
-docker compose -f dev/docker-compose.yml exec backend coverage run manage.py test
-docker compose -f dev/docker-compose.yml exec backend coverage report
+docker compose -f dev/docker-compose.yml --env-file .env exec backend coverage run manage.py test
+docker compose -f dev/docker-compose.yml --env-file .env exec backend coverage report
 ```
 
 ## Linting
@@ -86,7 +86,7 @@ The hook runs `ruff check`, `ruff format --check`, and `eslint` inside the dev c
 
 ```bash
 # Trigger a Celery task manually
-docker compose -f dev/docker-compose.yml exec celery celery -A nudge call apps.notifications.tasks.check_notifications
+docker compose -f dev/docker-compose.yml --env-file .env exec celery celery -A nudge call apps.notifications.tasks.check_notifications
 ```
 
 ## Regenerate PWA icons
@@ -95,7 +95,7 @@ The PWA icons are generated from `frontend/public/icons/source.svg`. To regenera
 them after modifying the SVG source:
 
 ```bash
-docker compose -f dev/docker-compose.yml run --rm frontend npm run generate-icons
+docker compose -f dev/docker-compose.yml --env-file .env run --rm frontend npm run generate-icons
 ```
 
 This produces all required sizes and formats:
@@ -114,7 +114,7 @@ This produces all required sizes and formats:
 Required after changing `requirements.txt` or any `Dockerfile`:
 
 ```bash
-docker compose -f dev/docker-compose.yml build
+docker compose -f dev/docker-compose.yml --env-file .env build
 ```
 
 ## Claude Code

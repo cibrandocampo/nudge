@@ -16,9 +16,9 @@ The root `docker-compose.yml` is for **production** (uses COPY, not bind mounts)
 ## Start / Stop
 
 ```bash
-docker compose -f dev/docker-compose.yml up -d      # Start all services
-docker compose -f dev/docker-compose.yml down         # Stop all
-docker compose -f dev/docker-compose.yml restart frontend  # Restart one service
+docker compose -f dev/docker-compose.yml --env-file .env up -d      # Start all services
+docker compose -f dev/docker-compose.yml --env-file .env down         # Stop all
+docker compose -f dev/docker-compose.yml --env-file .env restart frontend  # Restart one service
 ```
 
 ## Services
@@ -35,31 +35,31 @@ docker compose -f dev/docker-compose.yml restart frontend  # Restart one service
 
 ```bash
 # Django
-docker compose -f dev/docker-compose.yml exec backend python manage.py shell
-docker compose -f dev/docker-compose.yml exec backend python manage.py makemigrations
-docker compose -f dev/docker-compose.yml exec backend python manage.py migrate
-docker compose -f dev/docker-compose.yml exec backend python manage.py createsuperuser
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py shell
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py makemigrations
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py migrate
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py createsuperuser
 
 # Tests — backend
-docker compose -f dev/docker-compose.yml exec backend python manage.py test                              # full suite
-docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.users                   # one app
-docker compose -f dev/docker-compose.yml exec backend python manage.py test apps.users.tests.AdminAccessTest  # one class
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py test                              # full suite
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py test apps.users                   # one app
+docker compose -f dev/docker-compose.yml --env-file .env exec backend python manage.py test apps.users.tests.AdminAccessTest  # one class
 
 # Tests — frontend
-docker compose -f dev/docker-compose.yml exec frontend npx vitest run                                   # full suite
-docker compose -f dev/docker-compose.yml exec frontend npx vitest run src/pages/__tests__/SettingsPage.test.jsx  # one file
+docker compose -f dev/docker-compose.yml --env-file .env exec frontend npx vitest run                                   # full suite
+docker compose -f dev/docker-compose.yml --env-file .env exec frontend npx vitest run src/pages/__tests__/SettingsPage.test.jsx  # one file
 
 # Frontend
-docker compose -f dev/docker-compose.yml exec frontend npm install
-docker compose -f dev/docker-compose.yml exec frontend npm run build
+docker compose -f dev/docker-compose.yml --env-file .env exec frontend npm install
+docker compose -f dev/docker-compose.yml --env-file .env exec frontend npm run build
 
 # Formatting (needed before commits)
-docker compose -f dev/docker-compose.yml exec backend ruff format .
-docker compose -f dev/docker-compose.yml exec frontend npm run format
+docker compose -f dev/docker-compose.yml --env-file .env exec backend ruff format .
+docker compose -f dev/docker-compose.yml --env-file .env exec frontend npm run format
 
 # Logs
-docker compose -f dev/docker-compose.yml logs backend --tail=50
-docker compose -f dev/docker-compose.yml logs celery --tail=50
+docker compose -f dev/docker-compose.yml --env-file .env logs backend --tail=50
+docker compose -f dev/docker-compose.yml --env-file .env logs celery --tail=50
 ```
 
 ## Vite proxy
@@ -128,8 +128,8 @@ The password is in `.env` as `ADMIN_PASSWORD`.
 If another container already binds port 8000, use `run --rm` instead of `exec` — it starts a one-off container without binding host ports:
 
 ```bash
-docker compose -f dev/docker-compose.yml run --rm backend python manage.py migrate
-docker compose -f dev/docker-compose.yml run --rm backend python manage.py shell
+docker compose -f dev/docker-compose.yml --env-file .env run --rm backend python manage.py migrate
+docker compose -f dev/docker-compose.yml --env-file .env run --rm backend python manage.py shell
 ```
 
 ## Environment variables

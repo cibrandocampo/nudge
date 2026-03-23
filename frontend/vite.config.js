@@ -13,7 +13,6 @@ export default defineConfig({
       '/admin':         { target: 'http://backend:8000' },
       '/django-static': { target: 'http://backend:8000' },
     },
-    // Allow external tunnels (ngrok, Tailscale, etc.) for mobile testing
     allowedHosts: 'all',
   },
   plugins: [
