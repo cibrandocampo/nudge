@@ -411,6 +411,48 @@ class ContactTest(APITestCase):
         self.assertEqual(response.status_code, 401)
 
 
+# ── ensure_e2e_users management command ─────────────────────────────────────
+
+
+class EnsureE2eUsersCommandTest(TestCase):
+    def _call(self, env_overrides=None):
+        out = StringIO()
+        env = {
+            "E2E_USER2_USERNAME": "e2e-user2",
+            "E2E_USER2_PASSWORD": "e2e-pass2",
+        }
+        if env_overrides:
+            env.update(env_overrides)
+        with patch.dict(os.environ, env, clear=False):
+            call_command("ensure_e2e_users", stdout=out)
+        return out.getvalue()
+
+    def test_creates_user_when_not_exists(self):
+        output = self._call()
+        self.assertTrue(User.objects.filter(username="e2e-user2").exists())
+        self.assertIn("created", output)
+
+    def test_updates_user_when_already_exists(self):
+        User.objects.create_user(username="e2e-user2", password="old-pass")
+        output = self._call()
+        self.assertEqual(User.objects.filter(username="e2e-user2").count(), 1)
+        self.assertIn("updated", output)
+
+    def test_uses_env_var_username(self):
+        self._call(env_overrides={"E2E_USER2_USERNAME": "custom-e2e"})
+        self.assertTrue(User.objects.filter(username="custom-e2e").exists())
+
+    def test_password_is_set(self):
+        self._call(env_overrides={"E2E_USER2_PASSWORD": "new-pass-123"})
+        user = User.objects.get(username="e2e-user2")
+        self.assertTrue(user.check_password("new-pass-123"))
+
+    def test_idempotent(self):
+        self._call()
+        self._call()
+        self.assertEqual(User.objects.filter(username="e2e-user2").count(), 1)
+
+
 # ── /api/auth/admin-access/ ─────────────────────────────────────────────────
 
 
