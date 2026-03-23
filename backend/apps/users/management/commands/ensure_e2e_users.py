@@ -17,9 +17,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         User = get_user_model()
         for spec in USERS:
-            user, created = User.objects.get_or_create(
-                username=spec["username"], defaults={"is_active": True}
-            )
+            user, created = User.objects.get_or_create(username=spec["username"], defaults={"is_active": True})
             user.set_password(spec["password"])
             user.save(update_fields=["password"])
             status = "created" if created else "updated"
