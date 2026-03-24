@@ -134,6 +134,7 @@ def send_push_notification(user, *, title: str, body: str, type: str, data: dict
                 vapid_claims={
                     "sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}",
                 },
+                headers={"Urgency": "high"},
             )
             subscription.last_used = timezone.now()
             subscription.save(update_fields=["last_used"])
