@@ -22,6 +22,7 @@ USER appuser
 
 RUN DJANGO_SECRET_KEY=build-time-placeholder \
     DATABASE_URL=sqlite:////tmp/build.db \
+    REDIS_URL=redis://localhost:6379/0 \
     python manage.py collectstatic --noinput --verbosity 0
 
 ENTRYPOINT ["/entrypoint.sh"]
