@@ -217,6 +217,18 @@ Nudge is a Progressive Web App — it can be installed on your home screen and w
 
 Once installed, open Nudge from the home screen icon and enable push notifications from the Settings page.
 
+### Push notifications on Android — battery optimisation
+
+Android's battery optimisation (Doze mode) can delay push notifications until the next time you interact with your phone. This affects all PWAs running inside Chrome, regardless of app or server settings.
+
+**What to expect with the default "Optimised" battery mode:**
+Notifications are queued by FCM and delivered within seconds of unlocking your screen. For a reminders app this is usually fine — you will see pending alerts the moment you pick up your phone.
+
+**For instant delivery even while the screen is off:**
+Go to **Settings → Apps → Chrome → Battery → Unrestricted** (exact path varies by manufacturer). This allows Chrome to receive push messages in the background without delay.
+
+> This is an OS-level restriction, not a Nudge limitation. The same behaviour affects every web push notification on Android, including those from other websites and PWAs.
+
 ---
 
 ## Development
