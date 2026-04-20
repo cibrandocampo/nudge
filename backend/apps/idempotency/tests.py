@@ -123,14 +123,19 @@ class MiddlewareTest(APITestCase):
         # Patch the viewset to raise, forcing a 500.
         from rest_framework.viewsets import ModelViewSet
 
+        # `assertLogs` captures Django's `django.request` ERROR emitted for
+        # the unhandled exception so it doesn't spam CI output, while
+        # simultaneously verifying that Django IS logging the 500 (the
+        # production behaviour we rely on).
         with patch.object(ModelViewSet, "create", side_effect=RuntimeError("boom")):
             headers = {**self.auth, "HTTP_IDEMPOTENCY_KEY": "fails"}
-            with self.assertRaises(RuntimeError):
-                self.client.post(
-                    "/api/routines/",
-                    {"name": "R", "interval_hours": 24, "is_active": True},
-                    **headers,
-                )
+            with self.assertLogs("django.request", level="ERROR"):
+                with self.assertRaises(RuntimeError):
+                    self.client.post(
+                        "/api/routines/",
+                        {"name": "R", "interval_hours": 24, "is_active": True},
+                        **headers,
+                    )
         self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
     # ── 4xx response IS cached ───────────────────────────────────────────────

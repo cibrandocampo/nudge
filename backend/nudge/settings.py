@@ -246,19 +246,28 @@ LOGGING = {
 }
 
 # ── Test-run quiet mode ───────────────────────────────────────────────────────
-# During `manage.py test` our suites exercise 4xx/5xx paths and even raise
-# (mocked) 500s and WebPushExceptions on purpose. Django's `django.request`
-# logger and our own middleware/push/tasks/views loggers fire WARNING+ERROR
-# for each one, and Python's `warnings` module fires on short JWT keys and
-# the missing staticfiles directory. None of that helps CI output — the
-# assertions are the source of truth for whether a test passed. Silence
-# all logging and all warnings during the test run; real failures still
-# surface through the test runner's tracebacks.
+# During `manage.py test` dozens of specs exercise 4xx paths (401/403/404/
+# 412/422) on purpose. Django's `django.request` logger fires WARNING for
+# each one — hundreds of lines drown the useful pass/fail signal in CI.
+# Silence WARNING and below during the test run; ERROR and CRITICAL still
+# surface (and tests that trigger ERROR on purpose capture it with
+# `assertLogs`, which proves the log fires AND suppresses the output —
+# see apps.idempotency / apps.notifications tests).
 import sys  # noqa: E402
 
 if "test" in sys.argv:
     import logging  # noqa: E402
-    import warnings  # noqa: E402
 
-    logging.disable(logging.CRITICAL)
-    warnings.filterwarnings("ignore")
+    logging.disable(logging.WARNING)
+
+    # WhiteNoise's CompressedManifestStaticFilesStorage expects a manifest
+    # produced by `collectstatic`. In the test run we don't collect statics
+    # (it's not needed to exercise any view), so the manifest is missing
+    # and Django emits "No directory at: .../staticfiles/" as a UserWarning.
+    # Swap to the plain storage — correct choice for the test environment —
+    # and ensure the STATIC_ROOT directory exists so the staticfiles
+    # handler doesn't warn on first request.
+    STORAGES["staticfiles"] = {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    }
+    STATIC_ROOT.mkdir(parents=True, exist_ok=True)

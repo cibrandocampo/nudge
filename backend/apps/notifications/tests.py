@@ -380,8 +380,12 @@ class SendPushNotificationTest(TestCase):
 
         from pywebpush import WebPushException
 
+        # `assertLogs` captures the `push` logger's ERROR for the failed
+        # send — prevents CI noise while verifying the log DID fire (the
+        # production signal used to diagnose bad push endpoints).
         with patch("apps.notifications.push.webpush", side_effect=WebPushException("error", response=exc.response)):
-            send_push_notification(self.user, title="T", body="B", type=TYPE_DUE)
+            with self.assertLogs("apps.notifications.push", level="ERROR"):
+                send_push_notification(self.user, title="T", body="B", type=TYPE_DUE)
 
         self.assertTrue(PushSubscription.objects.filter(pk=sub.pk).exists())
 
