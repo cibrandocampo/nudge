@@ -8,6 +8,13 @@ on:
   release:
     types: [published]
 
+# Opt the repo into the Node.js 24 runtime for JavaScript actions now, ahead
+# of GitHub's forced switch on 2026-06-02. Silences the deprecation warning
+# that `actions/checkout@v4`, `actions/setup-node@v4`, `actions/setup-python@v5`
+# and friends emit while they still default to Node 20.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test-backend:
     runs-on: ubuntu-latest

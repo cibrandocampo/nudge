@@ -244,3 +244,16 @@ LOGGING = {
         },
     },
 }
+
+# ── Test-run quiet mode ───────────────────────────────────────────────────────
+# During `manage.py test` our suites exercise 4xx/5xx paths on purpose.
+# Django's `django.request` logger + our own middleware/push/tasks/views
+# loggers fire WARNING for each one, producing hundreds of noisy lines in
+# CI output that drown the useful pass/fail signal. Silence WARNING and
+# below during the test run only; ERROR and CRITICAL still surface.
+import sys  # noqa: E402
+
+if "test" in sys.argv:
+    import logging  # noqa: E402
+
+    logging.disable(logging.WARNING)
