@@ -9,14 +9,12 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { login, loginAs, ensureContact } from './helpers.js'
+import { login, loginAs, ensureContact, SEED } from './helpers.js'
 import path from 'path'
 import fs from 'fs'
 
-const USER2 = {
-  username: process.env.E2E_USER2_USERNAME ?? 'e2e-user2',
-  password: process.env.E2E_USER2_PASSWORD ?? 'e2e-pass2',
-}
+// Recipient user comes from the seed (T073), not ad-hoc env vars.
+const USER2 = SEED.user2
 
 const SCREENSHOTS_DIR = '/tmp/nudge-share-demo'
 
@@ -34,6 +32,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // ── 1. Login as admin ──────────────────────────────────────────────────
   await login(page)
   await ensureContact(page, USER2.username)
+  await expect(page.getByTestId('offline-banner')).toBeHidden()
 
   // ── 2. Navigate to Inventory ───────────────────────────────────────────
   await page.getByRole('link', { name: 'Inventory' }).click()
@@ -120,8 +119,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   await expect(sharedCard).toBeVisible({ timeout: 10000 })
 
   // Owner label should appear on the card
-  const adminUsername = process.env.E2E_USERNAME ?? 'admin'
-  await expect(sharedCard.getByText(adminUsername)).toBeVisible()
+  await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
 
   // Share button must NOT appear (user2 is not the owner)
   await expect(sharedCard.getByTitle('Share with')).not.toBeVisible()

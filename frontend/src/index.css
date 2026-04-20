@@ -1,23 +1,40 @@
 :root {
-  --c-primary: #6366f1;
-  --c-primary-bg: #eef2ff;
-  --c-text: #111827;
-  --c-text-2: #374151;
-  --c-text-3: #6b7280;
-  --c-muted: #9ca3af;
-  --c-border: #e5e7eb;
-  --c-border-inner: #f3f4f6;
-  --c-border-strong: #d1d5db;
-  --c-bg: #f9fafb;
-  --c-surface: #fff;
+  /* Brand */
+  --c-brand: #fcd34d;
+  --c-brand-text: #78350f;
+
+  /* Neutral (zinc) */
+  --c-primary: #18181b;
+  --c-primary-hover: #27272a;
+  --c-bg: #fafafa;
+  --c-surface: #ffffff;
+  --c-text: #09090b;
+  --c-text-2: #3f3f46;
+  --c-text-3: #a1a1aa;
+  --c-muted: #d4d4d8;
+  --c-border: #e4e4e7;
+  --c-border-inner: #f4f4f5;
+  --c-ring: rgba(9, 9, 11, 0.12);
+
+  /* Status */
+  --c-success: #22c55e;
+  --c-warning: #ca8a04;
   --c-danger: #ef4444;
-  --c-danger-bg: #fecaca;
-  --c-danger-text: #991b1b;
-  --c-success: #10b981;
-  --c-success-bg: rgba(16, 185, 129, 0.15);
-  --c-success-text: #065f46;
-  --c-warning: #f59e0b;
-  --c-warning-text: #92400e;
+  --c-border-success: rgba(34, 197, 94, 0.22);
+  --c-border-warning: rgba(202, 138, 4, 0.22);
+  --c-border-danger: rgba(239, 68, 68, 0.22);
+
+  /* Accents */
+  --c-shared: #1d4ed8;
+  --c-shared-light: #93c5fd;
+  --c-delete: #fca5a5;
+  --c-delete-hover: #f87171;
+
+  /* Shape */
+  --radius: 6px;
+  --radius-lg: 8px;
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --transition: 150ms ease;
 }
 
 *,
@@ -62,4 +79,29 @@ input[type='number'] {
   textarea {
     font-size: max(1rem, 1em);
   }
+}
+
+/* ─── Icon base ─────────────────────────────────────────────────────────── */
+/* Standalone global class (not a CSS module) so <Icon /> can reference it
+   without importing a stylesheet. Keeps stroke behavior consistent across
+   all Lucide-style SVG <use> references. */
+.icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+.icon-sm {
+  width: 14px;
+  height: 14px;
+}
+.icon-lg {
+  width: 20px;
+  height: 20px;
 }

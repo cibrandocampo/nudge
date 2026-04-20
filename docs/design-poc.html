@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nudge — Design System POC</title>
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     DESIGN TOKENS
+     ═══════════════════════════════════════════════════════════════ */
+  :root {
+    /* Brand */
+    --c-brand: #FCD34D;
+    --c-brand-text: #78350f;
+
+    /* Neutral palette (zinc) */
+    --c-primary: #18181b;
+    --c-primary-hover: #27272a;
+    --c-bg: #fafafa;
+    --c-surface: #ffffff;
+    --c-text: #09090b;
+    --c-text-2: #3f3f46;
+    --c-text-3: #a1a1aa;
+    --c-muted: #d4d4d8;
+    --c-border: #e4e4e7;
+    --c-border-inner: #f4f4f5;
+    --c-ring: rgba(9, 9, 11, 0.12);
+
+    /* Status — full and pastel (22% opacity for borders) */
+    --c-success: #22c55e;
+    --c-warning: #ca8a04;
+    --c-danger: #ef4444;
+    --c-border-success: rgba(34, 197, 94, 0.22);
+    --c-border-warning: rgba(202, 138, 4, 0.22);
+    --c-border-danger: rgba(239, 68, 68, 0.22);
+
+    /* Shared accent (blue) */
+    --c-shared: #1d4ed8;
+    --c-shared-light: #93c5fd;
+
+    /* Delete accent (red pastel) */
+    --c-delete: #fca5a5;
+    --c-delete-hover: #f87171;
+
+    /* Shape */
+    --radius: 6px;
+    --radius-lg: 8px;
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --transition: 150ms ease;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     RESET & BASE
+     ═══════════════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+    background: var(--c-bg); color: var(--c-text);
+    line-height: 1.5; font-size: 14px; -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     LAYOUT
+     ═══════════════════════════════════════════════════════════════ */
+  .app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: var(--c-bg); }
+  .page { padding: 1rem; flex: 1; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .page-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.025em; }
+  .section-label { font-size: 0.7rem; font-weight: 500; color: var(--c-text-2); margin: 1.25rem 0 0.4rem 0.125rem; }
+  .section-label:first-child { margin-top: 0; }
+  .flex { display: flex; }
+  .gap-sm { gap: 0.3rem; }
+  .gap-md { gap: 0.5rem; }
+  .mt-sm { margin-top: 0.5rem; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════ */
+  .header {
+    background: var(--c-surface); border-bottom: 1px solid var(--c-border);
+    padding: 0 1rem; height: 48px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 10;
+  }
+  .header-logo {
+    font-weight: 700; font-size: 0.95rem; letter-spacing: -0.02em;
+    color: var(--c-text); display: flex; align-items: center; gap: 0.3rem;
+  }
+  .header-dot { width: 7px; height: 7px; background: var(--c-brand); border-radius: 50%; }
+  .header-right { display: flex; align-items: center; gap: 0.75rem; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     BOTTOM NAV
+     ═══════════════════════════════════════════════════════════════ */
+  .bottom-nav {
+    background: var(--c-surface); border-top: 1px solid var(--c-border);
+    display: flex; justify-content: space-around;
+    padding: 0.35rem 0 calc(0.35rem + env(safe-area-inset-bottom, 0));
+    position: sticky; bottom: 0;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+    font-size: 0.6rem; font-weight: 500; color: var(--c-text-3);
+    padding: 0.35rem 1rem; border-radius: var(--radius);
+    transition: color var(--transition); cursor: pointer; border: none; background: none;
+  }
+  .nav-item .icon { width: 20px; height: 20px; }
+  .nav-item.active { color: var(--c-text); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     OFFLINE BANNER
+     ═══════════════════════════════════════════════════════════════ */
+  .offline-banner {
+    background: var(--c-brand); border-bottom: 1px solid #f5c843;
+    color: var(--c-brand-text); padding: 0.35rem 1rem; font-size: 0.7rem;
+    font-weight: 600; text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     PENDING BADGE
+     ═══════════════════════════════════════════════════════════════ */
+  .pending-badge {
+    background: var(--c-brand); color: var(--c-brand-text);
+    font-size: 0.6rem; font-weight: 700; min-width: 16px; height: 16px;
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    padding: 0 4px; line-height: 1;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ICONS (Lucide inline SVG)
+     ═══════════════════════════════════════════════════════════════ */
+  .icon {
+    width: 16px; height: 16px; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; fill: none;
+    flex-shrink: 0; display: inline-block; vertical-align: middle;
+  }
+  .icon-sm { width: 14px; height: 14px; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     DOT — universal status indicator
+     Used in: cards, alerts, toasts, status text
+     ═══════════════════════════════════════════════════════════════ */
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-success { background: var(--c-success); }
+  .dot-warning { background: var(--c-warning); }
+  .dot-danger { background: var(--c-danger); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     BUTTONS — text
+     ═══════════════════════════════════════════════════════════════ */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+    padding: 0.45rem 0.875rem; font-size: 0.8rem; font-weight: 500;
+    border-radius: var(--radius); border: 1px solid transparent;
+    cursor: pointer; transition: all var(--transition); line-height: 1.25;
+  }
+  .btn-sm { padding: 0.3rem 0.625rem; font-size: 0.75rem; }
+  .btn-primary { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+  .btn-primary:hover { background: var(--c-primary-hover); }
+  .btn-secondary { background: var(--c-surface); color: var(--c-text); border-color: var(--c-border); }
+  .btn-secondary:hover { background: var(--c-border-inner); }
+  .btn-ghost { background: transparent; color: var(--c-text-2); }
+  .btn-ghost:hover { background: var(--c-border-inner); }
+  .btn-danger { background: transparent; color: var(--c-delete); border-color: var(--c-border); }
+  .btn-danger:hover { color: var(--c-delete-hover); background: rgba(239,68,68,0.05); border-color: var(--c-border-danger); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     BUTTONS — icon (32x32, all same base)
+     Variants: action, done, consume, share, shared, delete
+     ═══════════════════════════════════════════════════════════════ */
+  .btn-icon {
+    width: 32px; height: 32px; padding: 0; border-radius: var(--radius);
+    background: var(--c-border-inner); border: none; color: var(--c-text-3);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: all var(--transition); -webkit-tap-highlight-color: transparent;
+  }
+  .btn-icon:hover { background: var(--c-border); color: var(--c-text-2); }
+  .btn-icon:active { opacity: 0.7; }
+
+  /* Action (default: grey — chevron, tag, nav) */
+  .btn-icon-action { color: var(--c-text-3); background: rgba(0,0,0,0.03); }
+  .btn-icon-action:hover { color: var(--c-text-2); background: rgba(0,0,0,0.07); }
+
+  /* Done (primary CTA — black) */
+  .btn-icon-done { color: var(--c-surface); background: var(--c-primary); }
+  .btn-icon-done:hover { background: var(--c-primary-hover); }
+
+  /* Consume (primary CTA — composite box+arrow) */
+  .btn-icon-consume { position: relative; color: var(--c-surface); background: var(--c-primary); }
+  .btn-icon-consume:hover { background: var(--c-primary-hover); }
+  .consume-box { width: 18px; height: 18px; position: absolute; top: 4px; left: 4px; }
+  .consume-arrow { width: 11px; height: 11px; position: absolute; bottom: 4px; right: 4px; stroke-width: 2.5; color: var(--c-delete); }
+
+  /* Share (can share — light blue) */
+  .btn-icon-share { color: var(--c-shared-light); background: rgba(37,99,235,0.05); }
+  .btn-icon-share:hover { color: #60a5fa; background: rgba(37,99,235,0.10); }
+
+  /* Shared (already shared — strong blue) */
+  .btn-icon-shared { color: var(--c-shared); background: rgba(37,99,235,0.14); cursor: default; }
+
+  /* Delete (red pastel) */
+  .btn-icon-delete { color: var(--c-delete); background: rgba(239,68,68,0.04); }
+  .btn-icon-delete:hover { color: var(--c-delete-hover); background: rgba(239,68,68,0.10); }
+
+  /* Add (40x40 — larger primary) */
+  .btn-add {
+    width: 40px; height: 40px; border-radius: var(--radius-lg);
+    background: var(--c-primary); border: none; color: var(--c-surface);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    transition: all var(--transition);
+  }
+  .btn-add:hover { background: var(--c-primary-hover); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CARD — universal container
+     Used for: routines, stock items, alerts, forms
+     ═══════════════════════════════════════════════════════════════ */
+  .card {
+    background: var(--c-surface); border: 1px solid var(--c-border);
+    border-left: 3px solid var(--c-border);
+    border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 0.5rem;
+  }
+  .card-border-success { border-left-color: var(--c-border-success); }
+  .card-border-warning { border-left-color: var(--c-border-warning); }
+  .card-border-danger  { border-left-color: var(--c-border-danger); }
+  .card-clickable { cursor: pointer; }
+  .card-clickable:hover { background: #fdfdfd; }
+
+  .card-header {
+    padding: 0.625rem 0.75rem; display: flex; align-items: center;
+    justify-content: space-between; gap: 0.5rem; min-height: 72px;
+  }
+  .card-meta { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
+  .card-title {
+    font-size: 0.8125rem; font-weight: 600; color: var(--c-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-title-flex { display: flex; align-items: center; gap: 0.3rem; }
+  .card-subtitle {
+    font-size: 0.7rem; color: var(--c-text-3); display: flex;
+    align-items: center; gap: 0.3rem; flex-wrap: wrap;
+  }
+  .card-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+  .card-stock-badge {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    font-size: 0.65rem; font-weight: 500; color: var(--c-text-3); margin-top: 0.1rem;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     STATUS TEXT — inline with dot
+     ═══════════════════════════════════════════════════════════════ */
+  .status { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.7rem; font-weight: 500; }
+  .status-due { color: var(--c-warning); }
+  .status-overdue { color: var(--c-danger); }
+  .status-ok { color: var(--c-success); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     STOCK — specific elements within cards
+     ═══════════════════════════════════════════════════════════════ */
+  .stock-qty { color: var(--c-text); font-weight: 600; font-size: 0.8rem; }
+  .stock-depletion { color: var(--c-text-3); }
+  .stock-depletion-warn { color: var(--c-warning); }
+  .shared-owner { font-size: 0.65rem; color: var(--c-text-3); font-style: italic; }
+  .lot-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.4rem 0.75rem; border-top: 1px solid var(--c-border-inner);
+    font-size: 0.75rem; color: var(--c-text-2);
+  }
+  .lot-info { display: flex; gap: 0.5rem; align-items: center; }
+  .lot-number { font-weight: 500; font-size: 0.7rem; font-family: ui-monospace, monospace; color: var(--c-text-3); }
+  .lot-qty { font-weight: 500; }
+  .lot-expiry { color: var(--c-text-3); }
+  .consumption-row {
+    padding: 0.35rem 0.75rem; border-top: 1px solid var(--c-border-inner);
+    font-size: 0.7rem; color: var(--c-text-3);
+  }
+  .consumption-own { font-weight: 600; color: var(--c-text-2); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ALERTS SECTION — separated from stock list
+     ═══════════════════════════════════════════════════════════════ */
+  .alerts-section { padding-bottom: 0.75rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--c-border); }
+  .alert-detail { font-size: 0.7rem; color: var(--c-text-3); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     GROUP — left border connects grouped cards
+     ═══════════════════════════════════════════════════════════════ */
+  .group { margin-bottom: 1.25rem; position: relative; }
+  .group::before {
+    content: ''; position: absolute; left: -0.75rem; top: 0; bottom: 0;
+    width: 3px; background: var(--c-muted); border-radius: 3px;
+  }
+  .group-header {
+    display: flex; align-items: center; gap: 0.3rem;
+    padding: 0.5rem 0; width: 100%; background: none;
+    border: none; cursor: pointer; text-align: left; color: var(--c-text);
+  }
+  .group-name { font-weight: 600; font-size: 0.75rem; }
+  .group-count { font-size: 0.7rem; color: var(--c-text-3); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     INPUTS
+     ═══════════════════════════════════════════════════════════════ */
+  .input {
+    width: 100%; padding: 0.5rem 0.75rem; font-size: 0.8rem;
+    border: 1px solid var(--c-border); border-radius: var(--radius);
+    background: var(--c-surface); color: var(--c-text); outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .input:focus { border-color: var(--c-text-3); box-shadow: 0 0 0 2px var(--c-ring); }
+  .input::placeholder { color: var(--c-muted); }
+  .input-label { display: block; font-size: 0.75rem; font-weight: 500; color: var(--c-text); margin-bottom: 0.25rem; }
+  .input-group { margin-bottom: 0.75rem; }
+  select.input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TOAST — notification bar
+     ═══════════════════════════════════════════════════════════════ */
+  .toast {
+    padding: 0.55rem 0.75rem; border-radius: var(--radius); font-size: 0.75rem; font-weight: 500;
+    display: flex; align-items: center; gap: 0.4rem; box-shadow: var(--shadow-md);
+    border: 1px solid var(--c-border); border-left: 3px solid var(--c-border);
+    background: var(--c-surface); color: var(--c-text);
+  }
+  .toast-success { border-left-color: var(--c-border-success); }
+  .toast-warning { border-left-color: var(--c-border-warning); }
+  .toast-danger  { border-left-color: var(--c-border-danger); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     MODAL
+     ═══════════════════════════════════════════════════════════════ */
+  .modal {
+    background: var(--c-surface); border-radius: var(--radius-lg);
+    border: 1px solid var(--c-border); box-shadow: var(--shadow-md);
+    width: 100%; max-width: 380px; overflow: hidden;
+  }
+  .modal-header {
+    padding: 0.875rem 1rem; display: flex; align-items: flex-start;
+    justify-content: space-between; border-bottom: 1px solid var(--c-border-inner);
+  }
+  .modal-title { font-size: 0.875rem; font-weight: 600; }
+  .modal-desc { font-size: 0.75rem; color: var(--c-text-3); margin-top: 0.1rem; }
+  .modal-body { padding: 1rem; }
+  .modal-footer {
+    padding: 0.625rem 1rem; border-top: 1px solid var(--c-border-inner);
+    display: flex; gap: 0.4rem; justify-content: flex-end;
+  }
+  .compare-block {
+    flex: 1; padding: 0.5rem 0.625rem; background: var(--c-border-inner);
+    border: 1px solid var(--c-border); border-radius: var(--radius); font-size: 0.75rem;
+  }
+  .compare-label {
+    font-size: 0.65rem; font-weight: 600; color: var(--c-text-3);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem;
+  }
+
+  /* POC only — section dividers between pages */
+  .poc-divider {
+    font-size: 0.6rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--c-text-3); margin: 2.5rem 0 0.75rem; padding-top: 1.5rem;
+    border-top: 1px dashed var(--c-border);
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SVG ICON DEFINITIONS (reusable via <use>)
+     ═══════════════════════════════════════════════════════════════ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-wifi-off" viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 12.86a10 10 0 0 1 5.17-2.86"/><line x1="12" x2="12.01" y1="20" y2="20"/></symbol>
+  <symbol id="i-nav-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+  <symbol id="i-nav-history" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-nav-inventory" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-nav-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- Offline banner -->
+  <div class="offline-banner">
+    <svg class="icon icon-sm"><use href="#i-wifi-off"/></svg>
+    Offline — changes will sync when you reconnect
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">nudge<span class="header-dot"></span></div>
+    <div class="header-right">
+      <span class="pending-badge">3</span>
+      <button class="btn-icon btn-icon-action" title="Settings" style="background:transparent">
+        <svg class="icon"><use href="#i-user"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- ═══════════ DASHBOARD ═══════════ -->
+    <div class="top-bar">
+      <h1 class="page-title">Dashboard</h1>
+      <button class="btn-add" title="Add new"><svg class="icon"><use href="#i-plus"/></svg></button>
+    </div>
+
+    <p class="section-label">Due now</p>
+
+    <div class="card card-border-danger card-clickable">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Control glucosa</div>
+          <div class="card-subtitle">
+            <span class="status status-overdue"><span class="dot dot-danger"></span> 2h overdue</span>
+            <span>Every 12h</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-done" title="Mark done"><svg class="icon"><use href="#i-check"/></svg></button>
+          <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-border-warning card-clickable">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Cambiar filtro BRITA</div>
+          <div class="card-subtitle">
+            <span class="status status-due"><span class="dot dot-warning"></span> Due today</span>
+            <span>Every 30d</span>
+          </div>
+          <div class="card-stock-badge">
+            <svg class="icon icon-sm" style="color:var(--c-text-3)"><use href="#i-package"/></svg>
+            Filtros BRITA
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-done" title="Mark done"><svg class="icon"><use href="#i-check"/></svg></button>
+          <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <p class="section-label">Upcoming</p>
+
+    <div class="card card-border-success card-clickable">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Cafe manana</div>
+          <div class="card-subtitle">
+            <span class="status status-ok"><span class="dot dot-success"></span> In 8h</span>
+            <span>Every 24h</span>
+          </div>
+          <div class="card-stock-badge">
+            <svg class="icon icon-sm" style="color:var(--c-text-3)"><use href="#i-package"/></svg>
+            Capsulas cafe
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-border-success card-clickable">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Regar plantas</div>
+          <div class="card-subtitle">
+            <span class="status status-ok"><span class="dot dot-success"></span> In 1d 4h</span>
+            <span>Every 3d</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-border-success card-clickable">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Limpiar bano</div>
+          <div class="card-subtitle">
+            <span class="status status-ok"><span class="dot dot-success"></span> In 3d</span>
+            <span>Every 7d</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ INVENTORY ═══════════ -->
+    <p class="poc-divider">Inventory page</p>
+
+    <div class="top-bar">
+      <h1 class="page-title">Inventory</h1>
+      <div class="flex gap-sm">
+        <button class="btn btn-secondary btn-sm">
+          <svg class="icon icon-sm"><use href="#i-tag"/></svg> Categories
+        </button>
+        <button class="btn-add" title="Add new"><svg class="icon"><use href="#i-plus"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="alerts-section">
+      <div class="card card-border-danger">
+        <div class="card-header">
+          <div class="card-meta">
+            <div class="card-title card-title-flex"><span class="dot dot-danger"></span> Expiring soon</div>
+            <div class="alert-detail">Tiras reactivas — ACCU-01: 50 units, Jun 2026</div>
+          </div>
+        </div>
+      </div>
+      <div class="card card-border-warning">
+        <div class="card-header">
+          <div class="card-meta">
+            <div class="card-title card-title-flex"><span class="dot dot-warning"></span> Low stock</div>
+            <div class="alert-detail">Capsulas cafe — ~6 May 2026 (4/day)</div>
+            <div class="alert-detail">Whey Protein — ~8 May 2026 (2/day)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stock -->
+    <p class="section-label">Stock</p>
+
+    <!-- Group: Roomba -->
+    <div class="group">
+      <button class="group-header">
+        <svg class="icon icon-sm" style="color:var(--c-text-3)"><use href="#i-chevron-down"/></svg>
+        <span class="group-name">Roomba</span>
+        <span class="group-count">(3)</span>
+      </button>
+
+      <div class="card card-border-success">
+        <div class="card-header">
+          <div class="card-meta">
+            <div class="card-title">Cepillos</div>
+            <div class="card-subtitle">
+              <span class="dot dot-success"></span>
+              <span class="stock-qty">4 total</span>
+              <span class="stock-depletion">Until ~Oct 2026</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-icon btn-icon-consume" title="Consume 1">
+              <svg class="icon consume-box"><use href="#i-package"/></svg>
+              <svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btn-icon btn-icon-action" title="Category"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+            <button class="btn-icon btn-icon-share" title="Share"><svg class="icon icon-sm"><use href="#i-user-plus"/></svg></button>
+          </div>
+        </div>
+        <div class="lot-row">
+          <div class="lot-info"><span class="lot-number">ROOMBA-CB-24</span> <span class="lot-qty">4 u.</span> <span class="lot-expiry">No expiry</span></div>
+          <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card card-border-success">
+        <div class="card-header">
+          <div class="card-meta">
+            <div class="card-title">Filtros</div>
+            <div class="card-subtitle">
+              <span class="dot dot-success"></span>
+              <span class="stock-qty">2 total</span>
+              <span class="shared-owner">maria</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-icon btn-icon-consume" title="Consume 1">
+              <svg class="icon consume-box"><use href="#i-package"/></svg>
+              <svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btn-icon btn-icon-action" title="Category"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+            <button class="btn-icon btn-icon-shared" title="Shared by maria"><svg class="icon icon-sm"><use href="#i-users"/></svg></button>
+          </div>
+        </div>
+        <div class="lot-row">
+          <div class="lot-info"><span class="lot-qty">2 u.</span> <span class="lot-expiry">Sep 2026</span></div>
+          <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card card-border-warning">
+        <div class="card-header">
+          <div class="card-meta">
+            <div class="card-title">Bayetas</div>
+            <div class="card-subtitle"><span class="dot dot-warning"></span> <span class="stock-qty">1 total</span></div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-icon btn-icon-consume" title="Consume 1">
+              <svg class="icon consume-box"><use href="#i-package"/></svg>
+              <svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btn-icon btn-icon-action" title="Category"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+            <button class="btn-icon btn-icon-share" title="Share"><svg class="icon icon-sm"><use href="#i-user-plus"/></svg></button>
+          </div>
+        </div>
+        <div class="lot-row">
+          <div class="lot-info"><span class="lot-qty">1 u.</span> <span class="lot-expiry">No expiry</span></div>
+          <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ungrouped stock -->
+    <div class="card card-border-success">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Capsulas cafe</div>
+          <div class="card-subtitle">
+            <span class="dot dot-success"></span>
+            <span class="stock-qty">80 total</span>
+            <span class="stock-depletion stock-depletion-warn">Until ~6 May 2026</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-consume" title="Consume 1">
+            <svg class="icon consume-box"><use href="#i-package"/></svg>
+            <svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg>
+          </button>
+          <button class="btn-icon btn-icon-action" title="Category"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+          <button class="btn-icon btn-icon-shared" title="Shared"><svg class="icon icon-sm"><use href="#i-users"/></svg></button>
+        </div>
+      </div>
+      <div class="lot-row">
+        <div class="lot-info"><span class="lot-number">NESPRESSO-OR</span> <span class="lot-qty">50 u.</span> <span class="lot-expiry">No expiry</span></div>
+        <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="lot-row">
+        <div class="lot-info"><span class="lot-number">NESPRESSO-VN</span> <span class="lot-qty">30 u.</span> <span class="lot-expiry">No expiry</span></div>
+        <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="consumption-row"><span class="consumption-own">2/day</span> + 2/day (shared)</div>
+    </div>
+
+    <div class="card card-border-warning">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Lentillas</div>
+          <div class="card-subtitle">
+            <span class="dot dot-warning"></span>
+            <span class="stock-qty">12 total</span>
+            <span class="stock-depletion">Until ~9 Jul 2026</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-icon-consume" title="Consume 1">
+            <svg class="icon consume-box"><use href="#i-package"/></svg>
+            <svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg>
+          </button>
+          <button class="btn-icon btn-icon-action" title="Category"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+          <button class="btn-icon btn-icon-share" title="Share"><svg class="icon icon-sm"><use href="#i-user-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="lot-row">
+        <div class="lot-info"><span class="lot-qty">6 u.</span> <span class="lot-expiry">Dec 2026</span></div>
+        <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="lot-row">
+        <div class="lot-info"><span class="lot-qty">6 u.</span> <span class="lot-expiry">Jun 2027</span></div>
+        <button class="btn-icon btn-icon-delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="consumption-row"><span class="consumption-own">0.14/day</span></div>
+    </div>
+
+    <div class="card card-border-danger">
+      <div class="card-header">
+        <div class="card-meta">
+          <div class="card-title">Apositos</div>
+          <div class="card-subtitle"><span class="dot dot-danger"></span> <span class="stock-qty">0 total</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ COMPONENT SHOWCASE ═══════════ -->
+    <p class="poc-divider">Form elements</p>
+    <div class="card">
+      <div style="padding:0.875rem">
+        <div class="input-group">
+          <label class="input-label">Routine name</label>
+          <input class="input" type="text" placeholder="e.g. Change water filter" value="Cambiar filtro BRITA">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Interval</label>
+          <select class="input"><option>Every 24 hours</option><option selected>Every 30 days</option></select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Stock item</label>
+          <select class="input"><option>— select —</option><option selected>Filtros BRITA (6 left)</option><option>Capsulas cafe (80 left) — cibran</option></select>
+        </div>
+        <div class="flex gap-sm mt-sm">
+          <button class="btn btn-primary">Save</button>
+          <button class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="poc-divider">Buttons</p>
+    <p style="font-size:0.7rem;color:var(--c-text-3);margin-bottom:0.5rem">Text</p>
+    <div class="flex gap-sm" style="flex-wrap:wrap;margin-bottom:1rem">
+      <button class="btn btn-primary">Save</button>
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-ghost">Ghost</button>
+      <button class="btn btn-danger">Delete</button>
+    </div>
+    <p style="font-size:0.7rem;color:var(--c-text-3);margin-bottom:0.5rem">Icon</p>
+    <div class="flex gap-sm" style="flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+      <button class="btn-icon btn-icon-done" title="Done"><svg class="icon"><use href="#i-check"/></svg></button>
+      <button class="btn-icon btn-icon-consume" title="Consume"><svg class="icon consume-box"><use href="#i-package"/></svg><svg class="icon consume-arrow"><use href="#i-arrow-down"/></svg></button>
+      <button class="btn-icon btn-icon-action" title="Tag"><svg class="icon icon-sm"><use href="#i-tag"/></svg></button>
+      <button class="btn-icon btn-icon-share" title="Share"><svg class="icon icon-sm"><use href="#i-user-plus"/></svg></button>
+      <button class="btn-icon btn-icon-shared" title="Shared"><svg class="icon icon-sm"><use href="#i-users"/></svg></button>
+      <button class="btn-icon btn-icon-action" title="Chevron"><svg class="icon"><use href="#i-chevron"/></svg></button>
+      <button class="btn-icon btn-icon-delete" title="Delete"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
+      <button class="btn-add" title="Add"><svg class="icon"><use href="#i-plus"/></svg></button>
+    </div>
+
+    <p class="poc-divider">Conflict modal</p>
+    <div class="modal" style="position:relative">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Conflict detected</div>
+          <div class="modal-desc">This routine was modified while you were offline.</div>
+        </div>
+        <button class="btn-icon btn-icon-action"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="flex gap-md">
+          <div class="compare-block"><div class="compare-label">Your version</div><div>Name: <strong>Coco</strong></div></div>
+          <div class="compare-block"><div class="compare-label">Server</div><div>Name: <strong>Max</strong></div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm">Use server</button>
+        <button class="btn btn-primary btn-sm">Keep mine</button>
+      </div>
+    </div>
+
+    <p class="poc-divider">Toasts</p>
+    <div style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:1rem">
+      <div class="toast toast-success"><span class="dot dot-success"></span> Routine marked as done.</div>
+      <div class="toast toast-warning"><span class="dot dot-warning"></span> 3 changes pending sync.</div>
+      <div class="toast toast-danger"><span class="dot dot-danger"></span> Failed to sync — tap to retry.</div>
+    </div>
+
+  </div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <button class="nav-item active"><svg class="icon"><use href="#i-nav-dashboard"/></svg> Dashboard</button>
+    <button class="nav-item"><svg class="icon"><use href="#i-nav-history"/></svg> History</button>
+    <button class="nav-item"><svg class="icon"><use href="#i-nav-inventory"/></svg> Inventory</button>
+    <button class="nav-item"><svg class="icon"><use href="#i-nav-settings"/></svg> Settings</button>
+  </div>
+
+</div>
+</body>
+</html>

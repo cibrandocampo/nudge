@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers.js'
+import { login, SEED } from './helpers.js'
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -16,6 +16,7 @@ test.describe('Settings', () => {
     await page.reload()
     await page.getByRole('link', { name: 'Settings' }).click()
     await expect(page).toHaveURL('/settings')
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
   test('settings page loads', async ({ page }) => {
@@ -26,16 +27,20 @@ test.describe('Settings', () => {
   })
 
   test('shows username', async ({ page }) => {
-    await expect(page.locator('p').filter({ hasText: /^admin$/ })).toBeVisible()
+    // Profile block renders the username as an h2 (T042 Profile redesign).
+    await expect(
+      page.getByRole('heading', { level: 2, name: new RegExp(`^${SEED.admin.username}$`) }),
+    ).toBeVisible()
   })
 
   test('save timezone change', async ({ page }) => {
-    // Select Europe/London
-    const tzSearch = page.getByPlaceholder('Search timezone…')
-    await tzSearch.fill('Madrid')
+    // The timezone picker is a Combobox (T044). Interact via its combobox
+    // input + listbox options, not the old native `select[size]`.
+    const tzInput = page.getByPlaceholder('Search timezone…')
+    await tzInput.click()
+    await tzInput.fill('Madrid')
 
-    const select = page.locator('select[size]')
-    await select.selectOption('Europe/Madrid')
+    await page.getByRole('option', { name: 'Europe/Madrid' }).click()
 
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page.getByRole('button', { name: 'Saved!' })).toBeVisible()

@@ -3,6 +3,7 @@ import zoneinfo
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.timezone import now as tz_now
 
 LANGUAGE_CHOICES = [("en", "English"), ("es", "Español"), ("gl", "Galego")]
 
@@ -32,6 +33,10 @@ class User(AbstractUser):
         help_text="Local time for the daily heads-up notification",
     )
     contacts = models.ManyToManyField("self", symmetrical=True, blank=True)
+    # Bumped explicitly only when `timezone`, `daily_notification_time` or
+    # `language` change (see UserUpdateSerializer). Exposed as an ETag for
+    # optimistic concurrency on PATCH /api/auth/me/.
+    settings_updated_at = models.DateTimeField(default=tz_now)
 
     class Meta:
         verbose_name = "user"

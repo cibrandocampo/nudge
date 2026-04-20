@@ -1,0 +1,29 @@
+---
+import Screenshot from './Screenshot.astro'
+
+export interface Step {
+  title: string
+  body: string
+  src: string
+  alt: string
+}
+
+export interface Props {
+  steps: Step[]
+}
+const { steps } = Astro.props
+---
+<div class="grid gap-10 md:grid-cols-3 md:gap-8 items-start">
+  {steps.map((step, index) => (
+    <div class="flex flex-col items-center text-center">
+      <div class="flex items-center justify-center h-10 w-10 rounded-full bg-nudge-500 text-white font-semibold mb-4" aria-hidden="true">
+        {index + 1}
+      </div>
+      <h3 class="text-xl font-semibold text-slate-100">{step.title}</h3>
+      <p class="mt-2 text-sm text-slate-400 leading-relaxed max-w-sm">{step.body}</p>
+      <div class="mt-6">
+        <Screenshot src={step.src} alt={step.alt} />
+      </div>
+    </div>
+  ))}
+</div>

@@ -4,27 +4,90 @@
   opacity: 0.6;
 }
 
+/* POC tokens (docs/design-poc.html lines 151–165) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  line-height: 1.25;
+}
+.btnSm {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+}
+.btnPrimary {
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border-color: var(--c-primary);
+}
+.btnPrimary:hover:not(:disabled) {
+  background: var(--c-primary-hover);
+}
+.btnSecondary {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-color: var(--c-border);
+}
+.btnSecondary:hover:not(:disabled) {
+  background: var(--c-border-inner);
+}
+.btnGhost {
+  background: transparent;
+  color: var(--c-text-2);
+}
+.btnGhost:hover:not(:disabled) {
+  background: var(--c-border-inner);
+}
+.btnDanger {
+  background: transparent;
+  color: var(--c-delete);
+  border-color: var(--c-border);
+}
+.btnDanger:hover:not(:disabled) {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--c-border-danger);
+}
+
 /* ── Inputs ──────────────────────────────────────────────────── */
+
+.inputGroup {
+  margin-bottom: 0.75rem;
+}
+
+.inputLabel {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-text);
+  margin-bottom: 0.25rem;
+}
 
 .input {
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 0.875rem;
   outline: none;
   width: 100%;
   background: var(--c-surface);
   color: var(--c-text);
   box-sizing: border-box;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
 }
-
-/* ── Card ────────────────────────────────────────────────────── */
-
-.card {
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--c-surface);
+.input:focus {
+  border-color: var(--c-text-3);
+  box-shadow: 0 0 0 2px var(--c-ring);
 }
 
 /* ── Overlay / Modal ─────────────────────────────────────────── */
@@ -66,11 +129,18 @@
 
 .sectionTitle {
   font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--c-muted);
+  font-weight: 500;
+  color: var(--c-text-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0 0.125rem;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--c-text-3);
 }
 
 .pageTitle {
@@ -118,4 +188,338 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   New design system (T031)
+   Consumed by T026 (offline UX) and T027–T029 (page migrations).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Status dot ──────────────────────────────────────────────── */
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dotSuccess {
+  background: var(--c-success);
+}
+.dotWarning {
+  background: var(--c-warning);
+}
+.dotDanger {
+  background: var(--c-danger);
+}
+.dotBrand {
+  background: var(--c-brand);
+}
+
+/* ── Card ────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.cardBorderSuccess {
+  border-left-color: var(--c-border-success);
+}
+.cardBorderWarning {
+  border-left-color: var(--c-border-warning);
+}
+.cardBorderDanger {
+  border-left-color: var(--c-border-danger);
+}
+.cardClickable {
+  cursor: pointer;
+}
+.cardClickable:hover {
+  background: #fdfdfd;
+}
+.cardHeader {
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 72px;
+}
+.cardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+.cardTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cardTitleFlex {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.cardSubtitle {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.cardActions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+.cardStockBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--c-text-3);
+  margin-top: 0.1rem;
+}
+
+/* ── Status text ─────────────────────────────────────────────── */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+.statusDue {
+  color: var(--c-warning);
+}
+.statusOverdue {
+  color: var(--c-danger);
+}
+.statusOk {
+  color: var(--c-success);
+}
+
+/* ── Icon buttons (32×32 base + variants) ────────────────────── */
+
+.btnIcon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius);
+  background: var(--c-border-inner);
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+.btnIcon:hover {
+  background: var(--c-border);
+  color: var(--c-text-2);
+}
+.btnIcon:active {
+  opacity: 0.7;
+}
+
+.btnIconAction {
+  color: var(--c-text-3);
+  background: rgba(0, 0, 0, 0.03);
+}
+.btnIconAction:hover {
+  color: var(--c-text-2);
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.btnIconDone {
+  color: var(--c-surface);
+  background: var(--c-primary);
+}
+.btnIconDone:hover {
+  background: var(--c-primary-hover);
+}
+
+.btnIconConsume {
+  position: relative;
+  color: var(--c-surface);
+  background: var(--c-primary);
+}
+.btnIconConsume:hover {
+  background: var(--c-primary-hover);
+}
+.consumeBox {
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+}
+.consumeArrow {
+  width: 11px;
+  height: 11px;
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  stroke-width: 2.5;
+  color: var(--c-delete);
+}
+
+.btnIconShare {
+  color: var(--c-shared-light);
+  background: rgba(37, 99, 235, 0.05);
+}
+.btnIconShare:hover {
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.btnIconShared {
+  color: var(--c-shared);
+  background: rgba(37, 99, 235, 0.14);
+  cursor: default;
+}
+
+.btnIconDelete {
+  color: var(--c-delete);
+  background: rgba(239, 68, 68, 0.04);
+}
+.btnIconDelete:hover {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.btnAdd {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background: var(--c-primary);
+  border: none;
+  color: var(--c-surface);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+.btnAdd:hover {
+  background: var(--c-primary-hover);
+}
+
+/* ── Stock — specific elements within cards ──────────────────── */
+
+.stockQty {
+  color: var(--c-text);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.stockDepletion {
+  color: var(--c-text-3);
+}
+.stockDepletionWarn {
+  color: var(--c-warning);
+}
+.sharedOwner {
+  font-size: 0.65rem;
+  color: var(--c-text-3);
+  font-style: italic;
+}
+.lotRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--c-border-inner);
+  font-size: 0.75rem;
+  color: var(--c-text-2);
+}
+.lotInfo {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.lotNumber {
+  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: ui-monospace, monospace;
+  color: var(--c-text-3);
+}
+.lotQty {
+  font-weight: 500;
+}
+.lotExpiry {
+  color: var(--c-text-3);
+}
+.consumptionRow {
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid var(--c-border-inner);
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+}
+.consumptionOwn {
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+
+/* ── Alerts section ──────────────────────────────────────────── */
+
+.alertsSection {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--c-border);
+}
+.alertDetail {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+}
+
+/* ── Group (left rail connecting cards) ──────────────────────── */
+
+.group {
+  margin-bottom: 1.25rem;
+  position: relative;
+}
+.group::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--c-muted);
+  border-radius: 3px;
+}
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--c-text);
+}
+.groupName {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+.groupCount {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
 }

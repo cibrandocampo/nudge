@@ -198,6 +198,121 @@ class MeViewTest(APITestCase):
         self.assertIn("language", response.json())
 
 
+# ── settings_updated_at ──────────────────────────────────────────────────────
+
+
+class SettingsUpdatedAtTest(APITestCase):
+    """
+    `settings_updated_at` acts as an ETag for optimistic concurrency on
+    /api/auth/me/. It must bump only when a SETTINGS field changes.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="carol",
+            password="pass",
+            timezone="UTC",
+            language="en",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _snapshot(self):
+        self.user.refresh_from_db()
+        return self.user.settings_updated_at
+
+    def test_get_me_returns_settings_updated_at(self):
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("settings_updated_at", response.json())
+        self.assertIsNotNone(response.json()["settings_updated_at"])
+
+    def test_patch_timezone_bumps(self):
+        before = self._snapshot()
+        response = self.client.patch("/api/auth/me/", {"timezone": "Europe/Madrid"})
+        self.assertEqual(response.status_code, 200)
+        after = self._snapshot()
+        self.assertGreater(after, before)
+
+    def test_patch_daily_notification_time_bumps(self):
+        before = self._snapshot()
+        response = self.client.patch("/api/auth/me/", {"daily_notification_time": "09:45"})
+        self.assertEqual(response.status_code, 200)
+        after = self._snapshot()
+        self.assertGreater(after, before)
+
+    def test_patch_language_bumps(self):
+        before = self._snapshot()
+        response = self.client.patch("/api/auth/me/", {"language": "es"})
+        self.assertEqual(response.status_code, 200)
+        after = self._snapshot()
+        self.assertGreater(after, before)
+
+    def test_patch_same_value_does_not_bump(self):
+        # Re-PATCHing the same value should not move the timestamp.
+        before = self._snapshot()
+        response = self.client.patch("/api/auth/me/", {"timezone": "UTC"})
+        self.assertEqual(response.status_code, 200)
+        after = self._snapshot()
+        self.assertEqual(after, before)
+
+
+# ── me() optimistic concurrency ─────────────────────────────────────────────
+
+
+class MeOptimisticLockingTest(APITestCase):
+    """
+    /api/auth/me/ PATCH respects If-Unmodified-Since via settings_updated_at.
+    """
+
+    STALE_HEADER = "Wed, 01 Jan 2020 00:00:00 GMT"
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="alice", password="pw")
+        self.client.force_authenticate(user=self.user)
+
+    def _current_header(self):
+        self.user.refresh_from_db()
+        return self.user.settings_updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    def test_patch_without_header_succeeds(self):
+        response = self.client.patch("/api/auth/me/", {"timezone": "Europe/Madrid"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_patch_with_current_header_succeeds(self):
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"timezone": "Europe/Madrid"},
+            HTTP_IF_UNMODIFIED_SINCE=self._current_header(),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.timezone, "Europe/Madrid")
+
+    def test_patch_with_stale_header_returns_412(self):
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"timezone": "Europe/Madrid"},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        body = response.json()
+        self.assertEqual(body["error"], "conflict")
+        self.assertIn("current", body)
+        self.assertEqual(body["current"]["username"], "alice")
+        self.assertIn("settings_updated_at", body["current"])
+        self.user.refresh_from_db()
+        self.assertNotEqual(self.user.timezone, "Europe/Madrid")
+
+    def test_patch_with_malformed_header_returns_400(self):
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"timezone": "Europe/Madrid"},
+            HTTP_IF_UNMODIFIED_SINCE="not-a-date",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+
 # ── ensure_admin management command ─────────────────────────────────────────
 
 
@@ -389,6 +504,18 @@ class ContactTest(APITestCase):
         response = self.client.get(f"{self.url}search/", {"q": "inac"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
+
+    def test_search_with_empty_query_returns_empty_list(self):
+        # Guard: `q=` (or missing) must short-circuit to [] instead of
+        # leaking every user via an unfiltered `username__istartswith=""`.
+        response = self.client.get(f"{self.url}search/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_add_contact_with_empty_username_returns_400(self):
+        response = self.client.post(self.url, {"username": "   "})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "Username is required."})
 
     def test_unauthenticated_list_returns_401(self):
         self.client.force_authenticate(user=None)

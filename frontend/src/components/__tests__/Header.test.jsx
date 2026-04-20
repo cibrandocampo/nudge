@@ -7,14 +7,14 @@ import Header from '../Header'
 const BASE = 'http://localhost/api'
 
 describe('Header', () => {
-  it('shows username', () => {
+  it('exposes username via the user menu button', () => {
     renderWithProviders(<Header />)
-    expect(screen.getByText('testuser')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'testuser' })).toBeInTheDocument()
   })
 
-  it('shows Nudge logo', () => {
+  it('shows nudge logo', () => {
     renderWithProviders(<Header />)
-    expect(screen.getByText('Nudge')).toBeInTheDocument()
+    expect(screen.getByText('nudge')).toBeInTheDocument()
   })
 
   it('shows Admin button for staff users', () => {
@@ -25,7 +25,6 @@ describe('Header', () => {
   })
 
   it('Admin button calls goToAdmin which submits a form', async () => {
-    // We intercept form.submit to prevent jsdom navigation error
     const origAppend = document.body.appendChild.bind(document.body)
     const formRef = { current: null }
     const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((el) => {
@@ -54,20 +53,21 @@ describe('Header', () => {
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
   })
 
-  it('toggles dropdown on username click', async () => {
+  it('toggles dropdown on user menu click', async () => {
     const { user } = renderWithProviders(<Header />)
+    const btn = screen.getByRole('button', { name: 'testuser' })
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
 
-    await user.click(screen.getByText('testuser'))
+    await user.click(btn)
     expect(screen.getByText('Sign out')).toBeInTheDocument()
 
-    await user.click(screen.getByText('testuser'))
+    await user.click(btn)
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument()
   })
 
   it('closes dropdown on outside click', async () => {
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     expect(screen.getByText('Sign out')).toBeInTheDocument()
 
     fireEvent.mouseDown(document.body)
@@ -76,14 +76,14 @@ describe('Header', () => {
 
   it('opens change password modal from dropdown', async () => {
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Change password'))
     expect(screen.getByPlaceholderText('Current password')).toBeInTheDocument()
   })
 
   it('submits change password form successfully', async () => {
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Change password'))
 
     await user.type(screen.getByPlaceholderText('Current password'), 'old')
@@ -96,7 +96,7 @@ describe('Header', () => {
 
   it('shows error when passwords do not match', async () => {
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Change password'))
 
     await user.type(screen.getByPlaceholderText('Current password'), 'old')
@@ -114,7 +114,7 @@ describe('Header', () => {
       ),
     )
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Change password'))
 
     await user.type(screen.getByPlaceholderText('Current password'), 'wrong')
@@ -128,7 +128,7 @@ describe('Header', () => {
   it('shows generic error when API returns error without detail', async () => {
     server.use(http.post(`${BASE}/auth/change-password/`, () => HttpResponse.json({}, { status: 400 })))
     const { user } = renderWithProviders(<Header />)
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Change password'))
 
     await user.type(screen.getByPlaceholderText('Current password'), 'wrong')
@@ -142,7 +142,7 @@ describe('Header', () => {
   it('calls logout and navigates on Sign out', async () => {
     const logout = vi.fn()
     const { user } = renderWithProviders(<Header />, { auth: { logout } })
-    await user.click(screen.getByText('testuser'))
+    await user.click(screen.getByRole('button', { name: 'testuser' }))
     await user.click(screen.getByText('Sign out'))
     expect(logout).toHaveBeenCalled()
   })

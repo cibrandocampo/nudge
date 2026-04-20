@@ -1,5 +1,7 @@
 from datetime import date, timedelta
+from math import floor
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
@@ -9,11 +11,42 @@ from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, 
 User = get_user_model()
 
 
+def validate_client_created_at(value):
+    """
+    Validator for client-provided action timestamps.
+
+    Returns the value unchanged when no skew limit is configured or when the
+    value is within skew. Raises ValidationError otherwise. Shared between the
+    RoutineEntry and StockConsumption entry points so the rule is consistent.
+    """
+    if value is None:
+        return None
+    skew = getattr(settings, "OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS", None)
+    if skew is None:
+        return value
+    delta = abs((timezone.now() - value).total_seconds())
+    if delta > skew:
+        raise serializers.ValidationError(f"Client timestamp exceeds allowed skew ({skew}s).")
+    return value
+
+
+class ClientTimestampInputSerializer(serializers.Serializer):
+    """
+    Tiny input-only serializer for endpoints that accept an optional
+    `client_created_at` alongside their domain payload (log, consume).
+    """
+
+    client_created_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_client_created_at(self, value):
+        return validate_client_created_at(value)
+
+
 class StockLotSerializer(serializers.ModelSerializer):
     class Meta:
         model = StockLot
-        fields = ["id", "quantity", "expiry_date", "lot_number", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "quantity", "expiry_date", "lot_number", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_quantity(self, value):
         if value < 0:
@@ -40,6 +73,10 @@ class StockSerializer(serializers.ModelSerializer):
     has_expiring_lots = serializers.SerializerMethodField()
     expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
+    estimated_depletion_date = serializers.SerializerMethodField()
+    daily_consumption_own = serializers.SerializerMethodField()
+    daily_consumption_shared = serializers.SerializerMethodField()
+    is_low_stock = serializers.SerializerMethodField()
     shared_with = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=User.objects.all(),
@@ -48,6 +85,8 @@ class StockSerializer(serializers.ModelSerializer):
     shared_with_details = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     owner_username = serializers.CharField(source="user.username", read_only=True)
+
+    LOW_STOCK_THRESHOLD_DAYS = 60
 
     class Meta:
         model = Stock
@@ -61,6 +100,10 @@ class StockSerializer(serializers.ModelSerializer):
             "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
+            "estimated_depletion_date",
+            "daily_consumption_own",
+            "daily_consumption_shared",
+            "is_low_stock",
             "shared_with",
             "shared_with_details",
             "is_owner",
@@ -75,6 +118,10 @@ class StockSerializer(serializers.ModelSerializer):
             "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
+            "estimated_depletion_date",
+            "daily_consumption_own",
+            "daily_consumption_shared",
+            "is_low_stock",
             "shared_with_details",
             "is_owner",
             "owner_username",
@@ -135,6 +182,68 @@ class StockSerializer(serializers.ModelSerializer):
             return any(lot.lot_number and lot.quantity > 0 for lot in obj.lots.all())
         return obj.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
 
+    def _consumption_data(self, obj):
+        """Compute and cache consumption data for the stock."""
+        cache_attr = "_consumption_data_cache"
+        if hasattr(obj, cache_attr):
+            return getattr(obj, cache_attr)
+
+        active_routines = getattr(obj, "active_routines", None)
+        if active_routines is None:
+            active_routines = list(obj.routines.filter(is_active=True).select_related("user"))
+
+        if not active_routines:
+            result = {
+                "own": None,
+                "shared": None,
+                "depletion_date": None,
+                "is_low_stock": False,
+            }
+            setattr(obj, cache_attr, result)
+            return result
+
+        own = 0.0
+        shared = 0.0
+        for routine in active_routines:
+            daily_rate = (24.0 / routine.interval_hours) * routine.stock_usage
+            if routine.user_id == obj.user_id:
+                own += daily_rate
+            else:
+                shared += daily_rate
+
+        total = own + shared
+        quantity = self.get_quantity(obj)
+
+        if quantity > 0:
+            days = floor(quantity / total)
+            depletion_date = date.today() + timedelta(days=days)
+        else:
+            depletion_date = date.today()
+
+        threshold = date.today() + timedelta(days=self.LOW_STOCK_THRESHOLD_DAYS)
+        is_low = depletion_date is not None and depletion_date <= threshold
+
+        result = {
+            "own": round(own, 2) if own > 0 else None,
+            "shared": round(shared, 2) if shared > 0 else None,
+            "depletion_date": depletion_date,
+            "is_low_stock": is_low,
+        }
+        setattr(obj, cache_attr, result)
+        return result
+
+    def get_estimated_depletion_date(self, obj):
+        return self._consumption_data(obj)["depletion_date"]
+
+    def get_daily_consumption_own(self, obj):
+        return self._consumption_data(obj)["own"]
+
+    def get_daily_consumption_shared(self, obj):
+        return self._consumption_data(obj)["shared"]
+
+    def get_is_low_stock(self, obj):
+        return self._consumption_data(obj)["is_low_stock"]
+
 
 class StockConsumptionSerializer(serializers.ModelSerializer):
     stock_name = serializers.CharField(source="stock.name", read_only=True)
@@ -151,6 +260,8 @@ class StockConsumptionSerializer(serializers.ModelSerializer):
             "notes",
             "consumed_by_username",
             "created_at",
+            "updated_at",
+            "client_created_at",
         ]
         read_only_fields = [
             "id",
@@ -160,6 +271,8 @@ class StockConsumptionSerializer(serializers.ModelSerializer):
             "consumed_lots",
             "consumed_by_username",
             "created_at",
+            "updated_at",
+            "client_created_at",
         ]
 
 
@@ -229,8 +342,11 @@ class RoutineSerializer(serializers.ModelSerializer):
 
     def validate_stock(self, value):
         request = self.context.get("request")
-        if value and request and value.user != request.user:
-            raise serializers.ValidationError("Invalid stock item.")
+        if value and request:
+            is_owner = value.user == request.user
+            is_shared = value.shared_with.filter(pk=request.user.pk).exists()
+            if not is_owner and not is_shared:
+                raise serializers.ValidationError("Invalid stock item.")
         return value
 
     def validate_shared_with(self, value):
@@ -268,7 +384,10 @@ class RoutineSerializer(serializers.ModelSerializer):
 
     def get_last_entry_at(self, obj):
         last = obj.last_entry()
-        return last.created_at if last else None
+        # Use the effective action time so UI "last done" reflects when the
+        # user actually performed the routine, not when the offline queue
+        # synced it (same principle as next_due_at).
+        return last.effective_created_at if last else None
 
     def get_next_due_at(self, obj):
         return obj.next_due_at()
@@ -306,6 +425,8 @@ class RoutineEntrySerializer(serializers.ModelSerializer):
             "stock_name",
             "completed_by_username",
             "created_at",
+            "updated_at",
+            "client_created_at",
             "notes",
             "consumed_lots",
         ]
@@ -313,6 +434,8 @@ class RoutineEntrySerializer(serializers.ModelSerializer):
             "id",
             "routine",
             "created_at",
+            "updated_at",
+            "client_created_at",
             "consumed_lots",
             "stock_name",
             "completed_by_username",

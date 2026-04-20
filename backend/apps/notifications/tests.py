@@ -380,8 +380,12 @@ class SendPushNotificationTest(TestCase):
 
         from pywebpush import WebPushException
 
+        # `assertLogs` captures the `push` logger's ERROR for the failed
+        # send — prevents CI noise while verifying the log DID fire (the
+        # production signal used to diagnose bad push endpoints).
         with patch("apps.notifications.push.webpush", side_effect=WebPushException("error", response=exc.response)):
-            send_push_notification(self.user, title="T", body="B", type=TYPE_DUE)
+            with self.assertLogs("apps.notifications.push", level="ERROR"):
+                send_push_notification(self.user, title="T", body="B", type=TYPE_DUE)
 
         self.assertTrue(PushSubscription.objects.filter(pk=sub.pk).exists())
 
@@ -428,6 +432,22 @@ class PushHelperTest(TestCase):
             args = mock_send.call_args
             self.assertEqual(args[1]["type"], TYPE_DUE)
             self.assertIn("Filter change", args[1]["title"])
+
+    def test_notify_due_falls_back_to_empty_body_when_timezone_is_invalid(self):
+        # A corrupted or unknown timezone string on the user should NOT
+        # raise — notify_due catches ZoneInfoNotFoundError and emits the
+        # notification with an empty body rather than crashing the worker.
+        bad_tz_user = make_user(username="badtz", tz="UTC")
+        bad_tz_user.timezone = "Not/A/Zone"
+        bad_tz_user.save()
+        routine = make_routine(bad_tz_user, name="Brake check")
+        # Ensure a due date exists so the try-branch actually runs.
+        make_entry(routine, offset_hours=-48)
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_due(routine)
+            args = mock_send.call_args
+            self.assertEqual(args[1]["type"], TYPE_DUE)
+            self.assertEqual(args[1]["body"], "")
 
     def test_notify_reminder(self):
         routine = make_routine(self.user, name="Check engine")

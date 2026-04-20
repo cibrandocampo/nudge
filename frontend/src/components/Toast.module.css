@@ -1,0 +1,123 @@
+.stack {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: calc(100% - 2rem);
+  max-width: 420px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  font-size: 0.875rem;
+  color: var(--c-text);
+  animation: slideUp 0.18s ease-out;
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+.message {
+  flex: 1;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.close:hover {
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-text) 6%, transparent);
+}
+
+/* Optional call-to-action button inside the toast (T065 sync errors).
+   Rendered between the message and the dismiss X. */
+.action {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--c-primary);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+.action:hover {
+  background: color-mix(in srgb, var(--c-primary) 8%, transparent);
+}
+
+/* Per-type accents: coloured left border + icon. Body stays on surface so
+   the toast reads cleanly on both light and dark surfaces. */
+.info .icon {
+  color: var(--c-primary);
+}
+.info {
+  border-left: 3px solid var(--c-primary);
+}
+
+.success .icon {
+  color: var(--c-success);
+}
+.success {
+  border-left: 3px solid var(--c-success);
+}
+
+.warning .icon {
+  color: var(--c-warning);
+}
+.warning {
+  border-left: 3px solid var(--c-warning);
+}
+
+.error .icon {
+  color: var(--c-danger);
+}
+.error {
+  border-left: 3px solid var(--c-danger);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 720px) {
+  .stack {
+    left: auto;
+    right: 1.5rem;
+    transform: none;
+    width: auto;
+  }
+}

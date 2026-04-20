@@ -202,6 +202,136 @@ Three languages: English (`en`), Spanish (`es`), Galician (`gl`). Language is au
 
 ---
 
+## Offline pipeline
+
+Every mutation the user triggers can fail because the network is missing, captive, or in a weird proxy state. Nudge never drops one: the request either succeeds against the backend, or it is captured in an IndexedDB queue, replayed when reachability recovers, and — if the server rejects the replay with a 412 — surfaced to the user as a resolvable conflict.
+
+```
+   UI tap ── useOfflineMutation ──▶ api.fetch
+                │                     │
+     on OfflineError │                │ on 2xx
+                ▼                     ▼
+       enqueue(entry, status='pending')   onSuccess (cache reconciliation)
+                │
+                │ online again + /api/health/ 2xx
+                ▼
+        sync.js drains queue (backoff 2s → 10s → 30s)
+                │
+    ┌───────────┼───────────────────────┐
+    │           │                       │
+    ▼           ▼                       ▼
+ 2xx ok   412 conflict             5xx / 429 / retryable
+    │         │                         │
+ remove     mark 'conflict'        mark 'error' / retry later
+            │
+            ▼
+    ConflictOrchestrator → ConflictModal
+            │
+    ┌───────┴───────┐
+    ▼               ▼
+ Overwrite       Discard
+ (re-enqueue     (remove +
+  with new        invalidate
+  updated_at)     queries)
+```
+
+### Mutation queue (IndexedDB)
+
+`frontend/src/offline/queue.js` wraps a single object store `mutations` inside the `nudge-offline` IndexedDB database, addressed via `idb-keyval`. Each entry represents one mutation:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `id` | string (UUID) | `Idempotency-Key` header reused verbatim on every retry — at-most-once replay |
+| `method` | `POST`/`PATCH`/`PUT`/`DELETE` | HTTP verb |
+| `endpoint` | string | API path relative to `/api/` |
+| `body` | any or `null` | JSON payload sent on the request |
+| `resourceKey` | string or `null` | Scope tag (`routine:5`, `stock:3:lot:7`) used by the `SyncStatusBadge` to colour the right row |
+| `ifUnmodifiedSince` | ISO timestamp or `null` | Forwarded as `If-Unmodified-Since` for optimistic locking |
+| `createdAt` | ISO timestamp | Tap time, used as tie-breaker when draining |
+| `status` | `pending` / `syncing` / `error` / `conflict` | Drives the UI badges and the orchestrator |
+| `retryCount` | number | Incremented on each failed replay |
+| `nextAttemptAt` | ISO timestamp or `null` | Backoff deadline — the worker skips entries whose attempt is still in the future |
+| `conflictCurrent` | any (only when `status='conflict'`) | Server's `current` resource serialisation, used to render the diff |
+
+`useOfflineMutation` is the only producer. Consumers (`useQueueEntries`, `PendingBadge`, `SyncStatusBadge`, `ConflictOrchestrator`) subscribe to a native `EventTarget` that emits `change` on every write, so the UI reacts without polling. Cross-tab synchronisation is out of scope — we assume one active tab per user.
+
+`queueable: false` is the escape hatch for mutations that must NOT queue: settings save, password change, push subscribe/unsubscribe. On `OfflineError` they re-throw so the caller can render a *Requires connection* prompt instead of silently enqueueing.
+
+### Sync worker
+
+`frontend/src/offline/sync.js` drains the queue in `createdAt` order. Triggers:
+
+- Native `online` browser event.
+- Service Worker `sync` event (Background Sync API in Chromium). The SW posts a `PROCESS_QUEUE` message to every open client — draining always runs in the main thread so it has the auth context.
+- Explicit `forceSync()` called by the reachability module the moment the health poll recovers.
+
+Per entry the worker:
+
+1. Marks `status='syncing'`, registers an `AbortController` against the entry id so the UI can cancel it mid-flight (used by `ConflictModal`'s *Discard* path).
+2. Re-issues the exact request body with the original `Idempotency-Key` header.
+3. On 2xx — `remove(id)` and **focal invalidation**: only the cache keys that `resourceKey` identifies get invalidated, not the whole React Query store.
+4. On 412 — `status='conflict'`, `conflictCurrent=response.body.current`. The orchestrator takes over.
+5. On 5xx / 429 / network error — `retryCount++`, `nextAttemptAt = now + backoff[retryCount]` where `backoff = [2s, 10s, 30s]`. After the last step retries are attempted at the longest delay. Override in dev via `window.__NUDGE_SYNC_RETRY_DELAYS_MS__`.
+6. On 4xx (non-conflict) — `status='error'`. The entry lives in the `PendingBadge` panel; the user decides to retry or discard.
+
+A per-entry discard aborts the in-flight fetch and removes the queue row. If discard arrives while the request is mid-flight we deliberately leak the server write — correctness from the user's perspective is that they asked to throw it away.
+
+### Reachability probe
+
+`frontend/src/offline/reachability.js` owns the single source of truth for "can we talk to the backend right now?". `navigator.onLine` is not trusted: captive portals answer the L3 ping and a crashed backend still has the OS reporting online.
+
+- On any fetch failure the api client calls `setReachable(false)`. That starts a poll of `GET /api/health/` every `HEALTH_POLL_INTERVAL_MS` (default 20 000 ms).
+- On the first 2xx response the module flips back, fires `forceSync()`, and stops the poll.
+- A native `offline` DOM event is folded in as a lower-bound — when the OS knows there's no network, we skip the poll and mark offline immediately.
+
+Dev / E2E hooks exposed on `window` (stripped by Rollup in production via `import.meta.env.DEV || VITE_E2E_MODE === 'true'`):
+
+| Hook | Purpose |
+|------|---------|
+| `__NUDGE_REACHABILITY_SET__(bool)` | Flip the flag directly, bypassing the poll |
+| `__NUDGE_REACHABILITY_POLL_MS__` | Override the poll interval (tests use 500 ms) |
+| `__NUDGE_REACHABILITY_LOCK__` | `true` blocks passive state flips (SW-cached 200s, api-client success) so tests keep a deterministic offline state |
+| `__NUDGE_SYNC_RETRY_DELAYS_MS__` | Replace the `[2s, 10s, 30s]` backoff with a test-friendly array |
+
+The `OfflineBanner` component reads `getReachable()` + subscribes to changes; it is mounted once in `Layout.jsx` and renders across the whole app.
+
+### Conflict resolution (412)
+
+The `OptimisticLockingMixin` in `apps/core/mixins.py` inspects `If-Unmodified-Since` on every `PATCH`/`PUT`/`DELETE`. If the header's timestamp is older than the target row's `updated_at` (at 1-second resolution), the response is `412 Precondition Failed` with:
+
+```json
+{
+  "error": "conflict",
+  "current": { …serialised resource… }
+}
+```
+
+Migrations `routines/0009` and `routines/0010` add `updated_at` to `RoutineEntry` and `StockConsumption`; `users/0003` adds `settings_updated_at` to `User`. Resources that already had `updated_at` (Routine, Stock, StockLot) are locked via that field directly.
+
+Important: the `ConflictOrchestrator` only opens the modal when a 412 arrives during a **queue-driven replay**. An online 412 (user edits while reachable) throws `ConflictError` from `useOfflineMutation` and bubbles to the caller, which handles the error locally (toast, form error). This keeps the modal focused on the genuinely asynchronous case where the user's tap has already moved on.
+
+`ConflictModal` renders a per-field diff produced by `frontend/src/utils/diffPayloads.js`: only fields that actually differ between the local body and `conflictCurrent` are shown, so the user sees exactly what changed. Two resolutions:
+
+- **Overwrite with my version** — re-enqueue the same body with a new `Idempotency-Key` and the server's fresh `updated_at`. The new key is mandatory: the old key's response is cached as a 412 in the backend's `IdempotencyRecord` and reusing it would just replay the conflict.
+- **Discard my changes** — `remove(id)` + invalidate every query key — the server's state is the truth from here on.
+
+### Idempotency middleware
+
+`apps/idempotency/middleware.py` scopes cached responses by `(user, Idempotency-Key)` so the sync worker's retries are safe: if the original request reached the backend but the response never made it back to the client, the replay returns the cached response instead of executing the view again.
+
+- Scope: mutations (`POST`/`PATCH`/`PUT`/`DELETE`) on paths starting with `/api/`. GETs pass through.
+- Key length limit 64 characters; oversized or missing headers are silently skipped.
+- Body hash is compared against the stored one — replaying with a mutated body returns 422 to surface the misuse.
+- 2xx and 4xx responses are both cached; 5xx is not (the retry might succeed).
+- TTL 24 hours, enforced by `apps.idempotency.tasks.cleanup_idempotency_records` on the Celery beat schedule.
+
+### See also
+
+- Source files: `frontend/src/hooks/useOfflineMutation.js`, `frontend/src/offline/queue.js`, `frontend/src/offline/sync.js`, `frontend/src/offline/reachability.js`, `frontend/src/components/ConflictModal.jsx`, `frontend/src/components/ConflictOrchestrator.jsx`, `frontend/src/utils/diffPayloads.js`, `backend/apps/core/mixins.py`, `backend/apps/idempotency/middleware.py`.
+- E2E coverage: `e2e/tests/offline-read.spec.js`, `e2e/tests/offline-mutations.spec.js`, `e2e/tests/offline-sync.spec.js`.
+
+---
+
 ## Docker setup
 
 ### Production (`docker-compose.yml`)

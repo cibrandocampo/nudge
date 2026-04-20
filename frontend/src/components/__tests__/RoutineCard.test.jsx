@@ -24,19 +24,19 @@ describe('RoutineCard', () => {
   it('shows stock info when present', () => {
     const routine = { ...baseRoutine, stock_name: 'Filters', stock_quantity: 5 }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    expect(screen.getByText(/Stock:/)).toBeInTheDocument()
+    expect(screen.getByText(/Filters/)).toBeInTheDocument()
     expect(screen.getByText(/5/)).toBeInTheDocument()
   })
 
   it('shows Done button only when is_due', () => {
     renderWithProviders(<RoutineCard routine={baseRoutine} onMarkDone={vi.fn()} completing={false} />)
-    expect(screen.getByText('Done')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument()
   })
 
   it('hides Done button when not is_due', () => {
     const routine = { ...baseRoutine, is_due: false }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    expect(screen.queryByText('Done')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /done/i })).not.toBeInTheDocument()
   })
 
   it('calls onMarkDone with routine id when Done clicked', async () => {
@@ -44,7 +44,7 @@ describe('RoutineCard', () => {
     const { user } = renderWithProviders(
       <RoutineCard routine={baseRoutine} onMarkDone={onMarkDone} completing={false} />,
     )
-    await user.click(screen.getByText('Done'))
+    await user.click(screen.getByRole('button', { name: /done/i }))
     expect(onMarkDone).toHaveBeenCalledWith(1)
   })
 
@@ -62,22 +62,22 @@ describe('RoutineCard', () => {
   it('applies danger border class when overdue', () => {
     const routine = { ...baseRoutine, is_due: true, is_overdue: true }
     const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    const row = container.firstChild
-    expect(row.className).toContain('borderDanger')
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderDanger')
   })
 
   it('applies warning border class when due today but not yet overdue', () => {
     const routine = { ...baseRoutine, is_due: true, is_overdue: false, hours_until_due: 3 }
     const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    const row = container.firstChild
-    expect(row.className).toContain('borderWarning')
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderWarning')
   })
 
   it('applies success border class when not due', () => {
     const routine = { ...baseRoutine, is_due: false, is_overdue: false, hours_until_due: 24 }
     const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    const row = container.firstChild
-    expect(row.className).toContain('borderSuccess')
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderSuccess')
   })
 
   // ── Sharing ────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ describe('RoutineCard', () => {
         onToggleShare={vi.fn()}
       />,
     )
-    expect(screen.getByLabelText('Share')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
   })
 
   it('hides share button when not owner', () => {
@@ -109,7 +109,7 @@ describe('RoutineCard', () => {
         onToggleShare={vi.fn()}
       />,
     )
-    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument()
   })
 
   it('clicking a due card row navigates to routine detail', async () => {
@@ -122,7 +122,7 @@ describe('RoutineCard', () => {
       { initialEntries: ['/'] },
     )
     // Click the card (not the Done button)
-    const card = screen.getByText('Take vitamins').closest('[class*="row"]')
+    const card = screen.getByText('Take vitamins').closest('[class*="card"]')
     await user.click(card)
     await waitFor(() => expect(screen.getByText('Detail page')).toBeInTheDocument())
   })
@@ -141,7 +141,7 @@ describe('RoutineCard', () => {
     const { user } = renderWithProviders(
       <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
     )
-    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('button', { name: /share/i }))
     expect(onShare).toHaveBeenCalledWith(1)
   })
 
@@ -159,7 +159,7 @@ describe('RoutineCard', () => {
     const { user } = renderWithProviders(
       <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
     )
-    await user.click(screen.getByLabelText('Share'))
+    await user.click(screen.getByRole('button', { name: /share/i }))
     expect(onShare).toHaveBeenCalledWith(1)
   })
 
@@ -169,21 +169,21 @@ describe('RoutineCard', () => {
     expect(screen.getByText('other')).toBeInTheDocument()
   })
 
-  it('shows shareBtnActive class on due routine when already shared', () => {
+  it('uses the shared-active icon variant on due routine when already shared', () => {
     const routine = { ...baseRoutine, is_due: true, is_overdue: true, shared_with: [10], is_owner: true }
     const contacts = [{ id: 10, username: 'alice' }]
     const { container } = renderWithProviders(
       <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
     )
-    expect(container.querySelector('[aria-label="Share"]').className).toContain('shareBtnActive')
+    expect(container.querySelector('[aria-label="Share"]').className).toContain('btnIconShared')
   })
 
-  it('shows shareBtnActive class on non-due routine when already shared', () => {
+  it('uses the shared-active icon variant on non-due routine when already shared', () => {
     const routine = { ...baseRoutine, is_due: false, is_overdue: false, shared_with: [10], is_owner: true }
     const contacts = [{ id: 10, username: 'alice' }]
     const { container } = renderWithProviders(
       <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
     )
-    expect(container.querySelector('[aria-label="Share"]').className).toContain('shareBtnActive')
+    expect(container.querySelector('[aria-label="Share"]').className).toContain('btnIconShared')
   })
 })

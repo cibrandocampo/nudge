@@ -1,0 +1,29 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+}
+
+.warning {
+  background: var(--c-brand);
+  color: var(--c-brand-text);
+  border-bottom-color: #f5c843;
+}
+
+.danger {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--c-danger);
+  border-bottom-color: var(--c-border-danger);
+}
+
+.message {
+  flex: 1;
+  text-align: center;
+  line-height: 1.3;
+}

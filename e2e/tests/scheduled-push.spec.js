@@ -35,6 +35,7 @@ const apiCall = (page, method, path, body) =>
 test.describe('Scheduled test notification', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
   test('returns 202 and enqueues Celery task', async ({ page }) => {

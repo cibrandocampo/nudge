@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.core.mixins import parse_http_date
 from apps.notifications.push import notify_contact_added
 from apps.routines.models import Routine, Stock
 
@@ -53,13 +54,34 @@ def change_password(request):
 @api_view(["GET", "PATCH"])
 def me(request):
     if request.method == "GET":
-        serializer = UserSerializer(request.user)
+        serializer = UserSerializer(request.user, context={"request": request})
         return Response(serializer.data)
+
+    # Optimistic concurrency: If-Unmodified-Since is compared against the
+    # user's `settings_updated_at` field (bumped only on settings changes by
+    # UserUpdateSerializer).
+    header = request.headers.get("If-Unmodified-Since")
+    if header:
+        since = parse_http_date(header)
+        if since is None:
+            return Response(
+                {"error": "Invalid If-Unmodified-Since header"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        server_value = request.user.settings_updated_at
+        if server_value.replace(microsecond=0) > since.replace(microsecond=0):
+            return Response(
+                {
+                    "error": "conflict",
+                    "current": UserSerializer(request.user, context={"request": request}).data,
+                },
+                status=status.HTTP_412_PRECONDITION_FAILED,
+            )
 
     serializer = UserUpdateSerializer(request.user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

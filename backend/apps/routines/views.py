@@ -8,11 +8,13 @@ from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from apps.core.mixins import OptimisticLockingMixin
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 from .serializers import (
+    ClientTimestampInputSerializer,
     RoutineEntrySerializer,
     RoutineSerializer,
     StockConsumptionSerializer,
@@ -34,15 +36,20 @@ class StockGroupViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class StockViewSet(viewsets.ModelViewSet):
+class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
     serializer_class = StockSerializer
 
     def get_queryset(self):
+        active_routines = Prefetch(
+            "routines",
+            queryset=Routine.objects.filter(is_active=True).select_related("user"),
+            to_attr="active_routines",
+        )
         return (
             Stock.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
             .distinct()
             .select_related("group", "user")
-            .prefetch_related("lots", "shared_with")
+            .prefetch_related("lots", "shared_with", active_routines)
             .order_by("name")
         )
 
@@ -75,7 +82,12 @@ class StockViewSet(viewsets.ModelViewSet):
     def lots_for_selection(self, request, pk=None):
         """
         Return available lots grouped (one row per lot, FEFO order).
-        Used to populate the lot selection modal when consuming stock directly.
+
+        Since T063 the frontend derives this list locally from `stock.lots`
+        (already included in every StockSerializer response) so the lot
+        selection modal works offline without a second round-trip. The
+        endpoint is kept for backwards compatibility with external or
+        future clients.
         """
         stock = self.get_object()
         lots = stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
@@ -103,6 +115,10 @@ class StockViewSet(viewsets.ModelViewSet):
             return Response({"quantity": "Must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         if quantity <= 0:
             return Response({"quantity": "Must be > 0."}, status=status.HTTP_400_BAD_REQUEST)
+
+        ts_serializer = ClientTimestampInputSerializer(data=request.data)
+        ts_serializer.is_valid(raise_exception=True)
+        client_created_at = ts_serializer.validated_data.get("client_created_at")
 
         lot_selections = request.data.get("lot_selections")
 
@@ -165,6 +181,7 @@ class StockViewSet(viewsets.ModelViewSet):
                 consumed_by=request.user,
                 quantity=quantity,
                 consumed_lots=consumed_lots,
+                client_created_at=client_created_at,
             )
             stock.save(update_fields=["updated_at"])
 
@@ -174,7 +191,7 @@ class StockViewSet(viewsets.ModelViewSet):
         return Response(StockSerializer(stock).data)
 
 
-class StockLotViewSet(viewsets.ModelViewSet):
+class StockLotViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
     serializer_class = StockLotSerializer
     http_method_names = ["post", "patch", "delete", "head", "options"]
 
@@ -214,7 +231,7 @@ class StockLotViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class RoutineViewSet(viewsets.ModelViewSet):
+class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
     serializer_class = RoutineSerializer
 
     def get_queryset(self):
@@ -259,7 +276,11 @@ class RoutineViewSet(viewsets.ModelViewSet):
     def lots_for_selection(self, request, pk=None):
         """
         Return available lots grouped (one row per lot, FEFO order).
-        Used to populate the lot selection modal on the frontend.
+
+        Since T063 the frontend derives this list from the cached stock
+        object (`useStockList()` keeps it warm) so marking a routine as
+        done with lot selection works offline without a second request.
+        Retained for backwards compatibility.
         """
         routine = self.get_object()
         if not routine.stock:
@@ -286,13 +307,35 @@ class RoutineViewSet(viewsets.ModelViewSet):
         Resets notification state for this cycle.
         """
         routine = self.get_object()
+
+        ts_serializer = ClientTimestampInputSerializer(data=request.data)
+        ts_serializer.is_valid(raise_exception=True)
+        client_created_at = ts_serializer.validated_data.get("client_created_at")
+
         lot_selections = request.data.get("lot_selections")
+
+        # Refuse to log when the routine has a linked stock whose total
+        # quantity is below `stock_usage`. Otherwise the entry would be
+        # recorded as "consumed" while no stock actually existed — an
+        # audit hole that also let `pain_relief` (seeded with 0-qty
+        # Ibuprofen) be marked done without blocking in the UI.
+        if routine.stock and routine.stock.quantity < routine.stock_usage:
+            return Response(
+                {
+                    "detail": "Insufficient stock to log this routine.",
+                    "code": "insufficient_stock",
+                    "required": routine.stock_usage,
+                    "available": routine.stock.quantity,
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         with transaction.atomic():
             entry = RoutineEntry.objects.create(
                 routine=routine,
                 completed_by=request.user,
                 notes=request.data.get("notes", ""),
+                client_created_at=client_created_at,
             )
             # Invalidate cached last_entry so subsequent calls see the new entry
             routine._last_entry_cache = entry
@@ -381,7 +424,12 @@ class RoutineViewSet(viewsets.ModelViewSet):
         return Response(RoutineEntrySerializer(qs, many=True).data)
 
 
-class StockConsumptionViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class StockConsumptionViewSet(
+    OptimisticLockingMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
     """List stock consumptions and edit notes."""
 
     serializer_class = StockConsumptionSerializer
@@ -407,9 +455,11 @@ class StockConsumptionViewSet(mixins.ListModelMixin, mixins.UpdateModelMixin, vi
 
 
 class RoutineEntryViewSet(
+    OptimisticLockingMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     """Global entry history for the authenticated user."""
@@ -434,6 +484,55 @@ class RoutineEntryViewSet(
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
         return qs
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete a routine entry and restore the consumed stock.
+
+        Used by the Undo flow after "Mark done" (T036): clicking the
+        toast's Undo button within its lifetime must fully reverse the
+        action. For each lot listed in `entry.consumed_lots` we look
+        up the matching StockLot (by lot_number + expiry_date) and
+        increment its quantity — or re-create the lot if the
+        `delete_empty_lot` signal wiped it when the last unit was
+        consumed.
+        """
+        entry = self.get_object()
+        # Only the owner can delete history entries. Shared users can see
+        # but not undo another user's action.
+        if entry.routine.user_id != request.user.id:
+            return Response(
+                {"detail": "Only the owner can delete this entry."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        with transaction.atomic():
+            stock = entry.routine.stock
+            if stock and entry.consumed_lots:
+                for lot_data in entry.consumed_lots:
+                    qty = int(lot_data.get("quantity", 0) or 0)
+                    if qty <= 0:
+                        continue
+                    lot_number = lot_data.get("lot_number") or ""
+                    expiry_date = lot_data.get("expiry_date")
+                    lot = (
+                        StockLot.objects.select_for_update()
+                        .filter(stock=stock, lot_number=lot_number, expiry_date=expiry_date)
+                        .first()
+                    )
+                    if lot is not None:
+                        lot.quantity += qty
+                        lot.save(update_fields=["quantity"])
+                    else:
+                        StockLot.objects.create(
+                            stock=stock,
+                            lot_number=lot_number,
+                            expiry_date=expiry_date,
+                            quantity=qty,
+                        )
+            entry.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])

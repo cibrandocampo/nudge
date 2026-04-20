@@ -1,8 +1,14 @@
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { vi } from 'vitest'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import SettingsPage from '../SettingsPage'
+
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
 
 const BASE = 'http://localhost/api'
 
@@ -33,19 +39,23 @@ describe('SettingsPage', () => {
     // the keys fall back). Just verify no crash.
   })
 
-  it('renders timezone search and listbox', async () => {
+  it('renders timezone combobox with the current value', async () => {
     renderWithProviders(<SettingsPage />)
-    expect(await screen.findByPlaceholderText('Search timezone…')).toBeInTheDocument()
+    // Placeholder attribute is present even when the input shows the current timezone
+    const tzInput = await screen.findByPlaceholderText('Search timezone…')
+    // Default test user has timezone Europe/Madrid
+    expect(tzInput).toHaveValue('Europe/Madrid')
   })
 
-  it('filters timezones when searching', async () => {
+  it('filters timezones when typing in the combobox', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
-    const searchInput = screen.getByPlaceholderText('Search timezone…')
-    await user.type(searchInput, 'Madrid')
-    // The listbox should contain Europe/Madrid
+    const input = await screen.findByPlaceholderText('Search timezone…')
+    await user.click(input)
+    await user.keyboard('London')
     const options = screen.getAllByRole('option')
-    const hasMadrid = options.some((o) => o.textContent.includes('Madrid'))
-    expect(hasMadrid).toBe(true)
+    const labels = options.map((o) => o.textContent)
+    expect(labels.some((l) => l.includes('Europe/London'))).toBe(true)
+    expect(labels.every((l) => l.toLowerCase().includes('london'))).toBe(true)
   })
 
   it('renders daily notification time input', async () => {
@@ -86,12 +96,15 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Enable notifications in your browser/)).toBeInTheDocument()
   })
 
-  it('selects a timezone from the listbox', async () => {
+  it('selects a timezone from the combobox popover', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
-    const listbox = screen.getByRole('listbox')
-    // selectOptions works on <select> elements
-    await user.selectOptions(listbox, 'Europe/London')
-    expect(listbox.value).toBe('Europe/London')
+    const input = await screen.findByPlaceholderText('Search timezone…')
+    await user.click(input)
+    await user.keyboard('London')
+    await user.click(screen.getByText('Europe/London'))
+    // After selection the combobox closes and the input shows the new value
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(input).toHaveValue('Europe/London')
   })
 
   it('changes daily notification time', async () => {
@@ -330,14 +343,14 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('contact search results list renders above the input', async () => {
-    const { user } = renderWithProviders(<SettingsPage />)
-    await screen.findByText('Contacts')
-    await user.type(screen.getByPlaceholderText('Search users...'), 'bob')
-    await waitFor(() => expect(screen.getByText('bob')).toBeInTheDocument())
-    const list = screen.getByRole('list', { name: (_, el) => el.className?.includes('contactResults') })
-    expect(list).toBeInTheDocument()
-    expect(list.className).toMatch(/contactResults/)
+  it('renders contacts with an avatar initial', async () => {
+    server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])))
+    renderWithProviders(<SettingsPage />)
+    const nameNode = await screen.findByText('alice')
+    const row = nameNode.closest('li')
+    expect(row).not.toBeNull()
+    // The avatar sibling renders the uppercased first letter
+    expect(row.textContent.startsWith('A')).toBe(true)
   })
 
   it('removes contact with confirmation', async () => {
@@ -350,7 +363,9 @@ describe('SettingsPage', () => {
     expect(window.confirm).toHaveBeenCalled()
   })
 
-  it('shows error when add contact throws network error', async () => {
+  it('shows "Action not available offline" when add contact hits a network error', async () => {
+    // Contacts became online-only in T060. Instead of queueing, the
+    // component surfaces the offline error inline.
     server.use(http.post(`${BASE}/auth/contacts/`, () => HttpResponse.error()))
     const { user } = renderWithProviders(<SettingsPage />)
     await screen.findByText('Contacts')
@@ -358,7 +373,7 @@ describe('SettingsPage', () => {
     await user.type(input, 'bob')
     await waitFor(() => expect(screen.getByText('bob')).toBeInTheDocument())
     await user.click(screen.getByText('bob'))
-    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
   })
 
   it('shows error when add contact fails', async () => {
@@ -374,7 +389,7 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(screen.getByText('Already a contact')).toBeInTheDocument())
   })
 
-  it('shows error when remove contact fails', async () => {
+  it('shows "Action not available offline" when remove contact hits a network error', async () => {
     server.use(
       http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
       http.delete(`${BASE}/auth/contacts/:id/`, () => HttpResponse.error()),
@@ -383,26 +398,110 @@ describe('SettingsPage', () => {
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await user.click(screen.getByTitle('Remove contact'))
-    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
   })
 
-  it('shows timezone hint when user timezone is UTC but browser is different', async () => {
-    // The user has timezone UTC, and the form pre-fills with BROWSER_TZ
-    // When they're different, the hint shows
+  it('shows error when remove contact returns a server error', async () => {
+    server.use(
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
+      http.delete(`${BASE}/auth/contacts/:id/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    window.confirm = vi.fn(() => true)
+    const { user } = renderWithProviders(<SettingsPage />)
+    expect(await screen.findByText('alice')).toBeInTheDocument()
+    await user.click(screen.getByTitle('Remove contact'))
+    await waitFor(() => expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument())
+  })
+
+  it('save button shows the offline label when updateMe fails with no connection', async () => {
+    server.use(http.patch(`${BASE}/auth/me/`, () => HttpResponse.error()))
+    const { user } = renderWithProviders(<SettingsPage />)
+    await user.click(screen.getByText('Save changes'))
+    await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
+  })
+
+  it('skips subscribing when user denies the permission prompt', async () => {
+    Object.defineProperty(window, 'Notification', {
+      value: { permission: 'default', requestPermission: vi.fn().mockResolvedValue('denied') },
+      writable: true,
+    })
+    const vapidSpy = vi.fn()
+    server.use(
+      http.get(`${BASE}/push/vapid-public-key/`, () => {
+        vapidSpy()
+        return HttpResponse.json({ public_key: 'should-not-be-fetched' })
+      }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />)
+    await user.click(screen.getByText('Enable notifications'))
+    await waitFor(() => expect(screen.getByText('Blocked by browser')).toBeInTheDocument())
+    expect(vapidSpy).not.toHaveBeenCalled()
+  })
+
+  it('adds contact error falls back to generic message when detail is missing', async () => {
+    server.use(http.post(`${BASE}/auth/contacts/`, () => new HttpResponse(null, { status: 500 })))
+    const { user } = renderWithProviders(<SettingsPage />)
+    await screen.findByText('Contacts')
+    const input = screen.getByPlaceholderText('Search users...')
+    await user.type(input, 'bob')
+    await waitFor(() => expect(screen.getByText('bob')).toBeInTheDocument())
+    await user.click(screen.getByText('bob'))
+    await waitFor(() => expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument())
+  })
+
+  it('does not remove contact when the confirm dialog is dismissed', async () => {
+    server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])))
+    const deleteSpy = vi.fn()
+    server.use(
+      http.delete(`${BASE}/auth/contacts/:id/`, () => {
+        deleteSpy()
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    window.confirm = vi.fn(() => false)
+    const { user } = renderWithProviders(<SettingsPage />)
+    expect(await screen.findByText('alice')).toBeInTheDocument()
+    await user.click(screen.getByTitle('Remove contact'))
+    expect(window.confirm).toHaveBeenCalled()
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
+
+  it('defaults daily notification time when the user record has none', async () => {
     renderWithProviders(<SettingsPage />, {
       auth: {
         user: {
           id: 1,
           username: 'testuser',
-          timezone: 'UTC',
-          daily_notification_time: '08:00:00',
+          timezone: 'Europe/Madrid',
+          daily_notification_time: null,
           language: 'en',
         },
       },
     })
-    // In jsdom BROWSER_TZ is typically UTC, so form.timezone === 'UTC'
-    // which makes the condition false. Just verify it renders.
-    expect(await screen.findByText('Settings')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('08:00')).toBeInTheDocument()
+  })
+
+  it('shows timezone hint when user timezone is UTC but browser is different', async () => {
+    const spy = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockReturnValue({ timeZone: 'Europe/Madrid' })
+    try {
+      renderWithProviders(<SettingsPage />, {
+        auth: {
+          user: {
+            id: 1,
+            username: 'testuser',
+            timezone: 'UTC',
+            daily_notification_time: '08:00:00',
+            language: 'en',
+          },
+        },
+      })
+      expect(await screen.findByText('Detected: Europe/Madrid')).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('handles contact search API failure gracefully', async () => {
@@ -481,5 +580,111 @@ describe('SettingsPage', () => {
     await user.type(input, 'b')
     // No results should appear for single character
     expect(screen.queryByRole('button', { name: 'bob' })).not.toBeInTheDocument()
+  })
+
+  // ── Profile (T042) ─────────────────────────────────────────────────────────
+
+  it('renders the email under the username when present', async () => {
+    renderWithProviders(<SettingsPage />, {
+      auth: {
+        user: {
+          id: 1,
+          username: 'testuser',
+          email: 'testuser@example.com',
+          timezone: 'Europe/Madrid',
+          language: 'en',
+          daily_notification_time: '08:00:00',
+        },
+      },
+    })
+    expect(await screen.findByText('testuser@example.com')).toBeInTheDocument()
+  })
+
+  it('omits the email line when the user has no email on file', async () => {
+    renderWithProviders(<SettingsPage />, {
+      auth: {
+        user: {
+          id: 1,
+          username: 'testuser',
+          email: '',
+          timezone: 'Europe/Madrid',
+          language: 'en',
+          daily_notification_time: '08:00:00',
+        },
+      },
+    })
+    await screen.findByText('testuser')
+    // No email rendered — the only @ on the page shouldn't appear
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument()
+  })
+
+  // ── Section order (T052) ───────────────────────────────────────────────────
+
+  it('renders sections in the expected order: Profile, Contacts, Push, Daily heads-up, Language, Timezone', async () => {
+    renderWithProviders(<SettingsPage />)
+    const titles = [
+      await screen.findByText('Profile'),
+      screen.getByText('Contacts'),
+      screen.getByText('Push notifications'),
+      screen.getByText('Daily heads-up time'),
+      screen.getByText('Language'),
+      screen.getByText('Timezone'),
+    ]
+    for (let i = 0; i < titles.length - 1; i++) {
+      expect(titles[i].compareDocumentPosition(titles[i + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  })
+
+  it('renders the daily heads-up hint in the same inline row as the time input', async () => {
+    renderWithProviders(<SettingsPage />)
+    const hint = await screen.findByText(/Your daily summary notification time/)
+    const timeInput = screen.getByDisplayValue('08:00')
+    // Both share the same inline parent (.inlineField wrapper)
+    expect(hint.parentElement).toBe(timeInput.parentElement)
+  })
+
+  describe('offline soft block', () => {
+    afterEach(() => {
+      reachableRef.current = true
+    })
+
+    it('renders the soft-block banner when offline', async () => {
+      reachableRef.current = false
+      renderWithProviders(<SettingsPage />)
+      expect(await screen.findByText(/Settings require a connection/i)).toBeInTheDocument()
+    })
+
+    it('disables the daily-time input, all comboboxes and the save button offline', async () => {
+      reachableRef.current = false
+      renderWithProviders(<SettingsPage />)
+      await screen.findByText(/Settings require a connection/i)
+      expect(screen.getByDisplayValue('08:00')).toBeDisabled()
+      // Both comboboxes (contact search + timezone) are disabled.
+      const comboboxes = screen.getAllByRole('combobox')
+      expect(comboboxes.length).toBeGreaterThan(0)
+      for (const cb of comboboxes) expect(cb).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Save changes/i })).toBeDisabled()
+    })
+
+    it('disables the language toggle buttons offline', async () => {
+      reachableRef.current = false
+      renderWithProviders(<SettingsPage />)
+      await screen.findByText(/Settings require a connection/i)
+      for (const name of ['English', 'Español', 'Galego']) {
+        expect(screen.getByRole('button', { name })).toBeDisabled()
+      }
+    })
+
+    it('disables the remove-contact buttons offline', async () => {
+      reachableRef.current = false
+      server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 1, username: 'alice' }])))
+      renderWithProviders(<SettingsPage />)
+      await screen.findByText('alice')
+      const removeButtons = screen
+        .getAllByRole('button')
+        .filter((btn) => btn.getAttribute('aria-label') === 'Remove contact')
+      expect(removeButtons.length).toBeGreaterThan(0)
+      for (const btn of removeButtons) expect(btn).toBeDisabled()
+    })
   })
 })

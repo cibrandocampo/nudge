@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
+import { useRoutine } from '../hooks/useRoutines'
+import { useServerReachable } from '../hooks/useServerReachable'
+import { useStockList } from '../hooks/useStock'
+import { useCreateRoutine } from '../hooks/mutations/useCreateRoutine'
+import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
+import { OfflineError } from '../api/errors'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './RoutineFormPage.module.css'
@@ -43,54 +48,41 @@ export default function RoutineFormPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  const { data: stocks = [] } = useStockList()
+  const { data: routine, isLoading: routineLoading, isError: routineError } = useRoutine(isEditing ? id : null)
+  const createRoutine = useCreateRoutine()
+  const updateRoutine = useUpdateRoutine()
+  const reachable = useServerReachable()
+
   const [form, setForm] = useState(EMPTY)
   const [intervalValue, setIntervalValue] = useState(1)
   const [intervalUnit, setIntervalUnit] = useState('days')
-  const [intervalDraft, setIntervalDraft] = useState(null) // string while focused
-  const [stocks, setStocks] = useState([])
+  const [intervalDraft, setIntervalDraft] = useState(null)
   const [usesStock, setUsesStock] = useState(false)
   const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
   const [lastDoneAt, setLastDoneAt] = useState('')
-  const [loading, setLoading] = useState(isEditing)
-  const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
-  const [loadError, setLoadError] = useState(false)
 
   const applyInterval = (value, unit) => {
     const factor = UNIT_FACTORS[unit] ?? 1
     setForm((f) => ({ ...f, interval_hours: Number(value) * factor }))
   }
 
+  // Prefill form once the edit routine is loaded.
   useEffect(() => {
-    api
-      .get('/stock/')
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setStocks(d.results ?? d))
-      .catch(() => {})
-    if (isEditing) {
-      api
-        .get(`/routines/${id}/`)
-        .then((r) => {
-          if (!r.ok) throw new Error()
-          return r.json()
-        })
-        .then((r) => {
-          const human = hoursToHuman(r.interval_hours)
-          setIntervalValue(human.value)
-          setIntervalUnit(human.unit)
-          setForm({
-            name: r.name,
-            description: r.description,
-            interval_hours: r.interval_hours,
-            stock: r.stock ?? '',
-            stock_usage: r.stock_usage,
-          })
-          setUsesStock(r.stock !== null)
-        })
-        .catch(() => setLoadError(true))
-        .finally(() => setLoading(false))
-    }
-  }, [id, isEditing])
+    if (!isEditing || !routine) return
+    const human = hoursToHuman(routine.interval_hours)
+    setIntervalValue(human.value)
+    setIntervalUnit(human.unit)
+    setForm({
+      name: routine.name,
+      description: routine.description,
+      interval_hours: routine.interval_hours,
+      stock: routine.stock ?? '',
+      stock_usage: routine.stock_usage,
+    })
+    setUsesStock(routine.stock !== null)
+  }, [isEditing, routine])
 
   const field = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
@@ -108,7 +100,6 @@ export default function RoutineFormPage() {
       setErrors(err)
       return
     }
-    setSaving(true)
     setErrors({})
     const payload = {
       name: form.name.trim(),
@@ -121,22 +112,32 @@ export default function RoutineFormPage() {
     if (!isEditing && lastDoneEnabled && lastDoneAt) {
       payload.last_done_at = new Date(lastDoneAt).toISOString()
     }
+
     try {
-      const res = isEditing ? await api.patch(`/routines/${id}/`, payload) : await api.post('/routines/', payload)
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      navigate(isEditing ? `/routines/${id}` : `/routines/${data.id}`)
-    } catch {
-      setErrors({ submit: t('common.actionError') })
-    } finally {
-      setSaving(false)
+      if (isEditing) {
+        await updateRoutine.mutateAsync({
+          routineId: Number(id),
+          patch: payload,
+          updatedAt: routine?.updated_at,
+        })
+        navigate(`/routines/${id}`)
+      } else {
+        // `useCreateRoutine` is online-only (T060), so it always resolves
+        // with the server payload here — no `__queued` branch to handle.
+        const result = await createRoutine.mutateAsync({ payload })
+        navigate(`/routines/${result.id}`)
+      }
+    } catch (err) {
+      const message = err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError')
+      setErrors({ submit: message })
     }
   }
 
-  if (loading) return <div className={shared.spinner} />
-  if (loadError) return <p className={shared.muted}>{t('common.error')}</p>
+  if (isEditing && routineLoading) return <div className={shared.spinner} />
+  if (isEditing && routineError) return <p className={shared.muted}>{t('common.error')}</p>
 
   const displayIntervalValue = intervalDraft !== null ? intervalDraft : String(intervalValue)
+  const saving = createRoutine.isPending || updateRoutine.isPending
 
   return (
     <div className={s.container}>
@@ -237,7 +238,13 @@ export default function RoutineFormPage() {
                 <option value="">{t('routine.form.selectDefault')}</option>
                 {stocks.map((st) => (
                   <option key={st.id} value={st.id}>
-                    {st.name} ({st.quantity} left)
+                    {st.is_owner === false
+                      ? t('routine.form.sharedStockLabel', {
+                          name: st.name,
+                          qty: st.quantity,
+                          owner: st.owner_username,
+                        })
+                      : `${st.name} (${st.quantity} left)`}
                   </option>
                 ))}
               </select>
@@ -282,11 +289,21 @@ export default function RoutineFormPage() {
         )}
 
         {errors.submit && <p className={shared.error}>{errors.submit}</p>}
+        {!isEditing && !reachable && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
         <div className={s.buttons}>
-          <button type="submit" className={s.saveBtn} disabled={saving}>
+          <button
+            type="submit"
+            className={cx(shared.btn, shared.btnPrimary, s.saveBtn)}
+            disabled={saving || (!isEditing && !reachable)}
+            title={!isEditing && !reachable ? t('offline.requiresConnection') : undefined}
+          >
             {saving ? t('routine.form.saving') : t('routine.form.save')}
           </button>
-          <button type="button" className={s.cancelBtn} onClick={() => navigate(-1)}>
+          <button
+            type="button"
+            className={cx(shared.btn, shared.btnSecondary, s.cancelBtn)}
+            onClick={() => navigate(-1)}
+          >
             {t('routine.form.cancel')}
           </button>
         </div>
@@ -299,7 +316,7 @@ function Field({ label, children, error, hint }) {
   return (
     <div className={s.field}>
       {label && (
-        <label className={s.label}>
+        <label className={cx(shared.inputLabel, s.label)}>
           {label}
           {hint && <span className={s.hint}> · {hint}</span>}
         </label>

@@ -9,17 +9,13 @@ const contacts = [
 
 describe('SharePopover', () => {
   it('does not render when not owner', () => {
-    const { container } = renderWithProviders(
-      <SharePopover sharedWith={[]} contacts={contacts} isOwner={false} onToggleShare={vi.fn()} />,
-    )
-    expect(container.innerHTML).toBe('')
+    renderWithProviders(<SharePopover sharedWith={[]} contacts={contacts} isOwner={false} onToggleShare={vi.fn()} />)
+    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument()
   })
 
   it('does not render when no contacts', () => {
-    const { container } = renderWithProviders(
-      <SharePopover sharedWith={[]} contacts={[]} isOwner={true} onToggleShare={vi.fn()} />,
-    )
-    expect(container.innerHTML).toBe('')
+    renderWithProviders(<SharePopover sharedWith={[]} contacts={[]} isOwner={true} onToggleShare={vi.fn()} />)
+    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument()
   })
 
   it('renders emoji button', () => {

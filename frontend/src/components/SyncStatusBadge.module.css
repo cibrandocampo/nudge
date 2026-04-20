@@ -1,0 +1,33 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.pending {
+  color: var(--c-text-3);
+}
+.syncing {
+  color: var(--c-text-2);
+  animation: syncPulse 1.4s ease-in-out infinite;
+}
+.error {
+  color: var(--c-delete);
+}
+.conflict {
+  color: var(--c-warning);
+}
+
+@keyframes syncPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}

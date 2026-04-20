@@ -1,123 +1,106 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
-import cx from '../utils/cx'
+import AlertBanner from '../components/AlertBanner'
 import ConfirmModal from '../components/ConfirmModal'
+import GroupPickerModal from '../components/GroupPickerModal'
+import Icon from '../components/Icon'
 import LotSelectionModal from '../components/LotSelectionModal'
 import ShareModal from '../components/ShareModal'
-import GroupPickerModal from '../components/GroupPickerModal'
+import StockCard from '../components/StockCard'
+import { useToast } from '../components/useToast'
+import { useContacts } from '../hooks/useContacts'
+import { useServerReachable } from '../hooks/useServerReachable'
+import { useStockGroups, useStockList } from '../hooks/useStock'
+import { useConsumeStock } from '../hooks/mutations/useConsumeStock'
+import { useCreateStock } from '../hooks/mutations/useCreateStock'
+import { useCreateStockGroup } from '../hooks/mutations/useCreateStockGroup'
+import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
+import { useDeleteStockGroup } from '../hooks/mutations/useDeleteStockGroup'
+import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
+import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
+import { useUpdateStockGroup } from '../hooks/mutations/useUpdateStockGroup'
+import { OfflineError } from '../api/errors'
+import cx from '../utils/cx'
+import { lotsForSelection } from '../utils/lotsForSelection'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
 
 function formatExpiry(dateStr) {
-  if (!dateStr) return null
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
+function formatDepletionDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function formatRate(rate) {
+  return rate % 1 === 0 ? String(rate) : rate.toFixed(1)
+}
+
 export default function InventoryPage() {
   const { t } = useTranslation()
-  const [stocks, setStocks] = useState([])
-  const [groups, setGroups] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [confirmRemove, setConfirmRemove] = useState(null) // { id, name }
-  const [confirmRemoveLot, setConfirmRemoveLot] = useState(null) // { stockId, lotId }
+  const { showToast } = useToast()
 
-  // New stock form
+  const { data: stocks = [], isLoading } = useStockList()
+  const { data: groups = [] } = useStockGroups()
+  const { data: contacts = [] } = useContacts()
+  const reachable = useServerReachable()
+
+  const createStock = useCreateStock()
+  const updateStock = useUpdateStock()
+  const createLot = useCreateStockLot()
+  const deleteLot = useDeleteStockLot()
+  const consumeStock = useConsumeStock()
+  const createGroup = useCreateStockGroup()
+  const updateGroup = useUpdateStockGroup()
+  const deleteGroup = useDeleteStockGroup()
+
+  const [confirmRemoveLot, setConfirmRemoveLot] = useState(null)
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
-
-  const [actionError, setActionError] = useState(null)
-  const [consuming, setConsuming] = useState(null) // stockId being consumed
-  const [lotModal, setLotModal] = useState(null) // { stockId, lots }
-  const [flashId, setFlashId] = useState(null) // stockId that just consumed
-
-  // Per-stock "add lot" form: { [stockId]: { show, qty, expiry, lotNumber, adding } }
+  const [consuming, setConsuming] = useState(null)
+  const [lotModal, setLotModal] = useState(null)
+  const [flashId, setFlashId] = useState(null)
   const [addLot, setAddLot] = useState({})
-
-  // Collapsible groups state
   const [collapsed, setCollapsed] = useState({})
-
-  // Group manager modal
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
-  const [creatingGroup, setCreatingGroup] = useState(false)
-  const [editingGroup, setEditingGroup] = useState(null) // { id, name }
-  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // { id, name }
-  const [groupPickerOpen, setGroupPickerOpen] = useState(null) // stockId
-  const [shareStockId, setShareStockId] = useState(null) // stockId
-  const [contacts, setContacts] = useState([])
+  const [editingGroup, setEditingGroup] = useState(null)
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
+  const [groupPickerOpen, setGroupPickerOpen] = useState(null)
+  const [shareStockId, setShareStockId] = useState(null)
 
-  const load = () => {
-    setLoading(true)
-    Promise.all([api.get('/stock/').then((r) => r.json()), api.get('/stock-groups/').then((r) => r.json())])
-      .then(([stockData, groupData]) => {
-        setStocks(stockData.results ?? stockData)
-        setGroups(groupData.results ?? groupData)
-      })
-      .finally(() => setLoading(false))
+  const notifyError = (err) => {
+    const message = err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError')
+    showToast({ type: 'error', message })
   }
-
-  useEffect(() => {
-    load()
-    api
-      .get('/auth/contacts/')
-      .then((r) => r.json())
-      .then(setContacts)
-      .catch(() => {})
-  }, [])
-
-  // ── Stock CRUD ────────────────────────────────────────────────────────────
 
   const create = async (e) => {
     e.preventDefault()
     if (!newName.trim()) return
-    setCreating(true)
-    setActionError(null)
     try {
-      const res = await api.post('/stock/', { name: newName.trim() })
-      if (!res.ok) throw new Error()
-      const item = await res.json()
-      setStocks((prev) => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)))
+      await createStock.mutateAsync({ name: newName.trim() })
       setNewName('')
       setShowNew(false)
-    } catch {
-      setActionError(t('common.actionError'))
-    } finally {
-      setCreating(false)
+    } catch (err) {
+      notifyError(err)
     }
   }
 
-  const doRemoveStock = async () => {
-    const { id } = confirmRemove
-    setConfirmRemove(null)
-    setActionError(null)
-    try {
-      const res = await api.delete(`/stock/${id}/`)
-      if (!res.ok && res.status !== 204) throw new Error()
-      setStocks((prev) => prev.filter((st) => st.id !== id))
-    } catch {
-      setActionError(t('common.actionError'))
-    }
-  }
-
-  // ── Consume ───────────────────────────────────────────────────────────────
-
-  const doConsume = async (stockId, lotSelections = null) => {
+  const doConsume = async (stockId, lotSelections) => {
     setConsuming(stockId)
-    setActionError(null)
     try {
-      const body = { quantity: 1 }
-      if (lotSelections) body.lot_selections = lotSelections
-      const res = await api.post(`/stock/${stockId}/consume/`, body)
-      if (!res.ok) throw new Error()
-      const updated = await res.json()
-      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
+      await consumeStock.mutateAsync({
+        stockId,
+        quantity: 1,
+        lotSelections,
+      })
       setFlashId(stockId)
       setTimeout(() => setFlashId(null), 600)
-    } catch {
-      setActionError(t('common.actionError'))
+    } catch (err) {
+      notifyError(err)
     } finally {
       setConsuming(null)
     }
@@ -126,17 +109,14 @@ export default function InventoryPage() {
   const handleConsume = async (stock) => {
     if (consuming) return
     if (stock.requires_lot_selection) {
-      setConsuming(stock.id)
-      try {
-        const res = await api.get(`/stock/${stock.id}/lots-for-selection/`)
-        if (!res.ok) throw new Error()
-        const lots = await res.json()
-        setLotModal({ stockId: stock.id, lots })
-      } catch {
-        setActionError(t('common.actionError'))
-      } finally {
-        setConsuming(null)
+      // The stock object already carries its lots array — derive the
+      // FEFO selection locally instead of hitting a separate endpoint.
+      const lots = lotsForSelection(stock)
+      if (lots.length === 0) {
+        showToast({ type: 'error', message: t('common.actionError') })
+        return
       }
+      setLotModal({ stockId: stock.id, lots })
       return
     }
     await doConsume(stock.id)
@@ -147,8 +127,6 @@ export default function InventoryPage() {
     setLotModal(null)
     await doConsume(stockId, lotSelections)
   }
-
-  // ── Lot CRUD ──────────────────────────────────────────────────────────────
 
   const lotForm = (stockId) => addLot[stockId] ?? { show: false, qty: '', expiry: '', lotNumber: '', adding: false }
 
@@ -164,396 +142,256 @@ export default function InventoryPage() {
     const qty = parseInt(form.qty, 10)
     if (isNaN(qty) || qty < 0) return
     setLotField(stockId, 'adding', true)
-    setActionError(null)
-    const payload = { quantity: qty }
-    if (form.expiry) payload.expiry_date = form.expiry
-    if (form.lotNumber.trim()) payload.lot_number = form.lotNumber.trim()
     try {
-      const res = await api.post(`/stock/${stockId}/lots/`, payload)
-      if (!res.ok) throw new Error()
-      const stockRes = await api.get(`/stock/${stockId}/`)
-      if (stockRes.ok) {
-        const updated = await stockRes.json()
-        setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
-      }
+      await createLot.mutateAsync({
+        stockId,
+        quantity: qty,
+        expiryDate: form.expiry,
+        lotNumber: form.lotNumber.trim(),
+      })
       setAddLot((prev) => ({ ...prev, [stockId]: { show: false, qty: '', expiry: '', lotNumber: '', adding: false } }))
-    } catch {
+    } catch (err) {
       setLotField(stockId, 'adding', false)
-      setActionError(t('common.actionError'))
+      notifyError(err)
     }
   }
 
   const doRemoveLot = async () => {
-    const { stockId, lotId } = confirmRemoveLot
+    const { stockId, lotId, updatedAt } = confirmRemoveLot
     setConfirmRemoveLot(null)
-    setActionError(null)
     try {
-      const res = await api.delete(`/stock/${stockId}/lots/${lotId}/`)
-      if (!res.ok && res.status !== 204) throw new Error()
-      const stockRes = await api.get(`/stock/${stockId}/`)
-      if (stockRes.ok) {
-        const updated = await stockRes.json()
-        setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
-      }
-    } catch {
-      setActionError(t('common.actionError'))
+      await deleteLot.mutateAsync({ stockId, lotId, updatedAt })
+    } catch (err) {
+      notifyError(err)
     }
   }
 
-  // ── Group actions ─────────────────────────────────────────────────────────
+  const requestDeleteLot = (stockId, lotId, updatedAt) => {
+    setConfirmRemoveLot({ stockId, lotId, updatedAt })
+  }
 
   const handleAssignGroup = async (stockId, groupId) => {
-    setActionError(null)
+    const stock = stocks.find((st) => st.id === stockId)
     try {
-      const res = await api.patch(`/stock/${stockId}/`, { group: groupId })
-      if (!res.ok) throw new Error()
-      const updated = await res.json()
-      setStocks((prev) => prev.map((st) => (st.id === stockId ? updated : st)))
-    } catch {
-      setActionError(t('common.actionError'))
+      await updateStock.mutateAsync({
+        stockId,
+        patch: { group: groupId },
+        updatedAt: stock?.updated_at,
+      })
+    } catch (err) {
+      notifyError(err)
     }
   }
 
   const handleToggleStockShare = async (userId) => {
-    if (!shareStockId) return
+    // ShareModal is only mounted when the stock for shareStockId exists,
+    // so `stock` is always defined at this point.
     const stock = stocks.find((st) => st.id === shareStockId)
-    if (!stock) return
     const current = stock.shared_with || []
     const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
-    setActionError(null)
     try {
-      const res = await api.patch(`/stock/${shareStockId}/`, { shared_with: newShared })
-      if (!res.ok) throw new Error()
-      const updated = await res.json()
-      setStocks((prev) => prev.map((st) => (st.id === shareStockId ? updated : st)))
-    } catch {
-      setActionError(t('common.actionError'))
+      await updateStock.mutateAsync({
+        stockId: shareStockId,
+        patch: { shared_with: newShared },
+        updatedAt: stock.updated_at,
+      })
+    } catch (err) {
+      notifyError(err)
     }
   }
 
   const handleCreateGroup = async (e) => {
     e.preventDefault()
     if (!newGroupName.trim()) return
-    setCreatingGroup(true)
-    setActionError(null)
     try {
-      const maxOrder = groups.reduce((max, g) => Math.max(max, g.display_order), -1)
-      const res = await api.post('/stock-groups/', { name: newGroupName.trim(), display_order: maxOrder + 1 })
-      if (!res.ok) throw new Error()
-      const group = await res.json()
-      setGroups((prev) => [...prev, group])
+      await createGroup.mutateAsync({ name: newGroupName.trim() })
       setNewGroupName('')
-    } catch {
-      setActionError(t('common.actionError'))
-    } finally {
-      setCreatingGroup(false)
+    } catch (err) {
+      notifyError(err)
     }
   }
 
   const handleRenameGroup = async (id, name) => {
     setEditingGroup(null)
     if (!name.trim()) return
-    setActionError(null)
     try {
-      const res = await api.patch(`/stock-groups/${id}/`, { name: name.trim() })
-      if (!res.ok) throw new Error()
-      const updated = await res.json()
-      setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)))
-    } catch {
-      setActionError(t('common.actionError'))
+      await updateGroup.mutateAsync({ groupId: id, patch: { name: name.trim() } })
+    } catch (err) {
+      notifyError(err)
     }
   }
 
   const handleDeleteGroup = async () => {
     const { id } = confirmDeleteGroup
     setConfirmDeleteGroup(null)
-    setActionError(null)
     try {
-      const res = await api.delete(`/stock-groups/${id}/`)
-      if (!res.ok && res.status !== 204) throw new Error()
-      setGroups((prev) => prev.filter((g) => g.id !== id))
-      // Un-group stocks locally
-      setStocks((prev) => prev.map((st) => (st.group === id ? { ...st, group: null, group_name: null } : st)))
-    } catch {
-      setActionError(t('common.actionError'))
+      await deleteGroup.mutateAsync({ groupId: id })
+    } catch (err) {
+      notifyError(err)
     }
   }
 
   const handleMoveGroup = async (id, direction) => {
+    // Callers are the per-row move buttons which are already disabled at
+    // boundaries, so idx and swapIdx are guaranteed to be in range.
     const idx = groups.findIndex((g) => g.id === id)
-    if (idx < 0) return
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= groups.length) return
-
-    const newGroups = [...groups]
-    const orderA = newGroups[idx].display_order
-    const orderB = newGroups[swapIdx].display_order
-    // If they have the same display_order, use index-based values
-    const realOrderA = orderA === orderB ? idx : orderA
-    const realOrderB = orderA === orderB ? swapIdx : orderB
-
-    newGroups[idx] = { ...newGroups[idx], display_order: realOrderB }
-    newGroups[swapIdx] = { ...newGroups[swapIdx], display_order: realOrderA }
-    newGroups.sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name))
-    setGroups(newGroups)
-
-    // Persist both changes
-    await Promise.all([
-      api.patch(`/stock-groups/${newGroups[idx].id}/`, { display_order: newGroups[idx].display_order }),
-      api.patch(`/stock-groups/${swapIdx < idx ? swapIdx : swapIdx}/`, {
-        display_order: newGroups[swapIdx]?.display_order,
-      }),
-    ]).catch(() => setActionError(t('common.actionError')))
+    const a = groups[idx]
+    const b = groups[swapIdx]
+    try {
+      await Promise.all([
+        updateGroup.mutateAsync({ groupId: a.id, patch: { display_order: b.display_order } }),
+        updateGroup.mutateAsync({ groupId: b.id, patch: { display_order: a.display_order } }),
+      ])
+    } catch (err) {
+      notifyError(err)
+    }
   }
 
   const toggleCollapse = (key) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  // ── Render helpers ──────────────────────────────────────────────────────
-
-  const renderStockCard = (stock) => {
-    const form = lotForm(stock.id)
-    return (
-      <div
-        key={stock.id}
-        className={cx(
-          s.productCard,
-          stock.quantity === 0 ? s.cardDanger : stock.quantity <= 3 ? s.cardWarning : s.cardSuccess,
-        )}
-        data-testid="product-card"
-      >
-        {/* Product header */}
-        <div className={s.productHeader}>
-          <div className={s.productMeta}>
-            <span className={s.productName}>{stock.name}</span>
-            <span className={cx(s.productTotal, flashId === stock.id && s.productTotalFlash)}>
-              ({stock.quantity} {t('common.total')})
-            </span>
-          </div>
-          <div className={s.headerActions}>
-            {stock.quantity > 0 && (
-              <button
-                className={cx(s.consumeBtn, consuming === stock.id && shared.disabled)}
-                onClick={() => handleConsume(stock)}
-                disabled={consuming === stock.id}
-                title={t('inventory.consumeTooltip')}
-              >
-                {consuming === stock.id ? '…' : t('inventory.consumeOne')}
-              </button>
-            )}
-            {stock.is_owner !== false && (
-              <button
-                className={cx(s.groupTagBtn, stock.group && s.groupTagBtnActive)}
-                onClick={() => setGroupPickerOpen(stock.id)}
-                title={t('inventory.assignGroup')}
-              >
-                🏷️
-              </button>
-            )}
-            {stock.is_owner !== false && contacts.length > 0 && (
-              <button
-                className={cx(s.groupTagBtn, stock.shared_with?.length > 0 && s.groupTagBtnActive)}
-                onClick={() => setShareStockId(stock.id)}
-                title={t('sharing.shareWith')}
-              >
-                👥
-              </button>
-            )}
-            <button
-              className={s.deleteBtn}
-              onClick={() => setConfirmRemove({ id: stock.id, name: stock.name })}
-              title={t('inventory.deleteTooltip')}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-        {stock.is_owner === false && stock.owner_username && (
-          <span className={s.ownerLabel}>{stock.owner_username}</span>
-        )}
-
-        {/* Lot list */}
-        {stock.lots.length > 0 && (
-          <div className={s.lotList}>
-            {stock.lots.map((lot) => {
-              const expiring = stock.expiring_lots.some((el) => el.id === lot.id)
-              return (
-                <div key={lot.id} className={s.lotRow}>
-                  <div className={s.lotInfo}>
-                    {lot.lot_number && <span className={s.lotNumber}>{lot.lot_number}</span>}
-                    <span className={s.lotQty}>
-                      {lot.quantity} {t('common.unit')}
-                    </span>
-                    <span className={cx(s.lotExpiry, expiring && s.lotExpiryDanger)}>
-                      {lot.expiry_date ? formatExpiry(lot.expiry_date) : t('inventory.noExpiry')}
-                      {expiring && ' ⚠'}
-                    </span>
-                  </div>
-                  <button
-                    className={s.lotDeleteBtn}
-                    onClick={() => setConfirmRemoveLot({ stockId: stock.id, lotId: lot.id })}
-                    title={t('inventory.deleteTooltip')}
-                  >
-                    🗑
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Add lot form */}
-        {form.show ? (
-          <form onSubmit={(e) => submitAddLot(e, stock.id)} className={s.addLotForm}>
-            <div className={s.addLotRow}>
-              <div className={s.addLotField}>
-                <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
-                <input
-                  className={cx(s.input, s.inputNarrow)}
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={form.qty}
-                  onChange={(e) => setLotField(stock.id, 'qty', e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className={s.addLotField}>
-                <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
-                <input
-                  className={s.input}
-                  type="date"
-                  value={form.expiry}
-                  onChange={(e) => setLotField(stock.id, 'expiry', e.target.value)}
-                />
-              </div>
-              <div className={cx(s.addLotField, s.inputFlex)}>
-                <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
-                <input
-                  className={s.input}
-                  type="text"
-                  placeholder={t('inventory.lotNumber')}
-                  value={form.lotNumber}
-                  onChange={(e) => setLotField(stock.id, 'lotNumber', e.target.value)}
-                />
-              </div>
-            </div>
-            <div className={s.addLotActions}>
-              <button type="submit" className={s.createBtn} disabled={form.adding}>
-                {form.adding ? t('inventory.adding') : t('inventory.addLot')}
-              </button>
-              <button type="button" className={s.cancelBtn} onClick={() => toggleAddLot(stock.id)}>
-                {t('inventory.cancel')}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button className={s.addLotBtn} onClick={() => toggleAddLot(stock.id)}>
-            + {t('inventory.addLot')}
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  if (loading) return <div className={shared.spinner} data-testid="spinner" />
+  if (isLoading) return <div className={shared.spinner} data-testid="spinner" />
 
   const expiringStocks = stocks.filter((st) => st.has_expiring_lots)
+  const lowStockItems = stocks.filter((st) => st.is_low_stock)
+  const hasAlerts = expiringStocks.length > 0 || lowStockItems.length > 0
 
-  // Build grouped sections
   const knownGroupIds = new Set(groups.map((g) => g.id))
   const groupedSections = groups.map((group) => ({
     key: group.id,
     label: group.name,
     stocks: stocks.filter((st) => st.group === group.id),
   }))
-  // Stocks with no group, or whose group belongs to another user (shared stocks), go ungrouped
   const ungroupedStocks = stocks.filter((st) => !st.group || !knownGroupIds.has(st.group))
+
+  const renderStockCard = (stock) => (
+    <StockCard
+      key={stock.id}
+      stock={stock}
+      consuming={consuming === stock.id}
+      flashing={flashId === stock.id}
+      canShare={contacts.length > 0}
+      onConsume={handleConsume}
+      onAssignGroup={setGroupPickerOpen}
+      onToggleShare={setShareStockId}
+      addLotForm={lotForm(stock.id)}
+      onLotFieldChange={(field, value) => setLotField(stock.id, field, value)}
+      onToggleAddLot={() => toggleAddLot(stock.id)}
+      onSubmitAddLot={(e) => submitAddLot(e, stock.id)}
+      onDeleteLot={requestDeleteLot}
+    />
+  )
 
   return (
     <div className={s.container}>
-      {actionError && <p className={shared.error}>{actionError}</p>}
-      {/* Top bar */}
       <div className={shared.topBar}>
         <h1 className={shared.pageTitle}>{t('inventory.title')}</h1>
         <div className={s.topActions}>
-          <button className={s.groupsBtn} onClick={() => setShowGroupManager(true)}>
-            {t('inventory.manageGroups')}
+          <button type="button" className={s.groupsBtn} onClick={() => setShowGroupManager(true)}>
+            <Icon name="tag" size="sm" /> {t('inventory.manageGroups')}
           </button>
-          <button className={showNew ? s.cancelBtn : s.newBtn} onClick={() => setShowNew((v) => !v)}>
-            {showNew ? t('inventory.cancel') : t('inventory.newButton')}
+          <button
+            type="button"
+            className={cx(shared.btnAdd, !reachable && shared.disabled)}
+            onClick={() => setShowNew((v) => !v)}
+            aria-label={showNew ? t('inventory.cancel') : t('inventory.newButton')}
+            disabled={!reachable}
+            title={!reachable ? t('offline.requiresConnection') : undefined}
+          >
+            <Icon name={showNew ? 'x' : 'plus'} />
           </button>
         </div>
       </div>
 
-      {/* New stock form */}
       {showNew && (
         <form onSubmit={create} className={s.newForm}>
           <input
-            className={s.input}
+            className={shared.input}
             placeholder={t('inventory.namePlaceholder')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             autoFocus
             required
           />
-          <button type="submit" className={s.createBtn} disabled={creating}>
-            {creating ? t('inventory.creating') : t('inventory.createButton')}
-          </button>
+          <div className={s.newFormActions}>
+            <button type="submit" className={s.createBtn} disabled={createStock.isPending}>
+              {createStock.isPending ? t('inventory.creating') : t('inventory.createButton')}
+            </button>
+            <button type="button" className={s.cancelBtn} onClick={() => setShowNew(false)}>
+              {t('inventory.cancel')}
+            </button>
+          </div>
         </form>
       )}
 
-      {/* Expiring soon alert section */}
-      {expiringStocks.length > 0 && (
-        <div className={s.alertBox}>
-          <div className={s.alertTitle}>⚠ {t('inventory.expiringSoon')}</div>
-          {expiringStocks.map((st) => (
-            <div key={st.id} className={s.alertProduct}>
-              <div className={s.alertProductName}>{st.name}</div>
-              {st.expiring_lots.map((lot) => (
-                <div key={lot.id} className={s.alertLot}>
-                  · {t('inventory.expiringLot', { qty: lot.quantity, date: formatExpiry(lot.expiry_date) })}
+      {hasAlerts && (
+        <div className={shared.alertsSection} data-testid="alert-box">
+          {expiringStocks.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderDanger)}>
+              <div className={shared.cardHeader}>
+                <div className={shared.cardMeta}>
+                  <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+                    <span className={cx(shared.dot, shared.dotDanger)} />
+                    {t('inventory.expiringSoon')}
+                  </div>
+                  {expiringStocks.map((st) =>
+                    st.expiring_lots.map((lot) => (
+                      <div key={`${st.id}-${lot.id}`} className={shared.alertDetail}>
+                        {st.name} —{' '}
+                        {t('inventory.expiringLot', { qty: lot.quantity, date: formatExpiry(lot.expiry_date) })}
+                      </div>
+                    )),
+                  )}
                 </div>
-              ))}
+              </div>
             </div>
-          ))}
+          )}
+
+          {lowStockItems.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderWarning)} data-testid="low-stock-alert">
+              <div className={shared.cardHeader}>
+                <div className={shared.cardMeta}>
+                  <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+                    <span className={cx(shared.dot, shared.dotWarning)} />
+                    {t('inventory.lowStockAlert')}
+                  </div>
+                  {lowStockItems.map((st) => {
+                    const totalRate = (st.daily_consumption_own || 0) + (st.daily_consumption_shared || 0)
+                    return (
+                      <div key={st.id} className={shared.alertDetail}>
+                        {st.name} —{' '}
+                        {t('inventory.lowStockItem', {
+                          date: formatDepletionDate(st.estimated_depletion_date),
+                          rate: formatRate(totalRate),
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Empty state */}
       {stocks.length === 0 && !showNew && <p className={shared.muted}>{t('inventory.empty')}</p>}
 
-      {/* Grouped stock sections */}
       {groupedSections.map(
         (section) =>
           section.stocks.length > 0 && (
-            <div key={section.key} className={s.groupBox} data-testid="group-box">
-              <button className={s.groupHeader} onClick={() => toggleCollapse(section.key)}>
-                <span className={s.groupToggle}>{collapsed[section.key] ? '▶' : '▼'}</span>
-                <span className={s.groupName}>{section.label}</span>
-                <span className={s.groupCount}>({section.stocks.length})</span>
+            <div key={section.key} className={shared.group} data-testid="group-box">
+              <button type="button" className={shared.groupHeader} onClick={() => toggleCollapse(section.key)}>
+                <Icon name={collapsed[section.key] ? 'chevron-right' : 'chevron-down'} size="sm" />
+                <span className={shared.groupName}>{section.label}</span>
+                <span className={shared.groupCount}>({section.stocks.length})</span>
               </button>
               {!collapsed[section.key] && section.stocks.map(renderStockCard)}
             </div>
           ),
       )}
 
-      {/* Ungrouped stocks — rendered flat, no group box */}
       {ungroupedStocks.map(renderStockCard)}
 
-      {/* Confirm delete stock */}
-      {confirmRemove && (
-        <ConfirmModal
-          message={t('inventory.confirmDelete', { name: confirmRemove.name })}
-          onConfirm={doRemoveStock}
-          onCancel={() => setConfirmRemove(null)}
-          confirmLabel={t('inventory.deleteTooltip')}
-        />
-      )}
-
-      {/* Confirm delete lot */}
       {confirmRemoveLot && (
         <ConfirmModal
           message={t('inventory.confirmDeleteLot')}
@@ -563,7 +401,6 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Lot selection modal for direct stock consume */}
       {lotModal && (
         <LotSelectionModal
           routine={{ stock_usage: 1 }}
@@ -573,20 +410,26 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Group manager modal */}
       {showGroupManager && (
         <div className={shared.overlay} onClick={() => setShowGroupManager(false)} role="dialog" aria-modal="true">
           <div className={cx(shared.modalBox, s.groupManagerModal)} onClick={(e) => e.stopPropagation()}>
             <div className={s.groupManagerHeader}>
               <h2 className={s.groupManagerTitle}>{t('inventory.manageGroups')}</h2>
               <button
-                className={s.groupManagerClose}
+                type="button"
+                className={cx(shared.btnIcon, shared.btnIconAction)}
                 onClick={() => setShowGroupManager(false)}
                 aria-label={t('common.close')}
               >
-                ✕
+                <Icon name="x" size="sm" />
               </button>
             </div>
+
+            {!reachable && (
+              <AlertBanner variant="warning" icon="wifi-off">
+                {t('offline.settingsBlock')}
+              </AlertBanner>
+            )}
 
             {groups.length === 0 && <p className={shared.muted}>{t('inventory.empty')}</p>}
 
@@ -595,7 +438,7 @@ export default function InventoryPage() {
                 <div key={group.id} className={s.groupManagerRow}>
                   {editingGroup?.id === group.id ? (
                     <input
-                      className={s.input}
+                      className={shared.input}
                       defaultValue={group.name}
                       autoFocus
                       onBlur={(e) => handleRenameGroup(group.id, e.target.value)}
@@ -606,35 +449,46 @@ export default function InventoryPage() {
                     />
                   ) : (
                     <button
-                      className={s.groupManagerName}
+                      type="button"
+                      className={cx(s.groupManagerName, !reachable && shared.disabled)}
                       onClick={() => setEditingGroup({ id: group.id, name: group.name })}
+                      disabled={!reachable}
+                      title={!reachable ? t('offline.requiresConnection') : undefined}
                     >
-                      {group.name} <span className={s.editHint}>✎</span>
+                      {group.name}
+                      <Icon name="edit" size="sm" className={s.editHint} />
                     </button>
                   )}
                   <div className={s.groupManagerActions}>
                     <button
-                      className={s.moveBtn}
+                      type="button"
+                      className={cx(shared.btnIcon, shared.btnIconAction)}
                       onClick={() => handleMoveGroup(group.id, 'up')}
-                      disabled={idx === 0}
-                      title={t('inventory.moveUp')}
+                      disabled={idx === 0 || !reachable}
+                      aria-label={t('inventory.moveUp')}
+                      title={!reachable ? t('offline.requiresConnection') : t('inventory.moveUp')}
                     >
-                      ▲
+                      <Icon name="chevron-up" size="sm" />
                     </button>
                     <button
-                      className={s.moveBtn}
+                      type="button"
+                      className={cx(shared.btnIcon, shared.btnIconAction)}
                       onClick={() => handleMoveGroup(group.id, 'down')}
-                      disabled={idx === groups.length - 1}
-                      title={t('inventory.moveDown')}
+                      disabled={idx === groups.length - 1 || !reachable}
+                      aria-label={t('inventory.moveDown')}
+                      title={!reachable ? t('offline.requiresConnection') : t('inventory.moveDown')}
                     >
-                      ▼
+                      <Icon name="chevron-down" size="sm" />
                     </button>
                     <button
-                      className={s.deleteBtn}
+                      type="button"
+                      className={cx(shared.btnIcon, shared.btnIconDelete)}
                       onClick={() => setConfirmDeleteGroup({ id: group.id, name: group.name })}
-                      title={t('inventory.deleteGroup')}
+                      disabled={!reachable}
+                      aria-label={t('inventory.deleteGroup')}
+                      title={!reachable ? t('offline.requiresConnection') : t('inventory.deleteGroup')}
                     >
-                      ✕
+                      <Icon name="trash" size="sm" />
                     </button>
                   </div>
                 </div>
@@ -643,21 +497,26 @@ export default function InventoryPage() {
 
             <form onSubmit={handleCreateGroup} className={s.groupManagerForm}>
               <input
-                className={s.input}
+                className={shared.input}
                 placeholder={t('inventory.groupName')}
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 required
+                disabled={!reachable}
               />
-              <button type="submit" className={s.createBtn} disabled={creatingGroup}>
-                {creatingGroup ? '…' : t('inventory.createGroup')}
+              <button
+                type="submit"
+                className={s.createBtn}
+                disabled={createGroup.isPending || !reachable}
+                title={!reachable ? t('offline.requiresConnection') : undefined}
+              >
+                {createGroup.isPending ? '…' : t('inventory.createGroup')}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Group picker modal */}
       {groupPickerOpen && stocks.find((st) => st.id === groupPickerOpen) && (
         <GroupPickerModal
           groups={groups}
@@ -670,7 +529,6 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Share stock modal */}
       {shareStockId && stocks.find((st) => st.id === shareStockId) && (
         <ShareModal
           contacts={contacts}
@@ -680,7 +538,6 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Confirm delete group */}
       {confirmDeleteGroup && (
         <ConfirmModal
           message={t('inventory.confirmDeleteGroup', { name: confirmDeleteGroup.name })}

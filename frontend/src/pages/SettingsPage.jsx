@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { OfflineError } from '../api/errors'
 import { useAuth } from '../contexts/AuthContext'
+import { useContacts, useContactSearch } from '../hooks/useContacts'
+import { useCreateContact } from '../hooks/mutations/useCreateContact'
+import { useDeleteContact } from '../hooks/mutations/useDeleteContact'
+import { useUpdateMe } from '../hooks/mutations/useUpdateMe'
+import { usePushStatus } from '../hooks/usePushStatus'
+import { useServerReachable } from '../hooks/useServerReachable'
+import AlertBanner from '../components/AlertBanner'
+import Combobox from '../components/Combobox'
+import Icon from '../components/Icon'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './SettingsPage.module.css'
 
-const TIMEZONES =
-  typeof Intl.supportedValuesOf === 'function'
-    ? Intl.supportedValuesOf('timeZone')
-    : ['UTC', 'Europe/Madrid', 'Europe/London', 'America/New_York', 'America/Los_Angeles']
-
-const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+const TIMEZONES = Intl.supportedValuesOf('timeZone')
 
 const LANGUAGES = [
   { code: 'en', labelKey: 'settings.languageEn' },
@@ -24,26 +29,33 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuth()
 
-  const [form, setForm] = useState({ timezone: BROWSER_TZ, daily_notification_time: '08:00' })
-  const [tzFilter, setTzFilter] = useState('')
-  const selectRef = useRef(null)
-  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState(() => ({
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    daily_notification_time: '08:00',
+  }))
   const [saveStatus, setSaveStatus] = useState(null)
 
-  const [pushPermission, setPushPermission] = useState('Notification' in window ? Notification.permission : 'denied')
-  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const {
+    permission: pushPermission,
+    subscribed: pushSubscribed,
+    setPermission: setPushPermission,
+    setSubscribed: setPushSubscribed,
+  } = usePushStatus()
   const [pushLoading, setPushLoading] = useState(false)
 
-  const [contacts, setContacts] = useState([])
   const [contactQuery, setContactQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
   const [contactError, setContactError] = useState('')
-  const searchTimer = useRef(null)
+
+  const updateMe = useUpdateMe()
+  const { data: contacts = [] } = useContacts()
+  const createContact = useCreateContact()
+  const deleteContact = useDeleteContact()
+  const { data: searchResults = [] } = useContactSearch(contactQuery)
+  const reachable = useServerReachable()
 
   useEffect(() => {
     if (user) {
-      // If timezone is still the default 'UTC', pre-fill with browser timezone
-      const tz = user.timezone === 'UTC' ? BROWSER_TZ : user.timezone
+      const tz = user.timezone === 'UTC' ? Intl.DateTimeFormat().resolvedOptions().timeZone : user.timezone
       setForm({
         timezone: tz,
         daily_notification_time: (user.daily_notification_time || '08:00:00').slice(0, 5),
@@ -52,24 +64,16 @@ export default function SettingsPage() {
         i18n.changeLanguage(user.language)
       }
     }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready
-        .then((reg) => reg.pushManager.getSubscription())
-        .then((sub) => setPushSubscribed(Boolean(sub)))
-    }
-    api
-      .get('/auth/contacts/')
-      .then((r) => r.json())
-      .then(setContacts)
-      .catch(() => {})
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (e) => {
     e.preventDefault()
-    setSaving(true)
-    const res = await api.patch('/auth/me/', form)
-    setSaving(false)
-    setSaveStatus(res.ok ? 'saved' : 'error')
+    try {
+      const result = await updateMe.mutateAsync({ patch: form, updatedAt: user?.settings_updated_at })
+      setSaveStatus(result?.__queued ? 'queued' : 'saved')
+    } catch (err) {
+      setSaveStatus(err instanceof OfflineError ? 'offline' : 'error')
+    }
     setTimeout(() => setSaveStatus(null), 2500)
   }
 
@@ -103,42 +107,22 @@ export default function SettingsPage() {
   const changeLanguage = useCallback(
     (lng) => {
       i18n.changeLanguage(lng)
-      api.patch('/auth/me/', { language: lng })
+      updateMe.mutate({ patch: { language: lng }, updatedAt: user?.settings_updated_at })
     },
-    [i18n],
+    [i18n, updateMe, user?.settings_updated_at],
   )
-
-  const handleContactSearch = useCallback((query) => {
-    clearTimeout(searchTimer.current)
-    if (query.length < 2) {
-      setSearchResults([])
-      return
-    }
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const res = await api.get(`/auth/contacts/search/?q=${encodeURIComponent(query)}`)
-        setSearchResults(await res.json())
-      } catch {
-        setSearchResults([])
-      }
-    }, 300)
-  }, [])
 
   const handleAddContact = async (contactUser) => {
     setContactError('')
     try {
-      const res = await api.post('/auth/contacts/', { username: contactUser.username })
-      if (res.ok) {
-        const added = await res.json()
-        setContacts((prev) => [...prev, added])
-        setContactQuery('')
-        setSearchResults([])
+      await createContact.mutateAsync({ username: contactUser.username })
+      setContactQuery('')
+    } catch (err) {
+      if (err instanceof OfflineError) {
+        setContactError(t('offline.actionUnavailable'))
       } else {
-        const data = await res.json().catch(() => ({}))
-        setContactError(data.detail || t('common.actionError'))
+        setContactError(err?.body?.detail || t('common.actionError'))
       }
-    } catch {
-      setContactError(t('common.actionError'))
     }
   }
 
@@ -146,33 +130,92 @@ export default function SettingsPage() {
     if (!window.confirm(t('settings.confirmRemoveContact'))) return
     setContactError('')
     try {
-      await api.delete(`/auth/contacts/${contactId}/`)
-      setContacts((prev) => prev.filter((c) => c.id !== contactId))
-    } catch {
-      setContactError(t('common.actionError'))
+      await deleteContact.mutateAsync({ contactId })
+    } catch (err) {
+      setContactError(err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError'))
     }
   }
 
-  const filteredTz = tzFilter ? TIMEZONES.filter((tz) => tz.toLowerCase().includes(tzFilter.toLowerCase())) : TIMEZONES
-
-  // Scroll the native <select> so the selected option is visible
-  useEffect(() => {
-    const el = selectRef.current
-    if (!el) return
-    const raf = requestAnimationFrame(() => {
-      const idx = filteredTz.indexOf(form.timezone)
-      if (idx >= 0) el.selectedIndex = idx
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [form.timezone, filteredTz])
+  const visibleSearchResults = contactQuery.length >= 2 ? searchResults : []
 
   return (
     <div className={s.container}>
       <h1 className={shared.pageTitle}>{t('settings.title')}</h1>
 
+      {!reachable && (
+        <AlertBanner variant="warning" icon="wifi-off">
+          {t('offline.settingsBlock')}
+        </AlertBanner>
+      )}
+
+      <Section title={t('settings.profile')}>
+        <h2 className={s.username}>{user?.username}</h2>
+        {user?.email && <p className={shared.helpText}>{user.email}</p>}
+      </Section>
+
+      <Section title={t('settings.contacts')}>
+        {contacts.length > 0 ? (
+          <ul className={s.contactList} data-testid="contacts-list">
+            {contacts.map((c) => (
+              <li key={c.id} className={s.contactRow}>
+                <span className={s.avatar} aria-hidden="true">
+                  {c.username.charAt(0).toUpperCase()}
+                </span>
+                <span className={s.contactName}>{c.username}</span>
+                <button
+                  type="button"
+                  className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
+                  onClick={() => handleRemoveContact(c.id)}
+                  title={!reachable ? t('offline.requiresConnection') : t('settings.removeContact')}
+                  aria-label={t('settings.removeContact')}
+                  disabled={!reachable}
+                >
+                  <Icon name="x" size="sm" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={shared.helpText}>{t('settings.noContacts')}</p>
+        )}
+
+        <Combobox
+          value=""
+          onChange={handleAddContact}
+          options={visibleSearchResults}
+          getLabel={(u) => u.username}
+          getKey={(u) => u.id}
+          placeholder={t('settings.searchUsers')}
+          emptyMessage={t('settings.contactNotFound')}
+          onInputChange={setContactQuery}
+          disabled={!reachable}
+        />
+
+        {contactError && <p className={cx(shared.helpText, s.error)}>{contactError}</p>}
+      </Section>
+
+      <Section title={t('settings.push')}>
+        <PushStatus
+          permission={pushPermission}
+          subscribed={pushSubscribed}
+          loading={pushLoading}
+          onToggle={togglePush}
+          disabled={!reachable}
+        />
+      </Section>
+
       <form onSubmit={handleSave} className={s.form}>
-        <Section title={t('settings.profile')}>
-          <p className={s.username}>{user?.username}</p>
+        <Section title={t('settings.dailyTime')}>
+          <div className={s.inlineField}>
+            <input
+              className={cx(shared.input, s.inputTime)}
+              type="time"
+              value={form.daily_notification_time}
+              onChange={(e) => setForm((f) => ({ ...f, daily_notification_time: e.target.value }))}
+              disabled={!reachable}
+            />
+            <p className={shared.helpText}>{t('settings.dailyTimeHint')}</p>
+          </div>
         </Section>
 
         <Section title={t('settings.language')}>
@@ -181,8 +224,9 @@ export default function SettingsPage() {
               <button
                 key={code}
                 type="button"
-                className={i18n.language === code ? s.langBtnActive : s.langBtn}
+                className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && shared.disabled)}
                 onClick={() => changeLanguage(code)}
+                disabled={!reachable}
               >
                 {t(labelKey)}
               </button>
@@ -192,120 +236,35 @@ export default function SettingsPage() {
 
         <Section title={t('settings.timezone')}>
           {form.timezone !== user?.timezone && user?.timezone === 'UTC' && (
-            <p className={s.tzHint}>{t('settings.timezoneDetected', { tz: BROWSER_TZ })}</p>
+            <p className={shared.helpText}>{t('settings.timezoneDetected', { tz: form.timezone })}</p>
           )}
-          <input
-            className={shared.input}
-            placeholder={t('settings.timezoneSearch')}
-            value={tzFilter}
-            onChange={(e) => setTzFilter(e.target.value)}
-          />
-          <select
-            ref={selectRef}
-            className={cx(shared.input, s.listbox)}
-            size={5}
+          <Combobox
             value={form.timezone}
-            onChange={(e) => {
-              setForm((f) => ({ ...f, timezone: e.target.value }))
-              setTzFilter('')
-            }}
-          >
-            {filteredTz.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-          </select>
-        </Section>
-
-        <Section title={t('settings.dailyTime')}>
-          <p className={s.hint}>{t('settings.dailyTimeHint')}</p>
-          <input
-            className={cx(shared.input, s.inputTime)}
-            type="time"
-            value={form.daily_notification_time}
-            onChange={(e) => setForm((f) => ({ ...f, daily_notification_time: e.target.value }))}
+            onChange={(tz) => setForm((f) => ({ ...f, timezone: tz }))}
+            options={TIMEZONES}
+            placeholder={t('settings.timezoneSearch')}
+            emptyMessage={t('settings.timezoneEmpty')}
+            disabled={!reachable}
           />
         </Section>
 
-        <button type="submit" className={s.saveBtn} disabled={saving}>
-          {saving
+        <button type="submit" className={s.saveBtn} disabled={updateMe.isPending || !reachable}>
+          {updateMe.isPending
             ? t('settings.saving')
             : saveStatus === 'saved'
               ? t('settings.saved')
-              : saveStatus === 'error'
-                ? t('settings.errorSave')
-                : t('settings.saveChanges')}
+              : saveStatus === 'offline'
+                ? t('offline.actionUnavailable')
+                : saveStatus === 'error'
+                  ? t('settings.errorSave')
+                  : t('settings.saveChanges')}
         </button>
       </form>
-
-      <hr className={s.divider} />
-
-      <Section title={t('settings.push')}>
-        <PushStatus
-          permission={pushPermission}
-          subscribed={pushSubscribed}
-          loading={pushLoading}
-          onToggle={togglePush}
-        />
-      </Section>
-
-      <hr className={s.divider} />
-
-      <Section title={t('settings.contacts')}>
-        {contacts.length === 0 ? (
-          <p className={s.hint}>{t('settings.noContacts')}</p>
-        ) : (
-          <ul className={s.contactList}>
-            {contacts.map((c) => (
-              <li key={c.id} className={s.contactItem}>
-                <span className={s.contactName}>{c.username}</span>
-                <button
-                  className={s.contactRemoveBtn}
-                  onClick={() => handleRemoveContact(c.id)}
-                  title={t('settings.removeContact')}
-                >
-                  &times;
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className={s.contactSearch}>
-          <input
-            type="text"
-            className={s.contactInput}
-            placeholder={t('settings.searchUsers')}
-            value={contactQuery}
-            onChange={(e) => {
-              setContactQuery(e.target.value)
-              handleContactSearch(e.target.value)
-            }}
-          />
-          {searchResults.length > 0 && (
-            <ul className={s.contactResults}>
-              {searchResults.map((u) => (
-                <li key={u.id}>
-                  <button onClick={() => handleAddContact(u)} className={s.contactResultBtn}>
-                    {u.username}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        {contactError && (
-          <p className={s.hint} style={{ color: 'var(--c-danger)' }}>
-            {contactError}
-          </p>
-        )}
-      </Section>
     </div>
   )
 }
 
-function PushStatus({ permission, subscribed, loading, onToggle }) {
+function PushStatus({ permission, subscribed, loading, onToggle, disabled = false }) {
   const { t } = useTranslation()
   const [testLoading, setTestLoading] = useState(false)
   const [testStatus, setTestStatus] = useState(null) // 'sent' | 'error'
@@ -316,13 +275,12 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
   const denied = permission === 'denied'
   const canEnable = permission === 'granted' && !subscribed
 
-  const dotClass = active ? s.pushDotActive : denied ? s.pushDotDenied : s.pushDotDefault
-  const labelClass = active ? s.pushLabelActive : denied ? s.pushLabelDenied : s.pushLabelDefault
+  const dotClass = active ? shared.dotSuccess : canEnable ? shared.dotWarning : shared.dotDanger
   const labelText = active
     ? t('settings.pushActive')
     : denied
       ? t('settings.pushBlocked')
-      : permission === 'granted'
+      : canEnable
         ? t('settings.pushGranted')
         : t('settings.pushNotEnabled')
 
@@ -331,7 +289,7 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
     setTestStatus(null)
     try {
       const res = await api.post('/push/test/', {})
-      setTestStatus(res.ok || res.status === 204 ? 'sent' : 'error')
+      setTestStatus(res.ok ? 'sent' : 'error')
     } catch {
       setTestStatus('error')
     } finally {
@@ -345,7 +303,7 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
     setSchedStatus(null)
     try {
       const res = await api.post('/push/test/scheduled/', {})
-      setSchedStatus(res.ok || res.status === 202 ? 'scheduled' : 'error')
+      setSchedStatus(res.ok ? 'scheduled' : 'error')
     } catch {
       setSchedStatus('error')
     } finally {
@@ -357,18 +315,19 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
   return (
     <div className={s.pushWrap}>
       <div className={s.pushRow}>
-        <span className={cx(s.pushDot, dotClass)} />
-        <span className={cx(s.pushLabel, labelClass)}>{labelText}</span>
+        <span className={cx(shared.dot, dotClass)} />
+        <span className={s.pushLabel}>{labelText}</span>
       </div>
 
-      {denied && <p className={s.pushHint}>{t('settings.pushHint')}</p>}
+      {denied && <p className={shared.helpText}>{t('settings.pushHint')}</p>}
 
       {(canEnable || permission === 'default') && (
         <button
-          className={cx(s.pushBtn, loading && shared.disabled)}
+          className={cx(s.pushBtn, (loading || disabled) && shared.disabled)}
           type="button"
           onClick={onToggle}
-          disabled={loading}
+          disabled={loading || disabled}
+          title={disabled ? t('offline.requiresConnection') : undefined}
         >
           {loading ? '…' : t('settings.pushEnable')}
         </button>
@@ -377,18 +336,20 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
       {active && (
         <>
           <button
-            className={cx(s.pushBtnGhost, loading && shared.disabled)}
+            className={cx(s.pushBtnGhost, (loading || disabled) && shared.disabled)}
             type="button"
             onClick={onToggle}
-            disabled={loading}
+            disabled={loading || disabled}
+            title={disabled ? t('offline.requiresConnection') : undefined}
           >
             {loading ? '…' : t('settings.pushDisable')}
           </button>
           <button
-            className={cx(s.pushBtnGhost, testLoading && shared.disabled)}
+            className={cx(s.pushBtnGhost, (testLoading || disabled) && shared.disabled)}
             type="button"
             onClick={sendTest}
-            disabled={testLoading}
+            disabled={testLoading || disabled}
+            title={disabled ? t('offline.requiresConnection') : undefined}
           >
             {testLoading
               ? '…'
@@ -399,10 +360,11 @@ function PushStatus({ permission, subscribed, loading, onToggle }) {
                   : t('settings.pushTestSend')}
           </button>
           <button
-            className={cx(s.pushBtnGhost, schedLoading && shared.disabled)}
+            className={cx(s.pushBtnGhost, (schedLoading || disabled) && shared.disabled)}
             type="button"
             onClick={scheduleTest}
-            disabled={schedLoading}
+            disabled={schedLoading || disabled}
+            title={disabled ? t('offline.requiresConnection') : undefined}
           >
             {schedLoading
               ? '…'

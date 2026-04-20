@@ -1,5 +1,7 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { afterEach } from 'vitest'
+import { queryClient } from '../../query/queryClient'
 import { server } from '../../test/mocks/server'
 import { AuthProvider, useAuth } from '../AuthContext'
 
@@ -10,6 +12,10 @@ function wrapper({ children }) {
 }
 
 describe('AuthContext', () => {
+  afterEach(() => {
+    queryClient.removeQueries({ queryKey: ['me'] })
+  })
+
   it('starts with loading=true and user=null when no token', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper })
     // After mount it should resolve quickly
@@ -26,6 +32,29 @@ describe('AuthContext', () => {
 
   it('remains user=null when fetch fails on mount', async () => {
     localStorage.setItem('access_token', 'tok')
+    server.use(http.get(`${BASE}/auth/me/`, () => HttpResponse.error()))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toBeNull()
+  })
+
+  it('hydrates user from cache when /auth/me/ fails offline and token is valid', async () => {
+    // Simulates reopening the PWA while the backend is unreachable: the
+    // persister has already re-hydrated ['me'], so ProtectedRoute must not
+    // redirect to /login.
+    localStorage.setItem('access_token', 'tok')
+    queryClient.setQueryData(['me'], { id: 1, username: 'cached-user' })
+    server.use(http.get(`${BASE}/auth/me/`, () => HttpResponse.error()))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toEqual({ id: 1, username: 'cached-user' })
+  })
+
+  it('stays user=null when offline and no cached me is available', async () => {
+    // Fresh install or evicted cache: no snapshot to hydrate from; the
+    // ProtectedRoute redirect to /login is the correct behaviour here.
+    localStorage.setItem('access_token', 'tok')
+    queryClient.removeQueries({ queryKey: ['me'] })
     server.use(http.get(`${BASE}/auth/me/`, () => HttpResponse.error()))
     const { result } = renderHook(() => useAuth(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))

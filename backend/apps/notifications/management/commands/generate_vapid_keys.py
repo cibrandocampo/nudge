@@ -12,13 +12,11 @@ class Command(BaseCommand):
         # Generate EC P-256 private key
         private_key = ec.generate_private_key(ec.SECP256R1())
 
-        # Private key — raw bytes, URL-safe base64 (no padding)
-        private_bytes = private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        private_b64 = base64.urlsafe_b64encode(private_bytes).decode().rstrip("=")
+        # VAPID private key format: raw 32-byte big-endian integer, URL-safe
+        # base64 (no padding). `cryptography` no longer accepts Raw encoding
+        # for SECP256R1 keys, so derive the integer directly.
+        private_value = private_key.private_numbers().private_value
+        private_b64 = base64.urlsafe_b64encode(private_value.to_bytes(32, "big")).decode().rstrip("=")
 
         # Public key — uncompressed point format, URL-safe base64 (no padding)
         public_bytes = private_key.public_key().public_bytes(

@@ -1,0 +1,15 @@
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--c-brand);
+  color: var(--c-brand-text);
+  border-bottom: 1px solid #f5c843;
+}
