@@ -20,21 +20,41 @@
   <i>A gentle reminder for recurring things.</i>
   <br/>
   Set the interval once. Get nudged at the right moment. Your server, your rules.
+  <br/><br/>
+  <a href="https://cibrandocampo.github.io/nudge/"><strong>See the project site →</strong></a>
 </p>
 
 ---
 
-## A closer look - How it works?
+## What it does in 30 seconds
+
+Nudge tracks the recurring jobs a household or team runs — medication, filters, pet dewormer, server backups, anything with an interval. It sends a push notification the moment something comes due, decrements the consumable it's attached to, and keeps working even when the network doesn't. Self-host it on any box that runs Docker; there is no SaaS and no public registration.
+
+---
 
 ### Access — secure by default
 
 <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" align="right" width="260" alt="Nudge login screen with username and password fields"/>
 
-Nudge has no public registration. Accounts are created by an admin, keeping the instance private and under your control. Authentication uses short-lived JWT access tokens and a rotating refresh token — sessions stay alive without prompting for credentials repeatedly, and the API rejects any unauthenticated request.
-
-The backend and database are never exposed outside the Docker network. Only the frontend container has a public-facing port.
+Nudge has no public registration. Accounts are created by an admin, keeping the instance private and under your control. Authentication uses short-lived JWT access tokens with a rotating refresh token — sessions stay alive without prompting for credentials repeatedly, and the API rejects any unauthenticated request. The backend and database are never exposed outside the Docker network; only the frontend container has a public-facing port.
 
 <br clear="right"/>
+
+---
+
+## Offline-first, sync when you're back
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/10-offline-banner.png" width="260" alt="Nudge dashboard with the offline banner at the top and a pending mutation counter in the header"/>
+  &nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/11-conflict-modal.png" width="260" alt="Nudge conflict resolution modal showing a per-field diff between the local edit and the server's current version"/>
+</p>
+
+- **Tap it offline. The queue keeps the tap.** Mark-done, edits, new routines — every mutation is captured in IndexedDB when the network is missing, with an optimistic update so the UI reacts immediately.
+- **Comes back online. The queue drains in the background.** A reachability probe polls the backend (not just `navigator.onLine`, which lies on captive portals). As soon as it sees a 2xx, the sync worker drains the queue with backoff and invalidates only the caches that were touched.
+- **Conflict? Solve it with a visual diff, not a guess.** If the server rejects a replay with 412 (someone else edited the same resource), Nudge opens a modal with a per-field diff. Overwrite with your version or discard — whichever matches your intent.
+
+Idempotency keys ride along on every mutation so the worker can retry safely: if the original request reached the server before the response made it to your device, the replay returns the cached response instead of creating a duplicate.
 
 ---
 
@@ -46,7 +66,7 @@ The backend and database are never exposed outside the Docker network. Only the 
   <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-routine-detail.png" width="260" alt="Nudge routine detail page showing next due date, linked stock usage, and completion history"/>
 </p>
 
-The dashboard is the heart of Nudge — a single view of what is due now and what is coming up. Each routine card shows how overdue or how close to due it is. Tapping one opens the detail view, where you see the exact next due date alongside a human-readable relative time (e.g. "In 3 days · 13 Mar, 10:30"), the full completion history, and the current stock level if a consumable is attached.
+The dashboard is a single view of what is due now and what is coming up. Each routine card shows how overdue or how close to due it is. Tapping one opens the detail view, where you see the exact next due date alongside a human-readable relative time ("In 3 days · 13 Mar, 10:30"), the full completion history, and the current stock level if a consumable is attached.
 
 Notifications work in three stages: a daily heads-up at your chosen time, a due alert the moment the interval expires, and follow-up reminders every 8 hours until you mark the task as done.
 
@@ -56,33 +76,37 @@ Notifications work in three stages: a daily heads-up at your chosen time, a due 
 
 <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-new-routine.png" align="left" width="260" alt="Nudge form for creating a new recurring task with name, interval, and optional stock link"/>
 
-Setting up a routine takes seconds. Give it a name, set the interval in hours (or days — the form converts automatically), and optionally link a consumable stock item with the amount used per completion. That is all Nudge needs to start tracking and notifying.
+Setting up a routine takes seconds. Give it a name, pick an interval preset (every day, every 8 hours, weekly, …) or set a custom one in hours, and optionally link a consumable stock item with the amount used per completion. That is all Nudge needs to start tracking and notifying.
 
-Routines can be paused at any time without losing their history, and re-activated when needed.
+Routines can be paused at any time without losing their history, and re-activated when needed. A `last_done_at` input backdates the first entry so the routine isn't immediately overdue when you migrate in from a spreadsheet.
 
 <br clear="left"/>
 
 ---
 
-### Inventory — track what you consume
+### Inventory and stock detail — track what you consume
 
-<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" align="right" width="260" alt="Nudge inventory screen with stock items, lot numbers, quantities, and expiry dates grouped by category"/>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Nudge inventory screen with stock items, lot numbers, quantities, and expiry dates grouped by category"/>
+  &nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06b-stock-detail.png" width="260" alt="Nudge stock detail page with per-lot quantities, expiries, consumption audit, and a depletion estimate"/>
+</p>
 
-Attach a consumable to any routine and Nudge will decrement stock automatically each time you log a completion, using FEFO order (First Expired, First Out) across lots. Stock can be organized into categories — Health, Home, Pets, or any group you define — and each lot can carry an expiry date. Nudge warns you 90 days before anything expires so you always have time to restock.
+Attach a consumable to any routine and Nudge decrements stock automatically each time you log a completion, using FEFO order (First Expired, First Out) across lots. Stock can be organised into categories — Health, Home, Pets, or any group you define — and each lot carries its own quantity and optional expiry date. Nudge warns you 90 days before anything expires so you always have time to restock.
 
-<br clear="right"/>
+The stock detail view adds a lot-level audit: quantity per lot, expiry warnings, a consumption log of every time a lot was drawn down, and a depletion estimate derived from your real consumption rate.
 
 ---
 
 ### Sharing — built for households and teams
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Nudge sharing modal showing a list of contacts to share a routine with, with selected contacts highlighted"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Nudge sharing popover showing a list of contacts to share a routine with, with selected contacts highlighted"/>
   &nbsp;&nbsp;
   <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Nudge dashboard from a recipient's perspective showing routines shared by another user with an owner label"/>
 </p>
 
-Share any routine or stock item with people you trust. A full-screen sharing modal lets you pick contacts with a single tap — no accidental navigation on mobile. The recipient gets a push notification the moment something is shared with them, and the shared item appears on their dashboard with an owner label. They can mark it as done too, which counts for both of you.
+Share any routine or stock item with people you trust. A sharing popover lets you pick contacts with a single tap — no accidental navigation on mobile. The recipient gets a push notification the moment something is shared with them, and the shared item appears on their dashboard with an owner label. They can mark it as done too, which counts for both of you.
 
 ---
 
@@ -91,40 +115,33 @@ Share any routine or stock item with people you trust. A full-screen sharing mod
 <p align="center">
   <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-history.png" width="260" alt="Nudge history page showing a paginated log of all completed routines with timestamps and notes"/>
   &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Nudge settings page with language selector, timezone picker, and daily notification time input"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Nudge settings page with contacts, push subscription, language selector, timezone picker, and daily notification time input"/>
 </p>
 
-The history page gives you a paginated log of every completion across all routines. Settings let each user independently choose their language (English, Spanish, or Galician), their local timezone — so notifications fire at the right clock time year-round, DST included — and their preferred daily heads-up time.
+The history page gives you a paginated log of every completion across all routines, with inline note editing. Settings let each user independently manage their contacts, enable or disable push notifications, choose their language (English, Spanish, or Galician), their local timezone — so notifications fire at the right clock time year-round, DST included — and their preferred daily heads-up time.
 
 ---
 
-## Features
+## Features at a glance
 
-- **Push notifications** — Browser web push when something comes due. Daily heads-up at your chosen time, a due alert when the interval expires, and follow-up reminders every 8 hours until you mark it done. No app store, no account required beyond your own server.
-- **Sharing** — Share routines and stock items with trusted contacts. Shared items appear on the recipient's dashboard with an owner label — they can see progress and mark tasks as done too. Everyone gets a push notification when they're added as a contact or when something new is shared with them.
-- **Inventory tracking** — Attach a consumable to a routine (medication packs, filter cartridges, oil bottles). Each time you log the task, stock decrements automatically using FEFO order (First Expired, First Out). Organize into categories and get an expiry warning 90 days in advance.
-- **Installable PWA** — Works offline, installs to your home screen on iOS and Android. Feels like a native app — because the web platform is good enough now.
-- **Timezone-aware** — Your notification schedule follows your local time and adjusts automatically for daylight saving.
+- **Offline-first PWA** — Mutations queue locally and sync automatically on reconnect. Conflict resolution with visual diff. Idempotent retries.
+- **Push notifications** — Browser web push when something comes due. Daily heads-up, due alert, and follow-up reminders every 8 hours until marked done.
+- **Sharing** — Share routines and stock items with trusted contacts. Shared items show up on the recipient's dashboard with an owner label.
+- **Inventory tracking** — Consumables auto-decrement on completion using FEFO order. Per-lot expiry warnings 90 days in advance.
+- **Timezone-aware** — Notification schedule follows your local time and adjusts automatically for daylight saving.
 - **Multilingual** — English, Spanish, and Galician.
-- **Multi-user** — Accounts are managed by an admin. There is no public registration, keeping the instance clean and yours.
+- **Multi-user** — Accounts managed by an admin. No public registration, keeping the instance private and yours.
+- **Install as a native-feeling app** — Add to home screen on iOS and Android, then open from the icon like any app.
 
 ---
 
-## Quality
+## Self-hosting and technical details
 
-Every change goes through a CI pipeline (GitHub Actions) with no shortcuts:
+*The rest of this document is for people who want to run their own instance.*
 
-- **Backend**: ruff (lint + format) and the full Django test suite with coverage.
-- **Frontend**: ESLint, Prettier, and Vitest with coverage.
-- **Coverage gate**: [Codecov](https://codecov.io/gh/cibrandocampo/nudge) enforces that every modified line is covered by tests. A pull request that leaves any touched line uncovered is blocked from merging. Defensive guards that can't be reached must be removed, not exempted.
+### Quick start
 
-The Codecov badge at the top of this page reflects the current state.
-
----
-
-## Quick start (self-hosted)
-
-### 1. Download the files
+**1. Download the files**
 
 ```bash
 curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/docker-compose.yml
@@ -132,9 +149,9 @@ curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/.env.example
 cp .env.example .env
 ```
 
-### 2. Generate the required secrets
+**2. Generate the required secrets**
 
-**Django secret key**
+Django secret key:
 
 ```bash
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
@@ -142,7 +159,7 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 
 Paste the output into `DJANGO_SECRET_KEY` in `.env`.
 
-**VAPID keys** (required for push notifications)
+VAPID keys (required for push notifications):
 
 ```bash
 pip install py-vapid
@@ -151,16 +168,15 @@ vapid --applicationServerKey
 ```
 
 From the output:
+
 - `Application Server Key` → `VAPID_PUBLIC_KEY` and `VITE_VAPID_PUBLIC_KEY`
 - `Private key` → `VAPID_PRIVATE_KEY`
 
 > If you don't have Python locally, run this inside any Docker container that has Python (`docker exec -it <container> sh`). The `.pem` files created by `vapid --gen` are only needed to recover the keys later — you do not need to keep them on the server.
 
-**Passwords**
+Choose strong random strings for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Use alphanumeric characters — `DATABASE_URL` and `REDIS_URL` are constructed automatically from these values, and special characters can break URL parsing.
 
-Choose a strong random string for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `ADMIN_PASSWORD`. Use alphanumeric characters — `DATABASE_URL` and `REDIS_URL` are constructed automatically by Docker Compose from these values, and special characters can break URL parsing.
-
-### 3. Configure your domain
+**3. Configure your domain**
 
 Edit `.env` and set:
 
@@ -174,13 +190,13 @@ VITE_API_BASE_URL=https://nudge.example.com/api
 
 > If you need to access the app by IP during initial setup (before DNS/reverse proxy is ready), add that IP too: `DJANGO_ALLOWED_HOSTS=nudge.example.com,localhost,192.168.1.10`.
 
-### 4. Reverse proxy and HTTPS
+**4. Reverse proxy and HTTPS**
 
 The frontend container is the only one that exposes a port (default `80`, or whatever you set in `NUDGE_HTTP_PORT`). The backend, database, and Redis are internal — never exposed directly.
 
 For a public deployment, put a reverse proxy in front (nginx, Traefik, Caddy, Synology reverse proxy, etc.) to terminate TLS and forward traffic to `NUDGE_HTTP_PORT`. Set `NUDGE_HTTP_PORT` to a free internal port (e.g. `8080`) if port 80 is already in use on the host.
 
-### 5. Start
+**5. Start**
 
 ```bash
 mkdir -p data
@@ -193,51 +209,52 @@ For all configuration options, see [docs/configuration.md](https://github.com/ci
 
 ### Logs
 
-All containers write to stdout using Docker's default `json-file` driver. Platforms like **Synology Container Manager** or **Portainer** handle log viewing and rotation automatically. If you run plain Docker without a management UI, consider configuring daemon-level log rotation — see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#log-rotation) for details.
+All containers write to stdout using Docker's default `json-file` driver. Platforms like Synology Container Manager or Portainer handle log viewing and rotation automatically. If you run plain Docker without a management UI, consider configuring daemon-level log rotation — see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#log-rotation) for details.
 
----
+### Install as an app (PWA)
 
-## Install as an app (PWA)
-
-Nudge is a Progressive Web App — it can be installed on your home screen and works like a native app, with push notifications included. No app store required.
+Nudge is a Progressive Web App. Installed from the browser, it lives on your home screen with push notifications enabled.
 
 **Android** (Chrome, Edge, Samsung Internet)
 
-1. Open Nudge in your browser
-2. Tap the browser menu (three dots)
-3. Tap **Add to Home screen** (or **Install app**)
-4. Confirm — the Nudge icon will appear on your home screen
+1. Open Nudge in your browser.
+2. Tap the browser menu (three dots).
+3. Tap **Add to Home screen** (or **Install app**).
+4. Confirm — the Nudge icon appears on your home screen.
 
 **iOS** (Safari only — Chrome and Firefox on iOS do not support PWA installation)
 
-1. Open Nudge in **Safari**
-2. Tap the **Share** button (the square with an arrow pointing up)
-3. Scroll down and tap **Add to Home Screen**
-4. Tap **Add** to confirm
+1. Open Nudge in Safari.
+2. Tap the **Share** button (the square with an arrow pointing up).
+3. Scroll down and tap **Add to Home Screen**.
+4. Tap **Add** to confirm.
 
 Once installed, open Nudge from the home screen icon and enable push notifications from the Settings page.
 
-### Push notifications on Android — battery optimisation
+#### Push notifications on Android — battery optimisation
 
 Android's battery optimisation (Doze mode) can delay push notifications until the next time you interact with your phone. This affects all PWAs running inside Chrome, regardless of app or server settings.
 
-**What to expect with the default "Optimised" battery mode:**
-Notifications are queued by FCM and delivered within seconds of unlocking your screen. For a reminders app this is usually fine — you will see pending alerts the moment you pick up your phone.
+**What to expect with the default "Optimised" battery mode:** Notifications are queued by FCM and delivered within seconds of unlocking your screen. For a reminders app this is usually fine — you will see pending alerts the moment you pick up your phone.
 
-**For instant delivery even while the screen is off:**
-Go to **Settings → Apps → Chrome → Battery → Unrestricted** (exact path varies by manufacturer). This allows Chrome to receive push messages in the background without delay.
+**For instant delivery even while the screen is off:** go to **Settings → Apps → Chrome → Battery → Unrestricted** (exact path varies by manufacturer). This allows Chrome to receive push messages in the background without delay.
 
 > This is an OS-level restriction, not a Nudge limitation. The same behaviour affects every web push notification on Android, including those from other websites and PWAs.
 
----
+### Quality
 
-## Development
+Every change goes through GitHub Actions with no shortcuts:
 
-A `Makefile` is provided for common tasks — run `make help` to see all available targets. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
+- **Backend** — `ruff check`, `ruff format --check`, and the full Django test suite (480 tests) with coverage.
+- **Frontend** — ESLint, Prettier, and Vitest (754 tests) with coverage thresholds at 95 % on statements, branches, functions and lines.
+- **Coverage reporting** — [Codecov](https://codecov.io/gh/cibrandocampo/nudge) tracks project and patch coverage. The patch gate is 95 % — a pull request that leaves touched lines uncovered is flagged before merge.
+- **End-to-end** — 84 Playwright specs covering online and offline flows (dashboard, inventory, history, sharing, i18n, push, plus dedicated offline read / mutations / sync suites). Not wired into CI today; run locally via `make test-e2e`. See `.claude/skills/test-discipline/SKILL.md` for how we handle failing tests.
 
----
+### Development
 
-## Documentation
+A `Makefile` is provided for common tasks — run `make help` to see all targets. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
+
+### Documentation
 
 - [Configuration](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md)
 - [Architecture & technical design](https://github.com/cibrandocampo/nudge/blob/main/docs/ARCHITECTURE.md)
@@ -246,9 +263,7 @@ A `Makefile` is provided for common tasks — run `make help` to see all availab
 - [Backup & restore](https://github.com/cibrandocampo/nudge/blob/main/docs/backup.md)
 - [Troubleshooting](https://github.com/cibrandocampo/nudge/blob/main/docs/troubleshooting.md)
 
----
-
-## Docker images
+### Docker images
 
 Pre-built multi-arch images (linux/amd64 + linux/arm64) are published to Docker Hub on every push to `main` and on each release.
 
@@ -260,15 +275,11 @@ Pre-built multi-arch images (linux/amd64 + linux/arm64) are published to Docker 
 
 Images are also rebuilt weekly to pick up base-image and dependency security patches.
 
----
+### Built with Claude Code
 
-## Built with Claude Code
+This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills and commands live in `.claude/` to maintain project conventions. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md#claude-code) for details.
 
-This project was developed with the help of [Claude Code](https://claude.ai/code), Anthropic's AI coding assistant. Custom skills and commands are provided in `.claude/` to maintain project conventions. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md#claude-code) for details.
-
----
-
-## License
+### License
 
 Released under the [MIT License](https://github.com/cibrandocampo/nudge/blob/main/LICENSE) © 2026 Cibrán Docampo Piñeiro.
 

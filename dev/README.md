@@ -142,3 +142,7 @@ Skills are loaded automatically. Commands are documented in [docs/development.md
 | `/push` | Commit, create PR, and verify CI pipeline |
 | `/fix` | Quick fix — focused bug fix or small change |
 | `/audit` | Structured audit of a code area |
+
+## Landing site
+
+The public project site lives in [`/site/`](../site/README.md) (Astro + Tailwind) and deploys to [`cibrandocampo.github.io/nudge/`](https://cibrandocampo.github.io/nudge/) on every push to `main` that touches `site/**` or `docs/screenshots/**`, via `.github/workflows/site-deploy.yml`. See [site/README.md](../site/README.md) for how to run it locally, regenerate screenshots (`make screenshots`), and where to edit content.

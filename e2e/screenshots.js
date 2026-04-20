@@ -282,6 +282,120 @@ async function main() {
       await page2.close()
     }
 
+    // 12. Dashboard with OfflineBanner + a pending mutation in the header.
+    //     Uses the dev-only reachability hook to force the banner, and
+    //     `context.route` to make mark-done calls reject so the real
+    //     useOfflineMutation flow enqueues the entry and surfaces the
+    //     PendingBadge. See docs/plans/documentation-and-marketing-site.md §1.
+    await page.goto(`${BASE}/`)
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => {
+      if (typeof window.__NUDGE_REACHABILITY_SET__ !== 'function') {
+        throw new Error('__NUDGE_REACHABILITY_SET__ missing — not running in dev / VITE_E2E_MODE build')
+      }
+      window.__NUDGE_REACHABILITY_LOCK__ = false
+      window.__NUDGE_REACHABILITY_SET__(false)
+      window.__NUDGE_REACHABILITY_LOCK__ = true
+    })
+    const markDoneRoute = (route) => route.abort('connectionrefused')
+    await context.route('**/api/routines/*/log/', markDoneRoute)
+    // Target the "Water the plants" card explicitly — no stock → no
+    // lot-selection modal → click Done fires useLogRoutine straight away,
+    // the aborted fetch throws OfflineError, and the mutation enqueues.
+    const plantsTitle = page.getByText('Water the plants', { exact: true }).first()
+    await plantsTitle.waitFor({ state: 'visible', timeout: 10_000 })
+    const plantsCard = plantsTitle.locator(
+      'xpath=ancestor::*[.//button[@aria-label="Done"]][1]',
+    )
+    await plantsCard.getByRole('button', { name: 'Done' }).click()
+    // Wait for both the offline banner and the pending badge to be visible.
+    await page.waitForSelector('[data-testid="offline-banner"]', { state: 'visible' })
+    await page.waitForSelector('[data-testid="pending-badge"]', { state: 'visible' })
+    await screenshot(page, '10-offline-banner')
+    // Cleanup: unroute, unlock, clear queue.
+    await context.unroute('**/api/routines/*/log/', markDoneRoute)
+    await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase('nudge-offline')
+          req.onsuccess = req.onerror = req.onblocked = () => resolve()
+        }),
+    )
+    await page.evaluate(() => {
+      window.__NUDGE_REACHABILITY_LOCK__ = false
+      window.__NUDGE_REACHABILITY_SET__(true)
+    })
+
+    // 13. ConflictModal open with a diff. Mirrors `openConflictOnRoutineRename`
+    //     from the E2E helpers: the modal only opens when a 412 arrives
+    //     during a queue-driven replay (online 412 throws ConflictError
+    //     and skips the queue). Flow:
+    //       a) fresh page, navigate to edit
+    //       b) context.setOffline(true) + reachability=false
+    //       c) save → fetch fails → useOfflineMutation enqueues
+    //       d) arm 412 mock, come back online with fast poll
+    //       e) sync worker retries PATCH → 412 → conflict status
+    //       f) ConflictOrchestrator opens the modal
+    //
+    // Fresh page so scene-10's IDB/reachability leftovers don't leak.
+    await page.close()
+    const pageC = await context.newPage()
+    await login(pageC, USER, PASS)
+    await pageC.goto(`${BASE}/routines/${detailId}/edit`)
+    await pageC.waitForLoadState('networkidle')
+    const nameInput = pageC.getByPlaceholder('e.g. Change water filter')
+    await nameInput.waitFor({ state: 'visible', timeout: 10_000 })
+    // Shorten the reachability poll so sync recovery happens sub-second.
+    await pageC.evaluate(() => {
+      window.__NUDGE_REACHABILITY_POLL_MS__ = 500
+    })
+    await context.setOffline(true)
+    await pageC.evaluate(() => {
+      window.__NUDGE_REACHABILITY_LOCK__ = false
+      window.__NUDGE_REACHABILITY_SET__(false)
+      window.__NUDGE_REACHABILITY_LOCK__ = true
+    })
+    await nameInput.fill('Take vitamin D (edited)')
+    await pageC.getByRole('button', { name: /^save/i }).click()
+    // Arm the 412 mock BEFORE coming online — the sync worker will fire
+    // its first retry within `__NUDGE_REACHABILITY_POLL_MS__`.
+    const conflictRoute = async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue()
+      return route.fulfill({
+        status: 412,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'conflict',
+          current: {
+            id: detailId,
+            name: 'Take vitamin D',
+            updated_at: new Date().toISOString(),
+          },
+        }),
+      })
+    }
+    await context.route(`**/api/routines/${detailId}/`, conflictRoute)
+    await context.setOffline(false)
+    await pageC.evaluate(() => {
+      window.__NUDGE_REACHABILITY_LOCK__ = false
+      window.__NUDGE_REACHABILITY_SET__(true)
+    })
+    await pageC.waitForSelector('[data-testid="conflict-modal"]', { state: 'visible' })
+    // Let the modal settle so the diff rows have rendered before the capture.
+    await pageC.waitForTimeout(300)
+    await screenshot(pageC, '11-conflict-modal')
+    // Cleanup: dismiss the modal + unroute + clear queue.
+    await pageC.getByRole('button', { name: /discard my changes/i }).click()
+    await context.unroute(`**/api/routines/${detailId}/`, conflictRoute)
+    await pageC.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase('nudge-offline')
+          req.onsuccess = req.onerror = req.onblocked = () => resolve()
+        }),
+    )
+    await pageC.close()
+
     console.log(`\nDone -> ${OUT}`)
   } finally {
     await browser.close()

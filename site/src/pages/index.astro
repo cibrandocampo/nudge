@@ -1,0 +1,232 @@
+---
+import Base from '../layouts/Base.astro'
+import Hero from '../components/Hero.astro'
+import FeatureCard from '../components/FeatureCard.astro'
+import Screenshot from '../components/Screenshot.astro'
+import OfflineStory from '../components/OfflineStory.astro'
+import Footer from '../components/Footer.astro'
+
+const offlineSteps = [
+  {
+    title: 'Tap it offline',
+    body: "Mark-done, edits, new routines — every mutation is captured in IndexedDB the moment the network drops, with an optimistic update so the UI reacts immediately.",
+    src: 'screenshots/10-offline-banner.png',
+    alt: "Nudge dashboard with the offline banner and a pending mutation counter",
+  },
+  {
+    title: 'Sync when you\'re back',
+    body: "A reachability probe polls the backend (not just navigator.onLine, which lies on captive portals). As soon as it sees a 2xx, the sync worker drains the queue with backoff and invalidates only the caches that were touched.",
+    src: 'screenshots/02-dashboard.png',
+    alt: "Nudge dashboard back online with the queue drained and routines up to date",
+  },
+  {
+    title: 'Resolve conflicts with a diff',
+    body: "If someone else edited the same thing while you were gone, Nudge opens a modal with a per-field diff. Overwrite with your version or discard — not a guess.",
+    src: 'screenshots/11-conflict-modal.png',
+    alt: "Nudge conflict resolution modal with a per-field diff",
+  },
+]
+
+const features = [
+  { icon: '📶', title: 'Offline-first PWA', body: 'Queue in IndexedDB, sync on reconnect, optimistic updates, conflict resolution with visual diff, idempotent retries.' },
+  { icon: '🔔', title: 'Push notifications', body: 'Daily heads-up at your chosen time, a due alert the moment the interval expires, follow-up reminders every 8 hours until done.' },
+  { icon: '👥', title: 'Household sharing', body: 'Share routines and stock items with contacts. Shared items show up on the recipient dashboard with an owner label.' },
+  { icon: '📦', title: 'Inventory with FEFO', body: 'Attach a consumable; Nudge decrements stock automatically, lot by lot, First Expired First Out. Expiry warnings 90 days out.' },
+  { icon: '🌍', title: 'Timezone-aware', body: 'Notification schedule follows your local time and adjusts automatically for daylight saving.' },
+  { icon: '🗣️', title: 'Multilingual', body: 'English, Spanish, and Galician. Auto-detected from the browser, overridable per user.' },
+  { icon: '🔒', title: 'Private by design', body: 'No public registration. No SaaS. No telemetry. Backend and database never leave the Docker network.' },
+  { icon: '📱', title: 'Install like an app', body: 'Add to home screen on iOS and Android. Opens from the icon, runs like a native app, push notifications included.' },
+]
+
+const screenshots = [
+  { src: 'screenshots/02-dashboard.png', alt: 'Dashboard — due and upcoming routines', caption: 'Dashboard' },
+  { src: 'screenshots/04-routine-detail.png', alt: 'Routine detail with next due date and history', caption: 'Routine detail' },
+  { src: 'screenshots/05-new-routine.png', alt: 'New-routine form with interval presets', caption: 'Create routine' },
+  { src: 'screenshots/06-inventory.png', alt: 'Inventory with stock items grouped by category', caption: 'Inventory' },
+  { src: 'screenshots/06b-stock-detail.png', alt: 'Stock detail with per-lot quantities and consumption audit', caption: 'Stock detail' },
+  { src: 'screenshots/03-dashboard-sharing.png', alt: 'Sharing popover with contacts', caption: 'Sharing' },
+  { src: 'screenshots/09-shared-dashboard.png', alt: "Recipient's dashboard with shared items", caption: 'Received share' },
+  { src: 'screenshots/07-history.png', alt: 'History of all completions', caption: 'History' },
+  { src: 'screenshots/08-settings.png', alt: 'Settings: contacts, push, language, timezone', caption: 'Settings' },
+]
+
+const faqItems = [
+  {
+    q: 'Does it really work offline?',
+    a: "Yes. Reads come from the Service Worker cache, and mutations (mark done, edits, new routines, sharing, consumption) go into a local queue. When the browser reconnects, the queue drains automatically. Conflicts go through a visual diff modal. No data loss in normal use.",
+  },
+  {
+    q: 'Can I use it without running my own server?',
+    a: "Not today — Nudge is self-hosted on purpose. There is no managed SaaS, no public registration, and no plan to add one. You run it yourself on any host that can run Docker (a NAS, a cheap VPS, a home server) and it is yours.",
+  },
+  {
+    q: 'Why no iOS app?',
+    a: "Nudge is a Progressive Web App. Apple finally supports Web Push in Safari, and the install flow (Add to Home Screen) works well. No App Store review, no native fork, no second UI to maintain.",
+  },
+  {
+    q: 'What about my data?',
+    a: "It lives in PostgreSQL inside your container stack. Backups are straightforward (pg_dump), there is no vendor to depend on, and no analytics or telemetry ships out of the box.",
+  },
+  {
+    q: 'Does it cost money?',
+    a: "No. MIT licence, free to use, modify, and distribute. You pay for whatever hosting you want to run it on — often a Synology or Raspberry Pi is enough for a household.",
+  },
+  {
+    q: 'Is there a demo I can try?',
+    a: "Not yet — this site is pure marketing, and a public demo with test data takes ongoing moderation work. The repo ships with Docker Compose so spinning up a local instance takes a few minutes if you just want to kick the tyres.",
+  },
+]
+---
+<Base>
+  <Hero />
+
+  <!-- Section 2 — Pitch -->
+  <section id="pitch" class="mx-auto max-w-4xl px-6 py-16 sm:py-24">
+    <div class="text-center">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">You open the app on the metro. It just works.</h2>
+      <p class="mt-6 text-lg text-slate-300 leading-relaxed">
+        Nudge is for the recurring jobs a household or team actually runs — medication,
+        filters, pet dewormer, server backups, anything with an interval. It sends a
+        push the moment something comes due, decrements the consumable it is attached
+        to, and keeps working when the network doesn't.
+      </p>
+    </div>
+  </section>
+
+  <!-- Section 3 — Offline storyboard -->
+  <section id="offline-story" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Offline-first, sync when you're back</h2>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto">
+        Three moments every offline-capable app has to get right. Nudge got the details right so you don't notice them.
+      </p>
+    </div>
+    <OfflineStory steps={offlineSteps} />
+  </section>
+
+  <!-- Section 4 — Feature grid -->
+  <section id="features" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Everything you expect, nothing you don't</h2>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto">
+        No freemium tier. No tracking. No onboarding wizard. It does one thing, and it does it on your machine.
+      </p>
+    </div>
+    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {features.map((f) => (
+        <FeatureCard title={f.title} body={f.body} icon={f.icon} />
+      ))}
+    </div>
+  </section>
+
+  <!-- Section 5 — Screenshots carousel -->
+  <section id="screenshots" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">A quick tour</h2>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto">
+        Every screen at the same mobile aspect ratio — because that's where Nudge lives day-to-day.
+      </p>
+    </div>
+    <div class="flex overflow-x-auto gap-6 pb-6 md:grid md:grid-cols-3 md:overflow-visible md:gap-8">
+      {screenshots.map((s) => (
+        <div class="flex-shrink-0 md:flex-shrink">
+          <Screenshot src={s.src} alt={s.alt} caption={s.caption} />
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <!-- Section 6 — Privacy -->
+  <section id="privacy" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Your server, your rules</h2>
+      <p class="mt-6 text-lg text-slate-300 leading-relaxed">
+        Nudge runs entirely in your Docker stack. No managed service, no public
+        registration, no telemetry, no third-party analytics. Backups are a
+        <code class="rounded bg-slate-800 px-1.5 py-0.5 text-sm text-slate-200">pg_dump</code>
+        away. The backend and database never leave the Docker network — only the
+        frontend container exposes a port, and even that is typically behind your
+        own reverse proxy for TLS.
+      </p>
+      <p class="mt-4 text-sm text-slate-500">
+        MIT licence · <a class="underline decoration-slate-700 underline-offset-4 hover:text-slate-300" href="https://github.com/cibrandocampo/nudge/blob/main/LICENSE">Read the terms</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- Section 7 — Self-host -->
+  <section id="self-host" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-10">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Self-host in 5 minutes</h2>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto">
+        Two files, a few secrets, <code class="rounded bg-slate-800 px-1.5 py-0.5 text-sm text-slate-200">docker compose up</code>. Full walkthrough in the README.
+      </p>
+    </div>
+    <div class="relative rounded-xl border border-slate-800 bg-slate-950/80 p-6 shadow-xl shadow-nudge-900/20">
+      <button
+        id="copy-install-snippet"
+        type="button"
+        class="absolute top-4 right-4 rounded-md border border-slate-700 bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-nudge-400"
+      >
+        Copy
+      </button>
+      <pre class="overflow-x-auto text-sm leading-relaxed text-slate-200"><code id="install-snippet"># 1. Download the compose file + env template
+curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/.env.example
+cp .env.example .env
+
+# 2. Fill in DJANGO_SECRET_KEY, ADMIN_PASSWORD, POSTGRES_PASSWORD,
+#    REDIS_PASSWORD and the VAPID key pair (see the README)
+
+# 3. Start it
+mkdir -p data
+docker compose up -d
+
+# Admin panel is at /nudge-admin/, the app at your configured port.</code></pre>
+    </div>
+    <p class="mt-6 text-center text-sm text-slate-400">
+      Full setup + configuration reference:
+      <a class="text-nudge-300 hover:text-nudge-100 underline decoration-nudge-700 underline-offset-4" href="https://github.com/cibrandocampo/nudge#self-hosting-and-technical-details">README — Self-hosting</a>
+    </p>
+  </section>
+
+  <!-- Section 8 — FAQ -->
+  <section id="faq" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-10">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Questions people ask</h2>
+    </div>
+    <div class="space-y-4">
+      {faqItems.map((item) => (
+        <details class="group rounded-lg border border-slate-800 bg-slate-900/50 open:bg-slate-900/70">
+          <summary class="cursor-pointer list-none p-5 flex items-center justify-between text-slate-100 font-medium hover:bg-slate-800/40 rounded-lg">
+            <span>{item.q}</span>
+            <span class="ml-4 text-slate-400 group-open:rotate-180 transition-transform" aria-hidden="true">▾</span>
+          </summary>
+          <p class="px-5 pb-5 text-slate-400 leading-relaxed">{item.a}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+
+  <Footer />
+
+  <!-- Copy button wiring; tiny enough that a framework would be overkill. -->
+  <script is:inline>
+    (function () {
+      var btn = document.getElementById('copy-install-snippet')
+      var pre = document.getElementById('install-snippet')
+      if (!btn || !pre) return
+      btn.addEventListener('click', function () {
+        var text = pre.textContent || ''
+        if (!navigator.clipboard) return
+        navigator.clipboard.writeText(text).then(function () {
+          var previous = btn.textContent
+          btn.textContent = 'Copied ✓'
+          setTimeout(function () {
+            btn.textContent = previous || 'Copy'
+          }, 2000)
+        })
+      })
+    })()
+  </script>
+</Base>

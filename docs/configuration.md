@@ -37,6 +37,7 @@ The admin user is created automatically on first startup if no superuser exists.
 | `DJANGO_DEBUG` | `False` | Enable debug mode. **Must be `False` in production** |
 | `DJANGO_ALLOWED_HOSTS` | `localhost` | Comma-separated list of allowed hostnames |
 | `CORS_ALLOWED_ORIGINS` | — | Comma-separated list of allowed CORS origins (e.g., `https://yourdomain.com`) |
+| `CSRF_TRUSTED_ORIGINS` | — | Comma-separated list of origins trusted by Django's CSRF middleware. Mirror `CORS_ALLOWED_ORIGINS` for the public-facing domain — forms submitted from that origin must pass CSRF validation. Required when `DJANGO_DEBUG=False`. |
 
 ## Database (PostgreSQL)
 
@@ -128,3 +129,15 @@ pip install py-vapid && vapid --gen
 | `BACKEND_PORT` | `8000` | Internal backend port (don't change unless you also update nginx.conf) |
 | `GUNICORN_WORKERS` | `2` | Gunicorn worker processes (rule of thumb: 2 × CPU cores + 1) |
 | `DATA_PATH` | `./data` | Host path for PostgreSQL data persistence |
+
+## Development / E2E
+
+These variables are **only** meaningful for the dev stack (`dev/docker-compose.yml`) and the Playwright E2E suite. They do nothing in a production deployment — leave them unset in `.env` for a real instance.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `E2E_SEED_ALLOWED` | _unset_ | Gate for the `/api/internal/e2e-seed/` endpoint that wipes non-admin data and rebuilds the Playwright fixture. The endpoint responds only when this is `true` or when `DJANGO_DEBUG=True`. Never set in production. |
+| `E2E_USER1_PASSWORD` | `e2e-pass-1` | Password assigned to the `user1` account created by `seed_e2e`. Read by the E2E specs via the `SEED` constant in `e2e/tests/helpers.js`. |
+| `E2E_USER2_PASSWORD` | `e2e-pass-2` | Same pattern for `user2`. |
+| `E2E_USER3_PASSWORD` | `e2e-pass-3` | Same pattern for `user3`. |
+| `VITE_E2E_MODE` | `false` | Build-time flag consumed by the Vite bundler. When `true`, the dev-only reachability hooks (`__NUDGE_REACHABILITY_SET__`, `__NUDGE_REACHABILITY_POLL_MS__`, `__NUDGE_REACHABILITY_LOCK__`, `__NUDGE_SYNC_RETRY_DELAYS_MS__`) are included in the preview build at `:4173`, so offline specs can drive the reachability flag without relying on `navigator.onLine`. Set via the `frontend-preview` service in `dev/docker-compose.yml`; not a runtime switch. |
