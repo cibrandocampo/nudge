@@ -246,14 +246,19 @@ LOGGING = {
 }
 
 # ── Test-run quiet mode ───────────────────────────────────────────────────────
-# During `manage.py test` our suites exercise 4xx/5xx paths on purpose.
-# Django's `django.request` logger + our own middleware/push/tasks/views
-# loggers fire WARNING for each one, producing hundreds of noisy lines in
-# CI output that drown the useful pass/fail signal. Silence WARNING and
-# below during the test run only; ERROR and CRITICAL still surface.
+# During `manage.py test` our suites exercise 4xx/5xx paths and even raise
+# (mocked) 500s and WebPushExceptions on purpose. Django's `django.request`
+# logger and our own middleware/push/tasks/views loggers fire WARNING+ERROR
+# for each one, and Python's `warnings` module fires on short JWT keys and
+# the missing staticfiles directory. None of that helps CI output — the
+# assertions are the source of truth for whether a test passed. Silence
+# all logging and all warnings during the test run; real failures still
+# surface through the test runner's tracebacks.
 import sys  # noqa: E402
 
 if "test" in sys.argv:
     import logging  # noqa: E402
+    import warnings  # noqa: E402
 
-    logging.disable(logging.WARNING)
+    logging.disable(logging.CRITICAL)
+    warnings.filterwarnings("ignore")
