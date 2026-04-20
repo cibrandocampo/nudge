@@ -145,4 +145,4 @@ Skills are loaded automatically. Commands are documented in [docs/development.md
 
 ## Landing site
 
-The public project site lives in [`/site/`](../site/README.md) (Astro + Tailwind) and deploys to [`cibrandocampo.github.io/nudge/`](https://cibrandocampo.github.io/nudge/) on every push to `main` that touches `site/**` or `docs/screenshots/**`, via `.github/workflows/site-deploy.yml`. See [site/README.md](../site/README.md) for how to run it locally, regenerate screenshots (`make screenshots`), and where to edit content.
+The public project site lives in [`/site/`](../site/README.md) (Astro + Tailwind) and deploys to [`cibrandocampo.github.io/nudge/`](https://cibrandocampo.github.io/nudge/) on every merge to `main` and on every published release, via `.github/workflows/site-deploy.yml`. See [site/README.md](../site/README.md) for how to run it locally, regenerate screenshots (`make screenshots`), and where to edit content.

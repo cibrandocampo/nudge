@@ -45,16 +45,17 @@ Pipeline: `copy-screenshots.mjs` → `astro check` (type-check) →
 
 ## Deploy
 
-Automated via `.github/workflows/site-deploy.yml`. It triggers on any
-push to `main` that touches:
+Automated via `.github/workflows/site-deploy.yml`. Triggers:
 
-- `site/**`
-- `docs/screenshots/**`
-- `.github/workflows/site-deploy.yml`
+- every push to `main` — the site redeploys on each merge and stays
+  in lock-step with the deployed code;
+- every published release — tag-based docs always reflect the
+  shipped version;
+- manual `workflow_dispatch` when you want to force a rebuild.
 
-…plus manual `workflow_dispatch`. The workflow runs `npm ci` +
-`npm run build` inside `site/`, uploads `site/dist/` as the Pages
-artifact, and `actions/deploy-pages@v4` publishes it.
+The workflow runs `npm ci` + `npm run build` inside `site/`, uploads
+`site/dist/` as the Pages artifact, and `actions/deploy-pages@v4`
+publishes it.
 
 ### One-time setup
 

@@ -1,12 +1,15 @@
 name: Deploy landing to GitHub Pages
 
 on:
+  # Redeploy the landing on every merge to main AND on every published
+  # release (so tag-based docs always reflect the shipped version). No
+  # path filter on purpose: the build takes < 1 min and having the site
+  # always in lock-step with the deployed code is worth the extra CI
+  # minutes.
   push:
     branches: [main]
-    paths:
-      - 'site/**'
-      - 'docs/screenshots/**'
-      - '.github/workflows/site-deploy.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
