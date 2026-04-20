@@ -110,6 +110,12 @@ pip install py-vapid && vapid --gen
 | `VITE_API_BASE_URL` | — | Backend API URL without trailing slash (e.g., `https://yourdomain.com/api`) |
 | `VITE_VAPID_PUBLIC_KEY` | — | Same value as `VAPID_PUBLIC_KEY` (exposed to browser) |
 
+## Offline sync safeguards
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS` | _unset_ (no limit) | Maximum allowed skew between a client-reported action timestamp (`client_created_at` on routine logs and stock consumptions) and the server's current time. When unset, arbitrary offline ages are accepted — correct for real-world offline trips of several days. Set to `86400` (24h) or similar if clients ever start drifting or misusing the field. |
+
 ## Docker / Infrastructure
 
 | Variable | Default | Description |

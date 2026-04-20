@@ -16,14 +16,23 @@
     "generate-icons": "pwa-assets-generator --preset minimal public/icons/source.svg"
   },
   "dependencies": {
+    "@tanstack/query-async-storage-persister": "~5.62",
+    "@tanstack/react-query": "~5.62",
+    "@tanstack/react-query-persist-client": "~5.62",
     "i18next": "~23.16",
     "i18next-browser-languagedetector": "~7.2",
+    "idb-keyval": "~6.2",
     "lucide-react": "~0.575.0",
     "react": "~18.3",
     "react-dom": "~18.3",
     "react-i18next": "~14.1",
     "react-router-dom": "~6.30",
-    "workbox-precaching": "~7.4"
+    "uuid": "~9.0",
+    "workbox-cacheable-response": "~7.4",
+    "workbox-expiration": "~7.4",
+    "workbox-precaching": "~7.4",
+    "workbox-routing": "~7.4",
+    "workbox-strategies": "~7.4"
   },
   "devDependencies": {
     "@eslint/js": "~9.17",
@@ -36,6 +45,7 @@
     "eslint": "~9.17",
     "eslint-plugin-react-hooks": "~7.0",
     "eslint-plugin-react-refresh": "~0.5",
+    "fake-indexeddb": "~6.0",
     "globals": "~17.3",
     "jsdom": "~25.0",
     "msw": "~2.7",

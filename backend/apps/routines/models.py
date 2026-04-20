@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Sum
-from django.db.models.signals import post_save
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -89,6 +89,7 @@ class StockLot(models.Model):
     expiry_date = models.DateField(null=True, blank=True)
     lot_number = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = [F("expiry_date").asc(nulls_last=True), "created_at"]
@@ -105,6 +106,15 @@ class StockLot(models.Model):
 def delete_empty_lot(sender, instance, **kwargs):
     if instance.quantity == 0:
         instance.delete()
+
+
+@receiver(m2m_changed, sender=Stock.shared_with.through)
+def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
+    """When users are removed from a stock's shared_with, unlink their routines."""
+    if action == "post_remove" and pk_set:
+        Routine.objects.filter(stock=instance, user_id__in=pk_set).update(stock=None)
+    elif action == "post_clear":
+        Routine.objects.filter(stock=instance).exclude(user=instance.user).update(stock=None)
 
 
 class StockConsumption(models.Model):
@@ -132,12 +142,21 @@ class StockConsumption(models.Model):
     )
     notes = models.CharField(max_length=1000, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    # Wall-clock time the client reports as the real moment of the action.
+    # Set for consumptions queued offline; stays NULL for server-initiated
+    # ones. Read back as `effective_created_at` (fallback to `created_at`).
+    client_created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.stock.name} — consumed {self.quantity} — {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def effective_created_at(self):
+        return self.client_created_at or self.created_at
 
 
 class Routine(models.Model):
@@ -198,7 +217,10 @@ class Routine(models.Model):
         if last is None:
             # Never logged — already due
             return None
-        return last.created_at + timedelta(hours=self.interval_hours)
+        # Use the effective action time (client_created_at when provided,
+        # else server-assigned created_at). Keeps due-time math correct for
+        # entries synced from offline.
+        return last.effective_created_at + timedelta(hours=self.interval_hours)
 
     def is_overdue(self):
         """True when the exact due time has passed (or routine was never logged)."""
@@ -237,6 +259,13 @@ class RoutineEntry(models.Model):
         related_name="completed_entries",
     )
     created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    # Wall-clock time the client reports as the real moment the routine was
+    # performed. Set for entries queued offline and synced later, NULL for
+    # entries created server-side (legacy, admin, tests). Read back as
+    # `effective_created_at` so `next_due_at()` computes from the action time
+    # rather than the sync time.
+    client_created_at = models.DateTimeField(null=True, blank=True)
     notes = models.CharField(max_length=1000, blank=True)
     consumed_lots = models.JSONField(
         default=list,
@@ -250,3 +279,7 @@ class RoutineEntry(models.Model):
 
     def __str__(self):
         return f"{self.routine.name} — {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def effective_created_at(self):
+        return self.client_created_at or self.created_at

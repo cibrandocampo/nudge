@@ -35,7 +35,7 @@ export async function unsubscribeFromPush() {
 
   const res = await api.delete('/push/unsubscribe/', { endpoint: subscription.endpoint })
 
-  if (!res.ok && res.status !== 204) throw new Error('Failed to unregister push subscription')
+  if (!res.ok) throw new Error('Failed to unregister push subscription')
 
   await subscription.unsubscribe()
 }

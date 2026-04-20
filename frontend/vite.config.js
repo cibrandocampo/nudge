@@ -15,6 +15,20 @@ export default defineConfig({
     },
     allowedHosts: 'all',
   },
+  preview: {
+    // Used by the `frontend-preview` service in dev/docker-compose.yml to
+    // serve a production build for offline E2E tests (T069–T071). Mirrors
+    // the dev-server proxy so /api/* hits the backend Django container.
+    proxy: {
+      '/api':           { target: 'http://backend:8000' },
+      '/admin':         { target: 'http://backend:8000' },
+      '/django-static': { target: 'http://backend:8000' },
+    },
+    allowedHosts: 'all',
+    host: true,
+    port: 4173,
+    strictPort: true,
+  },
   plugins: [
     react(),
     VitePWA({

@@ -83,7 +83,7 @@ services:
       dockerfile: dev/Dockerfile.frontend
     volumes:
       - ../frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
     ports:
       - "0.0.0.0:5173:5173"
     networks:
@@ -91,9 +91,49 @@ services:
     depends_on:
       - backend
 
+  # Production-build preview server for offline E2E tests (T069–T071).
+  # Vite dev serves JS modules on-the-fly and they are NOT precached by
+  # the Service Worker — offline reload of the PWA breaks. This service
+  # runs `vite build` + `vite preview` so the SW's precache manifest
+  # contains every hashed asset, and the app reloads fully offline.
+  #
+  # Gated behind the `preview` profile so the normal dev workflow does
+  # not pay for a ~30s build on every `up`. Bring it up explicitly:
+  #
+  #   docker compose -f dev/docker-compose.yml --env-file .env \
+  #     --profile preview up -d frontend-preview
+  frontend-preview:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.frontend
+    profiles: ["preview"]
+    command: sh -c "npm run build && npx vite preview --host --port 4173"
+    environment:
+      # Unlocks the dev-only E2E hooks (__NUDGE_REACHABILITY_SET__, etc.)
+      # in an otherwise production build. Set at build time so Vite bakes
+      # the flag into the compiled bundle. Not used by the plain frontend
+      # service (it runs in dev mode already).
+      VITE_E2E_MODE: "true"
+    volumes:
+      - ../frontend:/app
+      - frontend_preview_node_modules:/app/node_modules
+    ports:
+      - "0.0.0.0:4173:4173"
+    networks:
+      - nudge_net
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q -O- http://localhost:4173/ >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
 networks:
   nudge_net:
     driver: bridge
 
 volumes:
   postgres_data:
+  frontend_node_modules:
+  frontend_preview_node_modules:

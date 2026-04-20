@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import Icon from './Icon'
 import shared from '../styles/shared.module.css'
 import s from './ShareModal.module.css'
 
@@ -19,8 +20,8 @@ export default function ShareModal({ contacts, sharedWith, onToggle, onClose }) 
       <div className={shared.modalBox} onClick={(e) => e.stopPropagation()}>
         <div className={s.header}>
           <h2 className={s.title}>{t('sharing.shareWith')}</h2>
-          <button className={s.xBtn} onClick={onClose} aria-label="Close">
-            ✕
+          <button type="button" className={s.xBtn} onClick={onClose} aria-label="Close">
+            <Icon name="x" size="sm" />
           </button>
         </div>
         <p className={s.subtitle}>{t('sharing.shareWithSubtitle')}</p>

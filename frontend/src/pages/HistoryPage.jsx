@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
 import DateRangePicker from '../components/DateRangePicker'
+import Icon from '../components/Icon'
+import { useEntries, useStockConsumptions } from '../hooks/useEntries'
+import { useRoutines } from '../hooks/useRoutines'
+import { useStockList } from '../hooks/useStock'
+import { useUpdateConsumption } from '../hooks/mutations/useUpdateConsumption'
+import { useUpdateEntry } from '../hooks/mutations/useUpdateEntry'
 import cx from '../utils/cx'
 import { getLocale } from '../utils/time'
 import shared from '../styles/shared.module.css'
@@ -18,124 +23,80 @@ function todayStr() {
 }
 
 export default function HistoryPage() {
-  const [routines, setRoutines] = useState([])
-  const [entries, setEntries] = useState([])
-  const [consumptions, setConsumptions] = useState([])
-  const [stocks, setStocks] = useState([])
-  const [hasMore, setHasMore] = useState(false)
-  const [page, setPage] = useState(1)
+  const { t } = useTranslation()
+
   const [typeFilter, setTypeFilter] = useState('all')
   const [routineFilter, setRoutineFilter] = useState('')
   const [stockFilter, setStockFilter] = useState('')
   const [dateFrom, setDateFrom] = useState(defaultDateFrom)
   const [dateTo, setDateTo] = useState(todayStr)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState(false)
   const [editingNote, setEditingNote] = useState(null)
   const [savedNote, setSavedNote] = useState(null)
-  const { t } = useTranslation()
 
-  useEffect(() => {
-    Promise.all([
-      api
-        .get('/routines/')
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((d) => setRoutines(d.results ?? d))
-        .catch(() => {}),
-      api
-        .get('/stock/')
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((d) => setStocks(d.results ?? d))
-        .catch(() => {}),
-    ])
-  }, [])
+  const { data: routines = [] } = useRoutines()
+  const { data: stocks = [] } = useStockList()
 
-  const fetchEntries = async (p, filter, replace) => {
-    const params = new URLSearchParams({ page: p })
-    if (filter) params.set('routine', filter)
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
-    const res = await api.get(`/entries/?${params}`)
-    if (!res.ok) {
-      setError(true)
-      return
-    }
-    const data = await res.json()
-    const results = data.results ?? data
-    setEntries((prev) => (replace ? results : [...prev, ...results]))
-    setHasMore(Boolean(data.next))
-  }
+  const entriesFilters = useMemo(
+    () => ({
+      routine: routineFilter || undefined,
+      dateFrom,
+      dateTo,
+      enabled: typeFilter !== 'consumptions',
+    }),
+    [routineFilter, dateFrom, dateTo, typeFilter],
+  )
+  const consumptionFilters = useMemo(
+    () => ({
+      stock: stockFilter || undefined,
+      dateFrom,
+      dateTo,
+      enabled: typeFilter !== 'routines',
+    }),
+    [stockFilter, dateFrom, dateTo, typeFilter],
+  )
 
-  const fetchConsumptions = async (sFilter) => {
-    const params = new URLSearchParams()
-    if (sFilter) params.set('stock', sFilter)
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
-    const res = await api.get(`/stock-consumptions/?${params}`)
-    if (!res.ok) return
-    const data = await res.json()
-    setConsumptions(data.results ?? data)
-  }
+  const entriesQuery = useEntries(entriesFilters)
+  const consumptionsQuery = useStockConsumptions(consumptionFilters)
 
-  useEffect(() => {
-    setLoading(true)
-    setError(false)
-    setPage(1)
-    const promises = []
-    if (typeFilter !== 'consumptions') {
-      promises.push(fetchEntries(1, routineFilter, true))
-    } else {
-      setEntries([])
-      setHasMore(false)
-    }
-    if (typeFilter !== 'routines') {
-      promises.push(fetchConsumptions(stockFilter))
-    } else {
-      setConsumptions([])
-    }
-    Promise.all(promises).finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeFilter, routineFilter, stockFilter, dateFrom, dateTo])
+  const updateEntry = useUpdateEntry()
+  const updateConsumption = useUpdateConsumption()
 
-  const loadMore = async () => {
-    const next = page + 1
-    setLoadingMore(true)
-    await fetchEntries(next, routineFilter, false)
-    setPage(next)
-    setLoadingMore(false)
-  }
+  const entries = entriesQuery.data?.pages.flatMap((p) => p.items) ?? []
+  const consumptions = consumptionsQuery.data ?? []
 
-  const mergedItems = () => {
-    const routineItems = entries.map((e) => ({ ...e, _type: 'routine' }))
-    const consumptionItems = consumptions.map((c) => ({ ...c, _type: 'consumption' }))
-    if (typeFilter === 'routines') return routineItems
-    if (typeFilter === 'consumptions') return consumptionItems
-    return [...routineItems, ...consumptionItems].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  }
+  const loading =
+    (entriesFilters.enabled && entriesQuery.isLoading) || (consumptionFilters.enabled && consumptionsQuery.isLoading)
+  const error = entriesFilters.enabled && entriesQuery.isError
 
-  const items = mergedItems()
+  const items = mergedItems(typeFilter, entries, consumptions)
   const grouped = groupByDate(items)
   const isEmpty = items.length === 0
 
-  const handleSaveNote = async (type, id, notes) => {
-    const endpoint = type === 'routine' ? `/entries/${id}/` : `/stock-consumptions/${id}/`
-    const res = await api.patch(endpoint, { notes })
-    if (!res.ok) return
-    if (type === 'routine') {
-      setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, notes } : e)))
-    } else {
-      setConsumptions((prev) => prev.map((c) => (c.id === id ? { ...c, notes } : c)))
+  const handleSaveNote = async (type, entry, notes) => {
+    const mutation = type === 'routine' ? updateEntry : updateConsumption
+    const vars =
+      type === 'routine'
+        ? { entryId: entry.id, patch: { notes }, updatedAt: entry.updated_at }
+        : { consumptionId: entry.id, patch: { notes }, updatedAt: entry.updated_at }
+
+    try {
+      await mutation.mutateAsync(vars)
+      setEditingNote(null)
+      setSavedNote(`${type}-${entry.id}`)
+      setTimeout(() => setSavedNote(null), 2000)
+    } catch {
+      setEditingNote(null)
     }
-    setEditingNote(null)
-    setSavedNote(`${type}-${id}`)
-    setTimeout(() => setSavedNote(null), 2000)
   }
 
   const handleTypeFilterChange = (value) => {
     setTypeFilter(value)
     if (value === 'consumptions') setRoutineFilter('')
     if (value === 'routines') setStockFilter('')
+  }
+
+  const loadMore = () => {
+    if (entriesQuery.hasNextPage && !entriesQuery.isFetchingNextPage) entriesQuery.fetchNextPage()
   }
 
   return (
@@ -145,17 +106,24 @@ export default function HistoryPage() {
         <DateRangePicker
           dateFrom={dateFrom}
           dateTo={dateTo}
-          onChange={({ dateFrom: f, dateTo: t }) => {
+          onChange={({ dateFrom: f, dateTo: to }) => {
             setDateFrom(f)
-            setDateTo(t)
+            setDateTo(to)
           }}
         />
       </div>
 
       <div className={s.filterRow}>
         <div className={s.filterField}>
-          <label className={s.filterLabel}>{t('history.filterType')}</label>
-          <select className={s.filter} value={typeFilter} onChange={(e) => handleTypeFilterChange(e.target.value)}>
+          <label className={s.filterLabel} htmlFor="history-filter-type">
+            {t('history.filterType')}
+          </label>
+          <select
+            id="history-filter-type"
+            className={shared.input}
+            value={typeFilter}
+            onChange={(e) => handleTypeFilterChange(e.target.value)}
+          >
             <option value="all">{t('history.allTypes')}</option>
             <option value="routines">{t('history.routineEntries')}</option>
             <option value="consumptions">{t('history.stockConsumptions')}</option>
@@ -164,8 +132,15 @@ export default function HistoryPage() {
 
         {typeFilter !== 'consumptions' && (
           <div className={s.filterField}>
-            <label className={s.filterLabel}>{t('history.filterRoutine')}</label>
-            <select className={s.filter} value={routineFilter} onChange={(e) => setRoutineFilter(e.target.value)}>
+            <label className={s.filterLabel} htmlFor="history-filter-routine">
+              {t('history.filterRoutine')}
+            </label>
+            <select
+              id="history-filter-routine"
+              className={shared.input}
+              value={routineFilter}
+              onChange={(e) => setRoutineFilter(e.target.value)}
+            >
               <option value="">{t('history.allRoutines')}</option>
               {routines.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -178,8 +153,15 @@ export default function HistoryPage() {
 
         {typeFilter !== 'routines' && (
           <div className={s.filterField}>
-            <label className={s.filterLabel}>{t('history.filterStock')}</label>
-            <select className={s.filter} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
+            <label className={s.filterLabel} htmlFor="history-filter-stock">
+              {t('history.filterStock')}
+            </label>
+            <select
+              id="history-filter-stock"
+              className={shared.input}
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value)}
+            >
               <option value="">{t('history.allStocks')}</option>
               {stocks.map((st) => (
                 <option key={st.id} value={st.id}>
@@ -201,98 +183,115 @@ export default function HistoryPage() {
         <>
           {grouped.map(({ dateLabel, items: dayItems }) => (
             <section key={dateLabel} className={s.group}>
-              <p className={s.dateLabel}>{dateLabel}</p>
+              <p className={shared.sectionTitle}>{dateLabel}</p>
               <div className={s.list}>
                 {dayItems.map((e) => {
                   const key = `${e._type}-${e.id}`
                   const isEditing = editingNote && editingNote.type === e._type && editingNote.id === e.id
                   const justSaved = savedNote === key
-
                   return (
-                    <div key={key} className={cx(s.entry, e._type === 'routine' && s.entryRoutine)}>
-                      <div className={s.entryMain}>
-                        <span className={s.entryBadge}>{e._type === 'routine' ? '✓' : `−${e.quantity}`}</span>
-                        <span className={s.entryName}>
-                          {e._type === 'routine' ? e.routine_name : e.stock_name}
-                          {e._type === 'routine' && e.completed_by_username && (
-                            <span className={s.completedBy}>
-                              {' '}
-                              {t('sharing.completedBy', { username: e.completed_by_username })}
-                            </span>
-                          )}
-                          {e._type === 'consumption' && e.consumed_by_username && (
-                            <span className={s.completedBy}>
-                              {' '}
-                              {t('sharing.consumedBy', { username: e.consumed_by_username })}
-                            </span>
-                          )}
-                        </span>
-                        <span className={s.entryTime}>{formatTime(e.created_at)}</span>
-                      </div>
-                      {e.consumed_lots && e.consumed_lots.length > 0 && (
-                        <div className={s.consumedRow}>
-                          {(() => {
-                            const totalQty = e.consumed_lots.reduce((sum, l) => sum + l.quantity, 0)
-                            const name = e._type === 'routine' ? e.stock_name : e.stock_name
-                            const lotNumbers = e.consumed_lots
-                              .filter((l) => l.lot_number)
-                              .map((l) => l.lot_number)
-                              .join(', ')
-                            return (
-                              <span>
-                                {totalQty} × {name}
-                                {lotNumbers && <span className={s.consumedLot}> ({lotNumbers})</span>}
-                              </span>
-                            )
-                          })()}
-                        </div>
-                      )}
-                      <div className={s.notesRow}>
-                        {isEditing ? (
-                          <input
-                            className={s.notesInput}
-                            autoFocus
-                            defaultValue={e.notes || ''}
-                            placeholder={t('history.notesPlaceholder')}
-                            onBlur={(ev) => handleSaveNote(e._type, e.id, ev.target.value)}
-                            onKeyDown={(ev) => {
-                              if (ev.key === 'Enter') {
-                                handleSaveNote(e._type, e.id, ev.target.value)
-                              }
-                              if (ev.key === 'Escape') setEditingNote(null)
-                            }}
-                          />
-                        ) : (
-                          <button
-                            className={cx(s.notesBtn, !e.notes && s.notesPlaceholder)}
-                            onClick={() =>
-                              setEditingNote({
-                                type: e._type,
-                                id: e.id,
-                                notes: e.notes || '',
-                              })
-                            }
-                          >
-                            {e.notes || t('history.notesPlaceholder')}
-                          </button>
-                        )}
-                        {justSaved && <span className={s.notesSaved}>{t('history.savedNote')}</span>}
-                      </div>
-                    </div>
+                    <EntryCard
+                      key={key}
+                      entry={e}
+                      isEditing={isEditing}
+                      justSaved={justSaved}
+                      onStartEdit={() => setEditingNote({ type: e._type, id: e.id, notes: e.notes || '' })}
+                      onCancelEdit={() => setEditingNote(null)}
+                      onSave={(notes) => handleSaveNote(e._type, e, notes)}
+                    />
                   )
                 })}
               </div>
             </section>
           ))}
-          {typeFilter !== 'consumptions' && hasMore && (
-            <button className={s.moreBtn} onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? t('common.loading') : t('history.loadMore')}
+          {typeFilter !== 'consumptions' && entriesQuery.hasNextPage && (
+            <button type="button" className={s.moreBtn} onClick={loadMore} disabled={entriesQuery.isFetchingNextPage}>
+              {entriesQuery.isFetchingNextPage ? t('common.loading') : t('history.loadMore')}
             </button>
           )}
         </>
       )}
     </div>
   )
+}
+
+function EntryCard({ entry, isEditing, justSaved, onStartEdit, onCancelEdit, onSave }) {
+  const { t } = useTranslation()
+  const isRoutine = entry._type === 'routine'
+  const title = isRoutine ? entry.routine_name : entry.stock_name
+  const authorLabel = isRoutine
+    ? entry.completed_by_username && t('sharing.completedBy', { username: entry.completed_by_username })
+    : entry.consumed_by_username && t('sharing.consumedBy', { username: entry.consumed_by_username })
+
+  const totalQty = entry.consumed_lots?.reduce((sum, l) => sum + l.quantity, 0) ?? 0
+  const lotNumbers = (entry.consumed_lots || [])
+    .filter((l) => l.lot_number)
+    .map((l) => l.lot_number)
+    .join(', ')
+
+  return (
+    <div
+      className={cx(shared.card, shared.cardBorderSuccess, s.entryCard)}
+      data-testid="history-entry"
+      data-entry-type={entry._type}
+    >
+      <div className={shared.cardHeader}>
+        <div className={shared.cardMeta}>
+          <span className={cx(shared.cardTitle, shared.cardTitleFlex, s.entryName)}>
+            <Icon name={isRoutine ? 'check' : 'package'} size="sm" />
+            <span>{title}</span>
+          </span>
+          <span className={shared.cardSubtitle}>
+            <span>{formatTime(entry.created_at)}</span>
+            {authorLabel && <span>{authorLabel}</span>}
+            {!isRoutine && <span className={s.entryBadge}>−{entry.quantity}</span>}
+            {isRoutine && <span className={s.entryBadge}>✓</span>}
+          </span>
+          {entry.consumed_lots?.length > 0 && (
+            <span className={shared.cardStockBadge}>
+              <Icon name="package" size="sm" />
+              <span>
+                {totalQty} × {entry.stock_name}
+                {lotNumbers && <span className={s.consumedLot}> ({lotNumbers})</span>}
+              </span>
+            </span>
+          )}
+          <div className={s.notesRow}>
+            {isEditing ? (
+              <input
+                className={cx(shared.input, s.notesInput)}
+                autoFocus
+                defaultValue={entry.notes || ''}
+                placeholder={t('history.notesPlaceholder')}
+                onBlur={(ev) => onSave(ev.target.value)}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter') onSave(ev.target.value)
+                  if (ev.key === 'Escape') onCancelEdit()
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className={cx(s.notesBtn, !entry.notes && s.notesPlaceholder)}
+                onClick={onStartEdit}
+              >
+                {entry.notes || t('history.notesPlaceholder')}
+              </button>
+            )}
+            {justSaved && <span className={s.notesSaved}>{t('history.savedNote')}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function mergedItems(typeFilter, entries, consumptions) {
+  const routineItems = entries.map((e) => ({ ...e, _type: 'routine' }))
+  const consumptionItems = consumptions.map((c) => ({ ...c, _type: 'consumption' }))
+  if (typeFilter === 'routines') return routineItems
+  if (typeFilter === 'consumptions') return consumptionItems
+  return [...routineItems, ...consumptionItems].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 }
 
 function groupByDate(entries) {

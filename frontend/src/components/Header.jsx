@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
 import { unsubscribeFromPush } from '../utils/push'
 import ChangePasswordModal from './ChangePasswordModal'
+import Icon from './Icon'
+import PendingBadge from './PendingBadge'
 import s from './Header.module.css'
 
 export default function Header() {
@@ -47,19 +49,30 @@ export default function Header() {
 
   return (
     <header className={s.header}>
-      <span className={s.logo}>Nudge</span>
+      <span className={s.logo}>
+        nudge
+        <span className={s.brandDot} aria-hidden="true" />
+      </span>
       <div className={s.right}>
+        <PendingBadge />
         {user?.is_staff && (
           <button className={s.adminBtn} onClick={goToAdmin} title="Django admin panel">
             {t('header.admin', 'Admin')}
           </button>
         )}
         <div className={s.userWrap} ref={menuRef}>
-          <button className={s.userBtn} onClick={() => setMenuOpen((v) => !v)}>
-            {user?.username} <span className={s.chevron}>▾</span>
+          <button
+            type="button"
+            className={s.userBtn}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={user?.username ?? 'User menu'}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            <Icon name="user" />
           </button>
           {menuOpen && (
-            <div className={s.dropdown}>
+            <div className={s.dropdown} role="menu">
               <button
                 className={s.dropItem}
                 onClick={() => {

@@ -1,0 +1,162 @@
+.container {
+  max-width: 540px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--c-text-3);
+  font-size: 0.8rem;
+  text-decoration: none;
+  padding: 0.25rem 0;
+}
+.backLink:hover {
+  color: var(--c-text-2);
+}
+
+.titleBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.editHint {
+  color: var(--c-text-3);
+}
+
+.nameInput {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lotsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.addLotForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+}
+
+.addLotRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.addLotField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fieldLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.inputNarrow {
+  width: 80px;
+  text-align: center;
+}
+
+.inputFlex {
+  flex: 1;
+}
+
+.primaryBtn {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.primaryBtn:hover {
+  background: var(--c-primary-hover);
+}
+
+.consumptionList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.consumptionRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--c-text-2);
+  background: var(--c-surface);
+  border-radius: var(--radius);
+}
+
+.consumptionQty {
+  font-weight: 600;
+  color: var(--c-text);
+  min-width: 3rem;
+}
+
+.consumptionDate {
+  color: var(--c-text-3);
+  font-size: 0.75rem;
+  flex: 1;
+}
+
+.dangerZone {
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-border);
+}
+
+.dangerBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.875rem;
+  background: transparent;
+  color: var(--c-delete);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.dangerBtn:hover {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--c-border-danger);
+}

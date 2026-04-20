@@ -253,6 +253,18 @@ async function main() {
     await page.goto(`${BASE}/inventory`)
     await screenshot(page, '06-inventory')
 
+    // 8b. Stock detail — navigate via URL using the first stock fetched from the API.
+    const stocks = await api(page, 'GET', '/api/stock/')
+    const list = Array.isArray(stocks) ? stocks : stocks?.results || []
+    console.log(`  (stocks list length: ${list.length})`)
+    if (list[0]?.id) {
+      await page.goto(`${BASE}/inventory/${list[0].id}`)
+      await page.waitForLoadState('networkidle')
+      await screenshot(page, '06b-stock-detail')
+    } else {
+      console.log('  (skipped 06b — no stocks available)')
+    }
+
     // 9. History
     await page.goto(`${BASE}/history`)
     await screenshot(page, '07-history')

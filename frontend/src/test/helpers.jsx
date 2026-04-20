@@ -1,6 +1,8 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { ToastProvider } from '../components/Toast'
 import { AuthContext } from '../contexts/AuthContext'
 
 const defaultAuth = {
@@ -17,18 +19,32 @@ const defaultAuth = {
   loading: false,
 }
 
+/**
+ * Canonical test helper: wraps UI in QueryClientProvider + ToastProvider +
+ * AuthContext + MemoryRouter — the same set the live app uses in App.jsx.
+ * Each call creates a fresh QueryClient so caches don't leak between tests.
+ */
 export function renderWithProviders(ui, options = {}) {
-  const { auth = {}, initialEntries = ['/'], ...renderOptions } = options
+  const { auth = {}, initialEntries = ['/'], queryClient, ...renderOptions } = options
 
   const authValue = { ...defaultAuth, ...auth }
+  const qc =
+    queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
 
   function Wrapper({ children }) {
     return (
-      <AuthContext.Provider value={authValue}>
-        <MemoryRouter initialEntries={initialEntries} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          {children}
-        </MemoryRouter>
-      </AuthContext.Provider>
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <AuthContext.Provider value={authValue}>
+            <MemoryRouter
+              initialEntries={initialEntries}
+              future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+            >
+              {children}
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </ToastProvider>
+      </QueryClientProvider>
     )
   }
 
@@ -36,6 +52,7 @@ export function renderWithProviders(ui, options = {}) {
     ...render(ui, { wrapper: Wrapper, ...renderOptions }),
     user: userEvent.setup(),
     authValue,
+    queryClient: qc,
   }
 }
 
