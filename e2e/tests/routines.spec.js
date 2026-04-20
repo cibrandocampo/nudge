@@ -4,7 +4,10 @@ import { login } from './helpers.js'
 const ROUTINE_NAME = `E2E routine ${Date.now()}`
 
 test.describe('Routines', () => {
-  test.beforeEach(async ({ page }) => { await login(page) })
+  test.beforeEach(async ({ page }) => {
+    await login(page)
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
+  })
 
   test('navigate to new routine form', async ({ page }) => {
     await page.getByRole('link', { name: '+ New routine' }).click()

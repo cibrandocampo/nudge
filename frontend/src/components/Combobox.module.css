@@ -1,0 +1,42 @@
+.wrap {
+  position: relative;
+}
+
+.input {
+  width: 100%;
+}
+
+.popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 200;
+  list-style: none;
+  padding: 0.25rem 0;
+  margin-bottom: 0;
+}
+
+.option {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--c-text);
+}
+
+.optionHighlighted {
+  background: var(--c-bg);
+}
+
+.empty {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}

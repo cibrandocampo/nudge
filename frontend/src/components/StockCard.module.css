@@ -1,0 +1,98 @@
+.lotExpiryDanger {
+  color: var(--c-danger);
+  font-weight: 500;
+}
+
+.stockQtyFlash {
+  animation: stockQtyPulse 0.6s ease-out;
+}
+
+@keyframes stockQtyPulse {
+  0% {
+    color: var(--c-danger);
+    transform: scale(1.05);
+  }
+  100% {
+    color: inherit;
+    transform: scale(1);
+  }
+}
+
+.addLotWrap {
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-top: 1px solid var(--c-border-inner);
+}
+
+.addLotBtn {
+  background: none;
+  border: 1px dashed var(--c-border);
+  color: var(--c-text-3);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+  width: 100%;
+}
+.addLotBtn:hover {
+  color: var(--c-text-2);
+  border-color: var(--c-text-3);
+}
+
+.addLotForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.addLotRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.addLotField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fieldLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.inputNarrow {
+  width: 80px;
+  text-align: center;
+}
+
+.inputFlex {
+  flex: 1;
+}
+
+.addLotActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.createBtn {
+  padding: 0.45rem 0.875rem;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cancelBtn {
+  padding: 0.45rem 0.875rem;
+  background: none;
+  color: var(--c-text-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+}

@@ -27,3 +27,12 @@ Task files live in `docs/tasks/`. Plan files live in `docs/plans/`.
 ## Git workflow
 
 **ALWAYS run the `git-conventions` skill before creating any commit or branch.**
+
+## Testing workflow
+
+**ALWAYS consult the `test-discipline` skill before writing or debugging
+any test (unit, integration, E2E).** Short version: one test = one
+concept, fail hard, diagnose root cause (test / app / infra) before
+editing anything, never reach for `test.skip` or loosened assertions to
+go green, and re-run 3 times back-to-back without `--retries` before
+declaring done.

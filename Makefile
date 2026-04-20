@@ -135,6 +135,17 @@ django-shell:   ## Open Django interactive shell
 vapid:          ## Generate VAPID keys for push notifications
 	$(DEV) exec backend python manage.py generate_vapid_keys
 
+screenshots:    ## Regenerate docs/screenshots/*.png against the running dev stack
+	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
+	docker run --rm --network host \
+		-e E2E_USERNAME=admin \
+		-e E2E_PASSWORD=$(ADMIN_PASSWORD) \
+		-e E2E_USER2_USERNAME=user1 \
+		-e E2E_USER2_PASSWORD=$(E2E_USER1_PASSWORD) \
+		-e BASE_URL=http://localhost:5173 \
+		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
+		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:       ## Show this help
@@ -148,5 +159,5 @@ help:       ## Show this help
         qa test test-backend test-frontend test-e2e \
         lint format format-check \
         build-backend build-frontend build \
-        shell-backend shell-frontend django-shell vapid help
+        shell-backend shell-frontend django-shell vapid screenshots help
 .DEFAULT_GOAL := help

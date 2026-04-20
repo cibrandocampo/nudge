@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
+import { clear, list } from '../../offline/queue'
+import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import RoutineDetailPage from '../RoutineDetailPage'
@@ -33,6 +35,19 @@ const routine = {
   stock_usage: 1,
   stock: 1,
 }
+
+// Stock used to feed the lot-selection modal — T063 derives the list from
+// this cached stock instead of a dedicated endpoint.
+const stockForLotSelection = {
+  id: 1,
+  name: 'Vitamin D',
+  quantity: 10,
+  lots: [
+    { id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2, created_at: '2026-01-01T00:00:00Z' },
+    { id: 2, lot_number: 'LOT-B', expiry_date: '2027-06-01', quantity: 5, created_at: '2026-01-02T00:00:00Z' },
+  ],
+}
+const stockListHandler = http.get(`${BASE}/stock/`, () => HttpResponse.json([stockForLotSelection]))
 
 describe('RoutineDetailPage', () => {
   beforeEach(() => {
@@ -145,9 +160,13 @@ describe('RoutineDetailPage', () => {
   })
 
   it('shows lot selection modal when routine requires_lot_selection', async () => {
-    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
-    const { user } = renderDetail()
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      stockListHandler,
+    )
+    const { user, queryClient } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
 
     await user.click(screen.getByText('Mark as done'))
 
@@ -155,17 +174,19 @@ describe('RoutineDetailPage', () => {
   })
 
   it('confirms lot selection and calls log with lot_selections', async () => {
-    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
     let logBody = null
     server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      stockListHandler,
       http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
         logBody = await request.json()
         return HttpResponse.json({ id: 1 }, { status: 201 })
       }),
     )
 
-    const { user } = renderDetail()
+    const { user, queryClient } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
 
     await user.click(screen.getByText('Mark as done'))
     await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
@@ -178,27 +199,21 @@ describe('RoutineDetailPage', () => {
   })
 
   it('multi mode: pre-distributes and confirms with stepper', async () => {
+    let logBody = null
     server.use(
       http.get(`${BASE}/routines/1/`, () =>
         HttpResponse.json({ ...routine, stock_usage: 3, requires_lot_selection: true }),
       ),
-      http.get(`${BASE}/routines/1/lots-for-selection/`, () =>
-        HttpResponse.json([
-          { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 },
-          { lot_id: 2, lot_number: 'LOT-B', expiry_date: '2027-06-01', quantity: 5 },
-        ]),
-      ),
-    )
-    let logBody = null
-    server.use(
+      stockListHandler,
       http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
         logBody = await request.json()
         return HttpResponse.json({ id: 1 }, { status: 201 })
       }),
     )
 
-    const { user } = renderDetail()
+    const { user, queryClient } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
 
     await user.click(screen.getByText('Mark as done'))
     await waitFor(() => expect(screen.getByText(/Distribute 3 units across lots/)).toBeInTheDocument())
@@ -216,17 +231,19 @@ describe('RoutineDetailPage', () => {
   })
 
   it('cancels lot selection modal without logging', async () => {
-    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })))
     let logCalled = false
     server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      stockListHandler,
       http.post(`${BASE}/routines/1/log/`, () => {
         logCalled = true
         return HttpResponse.json({ id: 1 }, { status: 201 })
       }),
     )
 
-    const { user } = renderDetail()
+    const { user, queryClient } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
 
     await user.click(screen.getByText('Mark as done'))
     await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
@@ -264,10 +281,11 @@ describe('RoutineDetailPage', () => {
     await waitFor(() => expect(logCalled).toBe(true))
   })
 
-  it('shows error when lot selection fetch fails', async () => {
+  it('shows error when no lots are available for selection (empty stock cache)', async () => {
     server.use(
       http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
-      http.get(`${BASE}/routines/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
+      // Empty stock list → findCachedStock returns undefined → no lots.
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
     )
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
@@ -280,10 +298,12 @@ describe('RoutineDetailPage', () => {
       http.get(`${BASE}/routines/1/`, () =>
         HttpResponse.json({ ...routine, requires_lot_selection: true, stock_usage: 1 }),
       ),
+      stockListHandler,
       http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })),
     )
-    const { user } = renderDetail()
+    const { user, queryClient } = renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
 
     await user.click(screen.getByText('Mark as done'))
     await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
@@ -476,5 +496,28 @@ describe('RoutineDetailPage — advance button', () => {
     await user.click(screen.getByText('Do it now'))
     await user.click(screen.getAllByText('Do it now')[1])
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('queues toggleActive offline when the PATCH hits a network error', async () => {
+    await clear()
+    server.use(mockNetworkError('patch', '/routines/1/'))
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    await user.click(screen.getByText('Deactivate'))
+    await waitFor(async () => expect(await list()).toHaveLength(1))
+    await clear()
+  })
+
+  it('queues delete offline when the DELETE hits a network error', async () => {
+    await clear()
+    server.use(mockNetworkError('delete', '/routines/1/'))
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    await user.click(screen.getByText('Delete'))
+    // ConfirmModal exposes its confirm button with the routine.detail.delete label
+    const confirmButtons = screen.getAllByText('Delete')
+    await user.click(confirmButtons[confirmButtons.length - 1])
+    await waitFor(async () => expect(await list()).toHaveLength(1))
+    await clear()
   })
 })

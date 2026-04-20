@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import cx from '../utils/cx'
+import Icon from './Icon'
 import s from './SharePopover.module.css'
 
 export default function SharePopover({ sharedWith, contacts, isOwner, onToggleShare }) {
@@ -30,7 +31,7 @@ export default function SharePopover({ sharedWith, contacts, isOwner, onToggleSh
         }}
         aria-label="Share"
       >
-        👥
+        <Icon name="users" size="sm" />
       </button>
       {open && (
         <div className={s.popover} data-testid="share-popover" onClick={(e) => e.stopPropagation()}>

@@ -2,13 +2,51 @@
   max-width: 540px;
 }
 
-.newBtn {
-  padding: 0.4rem 0.875rem;
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.groupsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.groupsBtn:hover {
+  background: var(--c-border-inner);
+}
+
+.newForm {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--c-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.newFormActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.createBtn {
+  padding: 0.6rem 1.25rem;
   background: var(--c-primary);
   color: var(--c-surface);
   border: none;
-  border-radius: 8px;
-  font-size: 0.8rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -18,390 +56,35 @@
   background: none;
   color: var(--c-text-3);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 0.8rem;
   cursor: pointer;
 }
 
-.newForm {
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: var(--c-surface);
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.input {
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  font-size: 0.875rem;
-  outline: none;
-  background: var(--c-surface);
-  color: var(--c-text);
-  box-sizing: border-box;
-}
-
-.inputNarrow {
-  width: 80px;
-  text-align: center;
-}
-
-.inputFlex {
-  flex: 1;
-}
-
-.createBtn {
-  padding: 0.6rem 1.25rem;
-  background: var(--c-primary);
-  color: var(--c-surface);
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-/* ── Expiring soon alert ─────────────────────────────────────── */
-
-.alertBox {
-  border: 1px solid var(--c-danger);
-  border-radius: 8px;
-  padding: 0.875rem 1rem;
-  margin-bottom: 1.25rem;
-  background: color-mix(in srgb, var(--c-danger) 8%, transparent);
-}
-
-.alertTitle {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--c-danger);
-  margin-bottom: 0.5rem;
-}
-
-.alertProduct {
-  margin-top: 0.4rem;
-}
-
-.alertProductName {
-  font-weight: 500;
-  font-size: 0.875rem;
-  color: var(--c-text);
-  margin-bottom: 0.15rem;
-}
-
-.alertLot {
-  font-size: 0.8rem;
-  color: var(--c-text-2);
-  padding-left: 0.5rem;
-}
-
-/* ── Product cards ───────────────────────────────────────────── */
-
-.productCard {
-  border: 1px solid var(--c-border);
-  border-left: 3px solid transparent;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  background: var(--c-surface);
-  overflow: hidden;
-}
-
-.cardDanger {
-  border-left-color: var(--c-danger);
-}
-
-.cardWarning {
-  border-left-color: var(--c-warning);
-}
-
-.cardSuccess {
-  border-left-color: var(--c-success);
-}
-
-.productHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--c-border-inner);
-}
-
-.productMeta {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-
-.productName {
-  font-weight: 600;
-  color: var(--c-text);
-  font-size: 0.9rem;
-}
-
-.productTotal {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
-  transition:
-    background-color 0.6s ease,
-    color 0.6s ease;
-  border-radius: 4px;
-  padding: 0 0.25rem;
-}
-
-.productTotalFlash {
-  background-color: var(--c-success-bg);
-  color: var(--c-success);
-  transition: none;
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.consumeBtn {
-  padding: 0.3rem 0.75rem;
-  background: var(--c-primary);
-  border: none;
-  border-radius: 8px;
-  color: var(--c-surface);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.deleteBtn {
-  background: none;
-  border: none;
-  color: var(--c-danger);
-  font-size: 0.9rem;
-  cursor: pointer;
-  padding: 0.25rem;
-}
-
-/* ── Lots ────────────────────────────────────────────────────── */
-
-.lotList {
-  border-bottom: 1px solid var(--c-border-inner);
-}
-
-.lotRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.55rem 1rem;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--c-border-inner);
-}
-
-.lotRow:last-child {
-  border-bottom: none;
-}
-
-.lotInfo {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.lotNumber {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--c-text-2);
-}
-
-.lotQty {
-  font-size: 0.875rem;
-  color: var(--c-text);
-  font-weight: 500;
-}
-
-.lotExpiry {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
-}
-
-.lotExpiryDanger {
-  color: var(--c-danger);
-}
-
-.lotDeleteBtn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0.2rem;
-  color: var(--c-danger);
-}
-
-/* ── Add lot form ────────────────────────────────────────────── */
-
-.addLotForm {
-  padding: 0.875rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.addLotRow {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-
-.addLotField {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.addLotActions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-@media (max-width: 480px) {
-  .addLotRow {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .addLotField {
-    width: 100%;
-  }
-}
-
-.fieldLabel {
-  font-size: 0.75rem;
-  color: var(--c-text-3);
-  font-weight: 500;
-}
-
-.addLotBtn {
-  display: block;
-  width: 100%;
-  padding: 0.6rem 1rem;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--c-border-inner);
-  color: var(--c-primary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-}
-
-/* ── Top actions ─────────────────────────────────────────────── */
-
-.topActions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.groupsBtn {
-  padding: 0.4rem 0.875rem;
-  background: none;
-  color: var(--c-text-2);
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-/* ── Collapsible group boxes ─────────────────────────────────── */
-
-.groupBox {
-  border: 1px solid color-mix(in srgb, var(--c-primary) 20%, var(--c-border));
-  border-radius: 10px;
-  margin-bottom: 1rem;
-  background: color-mix(in srgb, var(--c-primary) 4%, var(--c-surface));
-  overflow: hidden;
-  padding: 0.25rem;
-}
-
-.groupHeader {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  width: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  font-size: 0.875rem;
-  color: var(--c-text);
-}
-
-.groupToggle {
-  font-size: 0.7rem;
-  color: var(--c-primary);
-}
-
-.groupName {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--c-primary);
-}
-
-.groupCount {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
-}
-
-.ungroupedLabel {
-  color: var(--c-text-3);
-  font-style: italic;
-}
-
-/* ── Group manager modal ─────────────────────────────────────── */
+/* ── Group manager modal ────────────────────────────────────── */
 
 .groupManagerModal {
-  max-width: 360px;
+  max-width: 420px;
 }
 
 .groupManagerHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 0 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .groupManagerTitle {
   font-size: 1rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
   margin: 0;
-}
-
-.groupManagerClose {
-  background: none;
-  border: none;
-  font-size: 1rem;
-  color: var(--c-text-3);
-  cursor: pointer;
-  padding: 0.1rem 0.25rem;
-  line-height: 1;
-}
-
-.groupManagerClose:hover {
-  color: var(--c-text);
 }
 
 .groupManagerList {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  margin-bottom: 0.75rem;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
 }
 
 .groupManagerRow {
@@ -409,92 +92,37 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.35rem 0;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--c-border-inner);
 }
 
 .groupManagerName {
-  cursor: pointer;
-  font-size: 0.875rem;
-  color: var(--c-text);
   flex: 1;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0.25rem 0;
   text-align: left;
+  font-size: 0.875rem;
+  color: var(--c-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
-
-.groupManagerName:hover .editHint {
-  opacity: 1;
+.groupManagerName:hover {
+  color: var(--c-primary);
 }
 
 .editHint {
-  font-size: 0.75rem;
   color: var(--c-text-3);
-  opacity: 0.4;
-  margin-left: 0.25rem;
-  transition: opacity 0.15s;
 }
 
 .groupManagerActions {
   display: flex;
-  gap: 0.25rem;
-  align-items: center;
-}
-
-.moveBtn {
-  background: none;
-  border: 1px solid var(--c-border);
-  border-radius: 4px;
-  padding: 0.15rem 0.35rem;
-  font-size: 0.7rem;
-  cursor: pointer;
-  color: var(--c-text-3);
-}
-
-.moveBtn:disabled {
-  opacity: 0.3;
-  cursor: default;
+  gap: 0.3rem;
 }
 
 .groupManagerForm {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.groupManagerForm .input {
-  flex: 1;
-}
-
-/* ── Group tag button (on card header) ─────────────────────── */
-
-.groupTagBtn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0.15rem 0.35rem;
-  line-height: 1;
-  opacity: 0.3;
-  transition: opacity 0.15s;
-}
-
-.groupTagBtn:hover {
-  opacity: 0.7;
-}
-
-.groupTagBtnActive {
-  opacity: 1;
-}
-
-.groupTagBtnActive:hover {
-  opacity: 1;
-}
-
-.ownerLabel {
-  font-size: 0.7rem;
-  color: var(--c-text-3);
-  font-style: italic;
-  padding: 0 1rem 0.3rem;
 }

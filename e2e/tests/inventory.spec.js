@@ -6,6 +6,7 @@ test.describe('Inventory', () => {
     await login(page)
     await page.getByRole('link', { name: 'Inventory' }).click()
     await expect(page).toHaveURL('/inventory')
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
   test('inventory page loads', async ({ page }) => {
@@ -55,13 +56,19 @@ test.describe('Inventory', () => {
     const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(card).toBeVisible()
 
-    // Click ✕ delete button on the product card header
-    await card.getByTitle('Delete').click()
+    // Stock delete moved from card (T048) to StockDetailPage. Click the
+    // card to navigate, then use the dangerous "Delete stock" button.
+    await card.click()
+    await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
-    // Confirm the modal
-    await page.getByRole('button', { name: 'Delete' }).last().click()
+    await page.getByRole('button', { name: 'Delete stock' }).click()
+    // Scope the confirm to the dialog so we don't race-click the page's
+    // trigger button again.
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete stock' }).click()
 
-    await expect(card).not.toBeVisible()
+    // Back to the list; the card must be gone.
+    await expect(page).toHaveURL('/inventory')
+    await expect(page.locator('[data-testid="product-card"]').filter({ hasText: name })).toHaveCount(0)
   })
 
   test('delete a lot', async ({ page }) => {
@@ -80,11 +87,20 @@ test.describe('Inventory', () => {
     await card.getByRole('button', { name: /add batch/i }).last().click()
     await expect(card.getByText('3 u.')).toBeVisible()
 
-    // Delete the lot using the 🗑 button
+    // Delete the lot using the 🗑 button → opens ConfirmModal.
     await card.getByTitle('Delete').last().click()
-    await page.getByRole('button', { name: 'Delete' }).last().click()
 
-    // Total should be 0
-    await expect(card.getByText('(0 total)')).toBeVisible()
+    // Scope to the dialog: the lot's delete button is the previous
+    // `.last()` Delete on the page and races the modal mount. Scoping
+    // to `[role="dialog"]` removes the ambiguity deterministically.
+    const confirmBtn = page.getByRole('dialog').getByRole('button', { name: 'Delete' })
+    await expect(confirmBtn).toBeVisible()
+    await confirmBtn.click()
+
+    // Retry-able assertion on the resulting DOM — waits for the mutation
+    // to resolve and TanStack's cache invalidation to re-render the card
+    // without relying on catching the exact DELETE response event
+    // (which can race the test runner's listener in the full suite).
+    await expect(card.getByText('(0 total)')).toBeVisible({ timeout: 10_000 })
   })
 })

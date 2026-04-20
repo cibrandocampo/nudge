@@ -1,8 +1,16 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { vi } from 'vitest'
+import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
+import { clear, list } from '../../offline/queue'
 import InventoryPage from '../InventoryPage'
+
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
 
 const BASE = 'http://localhost/api'
 
@@ -15,6 +23,10 @@ const stockItem = {
   has_expiring_lots: false,
   expiring_lots: [],
   requires_lot_selection: false,
+  estimated_depletion_date: null,
+  daily_consumption_own: null,
+  daily_consumption_shared: null,
+  is_low_stock: false,
   lots: [
     { id: 100, quantity: 5, expiry_date: '2025-06-01', lot_number: 'LOT-A' },
     { id: 101, quantity: 5, expiry_date: null, lot_number: '' },
@@ -57,9 +69,9 @@ describe('InventoryPage', () => {
   it('shows error when create stock fails', async () => {
     server.use(http.post(`${BASE}/stock/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('+ New')).toBeInTheDocument())
+    const addBtn = await screen.findByRole('button', { name: '+ New' })
 
-    await user.click(screen.getByText('+ New'))
+    await user.click(addBtn)
     const input = screen.getByPlaceholderText('Item name (e.g. Water filters)')
     await user.type(input, 'Bad Item')
     await user.click(screen.getByText('Create item'))
@@ -69,9 +81,9 @@ describe('InventoryPage', () => {
 
   it('shows + New button and creates stock', async () => {
     const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('+ New')).toBeInTheDocument())
+    const addBtn = await screen.findByRole('button', { name: '+ New' })
 
-    await user.click(screen.getByText('+ New'))
+    await user.click(addBtn)
     const input = screen.getByPlaceholderText('Item name (e.g. Water filters)')
     await user.type(input, 'New Item')
     await user.click(screen.getByText('Create item'))
@@ -79,22 +91,9 @@ describe('InventoryPage', () => {
     await waitFor(() => expect(screen.getByText('New Item')).toBeInTheDocument())
   })
 
-  it('confirms and deletes a stock item', async () => {
-    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
-    const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
-
-    // Click the stock delete button — first one with title "Delete"
-    const deleteBtns = screen.getAllByTitle('Delete')
-    await user.click(deleteBtns[0])
-    expect(screen.getByText(/Delete "Water filters"/)).toBeInTheDocument()
-
-    // Confirm delete
-    const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByText('Delete'))
-
-    await waitFor(() => expect(screen.queryByText('Water filters')).not.toBeInTheDocument())
-  })
+  // The card-level "Delete stock" button moves to StockDetailPage in T048.
+  // See docs/plans/ui-design-system-alignment.md.
+  it.skip('confirms and deletes a stock item', () => {})
 
   it('opens add lot form and submits', async () => {
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([{ ...stockItem, lots: [] }])))
@@ -114,10 +113,9 @@ describe('InventoryPage', () => {
     const { user } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('LOT-A')).toBeInTheDocument())
 
-    // Find the delete lot button
+    // Only lot deletes remain on the card (stock delete moved to StockDetailPage in T048)
     const lotDeleteBtns = screen.getAllByTitle('Delete')
-    // First is the stock delete, rest are lot deletes
-    await user.click(lotDeleteBtns[1])
+    await user.click(lotDeleteBtns[0])
     expect(screen.getByText('Delete this batch?')).toBeInTheDocument()
 
     const dialog = screen.getByRole('dialog')
@@ -137,9 +135,9 @@ describe('InventoryPage', () => {
 
   it('cancels new stock form', async () => {
     const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('+ New')).toBeInTheDocument())
+    const addBtn = await screen.findByRole('button', { name: '+ New' })
 
-    await user.click(screen.getByText('+ New'))
+    await user.click(addBtn)
     expect(screen.getByPlaceholderText('Item name (e.g. Water filters)')).toBeInTheDocument()
 
     await user.click(screen.getByText('Cancel'))
@@ -214,6 +212,19 @@ describe('InventoryPage', () => {
   it('renders page title', async () => {
     renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Inventory')).toBeInTheDocument())
+  })
+
+  it('disables the new-stock button offline', async () => {
+    reachableRef.current = false
+    try {
+      renderWithProviders(<InventoryPage />)
+      await waitFor(() => expect(screen.getByText('Inventory')).toBeInTheDocument())
+      const btn = screen.getByRole('button', { name: /New/i })
+      expect(btn).toBeDisabled()
+      expect(btn).toHaveAttribute('title', 'Requires connection')
+    } finally {
+      reachableRef.current = true
+    }
   })
 })
 
@@ -601,7 +612,7 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText(/Expiring soon/)).toBeInTheDocument())
 
     // Alert should appear before the first group box in the DOM
-    const alertBox = container.querySelector('.alertBox')
+    const alertBox = screen.getByTestId('alert-box')
     const groupBoxes = container.querySelectorAll('[data-testid="group-box"]')
     expect(alertBox).toBeInTheDocument()
     expect(groupBoxes.length).toBeGreaterThan(0)
@@ -756,21 +767,8 @@ describe('InventoryPage — stock groups', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
-  it('shows error when remove stock fails', async () => {
-    server.use(
-      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
-      http.delete(`${BASE}/stock/1/`, () => new HttpResponse(null, { status: 500 })),
-    )
-    const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
-
-    const deleteBtns = screen.getAllByTitle('Delete')
-    await user.click(deleteBtns[0])
-    const dialog = screen.getByRole('dialog')
-    await user.click(within(dialog).getByText('Delete'))
-
-    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
-  })
+  // Stock-level delete moved to StockDetailPage in T048.
+  it.skip('shows error when remove stock fails', () => {})
 
   it('shows error when create group fails', async () => {
     server.use(
@@ -791,9 +789,9 @@ describe('InventoryPage — stock groups', () => {
 
   it('does not submit empty stock name', async () => {
     const { user } = renderWithProviders(<InventoryPage />)
-    await waitFor(() => expect(screen.getByText('+ New')).toBeInTheDocument())
+    const addBtn = await screen.findByRole('button', { name: '+ New' })
 
-    await user.click(screen.getByText('+ New'))
+    await user.click(addBtn)
     // Leave name empty and click create — form should remain open
     await user.click(screen.getByText('Create item'))
     expect(screen.getByPlaceholderText('Item name (e.g. Water filters)')).toBeInTheDocument()
@@ -843,11 +841,13 @@ describe('InventoryPage — stock groups', () => {
     expect(patchBody.group).toBeNull()
   })
 
-  it('shows error when lot-selection fetch fails during consume', async () => {
-    server.use(
-      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockWithLots])),
-      http.get(`${BASE}/stock/1/lots-for-selection/`, () => new HttpResponse(null, { status: 500 })),
-    )
+  it('shows error when the stock has no lots available for selection', async () => {
+    // T063: lots-for-selection is derived from the cached stock. A stock
+    // flagged `requires_lot_selection: true` but with an empty `lots`
+    // array means there's nothing to pick — surface an error instead of
+    // opening an empty modal.
+    const emptyLotsStock = { ...stockWithLots, lots: [] }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([emptyLotsStock])))
     const { user } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
 
@@ -861,11 +861,44 @@ describe('InventoryPage — stock groups', () => {
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([lowStock])))
     const { container } = renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
-    const card = container.querySelector('.cardWarning')
+    // Shared POC border class from T046/T047 migration
+    const card = container.querySelector('.cardBorderWarning')
     expect(card).toBeInTheDocument()
   })
 
-  it('shows error when move group fails', async () => {
+  it('queues the consume mutation offline when the POST hits a network error', async () => {
+    await clear()
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])),
+      mockNetworkError('post', `/stock/${stockItem.id}/consume/`),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTitle('Consume 1 unit')).toBeInTheDocument())
+    await user.click(screen.getByTitle('Consume 1 unit'))
+    await waitFor(async () => expect(await list()).toHaveLength(1))
+    await clear()
+  })
+
+  it('shows error toast when move group fails with a server error', async () => {
+    server.use(
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+    await user.click(screen.getByText('Categories'))
+    await waitFor(() => expect(screen.getByText('Diabetes')).toBeInTheDocument())
+    const dialog = screen.getByRole('dialog')
+    const moveDownBtns = within(dialog).getAllByTitle('Move down')
+    await user.click(moveDownBtns[0])
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+  })
+
+  it('surfaces "action not available offline" when moving a group with no connection', async () => {
+    // Stock groups became online-only in T060 (settings territory). A
+    // network failure now shows the "Action not available offline" toast
+    // instead of queueing the mutation.
     server.use(
       http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groups })),
       http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
@@ -881,7 +914,7 @@ describe('InventoryPage — stock groups', () => {
     const moveDownBtns = within(dialog).getAllByTitle('Move down')
     await user.click(moveDownBtns[0])
 
-    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
   })
 
   it('moves groups with same display_order using index-based values', async () => {
@@ -960,5 +993,186 @@ describe('InventoryPage — stock groups', () => {
     renderWithProviders(<InventoryPage />)
     await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
     expect(screen.getByText('alice')).toBeInTheDocument()
+  })
+})
+
+describe('InventoryPage — group manager soft block', () => {
+  const groupsFixture = [
+    { id: 1, name: 'Diabetes', display_order: 0, created_at: '2026-01-01T00:00:00Z' },
+    { id: 2, name: 'Household', display_order: 1, created_at: '2026-01-01T00:00:00Z' },
+  ]
+
+  afterEach(() => {
+    reachableRef.current = true
+  })
+
+  it('shows the settings-block banner inside the group manager when offline', async () => {
+    reachableRef.current = false
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groupsFixture })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+    await user.click(screen.getByText('Categories'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Settings require a connection/i)).toBeInTheDocument()
+  })
+
+  it('disables rename / move / delete / create inside the group manager when offline', async () => {
+    reachableRef.current = false
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: groupsFixture })),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Categories')).toBeInTheDocument())
+    await user.click(screen.getByText('Categories'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: /Diabetes/i })).toBeDisabled()
+    for (const btn of within(dialog).getAllByTitle(/Requires connection/i)) {
+      expect(btn).toBeDisabled()
+    }
+    expect(within(dialog).getByPlaceholderText(/Group name|name/i)).toBeDisabled()
+  })
+})
+
+describe('InventoryPage — depletion estimation', () => {
+  it('shows depletion date when estimated_depletion_date is set', async () => {
+    const depletingStock = {
+      ...stockItem,
+      estimated_depletion_date: '2026-05-06',
+      daily_consumption_own: 2.0,
+      is_low_stock: true,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([depletingStock])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTestId('depletion-date')).toBeInTheDocument())
+  })
+
+  it('does not show depletion date when estimated_depletion_date is null', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.queryByTestId('depletion-date')).not.toBeInTheDocument()
+  })
+
+  it('shows own consumption only when no shared consumption', async () => {
+    const ownOnly = {
+      ...stockItem,
+      estimated_depletion_date: '2026-07-01',
+      daily_consumption_own: 1.0,
+      daily_consumption_shared: null,
+      is_low_stock: false,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([ownOnly])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTestId('consumption-row')).toBeInTheDocument())
+    expect(screen.getByText('1/day')).toBeInTheDocument()
+    expect(screen.queryByText(/shared/)).not.toBeInTheDocument()
+  })
+
+  it('formats fractional daily consumption with one decimal', async () => {
+    const fractionalStock = {
+      ...stockItem,
+      estimated_depletion_date: '2026-07-01',
+      daily_consumption_own: 1.5,
+      daily_consumption_shared: null,
+      is_low_stock: false,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([fractionalStock])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTestId('consumption-row')).toBeInTheDocument())
+    expect(screen.getByText('1.5/day')).toBeInTheDocument()
+  })
+
+  it('ignores add-lot submission with an invalid quantity', async () => {
+    const postSpy = vi.fn()
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([{ ...stockItem, lots: [] }])),
+      http.post(`${BASE}/stock/1/lots/`, () => {
+        postSpy()
+        return new HttpResponse(null, { status: 201 })
+      }),
+    )
+    const { user } = renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('+ Add batch')).toBeInTheDocument())
+
+    await user.click(screen.getByText('+ Add batch'))
+    const qtyInput = screen.getByPlaceholderText('0')
+    // Force an invalid value by setting it directly; `min={0}` is advisory in jsdom.
+    await user.type(qtyInput, '-')
+    // Submit: submitAddLot parses NaN/negative and returns without calling the API.
+    await user.click(screen.getByText('Add batch'))
+    // Form still open and no POST fired.
+    expect(screen.getByPlaceholderText('0')).toBeInTheDocument()
+    expect(postSpy).not.toHaveBeenCalled()
+  })
+
+  it('shows own + shared consumption breakdown', async () => {
+    const mixedConsumption = {
+      ...stockItem,
+      estimated_depletion_date: '2026-05-06',
+      daily_consumption_own: 2.0,
+      daily_consumption_shared: 2.0,
+      is_low_stock: true,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([mixedConsumption])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTestId('consumption-row')).toBeInTheDocument())
+    expect(screen.getByText('2/day')).toBeInTheDocument()
+    expect(screen.getByText('2/day (shared)')).toBeInTheDocument()
+  })
+
+  it('does not show consumption row when no consumption', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([stockItem])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.queryByTestId('consumption-row')).not.toBeInTheDocument()
+  })
+
+  it('shows low stock alert when is_low_stock is true', async () => {
+    // Fractional rate exercises the formatRate ".toFixed(1)" branch for alerts.
+    const lowStock = {
+      ...stockItem,
+      estimated_depletion_date: '2026-05-06',
+      daily_consumption_own: 4.5,
+      is_low_stock: true,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([lowStock])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText(/Low stock/)).toBeInTheDocument())
+    expect(screen.getByTestId('low-stock-alert')).toBeInTheDocument()
+  })
+
+  it('does not show low stock alert when is_low_stock is false', async () => {
+    const noAlert = {
+      ...stockItem,
+      estimated_depletion_date: '2027-01-01',
+      daily_consumption_own: 0.5,
+      is_low_stock: false,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([noAlert])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByText('Water filters')).toBeInTheDocument())
+    expect(screen.queryByTestId('low-stock-alert')).not.toBeInTheDocument()
+  })
+
+  it('shows both expiring and low stock alerts in unified section', async () => {
+    const bothAlerts = {
+      ...stockItem,
+      has_expiring_lots: true,
+      expiring_lots: [{ id: 100, quantity: 5, expiry_date: '2025-06-01' }],
+      estimated_depletion_date: '2026-05-06',
+      daily_consumption_own: 4.0,
+      is_low_stock: true,
+    }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([bothAlerts])))
+    renderWithProviders(<InventoryPage />)
+    await waitFor(() => expect(screen.getByTestId('alert-box')).toBeInTheDocument())
+    expect(screen.getByText(/Expiring soon/)).toBeInTheDocument()
+    expect(screen.getByText(/Low stock/)).toBeInTheDocument()
   })
 })

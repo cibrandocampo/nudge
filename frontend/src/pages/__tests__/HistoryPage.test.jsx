@@ -1,5 +1,6 @@
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { list } from '../../offline/queue'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import HistoryPage from '../HistoryPage'
@@ -136,6 +137,31 @@ describe('HistoryPage', () => {
     await waitFor(() => expect(screen.getByText('Load more')).toBeInTheDocument())
     await user.click(screen.getByText('Load more'))
     await waitFor(() => expect(getEntryNames(container)).toContain('Replaced filter'))
+  })
+
+  it('shows loading label on the pagination button while the next page is in flight', async () => {
+    let resolveSecond
+    server.use(
+      http.get(`${BASE}/entries/`, ({ request }) => {
+        const p = new URL(request.url).searchParams.get('page') || '1'
+        if (p === '1') {
+          return HttpResponse.json({
+            results: [
+              { id: 1, routine_name: 'Vitamins', created_at: '2025-02-20T09:00:00Z', notes: '', consumed_lots: [] },
+            ],
+            next: '/api/entries/?page=2',
+          })
+        }
+        return new Promise((r) => {
+          resolveSecond = r
+        })
+      }),
+    )
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('Load more')).toBeInTheDocument())
+    await user.click(screen.getByText('Load more'))
+    await waitFor(() => expect(screen.getByText('Loading…')).toBeInTheDocument())
+    resolveSecond(HttpResponse.json({ results: [], next: null }))
   })
 
   it('renders History title', async () => {
@@ -411,6 +437,24 @@ describe('HistoryPage — note editing edge cases', () => {
     expect(screen.getByText('morning dose')).toBeInTheDocument()
   })
 
+  it('queues the note edit offline when the PATCH hits a network error', async () => {
+    // T065: we no longer surface a per-action "queued" toast; the entry
+    // lands in the offline queue and the optimistic update keeps the note
+    // visible until sync.
+    server.use(http.patch(`${BASE}/entries/:id/`, () => HttpResponse.error()))
+    setupHandlers()
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
+
+    await user.click(screen.getByText('morning dose'))
+    const input = screen.getByDisplayValue('morning dose')
+    await user.clear(input)
+    await user.type(input, 'queued note')
+    input.blur()
+
+    await waitFor(async () => expect(await list()).toHaveLength(1))
+  })
+
   it('does not save when API returns error', async () => {
     server.use(http.patch(`${BASE}/entries/:id/`, () => new HttpResponse(null, { status: 500 })))
     setupHandlers()
@@ -430,7 +474,9 @@ describe('HistoryPage — note editing edge cases', () => {
   it('filters stock consumptions by stock', async () => {
     setupHandlers()
     const { user } = renderWithProviders(<HistoryPage />)
-    await waitFor(() => expect(screen.getByText('All items')).toBeInTheDocument())
+    // Wait for the stock dropdown option to be populated from the query before
+    // attempting to select it.
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Insulin pens' })).toBeInTheDocument())
 
     const stockSelect = screen.getByDisplayValue('All items')
     await user.selectOptions(stockSelect, '1')

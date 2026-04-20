@@ -1,27 +1,22 @@
 import { test, expect } from '@playwright/test'
-import { login, loginAs, CREDS, ensureContact } from './helpers.js'
+import { login, loginAs, SEED, ensureContact } from './helpers.js'
 
 /**
  * Sharing E2E tests.
  *
- * These tests require TWO users:
- *   - The primary admin user (E2E_USERNAME / E2E_PASSWORD)
- *   - A secondary user  (E2E_USER2_USERNAME / E2E_USER2_PASSWORD)
- *
- * The secondary user must exist in the database before running these tests.
- * The tests will add the secondary user as a contact of the primary user
- * via the API if not already present.
+ * Uses the admin (E2E_USERNAME/E2E_PASSWORD) as the sharer and `user2`
+ * from the seed fixture (T073) as the recipient. Mutual contact edges
+ * between admin and user2 are guaranteed by `ensureContact` at the top
+ * of each describe.
  */
 
-const USER2 = {
-  username: process.env.E2E_USER2_USERNAME ?? 'e2e-user2',
-  password: process.env.E2E_USER2_PASSWORD ?? 'e2e-pass2',
-}
+const USER2 = SEED.user2
 
 test.describe('Sharing — Routines', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
     await ensureContact(page, USER2.username)
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
   test('share popover appears on routine cards', async ({ page }) => {
@@ -87,7 +82,7 @@ test.describe('Sharing — Routines', () => {
 
     // Go to dashboard and find the specific routine card
     await page.goto('/')
-    const card = page.locator('[class*="row"]').filter({ hasText: routineName })
+    const card = page.getByTestId('routine-card').filter({ hasText: routineName })
     await expect(card).toBeVisible()
 
     // Open share modal for this specific routine and verify contact is selected
@@ -138,7 +133,7 @@ test.describe('Sharing — Routines', () => {
     await expect(page2.getByText(routineName)).toBeVisible({ timeout: 10000 })
 
     // It should show the owner label (admin username)
-    await expect(page2.getByText(CREDS.username).first()).toBeVisible()
+    await expect(page2.getByText(SEED.admin.username).first()).toBeVisible()
 
     await page2.close()
   })
@@ -150,6 +145,7 @@ test.describe('Sharing — Inventory', () => {
     await ensureContact(page, USER2.username)
     await page.getByRole('link', { name: 'Inventory' }).click()
     await expect(page).toHaveURL('/inventory')
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
   test('share popover appears on stock cards', async ({ page }) => {
@@ -229,7 +225,7 @@ test.describe('Sharing — Inventory', () => {
     await expect(sharedCard).toBeVisible({ timeout: 10000 })
 
     // Owner label should show admin username (scoped to the specific card)
-    await expect(sharedCard.getByText(CREDS.username)).toBeVisible()
+    await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
 
     // Share button should NOT appear (user2 is not the owner)
     await expect(sharedCard.getByTitle('Share with')).not.toBeVisible()

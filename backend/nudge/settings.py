@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.routines",
     "apps.notifications",
+    "apps.idempotency",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -56,6 +57,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.idempotency.middleware.IdempotencyMiddleware",
 ]
 
 ROOT_URLCONF = "nudge.urls"
@@ -122,14 +124,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 if DEBUG:
     CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
     CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000"]
-else:
+else:  # pragma: no cover — production branch, pure config assignments, no logic to test.
     # Never use CORS_ALLOW_ALL_ORIGINS — always whitelist explicitly.
     CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
     CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
 # ── Security headers (production only) ────────────────────────────────────────
 
-if not DEBUG:
+if not DEBUG:  # pragma: no cover — production-only hardening, straight config assignments.
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     # SSL redirect is handled by the external reverse proxy (Synology / nginx),
@@ -180,7 +182,20 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.tasks.check_notifications",
         "schedule": 300,  # every 5 minutes
     },
+    "cleanup-idempotency-records": {
+        "task": "apps.idempotency.tasks.cleanup_idempotency_records",
+        "schedule": 24 * 60 * 60,  # once a day
+    },
 }
+
+# ── Offline sync safeguards ──────────────────────────────────────────────────
+
+# Maximum allowed skew (in seconds) between a client-reported action timestamp
+# (`client_created_at` on RoutineEntry / StockConsumption) and the server's
+# current time. Unset (None) means no limit — appropriate for weeklong offline
+# trips. Set to e.g. `86400` (24h) if clients ever drift/misuse the field.
+_skew = env("OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS", default=None)
+OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS = int(_skew) if _skew else None
 
 # ── Web Push VAPID ────────────────────────────────────────────────────────────
 
@@ -229,3 +244,30 @@ LOGGING = {
         },
     },
 }
+
+# ── Test-run quiet mode ───────────────────────────────────────────────────────
+# During `manage.py test` dozens of specs exercise 4xx paths (401/403/404/
+# 412/422) on purpose. Django's `django.request` logger fires WARNING for
+# each one — hundreds of lines drown the useful pass/fail signal in CI.
+# Silence WARNING and below during the test run; ERROR and CRITICAL still
+# surface (and tests that trigger ERROR on purpose capture it with
+# `assertLogs`, which proves the log fires AND suppresses the output —
+# see apps.idempotency / apps.notifications tests).
+import sys  # noqa: E402
+
+if "test" in sys.argv:
+    import logging  # noqa: E402
+
+    logging.disable(logging.WARNING)
+
+    # WhiteNoise's CompressedManifestStaticFilesStorage expects a manifest
+    # produced by `collectstatic`. In the test run we don't collect statics
+    # (it's not needed to exercise any view), so the manifest is missing
+    # and Django emits "No directory at: .../staticfiles/" as a UserWarning.
+    # Swap to the plain storage — correct choice for the test environment —
+    # and ensure the STATIC_ROOT directory exists so the staticfiles
+    # handler doesn't warn on first request.
+    STORAGES["staticfiles"] = {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    }
+    STATIC_ROOT.mkdir(parents=True, exist_ok=True)

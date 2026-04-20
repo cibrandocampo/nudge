@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
-import { formatRelativeTime, formatAbsoluteDate, getLocale } from '../utils/time'
-import cx from '../utils/cx'
 import ConfirmModal from '../components/ConfirmModal'
 import LotSelectionModal from '../components/LotSelectionModal'
+import SyncStatusBadge from '../components/SyncStatusBadge'
+import { useToast } from '../components/useToast'
+import { useRoutine, useRoutineEntries } from '../hooks/useRoutines'
+import { useStockList } from '../hooks/useStock'
+import { useDeleteRoutine } from '../hooks/mutations/useDeleteRoutine'
+import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
+import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
+import cx from '../utils/cx'
+import { formatAbsoluteDate, formatRelativeTime, getLocale } from '../utils/time'
+import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import shared from '../styles/shared.module.css'
 import s from './RoutineDetailPage.module.css'
 
@@ -14,111 +22,100 @@ export default function RoutineDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const [routine, setRoutine] = useState(null)
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { showToast } = useToast()
+
+  const { data: routine, isLoading: routineLoading, isError: routineError, error: routineErr } = useRoutine(id)
+  const { data: entries = [] } = useRoutineEntries(id)
+  const logMutation = useLogRoutine()
+  const updateMutation = useUpdateRoutine()
+  const deleteMutation = useDeleteRoutine()
+  const queryClient = useQueryClient()
+  // Keep the stock cache warm so the lot selection modal derives its list
+  // offline from `['stock', id].lots` without hitting the network.
+  useStockList()
+
   const [completing, setCompleting] = useState(false)
-  const [error, setError] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false)
-  const [actionError, setActionError] = useState(null)
-  const [lotModal, setLotModal] = useState(null) // null | { lots }
+  const [lotModal, setLotModal] = useState(null)
 
-  const fetchData = async () => {
-    const [rRes, eRes] = await Promise.all([api.get(`/routines/${id}/`), api.get(`/routines/${id}/entries/`)])
-    if (rRes.ok) setRoutine(await rRes.json())
-    if (eRes.ok) {
-      const data = await eRes.json()
-      setEntries((data.results ?? data).slice(0, 5))
-    }
-  }
-
-  useEffect(() => {
-    fetchData()
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-log when opened from a push notification "Mark as done" action
-  useEffect(() => {
-    if (searchParams.get('action') === 'mark-done' && !loading && routine?.is_due) {
-      setSearchParams({}, { replace: true })
-      markDone()
-    }
-  }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const markDone = async () => {
-    if (routine?.requires_lot_selection) {
-      setCompleting(true)
-      setActionError(null)
-      try {
-        const res = await api.get(`/routines/${id}/lots-for-selection/`)
-        if (!res.ok) throw new Error()
-        const lots = await res.json()
-        setLotModal({ lots })
-      } catch {
-        setActionError(t('common.actionError'))
-      } finally {
-        setCompleting(false)
-      }
-      return
-    }
-
+  const runLog = async (lotSelections) => {
     setCompleting(true)
-    setActionError(null)
     try {
-      const res = await api.post(`/routines/${id}/log/`, {})
-      if (!res.ok) throw new Error()
-      await fetchData()
+      await logMutation.mutateAsync({ routineId: Number(id), lotSelections })
     } catch {
-      setActionError(t('common.actionError'))
+      showToast({ type: 'error', message: t('common.actionError') })
     } finally {
       setCompleting(false)
     }
+  }
+
+  const markDone = async () => {
+    if (routine?.requires_lot_selection) {
+      const stock = findCachedStock(queryClient, routine?.stock)
+      const lots = lotsForSelection(stock)
+      if (lots.length === 0) {
+        showToast({ type: 'error', message: t('common.actionError') })
+        return
+      }
+      setLotModal({ lots })
+      return
+    }
+    await runLog()
   }
 
   const handleLotConfirm = async (lotSelections) => {
     setLotModal(null)
-    setCompleting(true)
-    setActionError(null)
-    try {
-      const res = await api.post(`/routines/${id}/log/`, { lot_selections: lotSelections })
-      if (!res.ok) throw new Error()
-      await fetchData()
-    } catch {
-      setActionError(t('common.actionError'))
-    } finally {
-      setCompleting(false)
-    }
+    await runLog(lotSelections)
   }
+
+  // Auto-log when opened from a push notification "Mark as done" action.
+  // Depends on the query having loaded so `routine.is_due` is reliable.
+  useEffect(() => {
+    if (searchParams.get('action') === 'mark-done' && !routineLoading && routine?.is_due) {
+      setSearchParams({}, { replace: true })
+      markDone()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routineLoading])
 
   const toggleActive = async () => {
-    setActionError(null)
     try {
-      const res = await api.patch(`/routines/${id}/`, { is_active: !routine.is_active })
-      if (!res.ok) throw new Error()
-      await fetchData()
+      await updateMutation.mutateAsync({
+        routineId: Number(id),
+        patch: { is_active: !routine.is_active },
+        updatedAt: routine.updated_at,
+      })
     } catch {
-      setActionError(t('common.actionError'))
+      showToast({ type: 'error', message: t('common.actionError') })
     }
   }
-
-  const deleteRoutine = () => setShowDeleteConfirm(true)
 
   const confirmDelete = async () => {
     try {
-      const res = await api.delete(`/routines/${id}/`)
-      if (!res.ok && res.status !== 204) throw new Error()
+      await deleteMutation.mutateAsync({
+        routineId: Number(id),
+        updatedAt: routine.updated_at,
+      })
       navigate('/')
     } catch {
       setShowDeleteConfirm(false)
-      setActionError(t('common.actionError'))
+      showToast({ type: 'error', message: t('common.actionError') })
     }
   }
 
-  if (loading) return <div className={shared.spinner} data-testid="spinner" />
-  if (error) return <p className={shared.muted}>{t('common.error')}</p>
+  if (routineLoading) return <div className={shared.spinner} data-testid="spinner" />
+  if (routineError) {
+    if (routineErr?.status === 404) return <p className={shared.muted}>{t('routine.detail.notFound')}</p>
+    return <p className={shared.muted}>{t('common.error')}</p>
+  }
   if (!routine) return <p className={shared.muted}>{t('routine.detail.notFound')}</p>
+
+  const borderClass = !routine.is_due
+    ? shared.cardBorderSuccess
+    : routine.is_overdue
+      ? shared.cardBorderDanger
+      : shared.cardBorderWarning
 
   return (
     <div className={s.container}>
@@ -126,16 +123,18 @@ export default function RoutineDetailPage() {
         <Link to="/" className={s.back}>
           {t('routine.detail.back')}
         </Link>
-        <Link to={`/routines/${id}/edit`} className={s.edit}>
+        <Link to={`/routines/${id}/edit`} className={cx(shared.btn, shared.btnSecondary, shared.btnSm)}>
           {t('routine.detail.edit')}
         </Link>
       </div>
 
-      {actionError && <p className={shared.error}>{actionError}</p>}
-      <h1 className={s.title}>{routine.name}</h1>
+      <h1 className={s.title}>
+        {routine.name}
+        <SyncStatusBadge resourceKey={`routine:${routine.id}`} />
+      </h1>
       {routine.description && <p className={s.description}>{routine.description}</p>}
 
-      <div className={s.meta}>
+      <div className={cx(shared.card, borderClass, s.meta)}>
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('routine.detail.interval')}</span>
           <span className={s.metaValue}>{formatInterval(routine.interval_hours, t)}</span>
@@ -169,14 +168,18 @@ export default function RoutineDetailPage() {
       </div>
 
       {routine.is_due && (
-        <button className={cx(s.doneBtn, completing && shared.disabled)} onClick={markDone} disabled={completing}>
+        <button
+          className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
+          onClick={markDone}
+          disabled={completing}
+        >
           {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
         </button>
       )}
 
       {!routine.is_due && routine.is_active && (
         <button
-          className={cx(s.advanceBtn, completing && shared.disabled)}
+          className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
           onClick={() => setShowAdvanceConfirm(true)}
           disabled={completing}
         >
@@ -189,8 +192,10 @@ export default function RoutineDetailPage() {
           <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
           <div className={s.entryList}>
             {entries.map((e) => (
-              <div key={e.id} className={s.entry}>
-                <span className={s.entryDate}>{new Date(e.created_at).toLocaleString(getLocale())}</span>
+              <div key={e.id} className={cx(shared.card, shared.cardBorderSuccess, s.entry)}>
+                <span className={s.entryDate}>
+                  {new Date(e.client_created_at ?? e.created_at).toLocaleString(getLocale())}
+                </span>
                 {e.notes && <span className={s.notes}>{e.notes}</span>}
               </div>
             ))}
@@ -202,10 +207,14 @@ export default function RoutineDetailPage() {
       )}
 
       <div className={s.actions}>
-        <button className={s.toggleBtn} onClick={toggleActive}>
+        <button type="button" className={cx(shared.btn, shared.btnSecondary, s.actionBtn)} onClick={toggleActive}>
           {routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
         </button>
-        <button className={s.deleteBtn} onClick={deleteRoutine}>
+        <button
+          type="button"
+          className={cx(shared.btn, shared.btnDanger, s.actionBtn)}
+          onClick={() => setShowDeleteConfirm(true)}
+        >
           {t('routine.detail.delete')}
         </button>
       </div>

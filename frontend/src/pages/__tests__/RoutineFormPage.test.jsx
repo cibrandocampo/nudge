@@ -1,9 +1,15 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
+import { vi } from 'vitest'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import RoutineFormPage from '../RoutineFormPage'
+
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
 
 const BASE = 'http://localhost/api'
 
@@ -286,5 +292,53 @@ describe('RoutineFormPage', () => {
     // Fire blur directly without focus so intervalDraft remains null
     fireEvent.blur(screen.getByRole('spinbutton'))
     expect(screen.getByRole('spinbutton')).toBeInTheDocument()
+  })
+
+  it('shows owner name for shared stocks in dropdown', async () => {
+    const sharedStock = { id: 2, name: 'Shared Item', quantity: 10, is_owner: false, owner_username: 'alice' }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([sharedStock])))
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByText('Track stock for this routine')).toBeInTheDocument())
+    await user.click(screen.getByText('Track stock for this routine'))
+    await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
+    // Shared stock should show owner in the option
+    const option = screen.getByText(/Shared Item.*alice/)
+    expect(option).toBeInTheDocument()
+  })
+
+  it('does not show owner name for own stocks in dropdown', async () => {
+    const ownStock = { id: 1, name: 'My Item', quantity: 5, is_owner: true, owner_username: 'me' }
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([ownStock])))
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByText('Track stock for this routine')).toBeInTheDocument())
+    await user.click(screen.getByText('Track stock for this routine'))
+    await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
+    const option = screen.getByText('My Item (5 left)')
+    expect(option).toBeInTheDocument()
+    expect(screen.queryByText(/My Item.*me/)).not.toBeInTheDocument()
+  })
+
+  it('disables the submit button and shows a hint when offline in create mode', async () => {
+    reachableRef.current = false
+    try {
+      renderCreate()
+      const submit = await screen.findByRole('button', { name: /Save/i })
+      expect(submit).toBeDisabled()
+      expect(screen.getByText(/Requires connection/i)).toBeInTheDocument()
+    } finally {
+      reachableRef.current = true
+    }
+  })
+
+  it('keeps the submit button enabled offline in edit mode', async () => {
+    reachableRef.current = false
+    try {
+      server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(editRoutine)))
+      renderEdit()
+      const submit = await screen.findByRole('button', { name: /Save/i })
+      expect(submit).not.toBeDisabled()
+    } finally {
+      reachableRef.current = true
+    }
   })
 })

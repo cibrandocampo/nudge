@@ -1,0 +1,13 @@
+---
+export interface Props {
+  title: string
+  body: string
+  icon?: string
+}
+const { title, body, icon = '✦' } = Astro.props
+---
+<div class="group rounded-xl border border-slate-800 bg-slate-900/50 p-6 hover:border-nudge-600/60 hover:bg-slate-900/70 transition">
+  <div class="text-2xl mb-4 select-none" aria-hidden="true">{icon}</div>
+  <h3 class="text-lg font-semibold text-slate-100">{title}</h3>
+  <p class="mt-2 text-sm text-slate-400 leading-relaxed">{body}</p>
+</div>

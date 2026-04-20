@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -285,6 +285,31 @@ class RoutineEntryModelTest(TestCase):
         self.assertEqual(qs[1], e1)
 
 
+class StockAdminTest(TestCase):
+    def test_total_quantity_display_returns_stock_quantity(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from .admin import StockAdmin
+
+        user = make_user()
+        stock = make_stock(user)
+        make_lot(stock, quantity=3)
+        make_lot(stock, quantity=4)
+        admin_inst = StockAdmin(Stock, AdminSite())
+        self.assertEqual(admin_inst.total_quantity(stock), 7)
+
+
+class ClientTimestampValidatorTest(TestCase):
+    def test_client_timestamp_none_passes_through(self):
+        # `ClientTimestampInputSerializer.validate_client_created_at`
+        # short-circuits to None when the value is None.
+        from .serializers import ClientTimestampInputSerializer
+
+        s = ClientTimestampInputSerializer(data={"client_created_at": None})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertIsNone(s.validated_data.get("client_created_at"))
+
+
 # ── StockLotSerializer ───────────────────────────────────────────────────────
 
 
@@ -301,6 +326,12 @@ class StockLotSerializerTest(TestCase):
     def test_positive_quantity_valid(self):
         s = StockLotSerializer(data={"quantity": 5, "expiry_date": "2027-01-01"})
         self.assertTrue(s.is_valid())
+
+    def test_past_expiry_date_invalid(self):
+        past = (date.today() - timedelta(days=1)).isoformat()
+        s = StockLotSerializer(data={"quantity": 1, "expiry_date": past})
+        self.assertFalse(s.is_valid())
+        self.assertIn("expiry_date", s.errors)
 
 
 # ── StockSerializer ──────────────────────────────────────────────────────────
@@ -466,6 +497,50 @@ class RoutineSerializerTest(TestCase):
         )
         self.assertFalse(s.is_valid())
         self.assertIn("stock", s.errors)
+
+
+class SharedWithValidationTest(TestCase):
+    """Covers the `validate_shared_with` branches in both StockSerializer
+    and RoutineSerializer that are hard to reach from the ViewSet suite:
+    (a) no-request context → pass value through unchanged,
+    (b) non-owner trying to modify → raise ValidationError.
+    """
+
+    def setUp(self):
+        self.owner = make_user()
+        self.other = make_user(username="other")
+
+    def test_stock_shared_with_no_request_returns_value(self):
+        s = StockSerializer()
+        # Directly invoke the validator — without a request in context
+        # the method must pass the value through unchanged.
+        self.assertEqual(s.validate_shared_with([]), [])
+
+    def test_stock_shared_with_non_owner_rejected(self):
+        from rest_framework import serializers as drf_serializers
+        from rest_framework.test import APIRequestFactory
+
+        stock = make_stock(self.owner)
+        request = APIRequestFactory().patch("/")
+        request.user = self.other  # not the owner
+        s = StockSerializer(instance=stock, context={"request": request})
+        with self.assertRaises(drf_serializers.ValidationError):
+            s.validate_shared_with([])
+
+    def test_routine_shared_with_no_request_returns_value(self):
+        s = RoutineSerializer()
+        self.assertEqual(s.validate_shared_with([]), [])
+
+    def test_routine_shared_with_non_owner_rejected(self):
+        from rest_framework import serializers as drf_serializers
+        from rest_framework.test import APIRequestFactory
+
+        routine = make_routine(self.owner)
+        request = APIRequestFactory().patch("/")
+        request.user = self.other
+        s = RoutineSerializer(instance=routine, context={"request": request})
+        with self.assertRaises(drf_serializers.ValidationError):
+            s.validate_shared_with([])
 
 
 # ── Stock ViewSet ─────────────────────────────────────────────────────────────
@@ -1036,18 +1111,41 @@ class RoutineViewSetTest(APITestCase):
         no_expiry.refresh_from_db()
         self.assertEqual(no_expiry.quantity, 10)  # untouched
 
-    def test_log_does_not_decrement_below_zero(self):
-        """Total consumption is capped by available stock."""
+    def test_log_refuses_when_stock_insufficient(self):
+        """T036: logging is refused when stock_usage exceeds available quantity.
+
+        Previously the backend would silently cap consumption at the available
+        amount, logging an entry while leaving the stock empty. That produced
+        misleading history (the entry claims a consumption that didn't fully
+        happen) and hid inventory problems from the user. The log action now
+        returns 422 and leaves both the entries and the stock untouched.
+        """
         stock = make_stock(self.user)
         lot = make_lot(stock, quantity=2)
-        lot_id = lot.pk
         r = make_routine(self.user, stock=stock)
         r.stock_usage = 10
         r.save()
-        self.client.post(f"/api/routines/{r.id}/log/", {})
-        # lot was fully consumed → auto-deleted
-        self.assertFalse(StockLot.objects.filter(pk=lot_id).exists())
-        self.assertEqual(stock.quantity, 0)
+        response = self.client.post(f"/api/routines/{r.id}/log/", {})
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["code"], "insufficient_stock")
+        self.assertEqual(body["required"], 10)
+        self.assertEqual(body["available"], 2)
+        # No entry created; lot untouched.
+        self.assertEqual(r.entries.count(), 0)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 2)
+
+    def test_log_refuses_when_stock_is_zero(self):
+        """Pain-relief-like scenario: stock exists but every lot is 0."""
+        stock = make_stock(self.user)
+        # A lot explicitly at 0 — normally wiped by `delete_empty_lot`, but
+        # we bypass that via bulk_create to emulate the T073 seed state.
+        StockLot.objects.bulk_create([StockLot(stock=stock, quantity=0, lot_number="IBU-1")])
+        r = make_routine(self.user, stock=stock)
+        response = self.client.post(f"/api/routines/{r.id}/log/", {})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(r.entries.count(), 0)
 
     def test_log_resets_notification_state(self):
         r = make_routine(self.user)
@@ -1210,6 +1308,10 @@ class RoutineViewSetTest(APITestCase):
     def test_log_lot_selection_wrong_stock(self):
         """lot_id belonging to a different stock → 400."""
         stock = make_stock(self.user)
+        # Give `stock` enough inventory so the insufficient-stock guard
+        # (T036) doesn't fire first — the test is specifically about
+        # rejecting a cross-stock lot_id, not about empty stock.
+        make_lot(stock, quantity=5, lot_number="OWN")
         other_stock = make_stock(self.user, name="OtherStock")
         other_lot = make_lot(other_stock, quantity=10, lot_number="OTHER")
         r = make_routine(self.user, stock=stock)
@@ -1286,6 +1388,69 @@ class RoutineEntryViewSetTest(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/entries/")
         self.assertEqual(response.status_code, 401)
+
+    # ── destroy / undo ────────────────────────────────────────────────────────
+
+    def test_destroy_entry_without_stock(self):
+        """An entry with no stock reference just disappears on DELETE."""
+        r = make_routine(self.user, stock=None)
+        entry = make_entry(r, notes="to undo")
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(RoutineEntry.objects.filter(pk=entry.pk).exists())
+
+    def test_destroy_entry_restores_existing_lot_quantity(self):
+        """Undoing a log increments the original lot's quantity back."""
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=10, lot_number="A1", expiry_date=date.today() + timedelta(days=30))
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 1
+        r.save()
+        # Perform an actual log so consumed_lots is populated correctly.
+        log_response = self.client.post(f"/api/routines/{r.id}/log/", {})
+        self.assertEqual(log_response.status_code, 201)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 9)
+        entry_id = log_response.json()["id"]
+
+        # Undo.
+        response = self.client.delete(f"/api/entries/{entry_id}/")
+        self.assertEqual(response.status_code, 204)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 10)
+
+    def test_destroy_entry_recreates_auto_deleted_lot(self):
+        """When the last unit of a lot is consumed, the `delete_empty_lot`
+        signal removes it. Undo must re-create the lot with the same
+        lot_number + expiry_date and the original quantity.
+        """
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=1, lot_number="ONLY", expiry_date=date.today() + timedelta(days=10))
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 1
+        r.save()
+        log_response = self.client.post(f"/api/routines/{r.id}/log/", {})
+        self.assertEqual(log_response.status_code, 201)
+        # Lot was auto-deleted because it hit zero.
+        self.assertEqual(stock.lots.count(), 0)
+        entry_id = log_response.json()["id"]
+
+        response = self.client.delete(f"/api/entries/{entry_id}/")
+        self.assertEqual(response.status_code, 204)
+        # Lot is back.
+        self.assertEqual(stock.lots.count(), 1)
+        restored = stock.lots.first()
+        self.assertEqual(restored.lot_number, "ONLY")
+        self.assertEqual(restored.quantity, 1)
+
+    def test_destroy_other_users_entry_returns_403_or_404(self):
+        """Shared users (or strangers) can't undo the owner's log."""
+        r_other = make_routine(self.other)
+        entry = make_entry(r_other)
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+        # get_queryset scopes to (own routines OR shared-with). Stranger
+        # can't see the entry at all → 404.
+        self.assertEqual(response.status_code, 404)
 
 
 # ── Dashboard view ────────────────────────────────────────────────────────────
@@ -1485,6 +1650,28 @@ class StockConsumptionModelTest(TestCase):
         qs = list(StockConsumption.objects.filter(stock=self.stock))
         self.assertEqual(qs[0], c2)
         self.assertEqual(qs[1], c1)
+
+    def test_effective_created_at_prefers_client_timestamp(self):
+        consumption = StockConsumption.objects.create(
+            stock=self.stock,
+            consumed_by=self.user,
+            quantity=1,
+            client_created_at=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
+        )
+        self.assertEqual(
+            consumption.effective_created_at,
+            dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
+        )
+
+    def test_effective_created_at_falls_back_to_created_at(self):
+        # Server-initiated consumption with no client timestamp → falls back.
+        consumption = StockConsumption.objects.create(
+            stock=self.stock,
+            consumed_by=self.user,
+            quantity=1,
+        )
+        self.assertIsNone(consumption.client_created_at)
+        self.assertEqual(consumption.effective_created_at, consumption.created_at)
 
 
 # ── Stock consume audit trail ──────────────────────────────────────────────
@@ -1872,3 +2059,600 @@ class ContactRemovalCascadeTest(APITestCase):
         # Alice removed from Bob's shared items
         self.assertFalse(self.bob_routine.shared_with.filter(pk=self.alice.pk).exists())
         self.assertFalse(self.bob_stock.shared_with.filter(pk=self.alice.pk).exists())
+
+
+# ── validate_stock relaxation ──────────────────────────────────────────────
+
+
+class ValidateStockSharedTest(APITestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass")
+        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.alice.contacts.add(self.bob)
+        self.stock = make_stock(self.alice, name="Shared stock")
+        self.stock.shared_with.add(self.bob)
+
+    def test_create_routine_with_own_stock(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "My routine", "interval_hours": 24, "stock": self.stock.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["stock"], self.stock.pk)
+
+    def test_create_routine_with_shared_stock(self):
+        self.client.force_authenticate(user=self.bob)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Bob routine", "interval_hours": 24, "stock": self.stock.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["stock"], self.stock.pk)
+
+    def test_create_routine_with_unshared_stock_rejected(self):
+        self.client.force_authenticate(user=self.carol)
+        response = self.client.post(
+            "/api/routines/",
+            {"name": "Carol routine", "interval_hours": 24, "stock": self.stock.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+# ── m2m_changed signal: unlink routines on unshare ─────────────────────────
+
+
+class UnlinkRoutinesOnUnshareTest(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.carol = make_user("carol")
+        self.stock = make_stock(self.alice, name="Shared stock")
+        self.stock.shared_with.set([self.bob, self.carol])
+        # Bob has a routine pointing to Alice's stock
+        self.bob_routine = make_routine(self.bob, name="Bob routine", stock=self.stock)
+        # Carol has a routine pointing to Alice's stock
+        self.carol_routine = make_routine(self.carol, name="Carol routine", stock=self.stock)
+        # Alice has her own routine on the same stock
+        self.alice_routine = make_routine(self.alice, name="Alice routine", stock=self.stock)
+
+    def test_remove_user_unlinks_their_routines(self):
+        self.stock.shared_with.remove(self.bob)
+        self.bob_routine.refresh_from_db()
+        self.assertIsNone(self.bob_routine.stock)
+
+    def test_remove_user_does_not_touch_owner_routines(self):
+        self.stock.shared_with.remove(self.bob)
+        self.alice_routine.refresh_from_db()
+        self.assertEqual(self.alice_routine.stock, self.stock)
+
+    def test_remove_user_does_not_touch_other_shared_users(self):
+        self.stock.shared_with.remove(self.bob)
+        self.carol_routine.refresh_from_db()
+        self.assertEqual(self.carol_routine.stock, self.stock)
+
+    def test_clear_shared_with_unlinks_all_non_owner_routines(self):
+        self.stock.shared_with.clear()
+        self.bob_routine.refresh_from_db()
+        self.carol_routine.refresh_from_db()
+        self.alice_routine.refresh_from_db()
+        self.assertIsNone(self.bob_routine.stock)
+        self.assertIsNone(self.carol_routine.stock)
+        self.assertEqual(self.alice_routine.stock, self.stock)
+
+
+# ── Stock depletion estimation ─────────────────────────────────────────────
+
+
+class StockDepletionSerializerTest(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+
+    def _get_stock_data(self, stock):
+        """Serialize a stock through the API queryset to get prefetched data."""
+        from django.db.models import Prefetch
+
+        qs = (
+            Stock.objects.filter(pk=stock.pk)
+            .select_related("group", "user")
+            .prefetch_related(
+                "lots",
+                "shared_with",
+                Prefetch(
+                    "routines",
+                    queryset=Routine.objects.filter(is_active=True).select_related("user"),
+                    to_attr="active_routines",
+                ),
+            )
+        )
+        return StockSerializer(qs.first()).data
+
+    def test_no_active_routines_returns_null(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        data = self._get_stock_data(stock)
+        self.assertIsNone(data["estimated_depletion_date"])
+        self.assertIsNone(data["daily_consumption_own"])
+        self.assertIsNone(data["daily_consumption_shared"])
+        self.assertFalse(data["is_low_stock"])
+
+    def test_single_own_routine_daily_consumption(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["daily_consumption_own"], 1.0)
+        self.assertIsNone(data["daily_consumption_shared"])
+
+    def test_depletion_date_correct(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        # 24h interval, stock_usage=1 → 1/day → 20 days
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        expected = date.today() + timedelta(days=20)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_depletion_date_with_stock_usage_gt_1(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        r = make_routine(self.alice, name="Double", interval_hours=24, stock=stock)
+        r.stock_usage = 2
+        r.save()
+        data = self._get_stock_data(stock)
+        # 2/day → 20/2 = 10 days
+        self.assertEqual(data["daily_consumption_own"], 2.0)
+        expected = date.today() + timedelta(days=10)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_own_and_shared_consumption(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=80)
+        stock.shared_with.add(self.bob)
+        # Alice: 24h, usage=2 → 2/day own
+        r1 = make_routine(self.alice, name="Alice daily", interval_hours=24, stock=stock)
+        r1.stock_usage = 2
+        r1.save()
+        # Bob: 24h, usage=1 → 1/day shared
+        make_routine(self.bob, name="Bob daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["daily_consumption_own"], 2.0)
+        self.assertEqual(data["daily_consumption_shared"], 1.0)
+        # Total 3/day → 80/3 = 26 days (floor)
+        expected = date.today() + timedelta(days=26)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_quantity_zero_with_consumption(self):
+        stock = make_stock(self.alice)
+        # No lots → quantity = 0
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["estimated_depletion_date"], date.today())
+        self.assertTrue(data["is_low_stock"])
+
+    def test_inactive_routine_not_counted(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        make_routine(self.alice, name="Active", interval_hours=24, stock=stock)
+        make_routine(self.alice, name="Inactive", interval_hours=24, stock=stock, is_active=False)
+        data = self._get_stock_data(stock)
+        # Only the active routine counts: 1/day
+        self.assertEqual(data["daily_consumption_own"], 1.0)
+        expected = date.today() + timedelta(days=20)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_is_low_stock_true_within_threshold(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=10)
+        # 1/day → 10 days → within 60-day threshold
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertTrue(data["is_low_stock"])
+
+    def test_is_low_stock_false_beyond_threshold(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=200)
+        # 1/day → 200 days → beyond 60-day threshold
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertFalse(data["is_low_stock"])
+
+    def test_multiple_routines_accumulate(self):
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=48)
+        # 12h interval → 2/day, 24h interval → 1/day = 3/day total
+        make_routine(self.alice, name="Twice daily", interval_hours=12, stock=stock)
+        make_routine(self.alice, name="Once daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["daily_consumption_own"], 3.0)
+        expected = date.today() + timedelta(days=16)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_api_returns_depletion_fields(self):
+        """Verify the fields appear in a real API GET /stock/ response."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=30)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        client = self.client
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.alice)
+        response = client.get("/api/stock/")
+        self.assertEqual(response.status_code, 200)
+        stock_data = response.json()["results"][0]
+        self.assertIn("estimated_depletion_date", stock_data)
+        self.assertIn("daily_consumption_own", stock_data)
+        self.assertIn("daily_consumption_shared", stock_data)
+        self.assertIn("is_low_stock", stock_data)
+        self.assertEqual(stock_data["daily_consumption_own"], 1.0)
+        expected = date.today() + timedelta(days=30)
+        self.assertEqual(stock_data["estimated_depletion_date"], expected.isoformat())
+
+
+# ── updated_at on mutable child models ─────────────────────────────────────
+
+
+class UpdatedAtFieldsTest(APITestCase):
+    """
+    Tracks that `updated_at` is auto-bumped on save for the newly-annotated
+    models and is exposed read-only in GET responses so clients can use it
+    as an ETag for If-Unmodified-Since (see T020).
+    """
+
+    def setUp(self):
+        self.user = make_user("alice")
+        self.client.force_authenticate(user=self.user)
+
+    # model-level auto_now
+    def test_routine_entry_updated_at_bumps_on_save(self):
+        routine = make_routine(self.user)
+        entry = RoutineEntry.objects.create(routine=routine, notes="first")
+        before = entry.updated_at
+        entry.notes = "second"
+        entry.save()
+        entry.refresh_from_db()
+        self.assertGreater(entry.updated_at, before)
+
+    def test_stock_lot_updated_at_bumps_on_save(self):
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5)
+        before = lot.updated_at
+        lot.quantity = 3
+        lot.save()
+        lot.refresh_from_db()
+        self.assertGreater(lot.updated_at, before)
+
+    def test_stock_consumption_updated_at_bumps_on_save(self):
+        stock = make_stock(self.user)
+        consumption = StockConsumption.objects.create(stock=stock, quantity=1, notes="n1")
+        before = consumption.updated_at
+        consumption.notes = "edited"
+        consumption.save()
+        consumption.refresh_from_db()
+        self.assertGreater(consumption.updated_at, before)
+
+    # API exposure
+    def test_routine_entries_endpoint_returns_updated_at(self):
+        routine = make_routine(self.user)
+        RoutineEntry.objects.create(routine=routine, notes="hi")
+        response = self.client.get(f"/api/routines/{routine.id}/entries/")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()
+        # The endpoint may return a list or paginated results; handle both.
+        entries = results.get("results", results) if isinstance(results, dict) else results
+        self.assertGreater(len(entries), 0)
+        self.assertIn("updated_at", entries[0])
+        self.assertIsNotNone(entries[0]["updated_at"])
+
+    def test_stock_patch_response_includes_lot_updated_at(self):
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=10, lot_number="L-1")
+        response = self.client.patch(f"/api/stock/{stock.id}/lots/{lot.id}/", {"quantity": 8})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("updated_at", response.json())
+        self.assertIsNotNone(response.json()["updated_at"])
+
+    def test_stock_consumption_list_includes_updated_at(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        # Trigger consumption via API so the endpoint builds a real object
+        response = self.client.post(
+            f"/api/stock/{stock.id}/consume/",
+            {"quantity": 2, "notes": "t"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        consumption_list = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(consumption_list.status_code, 200)
+        results = consumption_list.json()
+        items = results.get("results", results) if isinstance(results, dict) else results
+        self.assertGreater(len(items), 0)
+        self.assertIn("updated_at", items[0])
+
+
+# ── Optimistic locking — integration per viewset ───────────────────────────
+
+
+class OptimisticLockingIntegrationTest(APITestCase):
+    """
+    Exercises each ModelViewSet with a stale If-Unmodified-Since header and
+    asserts the mixin short-circuits the update to 412 without writing.
+    """
+
+    STALE_HEADER = "Wed, 01 Jan 2020 00:00:00 GMT"
+
+    def setUp(self):
+        self.user = make_user("alice")
+        self.client.force_authenticate(user=self.user)
+
+    def _current_header(self, instance):
+        return instance.updated_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    # Routine
+    def test_patch_routine_with_stale_header_returns_412(self):
+        routine = make_routine(self.user)
+        response = self.client.patch(
+            f"/api/routines/{routine.id}/",
+            {"name": "Changed"},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        body = response.json()
+        self.assertEqual(body["error"], "conflict")
+        self.assertIn("current", body)
+        self.assertEqual(body["current"]["id"], routine.id)
+        routine.refresh_from_db()
+        self.assertNotEqual(routine.name, "Changed")
+
+    def test_patch_routine_with_current_header_succeeds(self):
+        routine = make_routine(self.user)
+        response = self.client.patch(
+            f"/api/routines/{routine.id}/",
+            {"name": "Changed"},
+            HTTP_IF_UNMODIFIED_SINCE=self._current_header(routine),
+        )
+        self.assertEqual(response.status_code, 200)
+        routine.refresh_from_db()
+        self.assertEqual(routine.name, "Changed")
+
+    # Stock
+    def test_patch_stock_with_stale_header_returns_412(self):
+        stock = make_stock(self.user)
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"name": "Changed"},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        self.assertEqual(response.json()["error"], "conflict")
+        stock.refresh_from_db()
+        self.assertNotEqual(stock.name, "Changed")
+
+    def test_delete_stock_with_stale_header_returns_412(self):
+        stock = make_stock(self.user)
+        response = self.client.delete(
+            f"/api/stock/{stock.id}/",
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        self.assertTrue(Stock.objects.filter(pk=stock.pk).exists())
+
+    # StockLot
+    def test_patch_stock_lot_with_stale_header_returns_412(self):
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=10, lot_number="L-1")
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/lots/{lot.id}/",
+            {"quantity": 5},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        self.assertEqual(response.json()["error"], "conflict")
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 10)
+
+    # RoutineEntry (notes PATCH)
+    def test_patch_routine_entry_with_stale_header_returns_412(self):
+        routine = make_routine(self.user)
+        entry = RoutineEntry.objects.create(routine=routine, notes="original")
+        response = self.client.patch(
+            f"/api/entries/{entry.id}/",
+            {"notes": "edited"},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        entry.refresh_from_db()
+        self.assertEqual(entry.notes, "original")
+
+    # StockConsumption (notes PATCH)
+    def test_patch_stock_consumption_with_stale_header_returns_412(self):
+        stock = make_stock(self.user)
+        consumption = StockConsumption.objects.create(stock=stock, quantity=1, notes="original")
+        response = self.client.patch(
+            f"/api/stock-consumptions/{consumption.id}/",
+            {"notes": "edited"},
+            HTTP_IF_UNMODIFIED_SINCE=self.STALE_HEADER,
+        )
+        self.assertEqual(response.status_code, 412)
+        consumption.refresh_from_db()
+        self.assertEqual(consumption.notes, "original")
+
+
+# ── client_created_at on log + consume ──────────────────────────────────────
+
+
+class ClientCreatedAtTest(APITestCase):
+    """
+    Both /api/routines/{id}/log/ and /api/stock/{id}/consume/ accept an
+    optional `client_created_at` so entries synced after an offline stretch
+    reflect the real action time. Skew validation is controlled by
+    OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS.
+    """
+
+    def setUp(self):
+        self.user = make_user("alice")
+        self.client.force_authenticate(user=self.user)
+
+    # ── /log/ endpoint ──────────────────────────────────────────────────────
+    def test_log_without_client_created_at_leaves_field_null(self):
+        routine = make_routine(self.user)
+        response = self.client.post(f"/api/routines/{routine.id}/log/", {})
+        self.assertEqual(response.status_code, 201)
+        entry = routine.entries.get()
+        self.assertIsNone(entry.client_created_at)
+        self.assertAlmostEqual(entry.created_at.timestamp(), timezone.now().timestamp(), delta=5)
+
+    def test_log_with_client_created_at_stores_it(self):
+        routine = make_routine(self.user)
+        action_time = timezone.now() - timedelta(hours=2)
+        response = self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": action_time.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        entry = routine.entries.get()
+        self.assertIsNotNone(entry.client_created_at)
+        self.assertAlmostEqual(entry.client_created_at.timestamp(), action_time.timestamp(), delta=2)
+        # created_at remains server-side (sync time), independent of client_created_at
+        self.assertGreater(entry.created_at, entry.client_created_at)
+
+    def test_log_without_skew_setting_accepts_old_timestamp(self):
+        routine = make_routine(self.user)
+        one_year_ago = timezone.now() - timedelta(days=365)
+        response = self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": one_year_ago.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+    @override_settings(OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS=24 * 60 * 60)
+    def test_log_with_skew_within_limit_accepts(self):
+        routine = make_routine(self.user)
+        ok = timezone.now() - timedelta(hours=23)
+        response = self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": ok.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+    @override_settings(OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS=24 * 60 * 60)
+    def test_log_with_skew_over_limit_returns_400(self):
+        routine = make_routine(self.user)
+        too_old = timezone.now() - timedelta(hours=25)
+        response = self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": too_old.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("client_created_at", response.json())
+
+    # ── next_due_at uses effective time ─────────────────────────────────────
+    def test_next_due_at_uses_client_created_at_when_present(self):
+        routine = make_routine(self.user, interval_hours=8)
+        past_action = timezone.now() - timedelta(hours=7)
+        response = self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": past_action.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        routine.refresh_from_db()
+        expected_due = past_action + timedelta(hours=8)
+        self.assertAlmostEqual(
+            routine.next_due_at().timestamp(),
+            expected_due.timestamp(),
+            delta=5,
+        )
+
+    def test_next_due_at_falls_back_to_created_at(self):
+        routine = make_routine(self.user, interval_hours=8)
+        response = self.client.post(f"/api/routines/{routine.id}/log/", {})
+        self.assertEqual(response.status_code, 201)
+        routine.refresh_from_db()
+        entry = routine.entries.get()
+        self.assertAlmostEqual(
+            routine.next_due_at().timestamp(),
+            (entry.created_at + timedelta(hours=8)).timestamp(),
+            delta=1,
+        )
+
+    # ── /consume/ endpoint ──────────────────────────────────────────────────
+    def test_consume_without_client_created_at_leaves_field_null(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        response = self.client.post(f"/api/stock/{stock.id}/consume/", {"quantity": 1}, format="json")
+        self.assertEqual(response.status_code, 200)
+        consumption = stock.consumptions.get()
+        self.assertIsNone(consumption.client_created_at)
+
+    def test_consume_with_client_created_at_stores_it(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        action_time = timezone.now() - timedelta(hours=3)
+        response = self.client.post(
+            f"/api/stock/{stock.id}/consume/",
+            {"quantity": 1, "client_created_at": action_time.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        consumption = stock.consumptions.get()
+        self.assertIsNotNone(consumption.client_created_at)
+        self.assertAlmostEqual(consumption.client_created_at.timestamp(), action_time.timestamp(), delta=2)
+
+    @override_settings(OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS=60)
+    def test_consume_with_skew_over_limit_returns_400(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        too_old = timezone.now() - timedelta(hours=2)
+        response = self.client.post(
+            f"/api/stock/{stock.id}/consume/",
+            {"quantity": 1, "client_created_at": too_old.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("client_created_at", response.json())
+
+    def test_last_entry_at_in_serializer_uses_effective_time(self):
+        routine = make_routine(self.user, interval_hours=8)
+        past_action = timezone.now() - timedelta(hours=3)
+        self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": past_action.isoformat()},
+            format="json",
+        )
+        response = self.client.get(f"/api/routines/{routine.id}/")
+        self.assertEqual(response.status_code, 200)
+        last_entry_at = response.json()["last_entry_at"]
+        # Should match client_created_at (past), not server created_at (now)
+        self.assertAlmostEqual(
+            timezone.datetime.fromisoformat(last_entry_at.replace("Z", "+00:00")).timestamp(),
+            past_action.timestamp(),
+            delta=2,
+        )
+
+    # ── API exposure ────────────────────────────────────────────────────────
+    def test_entries_endpoint_exposes_client_created_at(self):
+        routine = make_routine(self.user)
+        action_time = timezone.now() - timedelta(hours=1)
+        self.client.post(
+            f"/api/routines/{routine.id}/log/",
+            {"client_created_at": action_time.isoformat()},
+            format="json",
+        )
+        response = self.client.get(f"/api/routines/{routine.id}/entries/")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()
+        entries = results.get("results", results) if isinstance(results, dict) else results
+        self.assertEqual(len(entries), 1)
+        self.assertIn("client_created_at", entries[0])
+        self.assertIsNotNone(entries[0]["client_created_at"])

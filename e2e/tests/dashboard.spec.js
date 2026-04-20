@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test'
 import { login } from './helpers.js'
 
 test.describe('Dashboard', () => {
-  test.beforeEach(async ({ page }) => { await login(page) })
+  test.beforeEach(async ({ page }) => {
+    await login(page)
+    await expect(page.getByTestId('offline-banner')).toBeHidden()
+  })
 
   test('shows Today and Upcoming sections', async ({ page }) => {
     await expect(page.getByText('Today')).toBeVisible()

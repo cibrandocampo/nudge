@@ -2,6 +2,28 @@ import { http, HttpResponse } from 'msw'
 
 const BASE = 'http://localhost/api'
 
+/**
+ * Build an MSW handler that returns 412 Precondition Failed for a given
+ * endpoint so tests can assert the ConflictError path end-to-end.
+ *
+ * @param {string} method  'get' | 'post' | 'patch' | 'delete'
+ * @param {string} path    Path relative to BASE (e.g. `/routines/5/`)
+ * @param {object} [current] The payload the backend would echo in `current`
+ */
+export function mockConflict(method, path, current = {}) {
+  return http[method.toLowerCase()](`${BASE}${path}`, () =>
+    HttpResponse.json({ error: 'conflict', current }, { status: 412 }),
+  )
+}
+
+/**
+ * Build an MSW handler that simulates a network failure (fetch rejection)
+ * so tests can assert the OfflineError path.
+ */
+export function mockNetworkError(method, path) {
+  return http[method.toLowerCase()](`${BASE}${path}`, () => HttpResponse.error())
+}
+
 export const mockUser = {
   id: 1,
   username: 'testuser',
@@ -9,6 +31,7 @@ export const mockUser = {
   timezone: 'Europe/Madrid',
   language: 'en',
   daily_notification_time: '08:00:00',
+  settings_updated_at: '2026-03-01T00:00:00Z',
 }
 
 export const mockRoutine = {
@@ -22,6 +45,7 @@ export const mockRoutine = {
   hours_until_due: -2,
   next_due_at: new Date(Date.now() - 2 * 3600000).toISOString(),
   created_at: '2025-01-15T10:00:00Z',
+  updated_at: '2025-01-15T10:00:00Z',
   stock_name: null,
   stock_quantity: null,
   stock_usage: 1,

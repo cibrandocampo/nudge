@@ -1,0 +1,39 @@
+---
+const iconUrl = `${import.meta.env.BASE_URL}/icons/nudge-512.png`
+---
+<section id="hero" class="relative overflow-hidden">
+  <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28 lg:py-32 text-center">
+    <img
+      src={iconUrl}
+      alt="Nudge app icon"
+      width="96"
+      height="96"
+      class="mx-auto h-24 w-24 rounded-2xl shadow-xl shadow-nudge-900/50"
+      loading="eager"
+      decoding="async"
+    />
+    <h1 class="mt-8 text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">
+      A gentle reminder for <span class="text-nudge-300">recurring things.</span>
+    </h1>
+    <p class="mt-6 mx-auto max-w-2xl text-lg sm:text-xl text-slate-300 leading-relaxed">
+      Set the interval once. Get nudged at the right moment. Your server, your rules.
+      <span class="block mt-2 text-slate-400 text-base">Offline-first PWA. No SaaS. No public registration.</span>
+    </p>
+    <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
+      <a
+        href="#self-host"
+        class="inline-flex items-center justify-center rounded-lg bg-nudge-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-nudge-900/40 hover:bg-nudge-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-nudge-300 focus-visible:ring-offset-2 focus-visible:ring-offset-nudge-950"
+      >
+        Self-host in 5 minutes
+      </a>
+      <a
+        href="https://github.com/cibrandocampo/nudge"
+        class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 px-6 py-3 text-base font-medium text-slate-200 hover:bg-slate-800/60 hover:border-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-nudge-950"
+      >
+        <svg viewBox="0 0 16 16" class="h-5 w-5 mr-2" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.37-.93-.9-1.18-.9-1.18-.73-.5.06-.49.06-.49.8.06 1.22.83 1.22.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.13 0 0 .67-.22 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.11.16 1.93.08 2.13.51.56.82 1.28.82 2.15 0 3.07-1.86 3.75-3.65 3.95.29.25.54.74.54 1.5v2.22c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+    <p class="mt-6 text-sm text-slate-500">MIT-licensed · Docker images for amd64 + arm64 · Synology-friendly</p>
+  </div>
+</section>
