@@ -84,9 +84,7 @@ class Command(BaseCommand):
             return
         if os.environ.get("E2E_SEED_ALLOWED", "").lower() == "true":
             return
-        raise CommandError(
-            "seed_marketing refused to run: DEBUG is False and E2E_SEED_ALLOWED is not 'true'."
-        )
+        raise CommandError("seed_marketing refused to run: DEBUG is False and E2E_SEED_ALLOWED is not 'true'.")
 
     # ── Wipe ────────────────────────────────────────────────────────────────
 
