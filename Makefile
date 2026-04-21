@@ -3,6 +3,7 @@
 PROD := docker compose
 DEV  := docker compose -f dev/docker-compose.yml --env-file .env
 E2E_PASSWORD ?= $(ADMIN_PASSWORD)
+MARKETING_USER_PASSWORD ?= marketing-pass
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,16 @@ screenshots:    ## Regenerate docs/screenshots/*.png against the running dev sta
 		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
 		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'
 
+screenshots-marketing: ## Regenerate docs/screenshots/marketing/*.png against the running dev stack
+	$(DEV) exec -T backend python manage.py seed_marketing
+	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
+	docker run --rm --network host \
+		-e MARKETING_USERNAME=alex \
+		-e MARKETING_PASSWORD=$(MARKETING_USER_PASSWORD) \
+		-e BASE_URL=http://localhost:5173 \
+		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
+		nudge-e2e sh -c 'mkdir -p /docs-screenshots/marketing && node screenshots-marketing.js && cp /e2e/../docs/screenshots/marketing/*.png /docs-screenshots/marketing/'
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:       ## Show this help
@@ -159,5 +170,5 @@ help:       ## Show this help
         qa test test-backend test-frontend test-e2e \
         lint format format-check \
         build-backend build-frontend build \
-        shell-backend shell-frontend django-shell vapid screenshots help
+        shell-backend shell-frontend django-shell vapid screenshots screenshots-marketing help
 .DEFAULT_GOAL := help

@@ -1,0 +1,116 @@
+---
+import Screenshot from './Screenshot.astro'
+
+export interface LifecycleStep {
+  kind: 'mock-icon' | 'mock-notification' | 'capture'
+  title: string
+  body: string
+  // kind === 'capture'
+  src?: string
+  alt?: string
+  // kind === 'mock-notification'
+  headline?: string
+  appName?: string
+  timestamp?: string
+}
+
+export interface Props {
+  steps: readonly LifecycleStep[]
+}
+
+const { steps } = Astro.props
+
+// Nudge app icon reused from the Hero. Same defensive BASE_URL handling
+// as Screenshot.astro: dev ends with '/', prod may not.
+const iconUrl = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/icons/nudge-512.png`
+---
+<div class="flex flex-col gap-20 md:gap-28">
+  {steps.map((step, index) => {
+    const reversed = index % 2 === 1
+    return (
+      <article
+        class:list={[
+          'flex flex-col gap-8 md:gap-12 md:items-center',
+          reversed ? 'md:flex-row-reverse' : 'md:flex-row',
+        ]}
+      >
+        <div class="md:flex-1 flex justify-center">
+          {step.kind === 'capture' && step.src && step.alt && (
+            <Screenshot src={step.src} alt={step.alt} />
+          )}
+
+          {step.kind === 'mock-icon' && (
+            <div class="flex flex-col items-center gap-3 py-4">
+              <div
+                class="w-32 h-32 rounded-[28px] overflow-hidden shadow-2xl shadow-nudge-500/40 ring-1 ring-nudge-400/20"
+                aria-hidden="true"
+              >
+                <img
+                  src={iconUrl}
+                  alt=""
+                  class="w-full h-full"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <span class="text-sm font-medium text-slate-300">Nudge</span>
+            </div>
+          )}
+
+          {step.kind === 'mock-notification' && (
+            <div class="flex flex-col items-center gap-6 py-4" aria-hidden="true">
+              <div class="text-center">
+                <div class="text-white text-5xl font-light tracking-tight">9:41</div>
+                <div class="text-white/60 text-xs uppercase tracking-[0.2em] mt-2">Monday</div>
+              </div>
+              <div class="w-[280px] rounded-2xl bg-white/10 backdrop-blur-sm p-4 border border-white/15 shadow-xl shadow-nudge-900/30">
+                <div class="flex items-center gap-2">
+                  <img
+                    src={iconUrl}
+                    alt=""
+                    class="w-6 h-6 rounded-md"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span class="text-white/90 text-[11px] uppercase tracking-wider font-semibold">
+                    {step.appName ?? 'Nudge'}
+                  </span>
+                  <span class="text-white/60 text-[11px] ml-auto">{step.timestamp ?? 'now'}</span>
+                </div>
+                <div class="mt-2 text-white text-base font-medium text-left leading-snug">
+                  {step.headline}
+                </div>
+                <div class="mt-1 text-white/75 text-sm text-left">Tap to mark as done</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div class:list={['md:flex-1 text-center', reversed ? 'md:text-right' : 'md:text-left']}>
+          <div
+            class:list={[
+              'inline-flex items-center justify-center h-12 w-12 rounded-full bg-nudge-500 text-white text-xl font-semibold',
+              'mx-auto',
+              reversed ? 'md:ml-auto md:mr-0' : 'md:mx-0',
+            ]}
+            aria-hidden="true"
+          >
+            {index + 1}
+          </div>
+          <h3 class="mt-5 text-2xl sm:text-3xl font-semibold tracking-tight text-slate-100">
+            {step.title}
+          </h3>
+          <p
+            class:list={[
+              'mt-4 text-base text-slate-400 leading-relaxed max-w-md',
+              'mx-auto',
+              reversed ? 'md:ml-auto md:mr-0' : 'md:mx-0',
+            ]}
+          >
+            {step.body}
+          </p>
+        </div>
+      </article>
+    )
+  })}
+</div>

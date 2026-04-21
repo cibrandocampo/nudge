@@ -23,6 +23,7 @@ omit = [
     # of the tests' own helpers.
     "**/seed_e2e.py",
     "**/seed_demo.py",
+    "**/seed_marketing.py",
     "**/ensure_e2e_users.py",
     "**/generate_vapid_keys.py",
     # Production entry points — no testable logic.
