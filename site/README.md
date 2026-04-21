@@ -10,8 +10,9 @@ Not a docs site — documentation lives under `docs/` and in the main
 
 ## What this is
 
-- 9 sections: hero, 30-second pitch, offline storyboard, feature grid,
-  screenshots carousel, privacy statement, self-host snippet, FAQ, footer.
+- 10 sections: hero, 30-second pitch, lifecycle storyboard ("How it
+  works"), offline storyboard, feature grid, screenshots carousel,
+  privacy statement, self-host snippet, FAQ, footer.
 - Dark mode by default; light kicks in via `prefers-color-scheme`.
 - Screenshots are **single-sourced** from `../docs/screenshots/`. A
   prebuild script (`scripts/copy-screenshots.mjs`) mirrors them into
@@ -107,3 +108,44 @@ The script also captures the two offline-specific scenes
 `__NUDGE_REACHABILITY_SET__` hook + a Playwright 412 mock. It must run
 against the dev server (or a preview build with `VITE_E2E_MODE=true`),
 not a production bundle.
+
+### Marketing screenshots ("How it works" section)
+
+The 3 captures used by the lifecycle storyboard in §3 live in a
+separate pipeline with its own seed, script, and Makefile target:
+
+```bash
+make screenshots-marketing
+```
+
+What it does, in order:
+
+1. Runs `python manage.py seed_marketing` in the dev backend — wipes
+   business data and seeds a compact fixture (`alex` + `jordan` users,
+   5 stocks, 4 routines, zero history). Same triple gate as
+   `seed_e2e`, so **running it wipes your dev database**; it refuses
+   to run in production.
+2. Builds the `nudge-e2e` image.
+3. Runs `e2e/screenshots-marketing.js` inside the container with
+   `locale: 'en-US'` forced on the browser context. Writes three PNGs
+   to `docs/screenshots/marketing/`:
+   - `lifecycle-02-dashboard.png`
+   - `lifecycle-03-stock.png`
+   - `lifecycle-05-lot-selection.png`
+
+These are mirrored to `public/screenshots/marketing/` by the same
+`copy-screenshots.mjs` script (now recurses into subfolders). The
+marketing captures are single-sourced from `docs/screenshots/marketing/`
+— do not commit anything under `public/screenshots/marketing/`.
+
+**Drift risk**: the captures are regenerated on demand only. A
+redesign of the Dashboard, Inventory, or LotSelectionModal silently
+invalidates them — re-run `make screenshots-marketing` afterwards.
+Steps 1 (install icon) and 4 (OS-style notification) in the landing
+are rendered in pure CSS/SVG inside `LifecycleStory.astro`, so they
+stay in sync with the app's brand as long as the Nudge icon
+(`public/icons/nudge-512.png`) is up to date.
+
+**Password**: the fixture user `alex` uses `MARKETING_USER_PASSWORD`
+from `.env` — if unset, both the seed command and the Makefile target
+fall back to `marketing-pass`, so the pipeline works out of the box.

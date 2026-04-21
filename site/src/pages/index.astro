@@ -4,6 +4,7 @@ import Hero from '../components/Hero.astro'
 import FeatureCard from '../components/FeatureCard.astro'
 import Screenshot from '../components/Screenshot.astro'
 import OfflineStory from '../components/OfflineStory.astro'
+import LifecycleStory from '../components/LifecycleStory.astro'
 import Footer from '../components/Footer.astro'
 
 const offlineSteps = [
@@ -26,6 +27,43 @@ const offlineSteps = [
     alt: "Nudge conflict resolution modal with a per-field diff",
   },
 ]
+
+const lifecycleSteps = [
+  {
+    kind: 'mock-icon',
+    title: 'Install it',
+    body: "Add to Home Screen on iOS or Android. Opens from its own icon, feels like a native app — no store review, no download queue.",
+  },
+  {
+    kind: 'capture',
+    title: 'See your loop',
+    body: "Routines for anything recurring — medication, filters, the plants. Some tracked against stock, some not. Share any of them with the household.",
+    src: 'screenshots/marketing/lifecycle-02-dashboard.png',
+    alt: 'Nudge dashboard with four routines, one shared with a contact',
+  },
+  {
+    kind: 'capture',
+    title: 'Track your stock',
+    body: "Attach a consumable to a routine. Nudge tracks lots and expiries individually, and warns you 90 days before the first lot goes off.",
+    src: 'screenshots/marketing/lifecycle-03-stock.png',
+    alt: 'Nudge inventory with five stock items, one shared, and lot-level expiry dates',
+  },
+  {
+    kind: 'mock-notification',
+    title: 'Get nudged',
+    body: "When a routine comes due, Nudge sends a push — instantly on the due moment, with follow-up reminders every 8 hours until done.",
+    headline: 'Time for your Vitamin D',
+    appName: 'Nudge',
+    timestamp: 'now',
+  },
+  {
+    kind: 'capture',
+    title: 'Complete with a lot',
+    body: "Tap done. If the stock has multiple lots, Nudge picks the First-Expired-First-Out by default — you just confirm.",
+    src: 'screenshots/marketing/lifecycle-05-lot-selection.png',
+    alt: 'Nudge lot-selection modal showing two Vitamin D lots ordered by expiry date',
+  },
+] as const
 
 const features = [
   { icon: '📶', title: 'Offline-first PWA', body: 'Queue in IndexedDB, sync on reconnect, optimistic updates, conflict resolution with visual diff, idempotent retries.' },
@@ -93,7 +131,18 @@ const faqItems = [
     </div>
   </section>
 
-  <!-- Section 3 — Offline storyboard -->
+  <!-- Section 3 — How it works (lifecycle) -->
+  <section id="how-it-works" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">How it works</h2>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto">
+        From the first install to the moment you mark something done — the whole loop in five beats.
+      </p>
+    </div>
+    <LifecycleStory steps={lifecycleSteps} />
+  </section>
+
+  <!-- Section 4 — Offline storyboard -->
   <section id="offline-story" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center mb-12">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Offline-first, sync when you're back</h2>
@@ -104,7 +153,7 @@ const faqItems = [
     <OfflineStory steps={offlineSteps} />
   </section>
 
-  <!-- Section 4 — Feature grid -->
+  <!-- Section 5 — Feature grid -->
   <section id="features" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center mb-12">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Everything you expect, nothing you don't</h2>
@@ -119,7 +168,7 @@ const faqItems = [
     </div>
   </section>
 
-  <!-- Section 5 — Screenshots carousel -->
+  <!-- Section 6 — Screenshots carousel -->
   <section id="screenshots" class="mx-auto max-w-6xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center mb-12">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">A quick tour</h2>
@@ -136,7 +185,7 @@ const faqItems = [
     </div>
   </section>
 
-  <!-- Section 6 — Privacy -->
+  <!-- Section 7 — Privacy -->
   <section id="privacy" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Your server, your rules</h2>
@@ -154,7 +203,7 @@ const faqItems = [
     </div>
   </section>
 
-  <!-- Section 7 — Self-host -->
+  <!-- Section 8 — Self-host -->
   <section id="self-host" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center mb-10">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Self-host in 5 minutes</h2>
@@ -190,7 +239,7 @@ docker compose up -d
     </p>
   </section>
 
-  <!-- Section 8 — FAQ -->
+  <!-- Section 9 — FAQ -->
   <section id="faq" class="mx-auto max-w-4xl px-6 py-16 sm:py-24 border-t border-slate-800">
     <div class="text-center mb-10">
       <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">Questions people ask</h2>
