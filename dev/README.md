@@ -143,6 +143,23 @@ Skills are loaded automatically. Commands are documented in [docs/development.md
 | `/fix` | Quick fix — focused bug fix or small change |
 | `/audit` | Structured audit of a code area |
 
+## Environment variables (dev only)
+
+The root `.env.example` lists only variables relevant to a production
+deployment. The dev stack and the Playwright E2E suite recognise a
+handful of additional variables, all with safe defaults in code — you
+only need to set them in your local `.env` if you want to override the
+default.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `E2E_SEED_ALLOWED` | _unset_ | Gate for the destructive `seed_e2e` and `seed_demo` management commands (and the `/api/internal/e2e-seed/` endpoint). Both commands refuse to run unless this is `true` **or** `DJANGO_DEBUG=True`. Never set in production. |
+| `E2E_USER1_PASSWORD` | `e2e-pass-1` | Password for the `user1` account created by `seed_e2e`. Read at runtime by the Playwright helpers (`e2e/tests/helpers.js`). |
+| `E2E_USER2_PASSWORD` | `e2e-pass-2` | Same for `user2`. |
+| `E2E_USER3_PASSWORD` | `e2e-pass-3` | Same for `user3`. |
+| `DEMO_USER_PASSWORD` | `demo-pass` | Password for the `cibran` and `maria` accounts created by `seed_demo` (the fixture used to regenerate `docs/screenshots/*.png` via `make screenshots`). |
+| `VITE_E2E_MODE` | `false` | Build-time flag consumed by Vite. When `true`, the dev-only reachability hooks (`__NUDGE_REACHABILITY_SET__`, `__NUDGE_REACHABILITY_POLL_MS__`, `__NUDGE_REACHABILITY_LOCK__`, `__NUDGE_SYNC_RETRY_DELAYS_MS__`) are included in the preview build at `:4173` so offline specs can drive the reachability flag without relying on `navigator.onLine`. Set via the `frontend-preview` service in `dev/docker-compose.yml`; not a runtime switch. |
+
 ## Landing site
 
 The public project site lives in [`/site/`](../site/README.md) (Astro + Tailwind) and deploys to [`cibrandocampo.github.io/nudge/`](https://cibrandocampo.github.io/nudge/) on every merge to `main` and on every published release, via `.github/workflows/site-deploy.yml`. See [site/README.md](../site/README.md) for how to run it locally, regenerate screenshots (`make screenshots`), and where to edit content.

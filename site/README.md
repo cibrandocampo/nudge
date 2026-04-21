@@ -98,54 +98,36 @@ From the repo root, with the dev stack running:
 make screenshots
 ```
 
-This builds the `nudge-e2e` image, launches the Playwright script
-against `localhost:5173`, and writes the refreshed PNGs to
-`docs/screenshots/`. Next build of the landing picks them up via the
+Single pipeline: seeds the `seed_demo` fixture (users `cibran` +
+`maria`, 6 stocks, 6 routines, 6 entries), builds the `nudge-e2e`
+image, and runs `e2e/screenshots.js` against `localhost:5173`
+capturing 13 PNGs to `docs/screenshots/` (flat, no subfolders):
+`login`, `dashboard`, `dashboard-sharing`, `routine-detail`,
+`new-routine`, `inventory`, `stock-detail`, `history`, `settings`,
+`shared-dashboard`, `offline-banner`, `conflict-modal`,
+`lot-selection`. The next landing build picks them up via the
 `copy-screenshots.mjs` mirror.
 
-The script also captures the two offline-specific scenes
-(`10-offline-banner`, `11-conflict-modal`) via the dev-only
-`__NUDGE_REACHABILITY_SET__` hook + a Playwright 412 mock. It must run
-against the dev server (or a preview build with `VITE_E2E_MODE=true`),
-not a production bundle.
+**Destructive**: `seed_demo` wipes business data on every run. Same
+triple gate as `seed_e2e` (`DJANGO_DEBUG=True` OR
+`E2E_SEED_ALLOWED=true`) so it refuses to run in production.
 
-### Marketing screenshots ("How it works" section)
+The `offline-banner` and `conflict-modal` scenes depend on the
+dev-only `__NUDGE_REACHABILITY_SET__` hook + a Playwright 412 mock.
+They must run against the dev server (or a preview build with
+`VITE_E2E_MODE=true`), not a production bundle.
 
-The 3 captures used by the lifecycle storyboard in §3 live in a
-separate pipeline with its own seed, script, and Makefile target:
-
-```bash
-make screenshots-marketing
-```
-
-What it does, in order:
-
-1. Runs `python manage.py seed_marketing` in the dev backend — wipes
-   business data and seeds a compact fixture (`alex` + `jordan` users,
-   5 stocks, 4 routines, zero history). Same triple gate as
-   `seed_e2e`, so **running it wipes your dev database**; it refuses
-   to run in production.
-2. Builds the `nudge-e2e` image.
-3. Runs `e2e/screenshots-marketing.js` inside the container with
-   `locale: 'en-US'` forced on the browser context. Writes three PNGs
-   to `docs/screenshots/marketing/`:
-   - `lifecycle-02-dashboard.png`
-   - `lifecycle-03-stock.png`
-   - `lifecycle-05-lot-selection.png`
-
-These are mirrored to `public/screenshots/marketing/` by the same
-`copy-screenshots.mjs` script (now recurses into subfolders). The
-marketing captures are single-sourced from `docs/screenshots/marketing/`
-— do not commit anything under `public/screenshots/marketing/`.
-
-**Drift risk**: the captures are regenerated on demand only. A
-redesign of the Dashboard, Inventory, or LotSelectionModal silently
-invalidates them — re-run `make screenshots-marketing` afterwards.
-Steps 1 (install icon) and 4 (OS-style notification) in the landing
-are rendered in pure CSS/SVG inside `LifecycleStory.astro`, so they
-stay in sync with the app's brand as long as the Nudge icon
+**Drift risk**: captures are regenerated on demand only. Any
+redesign of the app silently invalidates them — re-run
+`make screenshots` afterwards. Steps 1 (install icon) and 4 (OS-style
+notification) in the landing's lifecycle storyboard are rendered in
+pure CSS/SVG inside `LifecycleStory.astro`, so they stay in sync
+with the app's brand as long as the Nudge icon
 (`public/icons/nudge-512.png`) is up to date.
 
-**Password**: the fixture user `alex` uses `MARKETING_USER_PASSWORD`
-from `.env` — if unset, both the seed command and the Makefile target
-fall back to `marketing-pass`, so the pipeline works out of the box.
+**Password**: the fixture users share a single password read from
+the optional `DEMO_USER_PASSWORD` env var. Unset by default (not in
+`.env.example`); both the seed command and the Makefile target fall
+back to `demo-pass` so the pipeline works out of the box. See
+[`dev/README.md`](../dev/README.md#environment-variables-dev-only) if
+you want a custom value.

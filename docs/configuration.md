@@ -132,13 +132,9 @@ pip install py-vapid && vapid --gen
 
 ## Development / E2E
 
-These variables are **only** meaningful for the dev stack (`dev/docker-compose.yml`) and the Playwright E2E suite. They do nothing in a production deployment — leave them unset in `.env` for a real instance.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `E2E_SEED_ALLOWED` | _unset_ | Gate for the `/api/internal/e2e-seed/` endpoint that wipes non-admin data and rebuilds the Playwright fixture. The endpoint responds only when this is `true` or when `DJANGO_DEBUG=True`. Never set in production. |
-| `E2E_USER1_PASSWORD` | `e2e-pass-1` | Password assigned to the `user1` account created by `seed_e2e`. Read by the E2E specs via the `SEED` constant in `e2e/tests/helpers.js`. |
-| `E2E_USER2_PASSWORD` | `e2e-pass-2` | Same pattern for `user2`. |
-| `E2E_USER3_PASSWORD` | `e2e-pass-3` | Same pattern for `user3`. |
-| `MARKETING_USER_PASSWORD` | `marketing-pass` | Password for the `alex` and `jordan` accounts created by the `seed_marketing` management command. Consumed by both the command (user setup) and `e2e/screenshots-marketing.js` (login) via the `screenshots-marketing` Makefile target. Gated by the same `DEBUG` / `E2E_SEED_ALLOWED` check as `seed_e2e`. Never set in production. |
-| `VITE_E2E_MODE` | `false` | Build-time flag consumed by the Vite bundler. When `true`, the dev-only reachability hooks (`__NUDGE_REACHABILITY_SET__`, `__NUDGE_REACHABILITY_POLL_MS__`, `__NUDGE_REACHABILITY_LOCK__`, `__NUDGE_SYNC_RETRY_DELAYS_MS__`) are included in the preview build at `:4173`, so offline specs can drive the reachability flag without relying on `navigator.onLine`. Set via the `frontend-preview` service in `dev/docker-compose.yml`; not a runtime switch. |
+Development-only environment variables (E2E seed gate, test-user
+passwords, demo-fixture password, preview-build flag) are documented
+in [`dev/README.md`](../dev/README.md#environment-variables-dev-only).
+They do nothing in a production deployment; all have safe defaults
+in code and only need to be overridden when a contributor wants a
+custom value locally. Leave them unset in a production `.env`.

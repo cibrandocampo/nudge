@@ -3,7 +3,7 @@
 PROD := docker compose
 DEV  := docker compose -f dev/docker-compose.yml --env-file .env
 E2E_PASSWORD ?= $(ADMIN_PASSWORD)
-MARKETING_USER_PASSWORD ?= marketing-pass
+DEMO_USER_PASSWORD ?= demo-pass
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ logs:       ## Tail production logs. Usage: make logs s=backend
 pull:       ## Pull latest production images
 	$(PROD) pull
 
-# ── Development ───────────────────────────────────────────────────────────────
+# ── Development environment ───────────────────────────────────────────────────
 
 dev-up:     ## Start dev environment
 	$(DEV) up -d
@@ -42,7 +42,7 @@ dev-ps:     ## Show dev container status
 dev-logs:   ## Tail dev logs. Usage: make dev-logs s=backend
 	$(DEV) logs -f $(s)
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
+# ── First-time setup ──────────────────────────────────────────────────────────
 
 init:       ## First-time setup: create .env, start dev, migrate, create admin, install hooks
 	@test -f .env || cp .env.example .env && echo "Created .env from .env.example — review it before continuing"
@@ -68,7 +68,7 @@ db-showmigrations:  ## Show migration status
 db-shell:           ## Open PostgreSQL shell
 	$(DEV) exec backend python manage.py dbshell
 
-# ── QA ────────────────────────────────────────────────────────────────────────
+# ── QA pipeline ───────────────────────────────────────────────────────────────
 
 qa:         ## Full QA pipeline: lint + format-check + test (mirrors GitHub Actions)
 	$(MAKE) lint
@@ -76,18 +76,24 @@ qa:         ## Full QA pipeline: lint + format-check + test (mirrors GitHub Acti
 	$(MAKE) test
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+# Backend tests are a mix of unit + integration using Django's TestCase /
+# DRF's APIClient; they run together because they are not tagged by type.
+# E2E (Playwright) are separate and require the dev stack to be up.
 
-test:           ## Run all tests (backend + frontend)
+test:             ## Run all tests (backend + frontend)
 	$(DEV) exec backend python manage.py test
 	$(DEV) exec frontend npm run test:coverage
 
-test-backend:   ## Run backend tests
+test-backend:     ## Run backend tests (no coverage)
 	$(DEV) exec backend python manage.py test
 
-test-frontend:  ## Run frontend tests
+test-frontend:    ## Run frontend tests with coverage
 	$(DEV) exec frontend npm run test:coverage
 
-test-e2e:       ## Run Playwright e2e tests (reads credentials from .env)
+coverage-backend: ## Run backend tests with coverage and print the report
+	$(DEV) exec backend sh -c 'coverage run manage.py test && coverage report --skip-covered'
+
+test-e2e:         ## Run Playwright e2e tests (reads credentials from .env)
 	$(DEV) exec -T backend python manage.py ensure_e2e_users
 	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
 	docker run --rm --network host \
@@ -110,7 +116,43 @@ format-check: ## Check formatting without applying changes
 	$(DEV) exec backend ruff format --check .
 	$(DEV) exec frontend npm run format:check
 
-# ── Build ─────────────────────────────────────────────────────────────────────
+# ── Seeds (destructive — dev only, gated by DEBUG / E2E_SEED_ALLOWED) ─────────
+# Both commands WIPE all non-admin business data before reseeding. They
+# refuse to run in production. See `dev/README.md` for the env-var reference.
+
+seed-demo:  ## Seed the dev DB with the realistic showcase fixture (cibran + maria)
+	$(DEV) exec -T backend python manage.py seed_demo
+
+seed-e2e:   ## Seed the dev DB with the Playwright fixture (user1 + user2 + user3)
+	$(DEV) exec -T backend python manage.py seed_e2e
+
+# ── Content regeneration ──────────────────────────────────────────────────────
+
+screenshots:  ## Regenerate docs/screenshots/*.png against the running dev stack
+	$(DEV) exec -T backend python manage.py seed_demo
+	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
+	docker run --rm --network host \
+		-e DEMO_USERNAME=cibran \
+		-e DEMO_USER2_USERNAME=maria \
+		-e DEMO_PASSWORD=$(DEMO_USER_PASSWORD) \
+		-e BASE_URL=http://localhost:5173 \
+		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
+		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'
+
+icons:        ## Regenerate PWA icons from frontend/public/icons/source.svg
+	$(DEV) run --rm frontend npm run generate-icons
+
+# ── Landing site (Astro) ──────────────────────────────────────────────────────
+# The marketing site in /site/ has no Docker service and runs natively via
+# npm. The /site/ build pipeline is independent of the app's Docker stack.
+
+site-dev:     ## Run the Astro landing dev server on http://localhost:4321/nudge/
+	cd site && npm run dev
+
+site-build:   ## Build the Astro landing site into site/dist/
+	cd site && npm run build
+
+# ── Production images ─────────────────────────────────────────────────────────
 
 build-backend:  ## Build production backend image
 	docker build -f backend/Dockerfile -t cibrandocampo/nudge-backend:latest ./backend
@@ -122,7 +164,7 @@ build:          ## Build both production images
 	$(MAKE) build-backend
 	$(MAKE) build-frontend
 
-# ── Utilities (dev) ───────────────────────────────────────────────────────────
+# ── Dev utilities ─────────────────────────────────────────────────────────────
 
 shell-backend:  ## Open shell in backend container
 	$(DEV) exec backend sh
@@ -136,39 +178,21 @@ django-shell:   ## Open Django interactive shell
 vapid:          ## Generate VAPID keys for push notifications
 	$(DEV) exec backend python manage.py generate_vapid_keys
 
-screenshots:    ## Regenerate docs/screenshots/*.png against the running dev stack
-	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
-	docker run --rm --network host \
-		-e E2E_USERNAME=admin \
-		-e E2E_PASSWORD=$(ADMIN_PASSWORD) \
-		-e E2E_USER2_USERNAME=user1 \
-		-e E2E_USER2_PASSWORD=$(E2E_USER1_PASSWORD) \
-		-e BASE_URL=http://localhost:5173 \
-		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
-		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'
-
-screenshots-marketing: ## Regenerate docs/screenshots/marketing/*.png against the running dev stack
-	$(DEV) exec -T backend python manage.py seed_marketing
-	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
-	docker run --rm --network host \
-		-e MARKETING_USERNAME=alex \
-		-e MARKETING_PASSWORD=$(MARKETING_USER_PASSWORD) \
-		-e BASE_URL=http://localhost:5173 \
-		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
-		nudge-e2e sh -c 'mkdir -p /docs-screenshots/marketing && node screenshots-marketing.js && cp /e2e/../docs/screenshots/marketing/*.png /docs-screenshots/marketing/'
-
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:       ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?##' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: up down restart ps logs pull \
         dev-up dev-down dev-restart dev-ps dev-logs \
         init hooks \
         db-migrate db-makemigrations db-showmigrations db-shell \
-        qa test test-backend test-frontend test-e2e \
+        qa test test-backend test-frontend test-e2e coverage-backend \
         lint format format-check \
+        seed-demo seed-e2e \
+        screenshots icons \
+        site-dev site-build \
         build-backend build-frontend build \
-        shell-backend shell-frontend django-shell vapid screenshots screenshots-marketing help
+        shell-backend shell-frontend django-shell vapid help
 .DEFAULT_GOAL := help
