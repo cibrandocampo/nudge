@@ -11,19 +11,19 @@ const offlineSteps = [
   {
     title: 'Tap it offline',
     body: "Mark-done, edits, new routines — every mutation is captured in IndexedDB the moment the network drops, with an optimistic update so the UI reacts immediately.",
-    src: 'screenshots/10-offline-banner.png',
+    src: 'screenshots/offline-banner.png',
     alt: "Nudge dashboard with the offline banner and a pending mutation counter",
   },
   {
     title: 'Sync when you\'re back',
     body: "A reachability probe polls the backend (not just navigator.onLine, which lies on captive portals). As soon as it sees a 2xx, the sync worker drains the queue with backoff and invalidates only the caches that were touched.",
-    src: 'screenshots/02-dashboard.png',
+    src: 'screenshots/dashboard.png',
     alt: "Nudge dashboard back online with the queue drained and routines up to date",
   },
   {
     title: 'Resolve conflicts with a diff',
     body: "If someone else edited the same thing while you were gone, Nudge opens a modal with a per-field diff. Overwrite with your version or discard — not a guess.",
-    src: 'screenshots/11-conflict-modal.png',
+    src: 'screenshots/conflict-modal.png',
     alt: "Nudge conflict resolution modal with a per-field diff",
   },
 ]
@@ -38,14 +38,14 @@ const lifecycleSteps = [
     kind: 'capture',
     title: 'See your loop',
     body: "Routines for anything recurring — medication, filters, the plants. Some tracked against stock, some not. Share any of them with the household.",
-    src: 'screenshots/marketing/lifecycle-02-dashboard.png',
+    src: 'screenshots/dashboard.png',
     alt: 'Nudge dashboard with four routines, one shared with a contact',
   },
   {
     kind: 'capture',
     title: 'Track your stock',
     body: "Attach a consumable to a routine. Nudge tracks lots and expiries individually, and warns you 90 days before the first lot goes off.",
-    src: 'screenshots/marketing/lifecycle-03-stock.png',
+    src: 'screenshots/inventory.png',
     alt: 'Nudge inventory with five stock items, one shared, and lot-level expiry dates',
   },
   {
@@ -60,7 +60,7 @@ const lifecycleSteps = [
     kind: 'capture',
     title: 'Complete with a lot',
     body: "Tap done. If the stock has multiple lots, Nudge picks the First-Expired-First-Out by default — you just confirm.",
-    src: 'screenshots/marketing/lifecycle-05-lot-selection.png',
+    src: 'screenshots/lot-selection.png',
     alt: 'Nudge lot-selection modal showing two Vitamin D lots ordered by expiry date',
   },
 ] as const
@@ -77,15 +77,15 @@ const features = [
 ]
 
 const screenshots = [
-  { src: 'screenshots/02-dashboard.png', alt: 'Dashboard — due and upcoming routines', caption: 'Dashboard' },
-  { src: 'screenshots/04-routine-detail.png', alt: 'Routine detail with next due date and history', caption: 'Routine detail' },
-  { src: 'screenshots/05-new-routine.png', alt: 'New-routine form with interval presets', caption: 'Create routine' },
-  { src: 'screenshots/06-inventory.png', alt: 'Inventory with stock items grouped by category', caption: 'Inventory' },
-  { src: 'screenshots/06b-stock-detail.png', alt: 'Stock detail with per-lot quantities and consumption audit', caption: 'Stock detail' },
-  { src: 'screenshots/03-dashboard-sharing.png', alt: 'Sharing popover with contacts', caption: 'Sharing' },
-  { src: 'screenshots/09-shared-dashboard.png', alt: "Recipient's dashboard with shared items", caption: 'Received share' },
-  { src: 'screenshots/07-history.png', alt: 'History of all completions', caption: 'History' },
-  { src: 'screenshots/08-settings.png', alt: 'Settings: contacts, push, language, timezone', caption: 'Settings' },
+  { src: 'screenshots/dashboard.png', alt: 'Dashboard — due and upcoming routines', caption: 'Dashboard' },
+  { src: 'screenshots/routine-detail.png', alt: 'Routine detail with next due date and history', caption: 'Routine detail' },
+  { src: 'screenshots/new-routine.png', alt: 'New-routine form with interval presets', caption: 'Create routine' },
+  { src: 'screenshots/inventory.png', alt: 'Inventory with stock items grouped by category', caption: 'Inventory' },
+  { src: 'screenshots/stock-detail.png', alt: 'Stock detail with per-lot quantities and consumption audit', caption: 'Stock detail' },
+  { src: 'screenshots/dashboard-sharing.png', alt: 'Sharing popover with contacts', caption: 'Sharing' },
+  { src: 'screenshots/shared-dashboard.png', alt: "Recipient's dashboard with shared items", caption: 'Received share' },
+  { src: 'screenshots/history.png', alt: 'History of all completions', caption: 'History' },
+  { src: 'screenshots/settings.png', alt: 'Settings: contacts, push, language, timezone', caption: 'Settings' },
 ]
 
 const faqItems = [

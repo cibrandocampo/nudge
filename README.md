@@ -1,15 +1,10 @@
 # Nudge
 
 <p align="center">
-  <a href="https://github.com/cibrandocampo/nudge"><img src="https://img.shields.io/badge/GitHub-Repository-blue?logo=github" alt="GitHub"/></a>
   <a href="https://hub.docker.com/r/cibrandocampo/nudge-backend"><img src="https://img.shields.io/badge/Docker%20Hub-backend-blue?logo=docker" alt="Docker Hub backend"/></a>
   <a href="https://hub.docker.com/r/cibrandocampo/nudge-frontend"><img src="https://img.shields.io/badge/Docker%20Hub-frontend-blue?logo=docker" alt="Docker Hub frontend"/></a>
   <a href="https://github.com/cibrandocampo/nudge/releases"><img src="https://img.shields.io/github/v/release/cibrandocampo/nudge" alt="GitHub release"/></a>
   <a href="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml"><img src="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue?logo=python" alt="Python"/></a>
-  <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/django-5.2-green?logo=django" alt="Django"/></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/react-18.3-61DAFB?logo=react&logoColor=000" alt="React"/></a>
-  <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/vite-5.4-646CFF?logo=vite&logoColor=fff" alt="Vite"/></a>
   <a href="https://codecov.io/gh/cibrandocampo/nudge"><img src="https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg" alt="codecov"/></a>
   <a href="https://github.com/cibrandocampo/nudge/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"/></a>
 </p>
@@ -20,124 +15,25 @@
   <i>A gentle reminder for recurring things.</i>
   <br/>
   Set the interval once. Get nudged at the right moment. Your server, your rules.
-  <br/><br/>
+</p>
+
+<p align="center">
   <a href="https://cibrandocampo.github.io/nudge/"><strong>See the project site →</strong></a>
+  <br/>
+  <sub>Product tour, how it works, features, screenshots and FAQ</sub>
 </p>
-
----
-
-## What it does in 30 seconds
-
-Nudge tracks the recurring jobs a household or team runs — medication, filters, pet dewormer, server backups, anything with an interval. It sends a push notification the moment something comes due, decrements the consumable it's attached to, and keeps working even when the network doesn't. Self-host it on any box that runs Docker; there is no SaaS and no public registration.
-
----
-
-### Access — secure by default
-
-<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/01-login.png" align="right" width="260" alt="Nudge login screen with username and password fields"/>
-
-Nudge has no public registration. Accounts are created by an admin, keeping the instance private and under your control. Authentication uses short-lived JWT access tokens with a rotating refresh token — sessions stay alive without prompting for credentials repeatedly, and the API rejects any unauthenticated request. The backend and database are never exposed outside the Docker network; only the frontend container has a public-facing port.
-
-<br clear="right"/>
-
----
-
-## Offline-first, sync when you're back
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/10-offline-banner.png" width="260" alt="Nudge dashboard with the offline banner at the top and a pending mutation counter in the header"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/dashboard.png" width="240" alt="Nudge dashboard with due and upcoming routines, sharing indicators, and inline stock status"/>
   &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/11-conflict-modal.png" width="260" alt="Nudge conflict resolution modal showing a per-field diff between the local edit and the server's current version"/>
+  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/lot-selection.png" width="240" alt="Nudge lot-selection modal with two lots of Vitamin D ordered by expiry date (FEFO)"/>
 </p>
-
-- **Tap it offline. The queue keeps the tap.** Mark-done, edits, new routines — every mutation is captured in IndexedDB when the network is missing, with an optimistic update so the UI reacts immediately.
-- **Comes back online. The queue drains in the background.** A reachability probe polls the backend (not just `navigator.onLine`, which lies on captive portals). As soon as it sees a 2xx, the sync worker drains the queue with backoff and invalidates only the caches that were touched.
-- **Conflict? Solve it with a visual diff, not a guess.** If the server rejects a replay with 412 (someone else edited the same resource), Nudge opens a modal with a per-field diff. Overwrite with your version or discard — whichever matches your intent.
-
-Idempotency keys ride along on every mutation so the worker can retry safely: if the original request reached the server before the response made it to your device, the replay returns the cached response instead of creating a duplicate.
-
----
-
-### Dashboard and routine detail — your schedule, always in view
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/02-dashboard.png" width="260" alt="Nudge dashboard showing due and upcoming recurring tasks with push notification indicators"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/04-routine-detail.png" width="260" alt="Nudge routine detail page showing next due date, linked stock usage, and completion history"/>
-</p>
-
-The dashboard is a single view of what is due now and what is coming up. Each routine card shows how overdue or how close to due it is. Tapping one opens the detail view, where you see the exact next due date alongside a human-readable relative time ("In 3 days · 13 Mar, 10:30"), the full completion history, and the current stock level if a consumable is attached.
-
-Notifications work in three stages: a daily heads-up at your chosen time, a due alert the moment the interval expires, and follow-up reminders every 8 hours until you mark the task as done.
-
----
-
-### Creating a routine — simple by design
-
-<img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/05-new-routine.png" align="left" width="260" alt="Nudge form for creating a new recurring task with name, interval, and optional stock link"/>
-
-Setting up a routine takes seconds. Give it a name, pick an interval preset (every day, every 8 hours, weekly, …) or set a custom one in hours, and optionally link a consumable stock item with the amount used per completion. That is all Nudge needs to start tracking and notifying.
-
-Routines can be paused at any time without losing their history, and re-activated when needed. A `last_done_at` input backdates the first entry so the routine isn't immediately overdue when you migrate in from a spreadsheet.
-
-<br clear="left"/>
-
----
-
-### Inventory and stock detail — track what you consume
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06-inventory.png" width="260" alt="Nudge inventory screen with stock items, lot numbers, quantities, and expiry dates grouped by category"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/06b-stock-detail.png" width="260" alt="Nudge stock detail page with per-lot quantities, expiries, consumption audit, and a depletion estimate"/>
-</p>
-
-Attach a consumable to any routine and Nudge decrements stock automatically each time you log a completion, using FEFO order (First Expired, First Out) across lots. Stock can be organised into categories — Health, Home, Pets, or any group you define — and each lot carries its own quantity and optional expiry date. Nudge warns you 90 days before anything expires so you always have time to restock.
-
-The stock detail view adds a lot-level audit: quantity per lot, expiry warnings, a consumption log of every time a lot was drawn down, and a depletion estimate derived from your real consumption rate.
-
----
-
-### Sharing — built for households and teams
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/03-dashboard-sharing.png" width="260" alt="Nudge sharing popover showing a list of contacts to share a routine with, with selected contacts highlighted"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/09-shared-dashboard.png" width="260" alt="Nudge dashboard from a recipient's perspective showing routines shared by another user with an owner label"/>
-</p>
-
-Share any routine or stock item with people you trust. A sharing popover lets you pick contacts with a single tap — no accidental navigation on mobile. The recipient gets a push notification the moment something is shared with them, and the shared item appears on their dashboard with an owner label. They can mark it as done too, which counts for both of you.
-
----
-
-### History and settings — full control, zero friction
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/07-history.png" width="260" alt="Nudge history page showing a paginated log of all completed routines with timestamps and notes"/>
-  &nbsp;&nbsp;
-  <img src="https://raw.githubusercontent.com/cibrandocampo/nudge/main/docs/screenshots/08-settings.png" width="260" alt="Nudge settings page with contacts, push subscription, language selector, timezone picker, and daily notification time input"/>
-</p>
-
-The history page gives you a paginated log of every completion across all routines, with inline note editing. Settings let each user independently manage their contacts, enable or disable push notifications, choose their language (English, Spanish, or Galician), their local timezone — so notifications fire at the right clock time year-round, DST included — and their preferred daily heads-up time.
-
----
-
-## Features at a glance
-
-- **Offline-first PWA** — Mutations queue locally and sync automatically on reconnect. Conflict resolution with visual diff. Idempotent retries.
-- **Push notifications** — Browser web push when something comes due. Daily heads-up, due alert, and follow-up reminders every 8 hours until marked done.
-- **Sharing** — Share routines and stock items with trusted contacts. Shared items show up on the recipient's dashboard with an owner label.
-- **Inventory tracking** — Consumables auto-decrement on completion using FEFO order. Per-lot expiry warnings 90 days in advance.
-- **Timezone-aware** — Notification schedule follows your local time and adjusts automatically for daylight saving.
-- **Multilingual** — English, Spanish, and Galician.
-- **Multi-user** — Accounts managed by an admin. No public registration, keeping the instance private and yours.
-- **Install as a native-feeling app** — Add to home screen on iOS and Android, then open from the icon like any app.
 
 ---
 
 ## Self-hosting and technical details
 
-*The rest of this document is for people who want to run their own instance.*
+What follows is the reference for running your own instance. For what Nudge does and how it looks in use, see the [project site](https://cibrandocampo.github.io/nudge/).
 
 ### Quick start
 
