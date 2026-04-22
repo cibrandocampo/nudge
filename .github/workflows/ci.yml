@@ -62,6 +62,13 @@ jobs:
           DJANGO_DEBUG: 'True'
           DJANGO_ALLOWED_HOSTS: localhost
       - run: coverage xml
+      # `coverage xml` runs from `backend/`, so the filename attributes in
+      # coverage.xml are relative to that dir (e.g. `apps/routines/models.py`).
+      # Codecov ingests those paths verbatim and can't map them back to the
+      # repo (the real path is `backend/apps/routines/models.py`), so files
+      # upload but don't appear in the code tree. Prefix `backend/` to every
+      # `filename="..."` before the upload so the paths resolve.
+      - run: sed -i 's|filename="|filename="backend/|g' coverage.xml
       - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
