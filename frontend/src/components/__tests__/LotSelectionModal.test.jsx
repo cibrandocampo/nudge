@@ -142,7 +142,7 @@ describe('LotSelectionModal', () => {
     renderWithProviders(
       <LotSelectionModal routine={singleRoutine} lots={mockLots} onConfirm={onConfirm} onCancel={onCancel} />,
     )
-    fireEvent.click(screen.getByRole('dialog'))
+    fireEvent.click(screen.getByRole('dialog').parentElement)
     expect(onCancel).toHaveBeenCalled()
   })
 

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useClickOutside } from '../hooks/useClickOutside'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import cx from '../utils/cx'
+import { formatShortDate } from '../utils/time'
+import Icon from './Icon'
 import s from './DateRangePicker.module.css'
 
 function daysAgo(n) {
@@ -43,12 +47,8 @@ function formatLabel(t, dateFrom, dateTo) {
   const preset = findActivePreset(dateFrom, dateTo)
   if (preset) return t(`dateRange.${preset}`)
   if (!dateFrom && !dateTo) return t('dateRange.allTime')
-  const fmt = (d) => {
-    const date = new Date(d + 'T00:00:00')
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-  }
-  const from = dateFrom ? fmt(dateFrom) : '...'
-  const to = dateTo ? fmt(dateTo) : '...'
+  const from = dateFrom ? formatShortDate(dateFrom, { withYear: false }) : '...'
+  const to = dateTo ? formatShortDate(dateTo, { withYear: false }) : '...'
   return `${from} – ${to}`
 }
 
@@ -66,21 +66,8 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
     }
   }, [open, dateFrom, dateTo])
 
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    function handleKey(e) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [open])
+  useClickOutside(ref, () => setOpen(false), open)
+  useEscapeKey(() => setOpen(false), open)
 
   const selectPreset = (preset) => {
     onChange({ dateFrom: preset.from(), dateTo: preset.to() })
@@ -103,7 +90,9 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        {formatLabel(t, dateFrom, dateTo)}
+        <Icon name="calendar" size="sm" className={s.triggerIcon} />
+        <span className={s.triggerLabel}>{formatLabel(t, dateFrom, dateTo)}</span>
+        <Icon name="chevron-down" size="sm" className={s.triggerChevron} />
       </button>
 
       {open && (

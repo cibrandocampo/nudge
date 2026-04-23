@@ -2,29 +2,22 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ConfirmModal from '../components/ConfirmModal'
+import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
+import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
-import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import cx from '../utils/cx'
-import { formatAbsoluteDate } from '../utils/time'
+import { groupEntriesByDate } from '../utils/historyGroups'
+import { parseIntSafe } from '../utils/number'
+import { formatShortDate } from '../utils/time'
 import shared from '../styles/shared.module.css'
 import s from './StockDetailPage.module.css'
-
-function formatExpiry(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-}
-
-function formatDepletionDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function borderTokens(stock) {
   if (!stock || stock.quantity === 0) return { border: shared.cardBorderDanger, dot: shared.dotDanger }
@@ -42,13 +35,11 @@ export default function StockDetailPage() {
   const { data: stock, isLoading, isError, error } = useStock(stockId)
   const { data: groups = [] } = useStockGroups()
   const { data: consumptions = [] } = useStockConsumptions({ stock: String(stockId), enabled: !isNaN(stockId) })
-  const updateStock = useUpdateStock()
   const deleteStock = useDeleteStock()
   const createLot = useCreateStockLot()
   const deleteLot = useDeleteStockLot()
+  const reachable = useServerReachable()
 
-  const [editingName, setEditingName] = useState(false)
-  const [nameDraft, setNameDraft] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmRemoveLot, setConfirmRemoveLot] = useState(null)
   const [addForm, setAddForm] = useState({ qty: '', expiry: '', lotNumber: '', adding: false })
@@ -63,30 +54,10 @@ export default function StockDetailPage() {
   const tokens = borderTokens(stock)
   const groupName = groups.find((g) => g.id === stock.group)?.name
 
-  const startEditName = () => {
-    setNameDraft(stock.name)
-    setEditingName(true)
-  }
-
-  const saveName = async () => {
-    const trimmed = nameDraft.trim()
-    setEditingName(false)
-    if (!trimmed || trimmed === stock.name) return
-    try {
-      await updateStock.mutateAsync({
-        stockId,
-        patch: { name: trimmed },
-        updatedAt: stock.updated_at,
-      })
-    } catch {
-      showToast({ type: 'error', message: t('common.actionError') })
-    }
-  }
-
   const handleAddLot = async (e) => {
     e.preventDefault()
-    const qty = parseInt(addForm.qty, 10)
-    if (isNaN(qty) || qty < 0) return
+    const qty = parseIntSafe(addForm.qty, -1)
+    if (qty < 0) return
     setAddForm((f) => ({ ...f, adding: true }))
     try {
       await createLot.mutateAsync({
@@ -122,39 +93,56 @@ export default function StockDetailPage() {
     }
   }
 
+  const isOwner = stock.is_owner !== false
+
   return (
     <div className={s.container}>
-      <div className={s.header}>
-        <Link to="/inventory" className={s.backLink} aria-label={t('stockDetail.back')}>
-          <Icon name="chevron-left" size="sm" />
-          <span>{t('stockDetail.back')}</span>
+      <div className={shared.topBar}>
+        <Link to="/inventory" className={s.backLink} aria-label={t('common.backToInventory')}>
+          <span>{t('common.backToInventory')}</span>
         </Link>
+        <div className={s.topActions}>
+          <Link
+            to={`/history?type=consumptions&stock=${stockId}`}
+            className={cx(shared.btnAdd, shared.btnAddSecondary)}
+            aria-label={t('stockDetail.viewAll')}
+            title={t('stockDetail.viewAll')}
+          >
+            <Icon name="history" />
+          </Link>
+          {isOwner && (
+            <>
+              <button
+                type="button"
+                className={cx(shared.btnAdd, shared.btnAddDanger)}
+                onClick={() => setConfirmDelete(true)}
+                aria-label={t('stockDetail.deleteStock')}
+                title={t('stockDetail.deleteStock')}
+              >
+                <Icon name="trash" />
+              </button>
+              <button
+                type="button"
+                className={cx(shared.btnAdd, !reachable && shared.disabled)}
+                onClick={() => navigate(`/inventory/${stockId}/edit`)}
+                disabled={!reachable}
+                aria-label={t('stockDetail.edit')}
+                title={!reachable ? t('offline.requiresConnection') : t('stockDetail.edit')}
+              >
+                <Icon name="pencil" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className={cx(shared.card, tokens.border)}>
         <div className={shared.cardHeader}>
           <div className={shared.cardMeta}>
-            {editingName ? (
-              <input
-                className={cx(shared.input, s.nameInput)}
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                autoFocus
-                onBlur={saveName}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveName()
-                  if (e.key === 'Escape') setEditingName(false)
-                }}
-              />
-            ) : (
-              <button type="button" className={s.titleBtn} onClick={startEditName}>
-                <span className={cx(shared.cardTitle, shared.cardTitleFlex)}>
-                  <span>{stock.name}</span>
-                  <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
-                  <Icon name="edit" size="sm" className={s.editHint} />
-                </span>
-              </button>
-            )}
+            <span className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+              <span>{stock.name}</span>
+              <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
+            </span>
             <span className={shared.cardSubtitle}>
               <span className={cx(shared.dot, tokens.dot)} />
               <span className={shared.stockQty}>
@@ -165,7 +153,7 @@ export default function StockDetailPage() {
                   className={cx(shared.stockDepletion, stock.is_low_stock && shared.stockDepletionWarn)}
                   data-testid="depletion-date"
                 >
-                  {t('inventory.depletionDate', { date: formatDepletionDate(stock.estimated_depletion_date) })}
+                  {t('inventory.depletionDate', { date: formatShortDate(stock.estimated_depletion_date) })}
                 </span>
               )}
             </span>
@@ -179,97 +167,102 @@ export default function StockDetailPage() {
 
       <section className={s.section}>
         <p className={shared.sectionTitle}>{t('stockDetail.lots')}</p>
-        {stock.lots.length > 0 && (
-          <div className={s.lotsList}>
-            {stock.lots.map((lot) => (
-              <div key={lot.id} className={shared.lotRow} data-testid="lot-row">
-                <div className={shared.lotInfo}>
-                  {lot.lot_number && <span className={shared.lotNumber}>{lot.lot_number}</span>}
-                  <span className={shared.lotQty}>
-                    {lot.quantity} {t('common.unit')}
-                  </span>
-                  <span className={shared.lotExpiry}>
-                    {lot.expiry_date ? formatExpiry(lot.expiry_date) : t('inventory.noExpiry')}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className={cx(shared.btnIcon, shared.btnIconDelete)}
-                  onClick={() => setConfirmRemoveLot({ lotId: lot.id, updatedAt: lot.updated_at })}
-                  aria-label={t('inventory.deleteTooltip')}
-                  title={t('inventory.deleteTooltip')}
-                >
-                  <Icon name="trash" size="sm" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className={s.lotsCard}>
+          {stock.lots.length > 0 && (
+            <div className={s.lotsList}>
+              {stock.lots.map((lot) => {
+                const isExpiring = (stock.expiring_lots ?? []).some((el) => el.id === lot.id)
+                return (
+                  <div
+                    key={lot.id}
+                    className={s.lotRow}
+                    data-testid="lot-row"
+                    data-expiring={isExpiring ? 'true' : 'false'}
+                  >
+                    <div className={shared.lotInfo}>
+                      {lot.lot_number && <span className={shared.lotNumber}>{lot.lot_number}</span>}
+                      <span className={shared.lotQty}>
+                        {lot.quantity} {t('common.unit')}
+                      </span>
+                      <span className={shared.lotExpiry}>
+                        {lot.expiry_date ? formatShortDate(lot.expiry_date, { withDay: false }) : t('inventory.noExpiry')}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={cx(shared.btnIcon, shared.btnIconDelete)}
+                      onClick={() => setConfirmRemoveLot({ lotId: lot.id, updatedAt: lot.updated_at })}
+                      aria-label={t('inventory.deleteTooltip')}
+                      title={t('inventory.deleteTooltip')}
+                    >
+                      <Icon name="trash" size="sm" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-        <form onSubmit={handleAddLot} className={s.addLotForm}>
-          <div className={s.addLotRow}>
-            <div className={s.addLotField}>
-              <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
-              <input
-                className={cx(shared.input, s.inputNarrow)}
-                type="number"
-                min={0}
-                placeholder="0"
-                value={addForm.qty}
-                onChange={(e) => setAddForm((f) => ({ ...f, qty: e.target.value }))}
-                required
-              />
+          <form onSubmit={handleAddLot} className={s.addLotForm}>
+            <div className={s.addLotRow}>
+              <div className={s.addLotField}>
+                <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
+                <input
+                  className={cx(shared.input, s.inputNarrow)}
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={addForm.qty}
+                  onChange={(e) => setAddForm((f) => ({ ...f, qty: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className={s.addLotField}>
+                <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
+                <input
+                  className={shared.input}
+                  type="date"
+                  value={addForm.expiry}
+                  onChange={(e) => setAddForm((f) => ({ ...f, expiry: e.target.value }))}
+                />
+              </div>
+              <div className={cx(s.addLotField, s.inputFlex)}>
+                <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
+                <input
+                  className={shared.input}
+                  type="text"
+                  placeholder={t('inventory.lotNumber')}
+                  value={addForm.lotNumber}
+                  onChange={(e) => setAddForm((f) => ({ ...f, lotNumber: e.target.value }))}
+                />
+              </div>
             </div>
-            <div className={s.addLotField}>
-              <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
-              <input
-                className={shared.input}
-                type="date"
-                value={addForm.expiry}
-                onChange={(e) => setAddForm((f) => ({ ...f, expiry: e.target.value }))}
-              />
-            </div>
-            <div className={cx(s.addLotField, s.inputFlex)}>
-              <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
-              <input
-                className={shared.input}
-                type="text"
-                placeholder={t('inventory.lotNumber')}
-                value={addForm.lotNumber}
-                onChange={(e) => setAddForm((f) => ({ ...f, lotNumber: e.target.value }))}
-              />
-            </div>
-          </div>
-          <button type="submit" className={s.primaryBtn} disabled={addForm.adding}>
-            {addForm.adding ? t('inventory.adding') : t('inventory.addLot')}
-          </button>
-        </form>
+            <button type="submit" className={s.primaryBtn} disabled={addForm.adding}>
+              {addForm.adding ? t('inventory.adding') : t('inventory.addLot')}
+            </button>
+          </form>
+        </div>
       </section>
 
       {consumptions.length > 0 && (
         <section className={s.section}>
           <p className={shared.sectionTitle}>{t('stockDetail.recentConsumption')}</p>
-          <ul className={s.consumptionList}>
-            {consumptions.slice(0, 5).map((c) => (
-              <li key={c.id} className={s.consumptionRow}>
-                <span className={s.consumptionQty}>
-                  {c.quantity} {t('common.unit')}
-                </span>
-                <span className={s.consumptionDate}>{formatAbsoluteDate(c.created_at)}</span>
-                {c.consumed_by_username && <span className={shared.sharedOwner}>{c.consumed_by_username}</span>}
-              </li>
+          <div className={s.entryList}>
+            {groupEntriesByDate(
+              consumptions.slice(0, 5).map((c) => ({ ...c, _type: 'consumption' })),
+            ).map(({ dateLabel, items }) => (
+              <section key={dateLabel} className={s.dayGroup}>
+                <p className={s.dayHeader}>{dateLabel}</p>
+                <div className={s.dayList}>
+                  {items.map((entry) => (
+                    <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
+                  ))}
+                </div>
+              </section>
             ))}
-          </ul>
+          </div>
         </section>
       )}
-
-      <section className={cx(s.section, s.dangerZone)}>
-        <p className={shared.sectionTitle}>{t('stockDetail.dangerZone')}</p>
-        <button type="button" className={s.dangerBtn} onClick={() => setConfirmDelete(true)}>
-          <Icon name="trash" size="sm" />
-          {t('stockDetail.deleteStock')}
-        </button>
-      </section>
 
       {confirmRemoveLot && (
         <ConfirmModal

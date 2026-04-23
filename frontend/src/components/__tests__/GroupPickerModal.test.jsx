@@ -77,7 +77,7 @@ describe('GroupPickerModal', () => {
   it('calls onClose when overlay clicked', () => {
     const onClose = vi.fn()
     renderWithProviders(<GroupPickerModal {...defaultProps} onClose={onClose} />)
-    fireEvent.click(screen.getByRole('dialog'))
+    fireEvent.click(screen.getByRole('dialog').parentElement)
     expect(onClose).toHaveBeenCalled()
   })
 

@@ -32,12 +32,10 @@ test.describe('Auth', () => {
 
   test('sign out clears session', async ({ page }) => {
     await login(page)
-    // Header user button is now an <Icon name="user" /> with aria-label = username;
-    // the previous `▾` chevron was removed in the design refresh. Admin staff
-    // users also render a separate "Admin" button (Django admin link) — so
-    // use exact match to disambiguate from SEED.admin.username ("admin").
-    await page.getByRole('button', { name: SEED.admin.username, exact: true }).click()
-    await page.getByRole('button', { name: 'Sign out' }).click()
+    // The old user-menu dropdown was replaced by a single Header button
+    // whose aria-label is "Sign out". `exact: true` disambiguates it
+    // from the "Sign in" button on the login page that renders after.
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click()
     await expect(page).toHaveURL('/login')
     await page.goto('/')
     await expect(page).toHaveURL('/login')

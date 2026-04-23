@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ConfirmModal from '../components/ConfirmModal'
+import HistoryEntryCard from '../components/HistoryEntryCard'
+import Icon from '../components/Icon'
 import LotSelectionModal from '../components/LotSelectionModal'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
@@ -12,7 +14,8 @@ import { useDeleteRoutine } from '../hooks/mutations/useDeleteRoutine'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
 import cx from '../utils/cx'
-import { formatAbsoluteDate, formatRelativeTime, getLocale } from '../utils/time'
+import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
+import { groupEntriesByDate } from '../utils/historyGroups'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import shared from '../styles/shared.module.css'
 import s from './RoutineDetailPage.module.css'
@@ -118,14 +121,47 @@ export default function RoutineDetailPage() {
       : shared.cardBorderWarning
 
   return (
-    <div className={s.container}>
+    <div>
       <div className={shared.topBar}>
         <Link to="/" className={s.back}>
-          {t('routine.detail.back')}
+          {t('common.backToRoutines')}
         </Link>
-        <Link to={`/routines/${id}/edit`} className={cx(shared.btn, shared.btnSecondary, shared.btnSm)}>
-          {t('routine.detail.edit')}
-        </Link>
+        <div className={s.topActions}>
+          <Link
+            to={`/history?type=routines&routine=${routine.id}`}
+            className={cx(shared.btnAdd, shared.btnAddSecondary)}
+            aria-label={t('routine.detail.viewAll')}
+            title={t('routine.detail.viewAll')}
+          >
+            <Icon name="history" />
+          </Link>
+          <button
+            type="button"
+            className={cx(shared.btnAdd, shared.btnAddSecondary)}
+            onClick={toggleActive}
+            aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+            title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+          >
+            <Icon name={routine.is_active ? 'pause' : 'play'} />
+          </button>
+          <button
+            type="button"
+            className={cx(shared.btnAdd, shared.btnAddDanger)}
+            onClick={() => setShowDeleteConfirm(true)}
+            aria-label={t('routine.detail.delete')}
+            title={t('routine.detail.delete')}
+          >
+            <Icon name="trash" />
+          </button>
+          <Link
+            to={`/routines/${id}/edit`}
+            className={shared.btnAdd}
+            aria-label={t('routine.detail.edit')}
+            title={t('routine.detail.edit')}
+          >
+            <Icon name="pencil" />
+          </Link>
+        </div>
       </div>
 
       <h1 className={s.title}>
@@ -191,33 +227,21 @@ export default function RoutineDetailPage() {
         <section className={s.section}>
           <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
           <div className={s.entryList}>
-            {entries.map((e) => (
-              <div key={e.id} className={cx(shared.card, shared.cardBorderSuccess, s.entry)}>
-                <span className={s.entryDate}>
-                  {new Date(e.client_created_at ?? e.created_at).toLocaleString(getLocale())}
-                </span>
-                {e.notes && <span className={s.notes}>{e.notes}</span>}
-              </div>
-            ))}
+            {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(
+              ({ dateLabel, items }) => (
+                <section key={dateLabel} className={s.dayGroup}>
+                  <p className={s.dayHeader}>{dateLabel}</p>
+                  <div className={s.dayList}>
+                    {items.map((entry) => (
+                      <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
+                    ))}
+                  </div>
+                </section>
+              ),
+            )}
           </div>
-          <Link to="/history" className={s.viewAll}>
-            {t('routine.detail.viewAll')}
-          </Link>
         </section>
       )}
-
-      <div className={s.actions}>
-        <button type="button" className={cx(shared.btn, shared.btnSecondary, s.actionBtn)} onClick={toggleActive}>
-          {routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-        </button>
-        <button
-          type="button"
-          className={cx(shared.btn, shared.btnDanger, s.actionBtn)}
-          onClick={() => setShowDeleteConfirm(true)}
-        >
-          {t('routine.detail.delete')}
-        </button>
-      </div>
 
       {showDeleteConfirm && (
         <ConfirmModal

@@ -1,4 +1,4 @@
-import { formatAbsoluteDate, formatRelativeTime } from '../time'
+import { formatAbsoluteDate, formatRelativeTime, formatShortDate } from '../time'
 
 describe('formatAbsoluteDate', () => {
   it('returns dash for null', () => {
@@ -61,5 +61,41 @@ describe('formatRelativeTime', () => {
   it('returns N days for multiple days in the future', () => {
     const inThreeDays = new Date(Date.now() + 72 * 3600000).toISOString()
     expect(formatRelativeTime(inThreeDays)).toMatch(/In 3 days/)
+  })
+})
+
+describe('formatShortDate', () => {
+  it('returns empty string for null/undefined/empty', () => {
+    expect(formatShortDate(null)).toBe('')
+    expect(formatShortDate(undefined)).toBe('')
+    expect(formatShortDate('')).toBe('')
+  })
+
+  it('returns empty string for an invalid date string', () => {
+    expect(formatShortDate('not-a-date')).toBe('')
+  })
+
+  it('formats a YYYY-MM-DD date with day, short month and year by default', () => {
+    const out = formatShortDate('2025-03-15')
+    expect(out).toContain('2025')
+    expect(out).toContain('15')
+    expect(out.toLowerCase()).toMatch(/mar/)
+  })
+
+  it('omits the year when withYear is false', () => {
+    const out = formatShortDate('2025-03-15', { withYear: false })
+    expect(out).not.toContain('2025')
+    expect(out).toContain('15')
+  })
+
+  it('omits the day when withDay is false', () => {
+    const out = formatShortDate('2025-03-15', { withDay: false })
+    expect(out).not.toContain('15')
+    expect(out).toContain('2025')
+  })
+
+  it('accepts a full ISO datetime string', () => {
+    const out = formatShortDate('2020-03-15T09:00:00Z')
+    expect(out).toContain('2020')
   })
 })

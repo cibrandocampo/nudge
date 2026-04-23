@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { remove } from '../offline/queue'
 import { forceSync } from '../offline/sync'
+import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
 import s from './PendingBadge.module.css'
 
@@ -13,15 +15,6 @@ const STATUS_ICON = {
   conflict: 'git-merge',
 }
 
-function formatDate(locale, iso) {
-  return new Date(iso).toLocaleString(locale, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 /**
  * In-header chip that surfaces how many offline mutations are waiting to
  * sync. Click opens a dropdown listing each entry with its status, origin
@@ -30,20 +23,11 @@ function formatDate(locale, iso) {
  */
 export default function PendingBadge() {
   const entries = useQueueEntries()
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef(null)
 
-  useEffect(() => {
-    if (!open) return
-    const handler = (event) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  useClickOutside(wrapperRef, () => setOpen(false), open)
 
   // Sync-errors toast (T065) dispatches this event so the user can jump to
   // the pending panel without hunting for the badge.
@@ -97,7 +81,7 @@ export default function PendingBadge() {
                     {entry.method} {entry.endpoint}
                   </div>
                   <div className={s.itemMeta}>
-                    {t(`offline.status.${entry.status}`)} · {formatDate(i18n.language, entry.createdAt)}
+                    {t(`offline.status.${entry.status}`)} · {formatShortDate(entry.createdAt)}
                   </div>
                 </div>
                 <button

@@ -2,19 +2,17 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import EmptyCard from '../components/EmptyCard'
 import Icon from '../components/Icon'
 import LotSelectionModal from '../components/LotSelectionModal'
 import RoutineCard from '../components/RoutineCard'
-import ShareModal from '../components/ShareModal'
 import { useToast } from '../components/useToast'
 import { useRoutines } from '../hooks/useRoutines'
-import { useContacts } from '../hooks/useContacts'
 import { useDashboard } from '../hooks/useDashboard'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockList } from '../hooks/useStock'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
-import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
 import cx from '../utils/cx'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import shared from '../styles/shared.module.css'
@@ -24,11 +22,14 @@ export default function DashboardPage() {
   const { t } = useTranslation()
   const { showToast } = useToast()
   const { data, isLoading, isError } = useDashboard()
-  const { data: contacts = [] } = useContacts()
   const reachable = useServerReachable()
   const queryClient = useQueryClient()
   // Keep full routine list warm so the router detail page loads instantly.
-  useRoutines()
+  // Also feeds the dashboard's empty-state decision: the server's `due` +
+  // `upcoming` lists may be both empty because the user just completed a
+  // routine (positive "all caught up") or because they've never created
+  // one (suggest creating) — we tell them apart from the full list count.
+  const { data: allRoutinesData = [] } = useRoutines()
   // Keep the stock cache warm so the lot-selection modal can derive its
   // list from `['stock', id].lots` without an extra HTTP call — and still
   // work offline if the user hasn't visited the inventory page yet.
@@ -36,11 +37,9 @@ export default function DashboardPage() {
 
   const [completing, setCompleting] = useState(null)
   const [lotModal, setLotModal] = useState(null)
-  const [shareRoutineId, setShareRoutineId] = useState(null)
 
   const logMutation = useLogRoutine()
   const undoLogMutation = useUndoLogRoutine()
-  const updateMutation = useUpdateRoutine()
 
   const dueList = data?.due ?? []
   const upcomingList = data?.upcoming ?? []
@@ -98,25 +97,6 @@ export default function DashboardPage() {
     await runLog(routineId, lotSelections)
   }
 
-  const handleToggleShare = async (userId) => {
-    // ShareModal is only mounted when shareRoutineId is set and the routine
-    // exists in allRoutines, so `routine` can only be missing if the routine
-    // was removed between the modal opening and the toggle firing.
-    const routine = allRoutines.find((r) => r.id === shareRoutineId)
-    if (!routine) return
-    const current = routine.shared_with || []
-    const newShared = current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
-    try {
-      await updateMutation.mutateAsync({
-        routineId: shareRoutineId,
-        patch: { shared_with: newShared },
-        updatedAt: routine.updated_at,
-      })
-    } catch {
-      showToast({ type: 'error', message: t('common.actionError') })
-    }
-  }
-
   if (isLoading) return <div className={shared.spinner} data-testid="spinner" />
   if (isError) return <p className={shared.muted}>{t('common.error')}</p>
 
@@ -145,17 +125,19 @@ export default function DashboardPage() {
         routines={dueList}
         onMarkDone={markDone}
         completing={completing}
-        emptyMessage={t('dashboard.empty')}
-        contacts={contacts}
-        onShare={setShareRoutineId}
+        empty={
+          allRoutinesData.length === 0 ? (
+            <EmptyCard title={t('dashboard.noRoutinesTitle')} message={t('dashboard.noRoutinesBody')} />
+          ) : (
+            <EmptyCard title={t('dashboard.empty')} message={t('dashboard.emptyBody')} />
+          )
+        }
       />
       <Section
         title={t('dashboard.upcoming')}
         routines={upcomingList}
         onMarkDone={markDone}
         completing={completing}
-        contacts={contacts}
-        onShare={setShareRoutineId}
       />
       {lotModal && (
         <LotSelectionModal
@@ -165,42 +147,28 @@ export default function DashboardPage() {
           onCancel={() => setLotModal(null)}
         />
       )}
-      {shareRoutineId &&
-        (() => {
-          const shareRoutine = allRoutines.find((r) => r.id === shareRoutineId)
-          return shareRoutine ? (
-            <ShareModal
-              contacts={contacts}
-              sharedWith={shareRoutine.shared_with}
-              onToggle={handleToggleShare}
-              onClose={() => setShareRoutineId(null)}
-            />
-          ) : null
-        })()}
     </div>
   )
 }
 
-function Section({ title, routines, onMarkDone, completing, emptyMessage, contacts, onShare }) {
+function Section({ title, routines, onMarkDone, completing, empty }) {
   return (
     <section className={s.section}>
       <h2 className={shared.sectionTitle}>{title}</h2>
-      {routines.length === 0 && emptyMessage ? (
-        <p className={shared.muted}>{emptyMessage}</p>
-      ) : routines.length > 0 ? (
-        <div className={s.list}>
-          {routines.map((r) => (
-            <RoutineCard
-              key={r.id}
-              routine={r}
-              onMarkDone={onMarkDone}
-              completing={completing === r.id}
-              contacts={contacts}
-              onShare={onShare}
-            />
-          ))}
-        </div>
-      ) : null}
+      {routines.length === 0 && empty
+        ? empty
+        : routines.length > 0 && (
+            <div className={s.list}>
+              {routines.map((r) => (
+                <RoutineCard
+                  key={r.id}
+                  routine={r}
+                  onMarkDone={onMarkDone}
+                  completing={completing === r.id}
+                />
+              ))}
+            </div>
+          )}
     </section>
   )
 }

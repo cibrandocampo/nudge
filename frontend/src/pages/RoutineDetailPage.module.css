@@ -1,7 +1,3 @@
-.container {
-  max-width: 540px;
-}
-
 .back {
   color: var(--c-text-3);
   text-decoration: none;
@@ -65,41 +61,31 @@
 .entryList {
   display: flex;
   flex-direction: column;
+  /* Section header (sectionTitle) has no bottom margin, so breathe here. */
+  margin-top: 0.5rem;
 }
 
-.entry {
+.dayGroup {
+  margin-bottom: 1rem;
+}
+
+.dayHeader {
+  margin: 0 0 0 0.125rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.dayList {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  /* Matches HistoryPage — leaves room between the weekday header and the
+   * first entry card. Shared with HistoryPage's `.list` spacing. */
+  margin-top: 0.5rem;
+}
+
+.topActions {
+  display: flex;
   align-items: center;
-  padding: 0.65rem 0.75rem;
-  font-size: 0.875rem;
-  margin-bottom: 0.35rem;
-}
-
-.entryDate {
-  color: var(--c-text-3);
-}
-
-.notes {
-  color: var(--c-muted);
-  font-style: italic;
-  font-size: 0.8rem;
-}
-
-.viewAll {
-  display: inline-block;
-  margin-top: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--c-primary);
-  text-decoration: none;
-}
-
-.actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 2rem;
-}
-
-.actionBtn {
-  flex: 1;
+  gap: 0.5rem;
 }

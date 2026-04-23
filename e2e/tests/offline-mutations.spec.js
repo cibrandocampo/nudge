@@ -4,6 +4,7 @@ import {
   freshSession,
   goOffline,
   goOnline,
+  resetSeed,
   waitForServiceWorkerReady,
   expectOfflineBanner,
   expectPendingBadge,
@@ -23,6 +24,11 @@ import {
  */
 test.describe('offline-mutations', () => {
   test.beforeEach(async ({ page, context }) => {
+    // Reset backend state per-test. Mutation tests (mark done, rename,
+    // edit note) leave real data behind; without this, a later test sees
+    // polluted entries and `.first()` matchers land on the wrong row.
+    // Mirrors the pattern offline-sync.spec.js uses for the same reason.
+    await resetSeed(context)
     await freshSession(page, context, { loginAs: 'user1' })
     await waitForServiceWorkerReady(page)
     await expect(routineCard(page, 'takeVitamins')).toBeVisible()
@@ -138,9 +144,10 @@ test.describe('offline-mutations', () => {
   })
 
   test('botón + New routine deshabilitado offline', async ({ page, context }) => {
-    const newLink = page.getByRole('link', { name: SEED.routines.takeVitamins }) // sanity — dashboard loaded
-
-    await expect(newLink).toBeVisible()
+    // Sanity — the dashboard has rendered. The Today section's routine
+    // cards are divs (not links), so use the shared `routineCard` helper
+    // that targets `data-testid="routine-card"` rather than role=link.
+    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
 
     await goOffline(page, context)
     await expectOfflineBanner(page, { visible: true })
@@ -171,11 +178,10 @@ test.describe('offline-mutations', () => {
       await expect(page.getByRole('button', { name: label, exact: true })).toBeDisabled()
     }
 
-    // Save changes button.
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-
     // Daily time input (type=time) — read-only offline so the user cannot
-    // queue an unsendable change from the form.
+    // queue an unsendable change from the form. The new SettingsPage
+    // autosaves on blur/change; there is no "Save changes" button to
+    // assert on.
     await expect(page.locator('input[type="time"]').first()).toBeDisabled()
   })
 
@@ -190,15 +196,14 @@ test.describe('offline-mutations', () => {
       return route.abort('internetdisconnected')
     })
 
+    // SettingsPage autosaves the time input on blur. `useUpdateMe` is
+    // `queueable: false`, so on OfflineError it does NOT enqueue — the
+    // autosave's `onError` surfaces an error toast instead.
     const timeInput = page.locator('input[type="time"]').first()
     await timeInput.fill('07:30')
-    await page.getByRole('button', { name: 'Save changes' }).click()
+    await timeInput.blur()
 
-    // useUpdateMe is `queueable: false`, so on OfflineError it does NOT
-    // enqueue — it surfaces the failure. SettingsPage catches it and
-    // flips `saveStatus='offline'` which swaps the submit button's
-    // label to `t('offline.actionUnavailable')`.
-    await expect(page.getByRole('button', { name: 'Action not available offline' })).toBeVisible()
+    await expect(page.getByTestId('toast-error')).toBeVisible()
     await expectPendingBadge(page, { count: 0 })
   })
 
@@ -227,7 +232,18 @@ test.describe('offline-mutations', () => {
     await goOnline(page, context)
     await waitForSyncDrain(page)
 
+    // Wait for the post-drain entries refetch to complete before reload,
+    // otherwise the persister may still hold the pre-drain snapshot and
+    // the post-reload render paints stale entries before the new GET
+    // responds.
+    await page
+      .waitForResponse(
+        (r) => r.url().includes('/api/entries/') && r.request().method() === 'GET' && r.status() === 200,
+        { timeout: 10_000 },
+      )
+      .catch(() => null)
+
     await page.reload()
-    await expect(page.getByRole('button', { name: 'edited offline' }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'edited offline' }).first()).toBeVisible({ timeout: 10_000 })
   })
 })

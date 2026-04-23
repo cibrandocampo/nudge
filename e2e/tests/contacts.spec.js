@@ -50,11 +50,12 @@ test.describe('Settings › Contacts', () => {
     await expect(list).toContainText(SEED.admin.username)
     await expect(searchInput).toHaveValue('')
 
-    // Remove via the 🗑 button. The app shows a native window.confirm()
-    // dialog; Playwright must accept it before the mutation fires.
-    page.once('dialog', (dialog) => dialog.accept())
+    // Remove via the X button on the contact row. The app now surfaces
+    // a React-rendered ConfirmModal (no native window.confirm) — confirm
+    // inside it to fire the mutation.
     const adminRow = list.getByRole('listitem').filter({ hasText: SEED.admin.username })
     await adminRow.getByRole('button', { name: 'Remove contact', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove contact' }).click()
 
     await expect(list).not.toContainText(SEED.admin.username)
   })

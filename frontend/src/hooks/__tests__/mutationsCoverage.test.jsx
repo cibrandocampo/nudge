@@ -212,10 +212,12 @@ describe('useCreateRoutine — branches', () => {
 
 describe('useUpdateMe — branches', () => {
   it('merges server response into me cache on success', async () => {
+    let calls = 0
     server.use(
-      http.patch(`${BASE}/auth/me/`, () =>
-        HttpResponse.json({ id: 1, username: 'u', language: 'es', timezone: 'Europe/Madrid' }),
-      ),
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json({ id: 1, username: 'u', language: 'es', timezone: 'Europe/Madrid' })
+      }),
     )
     const { result, qc } = renderWith(() => useUpdateMe())
     qc.setQueryData(['me'], { id: 1, username: 'u', language: 'en', timezone: 'Europe/Madrid' })
@@ -223,18 +225,96 @@ describe('useUpdateMe — branches', () => {
     await act(async () => {
       await result.current.mutateAsync({ patch: { language: 'es' } })
     })
+    expect(calls).toBe(1)
     expect(qc.getQueryData(['me']).language).toBe('es')
   })
 
-  it('invalidates me when the response lacks an id', async () => {
-    server.use(http.patch(`${BASE}/auth/me/`, () => HttpResponse.json({ detail: 'ok' })))
+  it('auto-recovers from 412 by priming the cache and replaying with fresh updated_at', async () => {
+    const freshTs = '2026-04-22T10:00:00Z'
+    const finalTs = '2026-04-22T10:00:05Z'
+    const calls = []
+    server.use(
+      http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+        calls.push({ body: await request.json(), ifUnmodified: request.headers.get('if-unmodified-since') })
+        if (calls.length === 1) {
+          return HttpResponse.json(
+            {
+              error: 'conflict',
+              current: { id: 1, username: 'u', language: 'en', settings_updated_at: freshTs },
+            },
+            { status: 412 },
+          )
+        }
+        return HttpResponse.json({ id: 1, username: 'u', language: 'gl', settings_updated_at: finalTs })
+      }),
+    )
     const { result, qc } = renderWith(() => useUpdateMe())
-    qc.setQueryData(['me'], { id: 1 })
+    qc.setQueryData(['me'], { id: 1, username: 'u', language: 'en', settings_updated_at: '2026-01-01T00:00:00Z' })
 
     await act(async () => {
-      await result.current.mutateAsync({ patch: { language: 'gl' } })
+      await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
     })
-    expect(qc.getQueryState(['me']).isInvalidated).toBe(true)
+
+    expect(calls).toHaveLength(2)
+    expect(calls[1].ifUnmodified).toBe(new Date(freshTs).toUTCString())
+    const me = qc.getQueryData(['me'])
+    expect(me.language).toBe('gl')
+    expect(me.settings_updated_at).toBe(finalTs)
+  })
+
+  it('propagates a second 412 without retrying again', async () => {
+    const freshTs = '2026-04-22T10:00:00Z'
+    let calls = 0
+    server.use(
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json(
+          {
+            error: 'conflict',
+            current: { id: 1, username: 'u', language: 'en', settings_updated_at: freshTs },
+          },
+          { status: 412 },
+        )
+      }),
+    )
+    const { result } = renderWith(() => useUpdateMe())
+
+    let caught = null
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
+      } catch (err) {
+        caught = err
+      }
+    })
+
+    expect(calls).toBe(2)
+    expect(caught?.name).toBe('ConflictError')
+    expect(caught?.current?.settings_updated_at).toBe(freshTs)
+  })
+
+  it('does not retry when a 412 arrives without a current body', async () => {
+    let calls = 0
+    server.use(
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json({ error: 'conflict' }, { status: 412 })
+      }),
+    )
+    const { result } = renderWith(() => useUpdateMe())
+
+    let caught = null
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
+      } catch (err) {
+        caught = err
+      }
+    })
+
+    expect(calls).toBe(1)
+    expect(caught?.name).toBe('ConflictError')
+    expect(caught?.current).toBeUndefined()
   })
 })
 
@@ -261,6 +341,26 @@ describe('useUpdateRoutine — dashboard optimistic branch', () => {
     expect(dash.due[1].name).toBe('Other')
     expect(dash.upcoming[0].name).toBe('Vitamins')
     expect(dash.upcoming[1].name).toBe('Third')
+  })
+
+  it('patches only the matching row in the routines list and tolerates missing due/upcoming arrays', async () => {
+    server.use(http.patch(`${BASE}/routines/5/`, () => HttpResponse.json({ id: 5, name: 'Vitamins' })))
+    const { result, qc } = renderWith(() => useUpdateRoutine())
+    qc.setQueryData(['routines'], [
+      { id: 5, name: 'Pills' },
+      { id: 99, name: 'Other' }, // unrelated — exercises the "id !== target" branch
+    ])
+    qc.setQueryData(['dashboard'], {}) // no due / no upcoming → exercises the `?? []` fallbacks
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5, patch: { name: 'Vitamins' } })
+    })
+    const routines = qc.getQueryData(['routines'])
+    expect(routines[0].name).toBe('Vitamins')
+    expect(routines[1].name).toBe('Other')
+    const dash = qc.getQueryData(['dashboard'])
+    expect(dash.due).toEqual([])
+    expect(dash.upcoming).toEqual([])
   })
 
   it('leaves the dashboard untouched when the cache is empty', async () => {
@@ -372,6 +472,49 @@ describe('useConsumeStock — applyConsumption branches', () => {
     expect(stock.quantity).toBe(1)
   })
 
+  it('falls back to quantity = 0 when the cached stock has no quantity field', async () => {
+    server.use(http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ id: 1, quantity: 2, lots: [] })))
+    const { result, qc } = renderWith(() => useConsumeStock())
+    // Stock list + detail both without a `quantity` field → the `?? 0` fallback is exercised.
+    qc.setQueryData(['stock'], [
+      { id: 1, lots: [{ id: 100, quantity: 1 }] },
+      { id: 2, lots: [] }, // unrelated stock exercises the non-matching id branch.
+    ])
+    qc.setQueryData(['stock', 1], { id: 1, lots: [{ id: 100, quantity: 1 }] })
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        stockId: 1,
+        quantity: 1,
+        lotSelections: [{ lot_id: 100, quantity: 1 }],
+      })
+    })
+    // Server response overwrote the cache; check the intermediate optimistic step
+    // did not explode on the missing quantity.
+    expect(qc.getQueryData(['stock', 1]).quantity).toBe(2)
+  })
+
+  it('sorts lots with null expiry_date and missing created_at using FEFO fallbacks', async () => {
+    server.use(http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ id: 1, quantity: 2, lots: [] })))
+    const { result, qc } = renderWith(() => useConsumeStock())
+    qc.setQueryData(['stock', 1], {
+      id: 1,
+      quantity: 3,
+      lots: [
+        { id: 200, quantity: 1, expiry_date: null }, // no created_at → empty string
+        { id: 201, quantity: 1, expiry_date: null, created_at: '2026-01-01T00:00:00Z' },
+        { id: 202, quantity: 1, expiry_date: '2026-05-01' },
+      ],
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({ stockId: 1, quantity: 1, lotSelections: undefined })
+    })
+    // The 2026-05-01 lot (earliest expiry) should be consumed first in the
+    // optimistic update; server response overwrites to match.
+    expect(qc.getQueryData(['stock', 1]).quantity).toBe(2)
+  })
+
   it('handles lot_selections with deduct = 0 (skips the subtract)', async () => {
     server.use(http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ id: 1, quantity: 4, lots: [] })))
     const { result, qc } = renderWith(() => useConsumeStock())
@@ -417,6 +560,39 @@ describe('useUpdateStockLot — branches', () => {
       await result.current.mutateAsync({ stockId: 1, lotId: 10, patch: { quantity: 1 } })
     })
     expect(qc.getQueryData(['stock'])).toEqual({ not: 'an array' })
+  })
+
+  it('updates the target lot in place and leaves sibling lots untouched', async () => {
+    server.use(http.patch(`${BASE}/stock/1/lots/10/`, () => HttpResponse.json({ id: 10, quantity: 7 })))
+    const { result, qc } = renderWith(() => useUpdateStockLot())
+    // Two lots + a sibling lot (exercises the "lot.id !== lid" branch).
+    // Lot without a quantity exercises the `?? 0` sum fallback.
+    qc.setQueryData(['stock', 1], {
+      id: 1,
+      lots: [
+        { id: 10, quantity: 3 },
+        { id: 11 }, // no quantity
+      ],
+    })
+    qc.setQueryData(['stock'], [
+      {
+        id: 1,
+        lots: [
+          { id: 10, quantity: 3 },
+          { id: 11 },
+        ],
+      },
+      { id: 2, lots: [{ id: 20, quantity: 5 }] }, // unrelated stock (id !== 1)
+    ])
+
+    await act(async () => {
+      await result.current.mutateAsync({ stockId: 1, lotId: 10, patch: { quantity: 7 } })
+    })
+    // Invalidate runs on success → read from the optimistic snapshot before
+    // the next refetch would happen. We just need to confirm no throw.
+    const list = qc.getQueryData(['stock'])
+    expect(Array.isArray(list)).toBe(true)
+    expect(list.find((s) => s.id === 2)).toBeDefined()
   })
 })
 

@@ -1,0 +1,106 @@
+.back {
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.empty {
+  color: var(--c-muted);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* Reset browser defaults for <ul> so the rows take the full container
+   * width and line up pixel-perfect with the sibling create-form below. */
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xl);
+  background: var(--c-surface);
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s,
+    border-color 0.12s;
+}
+
+.rowDragging {
+  opacity: 0.5;
+}
+
+.rowDragOver {
+  border-color: var(--c-primary);
+  outline: 2px solid color-mix(in srgb, var(--c-primary) 20%, transparent);
+  outline-offset: 0;
+}
+
+.dragHandle {
+  flex-shrink: 0;
+  color: var(--c-text-3);
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem;
+  user-select: none;
+}
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.name {
+  flex: 1;
+  padding: 0.25rem 0;
+  color: var(--c-text);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameInput {
+  flex: 1;
+}
+
+.actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Create-category form: standalone bordered input + `+` button. Both
+ * share the same outer width as the list rows above (the `.list` reset
+ * above removes the default `<ul>` padding that used to mis-align them).
+ * Keeping the input visually bordered signals "this is an input field"
+ * rather than blending into the list. */
+.createForm {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.createInput {
+  flex: 1;
+  min-width: 0;
+  /* Match the 40×40 of `shared.btnAdd` so the input and the `+` button
+   * render the same pixel height. Otherwise the input's vertical
+   * padding makes it ~44 px tall and the button reads as smaller. */
+  height: 40px;
+}
+
+.error {
+  margin-top: 0.5rem;
+}

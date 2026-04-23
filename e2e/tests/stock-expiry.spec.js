@@ -34,30 +34,30 @@ test.describe('Stock expiry and dedup', () => {
     await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
-  test('near-expiry lot is flagged on the Vitamin D card', async ({ page }) => {
-    const card = stockCard(page, 'vitaminD')
-    await expect(card).toBeVisible()
+  test('near-expiry lot is flagged on the Vitamin D detail page', async ({ page }) => {
+    // Lot rows live on the stock detail page (the inventory card only shows
+    // the aggregate quantity + optional alert banner).
+    await goToStockDetail(page, 'vitaminD')
 
     // VIT-A expires in 7 days → flagged. VIT-B expires in 180 days → not flagged.
-    const vitaRow = card.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
+    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
     await expect(vitaRow).toHaveAttribute('data-expiring', 'true')
 
-    const vitbRow = card.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_FAR })
+    const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_FAR })
     await expect(vitbRow).toHaveAttribute('data-expiring', 'false')
   })
 
   test('lot without expiry_date is not flagged', async ({ page }) => {
     // Filter cartridge has one lot with no SN and no expiry — nothing
     // to expire, nothing to flag.
-    const card = stockCard(page, 'filterCartridge')
-    const row = card.getByTestId('lot-row').first()
+    await goToStockDetail(page, 'filterCartridge')
+    const row = page.getByTestId('lot-row').first()
     await expect(row).toHaveAttribute('data-expiring', 'false')
   })
 
   test('Consume chooses VIT-A by FEFO (nearest expiry)', async ({ page }) => {
-    // Vitamin D has requires_lot_selection=true (PILL-style SNs), so
-    // clicking Consume opens the LotSelectionModal. The modal's radio
-    // list is pre-sorted FEFO and pre-selects the first option, which
+    // Clicking Consume on a stock card opens the LotPickerModal. The modal's
+    // radio list is pre-sorted FEFO and pre-selects the first option, which
     // must be VIT-A (7 days) — not VIT-B (180 days) nor the no-SN lot.
     const card = stockCard(page, 'vitaminD')
     await card.getByRole('button', { name: 'Consume 1 unit' }).click()
@@ -67,8 +67,9 @@ test.describe('Stock expiry and dedup', () => {
     const firstRadio = dialog.getByRole('radio').first()
     await expect(firstRadio).toContainText(SEED.lots.VITAMIN_D_NEAR_EXPIRY)
 
-    // Confirm the pre-selection (VIT-A).
-    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    // Confirm the pre-selection (VIT-A). LotPickerModal labels the
+    // confirm button "Consume 1" (quantity is always 1 from the card).
+    await dialog.getByRole('button', { name: 'Consume 1', exact: true }).click()
     await expect(dialog).toBeHidden()
 
     // Backend records a StockConsumption referencing VIT-A; Stock-detail

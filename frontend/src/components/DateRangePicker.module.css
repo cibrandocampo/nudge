@@ -3,9 +3,13 @@
 }
 
 .trigger {
-  padding: 0.4rem 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 40px;
+  padding: 0 0.625rem 0 0.875rem;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--c-primary);
@@ -15,19 +19,40 @@
   white-space: nowrap;
 }
 
+.triggerIcon {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.triggerLabel {
+  flex: 1 1 auto;
+}
+
+.triggerChevron {
+  flex: 0 0 auto;
+  opacity: 0.7;
+  transition: transform var(--transition);
+}
+
+.trigger[aria-expanded='true'] .triggerChevron {
+  transform: rotate(180deg);
+}
+
 /* ── Popover ──────────────────────────────────────────────── */
 
 .popover {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 100;
   display: flex;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
+  max-width: calc(100vw - 1rem);
 }
 
 /* ── Quick ranges (left panel) ────────────────────────────── */
@@ -47,7 +72,7 @@
   font-size: 0.8rem;
   text-align: left;
   color: var(--c-text-2);
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -91,7 +116,7 @@
 .dateInput {
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-size: 0.8rem;
   background: var(--c-surface);
   color: var(--c-text);
@@ -101,7 +126,7 @@
 .applyBtn {
   padding: 0.4rem 0.75rem;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--c-primary);
@@ -114,13 +139,11 @@
   opacity: 0.9;
 }
 
-/* ── Mobile (<400px): stack panels vertically ─────────────── */
+/* ── Mobile (<480px): stack panels vertically ─────────────── */
 
-@media (max-width: 399px) {
+@media (max-width: 479px) {
   .popover {
     flex-direction: column;
-    right: 0;
-    left: auto;
   }
 
   .presets {

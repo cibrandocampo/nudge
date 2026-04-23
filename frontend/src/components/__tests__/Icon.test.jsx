@@ -14,7 +14,7 @@ describe('Icon', () => {
   it('renders an <svg> with <use> referencing the sprite', () => {
     const { container } = render(<Icon name="check" />)
     expect(getSvg(container)).toBeInTheDocument()
-    expect(getUseHref(container)).toBe('/icons.svg#i-check')
+    expect(getUseHref(container)).toBe('#i-check')
   })
 
   it('applies the default icon size class', () => {

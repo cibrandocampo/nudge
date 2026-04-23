@@ -69,6 +69,29 @@ describe('lotsForSelection', () => {
     const stock = { lots: [{ id: 8, quantity: 1, expiry_date: null, lot_number: '' }] }
     expect(lotsForSelection(stock)[0].lot_number).toBeNull()
   })
+
+  it('treats lots with undefined quantity as zero (filtered out)', () => {
+    const stock = {
+      lots: [
+        { id: 1, expiry_date: '2026-01-01', lot_number: 'A' }, // quantity undefined
+        { id: 2, quantity: 2, expiry_date: '2026-02-01', lot_number: 'B' },
+      ],
+    }
+    const result = lotsForSelection(stock)
+    expect(result.map((l) => l.lot_id)).toEqual([2])
+  })
+
+  it('handles undefined created_at when breaking a tie on expiry_date', () => {
+    const stock = {
+      lots: [
+        { id: 1, quantity: 1, expiry_date: '2026-05-01' }, // no created_at
+        { id: 2, quantity: 1, expiry_date: '2026-05-01', created_at: '2026-01-01T00:00:00Z' },
+      ],
+    }
+    const result = lotsForSelection(stock)
+    // Empty string sorts before a real timestamp.
+    expect(result.map((l) => l.lot_id)).toEqual([1, 2])
+  })
 })
 
 describe('findCachedStock', () => {

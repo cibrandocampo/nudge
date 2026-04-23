@@ -110,8 +110,8 @@ describe('RoutineDetailPage', () => {
   it('shows error when toggle active fails', async () => {
     server.use(http.patch(`${BASE}/routines/1/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
-    await waitFor(() => expect(screen.getByText('Deactivate')).toBeInTheDocument())
-    await user.click(screen.getByText('Deactivate'))
+    const deactivate = await screen.findByRole('button', { name: 'Deactivate' })
+    await user.click(deactivate)
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
@@ -138,15 +138,15 @@ describe('RoutineDetailPage', () => {
       }),
     )
     const { user } = renderDetail()
-    await waitFor(() => expect(screen.getByText('Deactivate')).toBeInTheDocument())
-    await user.click(screen.getByText('Deactivate'))
+    const deactivate = await screen.findByRole('button', { name: 'Deactivate' })
+    await user.click(deactivate)
     await waitFor(() => expect(patched).toBe(true))
   })
 
   it('shows delete confirmation and deletes', async () => {
     const { user } = renderDetail()
-    await waitFor(() => expect(screen.getByText('Delete')).toBeInTheDocument())
-    await user.click(screen.getByText('Delete'))
+    const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
+    await user.click(deleteBtn)
     // Confirm modal should appear
     expect(screen.getByText(/Delete "Take vitamins"/)).toBeInTheDocument()
     await user.click(screen.getAllByText('Delete').find((btn) => btn.closest('[role="dialog"]')))
@@ -156,7 +156,7 @@ describe('RoutineDetailPage', () => {
   it('renders recent history entries', async () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('Recent history')).toBeInTheDocument())
-    expect(screen.getByText('View all →')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View all →' })).toBeInTheDocument()
   })
 
   it('shows lot selection modal when routine requires_lot_selection', async () => {
@@ -257,8 +257,8 @@ describe('RoutineDetailPage', () => {
   it('shows error when delete fails', async () => {
     server.use(http.delete(`${BASE}/routines/1/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
-    await waitFor(() => expect(screen.getByText('Delete')).toBeInTheDocument())
-    await user.click(screen.getByText('Delete'))
+    const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
+    await user.click(deleteBtn)
     await user.click(screen.getAllByText('Delete').find((btn) => btn.closest('[role="dialog"]')))
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
@@ -377,13 +377,13 @@ describe('RoutineDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText('Inactive')).toBeInTheDocument())
-    expect(screen.getByText('Activate')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Activate' })).toBeInTheDocument()
   })
 
   it('renders back and edit links', async () => {
     renderDetail()
-    await waitFor(() => expect(screen.getByText('← Back')).toBeInTheDocument())
-    expect(screen.getByText('Edit')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('shows next due with both relative and absolute datetime', async () => {
@@ -503,7 +503,7 @@ describe('RoutineDetailPage — advance button', () => {
     server.use(mockNetworkError('patch', '/routines/1/'))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    await user.click(screen.getByText('Deactivate'))
+    await user.click(screen.getByRole('button', { name: 'Deactivate' }))
     await waitFor(async () => expect(await list()).toHaveLength(1))
     await clear()
   })
@@ -513,7 +513,7 @@ describe('RoutineDetailPage — advance button', () => {
     server.use(mockNetworkError('delete', '/routines/1/'))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    await user.click(screen.getByText('Delete'))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
     // ConfirmModal exposes its confirm button with the routine.detail.delete label
     const confirmButtons = screen.getAllByText('Delete')
     await user.click(confirmButtons[confirmButtons.length - 1])

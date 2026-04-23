@@ -220,6 +220,10 @@ frontend/coverage/
 frontend/.vite/
 *.local
 
+# Playwright artifacts
+e2e/test-results/
+e2e/playwright-report/
+
 # ── Django generated ─────────────────────────────
 backend/staticfiles/
 

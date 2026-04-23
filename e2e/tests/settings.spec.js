@@ -27,23 +27,32 @@ test.describe('Settings', () => {
   })
 
   test('shows username', async ({ page }) => {
-    // Profile block renders the username as an h2 (T042 Profile redesign).
-    await expect(
-      page.getByRole('heading', { level: 2, name: new RegExp(`^${SEED.admin.username}$`) }),
-    ).toBeVisible()
+    // Profile block renders the username as an h2. When the user also has
+    // a first/last name populated, the heading reads "First Last (username)";
+    // otherwise just "username". Use a substring assertion so the test
+    // works in both configurations. `.first()` avoids strict-mode
+    // violations when other h2s appear (e.g. the dashboard section
+    // header above the profile, or future sections).
+    await expect(page.getByRole('heading', { level: 2 }).first()).toContainText(SEED.admin.username)
   })
 
   test('save timezone change', async ({ page }) => {
-    // The timezone picker is a Combobox (T044). Interact via its combobox
-    // input + listbox options, not the old native `select[size]`.
+    // SettingsPage autosaves the timezone on selection — no "Save changes"
+    // button any more. Hop through two timezones so at least one is a
+    // change regardless of the admin's existing setting, then reload and
+    // assert the last pick survives the round-trip.
     const tzInput = page.getByPlaceholder('Search timezone…')
+
+    await tzInput.click()
+    await tzInput.fill('Tokyo')
+    await page.getByRole('option', { name: 'Asia/Tokyo' }).click()
+
     await tzInput.click()
     await tzInput.fill('Madrid')
-
     await page.getByRole('option', { name: 'Europe/Madrid' }).click()
 
-    await page.getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByRole('button', { name: 'Saved!' })).toBeVisible()
+    await page.reload()
+    await expect(page.getByPlaceholder('Search timezone…')).toHaveValue('Europe/Madrid')
   })
 
   test('shows push notification status', async ({ page }) => {

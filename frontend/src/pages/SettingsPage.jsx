@@ -10,8 +10,11 @@ import { useUpdateMe } from '../hooks/mutations/useUpdateMe'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { useServerReachable } from '../hooks/useServerReachable'
 import AlertBanner from '../components/AlertBanner'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import Combobox from '../components/Combobox'
+import ConfirmModal from '../components/ConfirmModal'
 import Icon from '../components/Icon'
+import { useToast } from '../components/useToast'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
@@ -28,12 +31,12 @@ const LANGUAGES = [
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuth()
+  const { showToast } = useToast()
 
   const [form, setForm] = useState(() => ({
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     daily_notification_time: '08:00',
   }))
-  const [saveStatus, setSaveStatus] = useState(null)
 
   const {
     permission: pushPermission,
@@ -45,6 +48,10 @@ export default function SettingsPage() {
 
   const [contactQuery, setContactQuery] = useState('')
   const [contactError, setContactError] = useState('')
+  // { id, username } when the user clicks the X on a contact row; cleared
+  // when they confirm or cancel the ConfirmModal.
+  const [contactToRemove, setContactToRemove] = useState(null)
+  const [showPwModal, setShowPwModal] = useState(false)
 
   const updateMe = useUpdateMe()
   const { data: contacts = [] } = useContacts()
@@ -66,16 +73,27 @@ export default function SettingsPage() {
     }
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSave = async (e) => {
-    e.preventDefault()
-    try {
-      const result = await updateMe.mutateAsync({ patch: form, updatedAt: user?.settings_updated_at })
-      setSaveStatus(result?.__queued ? 'queued' : 'saved')
-    } catch (err) {
-      setSaveStatus(err instanceof OfflineError ? 'offline' : 'error')
-    }
-    setTimeout(() => setSaveStatus(null), 2500)
-  }
+  // Generic autosave for the two fields without a dedicated form (timezone
+  // and daily notification time). Matches the language pattern: the user
+  // picks a value → it persists silently via `updateMe`. Only surface an
+  // error toast when something actually goes wrong; success is implicit
+  // (the UI already shows the new value the user just chose).
+  const autosave = useCallback(
+    (patch) => {
+      updateMe.mutate(
+        { patch, updatedAt: user?.settings_updated_at },
+        {
+          onError: (err) => {
+            showToast({
+              type: 'error',
+              message: err instanceof OfflineError ? t('offline.actionUnavailable') : t('settings.errorSave'),
+            })
+          },
+        },
+      )
+    },
+    [updateMe, user?.settings_updated_at, showToast, t],
+  )
 
   const togglePush = async () => {
     setPushLoading(true)
@@ -107,9 +125,9 @@ export default function SettingsPage() {
   const changeLanguage = useCallback(
     (lng) => {
       i18n.changeLanguage(lng)
-      updateMe.mutate({ patch: { language: lng }, updatedAt: user?.settings_updated_at })
+      autosave({ language: lng })
     },
-    [i18n, updateMe, user?.settings_updated_at],
+    [i18n, autosave],
   )
 
   const handleAddContact = async (contactUser) => {
@@ -126,8 +144,10 @@ export default function SettingsPage() {
     }
   }
 
-  const handleRemoveContact = async (contactId) => {
-    if (!window.confirm(t('settings.confirmRemoveContact'))) return
+  const confirmRemoveContact = async () => {
+    const contactId = contactToRemove?.id
+    setContactToRemove(null)
+    if (contactId == null) return
     setContactError('')
     try {
       await deleteContact.mutateAsync({ contactId })
@@ -149,8 +169,34 @@ export default function SettingsPage() {
       )}
 
       <Section title={t('settings.profile')}>
-        <h2 className={s.username}>{user?.username}</h2>
-        {user?.email && <p className={shared.helpText}>{user.email}</p>}
+        <div className={s.profileRow}>
+          <span className={s.avatar} aria-hidden="true">
+            {(user?.first_name || user?.username || '?').charAt(0).toUpperCase()}
+          </span>
+          <div className={s.profileMeta}>
+            {/* Show "First Last (username)" when names exist; fall back to
+              * just the username. The "(username)" tail is rendered in the
+              * helpText style so it reads as secondary. */}
+            {user?.first_name || user?.last_name ? (
+              <h2 className={s.username}>
+                {[user.first_name, user.last_name].filter(Boolean).join(' ')}
+                <span className={shared.helpText}> ({user.username})</span>
+              </h2>
+            ) : (
+              <h2 className={s.username}>{user?.username}</h2>
+            )}
+            {user?.email && <p className={shared.helpText}>{user.email}</p>}
+          </div>
+          <button
+            type="button"
+            className={shared.btnAdd}
+            onClick={() => setShowPwModal(true)}
+            aria-label={t('header.changePassword')}
+            title={t('header.changePassword')}
+          >
+            <Icon name="user-key" />
+          </button>
+        </div>
       </Section>
 
       <Section title={t('settings.contacts')}>
@@ -165,7 +211,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
-                  onClick={() => handleRemoveContact(c.id)}
+                  onClick={() => setContactToRemove({ id: c.id, username: c.username })}
                   title={!reachable ? t('offline.requiresConnection') : t('settings.removeContact')}
                   aria-label={t('settings.removeContact')}
                   disabled={!reachable}
@@ -204,62 +250,65 @@ export default function SettingsPage() {
         />
       </Section>
 
-      <form onSubmit={handleSave} className={s.form}>
-        <Section title={t('settings.dailyTime')}>
-          <div className={s.inlineField}>
-            <input
-              className={cx(shared.input, s.inputTime)}
-              type="time"
-              value={form.daily_notification_time}
-              onChange={(e) => setForm((f) => ({ ...f, daily_notification_time: e.target.value }))}
+      <Section title={t('settings.dailyTime')}>
+        <p className={shared.helpText}>{t('settings.dailyTimeHint')}</p>
+        <input
+          className={shared.input}
+          type="time"
+          value={form.daily_notification_time}
+          onChange={(e) => setForm((f) => ({ ...f, daily_notification_time: e.target.value }))}
+          onBlur={(e) => {
+            const next = e.target.value
+            if (next && next !== (user?.daily_notification_time || '').slice(0, 5)) {
+              autosave({ daily_notification_time: next })
+            }
+          }}
+          disabled={!reachable}
+        />
+      </Section>
+
+      <Section title={t('settings.language')}>
+        <div className={s.langRow}>
+          {LANGUAGES.map(({ code, labelKey }) => (
+            <button
+              key={code}
+              type="button"
+              className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && shared.disabled)}
+              onClick={() => changeLanguage(code)}
               disabled={!reachable}
-            />
-            <p className={shared.helpText}>{t('settings.dailyTimeHint')}</p>
-          </div>
-        </Section>
+            >
+              {t(labelKey)}
+            </button>
+          ))}
+        </div>
+      </Section>
 
-        <Section title={t('settings.language')}>
-          <div className={s.langRow}>
-            {LANGUAGES.map(({ code, labelKey }) => (
-              <button
-                key={code}
-                type="button"
-                className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && shared.disabled)}
-                onClick={() => changeLanguage(code)}
-                disabled={!reachable}
-              >
-                {t(labelKey)}
-              </button>
-            ))}
-          </div>
-        </Section>
+      <Section title={t('settings.timezone')}>
+        {form.timezone !== user?.timezone && user?.timezone === 'UTC' && (
+          <p className={shared.helpText}>{t('settings.timezoneDetected', { tz: form.timezone })}</p>
+        )}
+        <Combobox
+          value={form.timezone}
+          onChange={(tz) => {
+            setForm((f) => ({ ...f, timezone: tz }))
+            if (tz && tz !== user?.timezone) autosave({ timezone: tz })
+          }}
+          options={TIMEZONES}
+          placeholder={t('settings.timezoneSearch')}
+          emptyMessage={t('settings.timezoneEmpty')}
+          disabled={!reachable}
+        />
+      </Section>
 
-        <Section title={t('settings.timezone')}>
-          {form.timezone !== user?.timezone && user?.timezone === 'UTC' && (
-            <p className={shared.helpText}>{t('settings.timezoneDetected', { tz: form.timezone })}</p>
-          )}
-          <Combobox
-            value={form.timezone}
-            onChange={(tz) => setForm((f) => ({ ...f, timezone: tz }))}
-            options={TIMEZONES}
-            placeholder={t('settings.timezoneSearch')}
-            emptyMessage={t('settings.timezoneEmpty')}
-            disabled={!reachable}
-          />
-        </Section>
-
-        <button type="submit" className={s.saveBtn} disabled={updateMe.isPending || !reachable}>
-          {updateMe.isPending
-            ? t('settings.saving')
-            : saveStatus === 'saved'
-              ? t('settings.saved')
-              : saveStatus === 'offline'
-                ? t('offline.actionUnavailable')
-                : saveStatus === 'error'
-                  ? t('settings.errorSave')
-                  : t('settings.saveChanges')}
-        </button>
-      </form>
+      {contactToRemove && (
+        <ConfirmModal
+          message={t('settings.confirmRemoveContact', { name: contactToRemove.username })}
+          confirmLabel={t('settings.removeContact')}
+          onConfirm={confirmRemoveContact}
+          onCancel={() => setContactToRemove(null)}
+        />
+      )}
+      {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} />}
     </div>
   )
 }
@@ -314,24 +363,26 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
 
   return (
     <div className={s.pushWrap}>
-      <div className={s.pushRow}>
-        <span className={cx(shared.dot, dotClass)} />
-        <span className={s.pushLabel}>{labelText}</span>
+      <div className={s.pushStatusRow}>
+        <div className={s.pushRow}>
+          <span className={cx(shared.dot, dotClass)} />
+          <span className={s.pushLabel}>{labelText}</span>
+        </div>
+
+        {(canEnable || permission === 'default') && (
+          <button
+            className={cx(s.pushBtn, (loading || disabled) && shared.disabled)}
+            type="button"
+            onClick={onToggle}
+            disabled={loading || disabled}
+            title={disabled ? t('offline.requiresConnection') : undefined}
+          >
+            {loading ? '…' : t('settings.pushEnable')}
+          </button>
+        )}
       </div>
 
       {denied && <p className={shared.helpText}>{t('settings.pushHint')}</p>}
-
-      {(canEnable || permission === 'default') && (
-        <button
-          className={cx(s.pushBtn, (loading || disabled) && shared.disabled)}
-          type="button"
-          onClick={onToggle}
-          disabled={loading || disabled}
-          title={disabled ? t('offline.requiresConnection') : undefined}
-        >
-          {loading ? '…' : t('settings.pushEnable')}
-        </button>
-      )}
 
       {active && (
         <>

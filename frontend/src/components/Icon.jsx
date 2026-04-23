@@ -1,5 +1,6 @@
 /**
- * Thin wrapper around the public/icons.svg sprite.
+ * Thin wrapper around the SVG sprite inlined at the app root by
+ * <IconsSprite />.
  *
  * Usage:
  *   <Icon name="check" />           // 16px
@@ -7,8 +8,11 @@
  *   <Icon name="user" size="lg" />  // 20px
  *   <Icon name="check" className={s.ok} />
  *
- * `name` must match a `<symbol id="i-NAME">` in public/icons.svg.
+ * `name` must match a `<symbol id="i-NAME">` in src/assets/icons.svg.
  * Colour comes from `currentColor` — set `color` on the parent.
+ *
+ * `href` is fragment-only (`#i-NAME`) so the browser resolves it against
+ * the current document and does not issue an HTTP request per `<Icon>`.
  */
 
 const SIZE_CLASS = {
@@ -22,7 +26,7 @@ export default function Icon({ name, size = 'md', className = '', ...rest }) {
   const classes = ['icon', sizeCls, className].filter(Boolean).join(' ')
   return (
     <svg className={classes} aria-hidden="true" focusable="false" {...rest}>
-      <use href={`/icons.svg#i-${name}`} />
+      <use href={`#i-${name}`} />
     </svg>
   )
 }

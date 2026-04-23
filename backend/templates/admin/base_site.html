@@ -9,107 +9,224 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-  /* ── Override Django's own CSS variables ──────────────────────────── */
+  /* Palette mirrors frontend/src/index.css (zinc neutrals + yellow accent). */
 
   /* Light mode */
   :root, html[data-theme="light"] {
-    --primary: #eef2ff;
-    --secondary: #6366f1;
-    --accent: #818cf8;
-    --primary-fg: #fff;
+    --primary: #18181b;
+    --secondary: #27272a;
+    --accent: #fcd34d;
+    --primary-fg: #ffffff;
 
-    --header-bg: #6366f1;
-    --header-color: #fff;
-    --header-branding-color: #fff;
-    --header-link-color: #fff;
+    --header-bg: #18181b;
+    --header-color: #ffffff;
+    --header-branding-color: #ffffff;
+    --header-link-color: #ffffff;
 
-    --breadcrumbs-fg: #4f46e5;
-    --breadcrumbs-link-fg: #4f46e5;
-    --breadcrumbs-bg: #eef2ff;
+    --breadcrumbs-fg: #3f3f46;
+    --breadcrumbs-link-fg: #09090b;
+    --breadcrumbs-bg: #f4f4f5;
 
-    --link-fg: #6366f1;
-    --link-hover-color: #4f46e5;
-    --link-selected-fg: #818cf8;
+    --link-fg: #09090b;
+    --link-hover-color: #27272a;
+    --link-selected-fg: #18181b;
 
-    --body-bg: #f9fafb;
-    --module-bg: #6366f1;
+    --body-bg: #fafafa;
+    --body-fg: #09090b;
+    --body-quiet-color: #3f3f46;
+    --body-loud-color: #09090b;
 
-    --button-bg: #6366f1;
-    --button-hover-bg: #4f46e5;
-    --default-button-bg: #6366f1;
-    --default-button-hover-bg: #4f46e5;
+    --darkened-bg: #f4f4f5;
+    --selected-bg: #fef3c7;
+    --selected-row: #fffbeb;
+
+    --border-color: #e4e4e7;
+    --hairline-color: #e4e4e7;
+
+    --module-bg: #fcd34d;
+    --module-fg: #78350f;
+
+    --button-bg: #18181b;
+    --button-fg: #ffffff;
+    --button-hover-bg: #27272a;
+    --default-button-bg: #18181b;
+    --default-button-hover-bg: #27272a;
+
+    --close-button-bg: #71717a;
+    --close-button-hover-bg: #3f3f46;
+    --delete-button-bg: #ef4444;
+    --delete-button-hover-bg: #dc2626;
+
+    --message-success-bg: #dcfce7;
+    --message-warning-bg: #fef3c7;
+    --message-error-bg: #fee2e2;
   }
 
-  /* Dark mode */
+  /* Dark mode (auto) */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --primary: #312e81;
-      --secondary: #6366f1;
-      --accent: #818cf8;
-      --primary-fg: #f1f5f9;
+      --primary: #fafafa;
+      --secondary: #e4e4e7;
+      --accent: #fcd34d;
+      --primary-fg: #09090b;
 
-      --header-bg: #6366f1;
-      --header-color: #fff;
-      --header-branding-color: #fff;
-      --header-link-color: #fff;
+      --header-bg: #09090b;
+      --header-color: #fafafa;
+      --header-branding-color: #fafafa;
+      --header-link-color: #fafafa;
 
-      --breadcrumbs-fg: #c7d2fe;
-      --breadcrumbs-link-fg: #a5b4fc;
-      --breadcrumbs-bg: #312e81;
+      --breadcrumbs-fg: #d4d4d8;
+      --breadcrumbs-link-fg: #fafafa;
+      --breadcrumbs-bg: #18181b;
 
-      --link-fg: #a5b4fc;
-      --link-hover-color: #c7d2fe;
-      --link-selected-fg: #818cf8;
+      --link-fg: #fafafa;
+      --link-hover-color: #fcd34d;
+      --link-selected-fg: #fcd34d;
 
-      --body-bg: #1e1e2e;
-      --module-bg: #6366f1;
+      --body-bg: #0a0a0b;
+      --body-fg: #fafafa;
+      --body-quiet-color: #a1a1aa;
+      --body-loud-color: #fafafa;
 
-      --button-bg: #6366f1;
-      --button-hover-bg: #4f46e5;
-      --default-button-bg: #6366f1;
-      --default-button-hover-bg: #4f46e5;
+      --darkened-bg: #18181b;
+      --selected-bg: #422006;
+      --selected-row: #292524;
+
+      --border-color: #27272a;
+      --hairline-color: #27272a;
+
+      --module-bg: #18181b;
+      --module-fg: #fcd34d;
+
+      --button-bg: #fafafa;
+      --button-fg: #09090b;
+      --button-hover-bg: #e4e4e7;
+      --default-button-bg: #fcd34d;
+      --default-button-hover-bg: #fbbf24;
+
+      --close-button-bg: #52525b;
+      --close-button-hover-bg: #3f3f46;
+      --delete-button-bg: #ef4444;
+      --delete-button-hover-bg: #dc2626;
+
+      --message-success-bg: #14532d;
+      --message-warning-bg: #78350f;
+      --message-error-bg: #7f1d1d;
     }
   }
 
+  /* Dark mode (forced) */
   html[data-theme="dark"] {
-    --primary: #312e81;
-    --secondary: #6366f1;
-    --accent: #818cf8;
-    --primary-fg: #f1f5f9;
+    --primary: #fafafa;
+    --secondary: #e4e4e7;
+    --accent: #fcd34d;
+    --primary-fg: #09090b;
 
-    --header-bg: #6366f1;
-    --header-color: #fff;
-    --header-branding-color: #fff;
-    --header-link-color: #fff;
+    --header-bg: #09090b;
+    --header-color: #fafafa;
+    --header-branding-color: #fafafa;
+    --header-link-color: #fafafa;
 
-    --breadcrumbs-fg: #c7d2fe;
-    --breadcrumbs-link-fg: #a5b4fc;
-    --breadcrumbs-bg: #312e81;
+    --breadcrumbs-fg: #d4d4d8;
+    --breadcrumbs-link-fg: #fafafa;
+    --breadcrumbs-bg: #18181b;
 
-    --link-fg: #a5b4fc;
-    --link-hover-color: #c7d2fe;
-    --link-selected-fg: #818cf8;
+    --link-fg: #fafafa;
+    --link-hover-color: #fcd34d;
+    --link-selected-fg: #fcd34d;
 
-    --body-bg: #1e1e2e;
-    --module-bg: #6366f1;
+    --body-bg: #0a0a0b;
+    --body-fg: #fafafa;
+    --body-quiet-color: #a1a1aa;
+    --body-loud-color: #fafafa;
 
-    --button-bg: #6366f1;
-    --button-hover-bg: #4f46e5;
-    --default-button-bg: #6366f1;
-    --default-button-hover-bg: #4f46e5;
+    --darkened-bg: #18181b;
+    --selected-bg: #422006;
+    --selected-row: #292524;
+
+    --border-color: #27272a;
+    --hairline-color: #27272a;
+
+    --module-bg: #18181b;
+    --module-fg: #fcd34d;
+
+    --button-bg: #fafafa;
+    --button-fg: #09090b;
+    --button-hover-bg: #e4e4e7;
+    --default-button-bg: #fcd34d;
+    --default-button-hover-bg: #fbbf24;
+
+    --close-button-bg: #52525b;
+    --close-button-hover-bg: #3f3f46;
+    --delete-button-bg: #ef4444;
+    --delete-button-hover-bg: #dc2626;
+
+    --message-success-bg: #14532d;
+    --message-warning-bg: #78350f;
+    --message-error-bg: #7f1d1d;
   }
 
-  /* ── Small tweaks not covered by variables ────────────────────────── */
+  /* Small tweaks not covered by Django's variables. */
   #branding h1 { font-weight: 700; }
   #site-name, #site-name a:link, #site-name a:visited,
   #branding h1, #branding h1 a:link, #branding h1 a:visited {
     color: #fff !important;
     opacity: 1 !important;
   }
+  html[data-theme="dark"] #site-name,
+  html[data-theme="dark"] #site-name a:link,
+  html[data-theme="dark"] #site-name a:visited,
+  html[data-theme="dark"] #branding h1,
+  html[data-theme="dark"] #branding h1 a:link,
+  html[data-theme="dark"] #branding h1 a:visited {
+    color: #fafafa !important;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) #site-name,
+    :root:not([data-theme="light"]) #site-name a:link,
+    :root:not([data-theme="light"]) #site-name a:visited,
+    :root:not([data-theme="light"]) #branding h1,
+    :root:not([data-theme="light"]) #branding h1 a:link,
+    :root:not([data-theme="light"]) #branding h1 a:visited {
+      color: #fafafa !important;
+    }
+  }
 
-  /* Module header text always white */
-  div.module > h2, div.module > caption { color: #fff; }
-  div.module > h2 a, div.module > h2 span,
-  div.module > caption a { color: #fff !important; }
+  /* Font stack — matches frontend/src/index.css so the admin reads as
+     the same product as the PWA. */
+  html, body, input, select, textarea, button {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Module section bars — yellow in both light and dark to give the admin
+     a consistent Nudge-brand accent. Django's own admin.css styles these
+     via --primary, which we can't override without side-effects, so we
+     target the selectors directly with !important. */
+  .module h2,
+  .module caption,
+  .inline-group h2 {
+    background: #fcd34d !important;
+    color: #78350f !important;
+  }
+  .module h2 a,
+  .module h2 span,
+  .module caption a,
+  .inline-group h2 a {
+    color: #78350f !important;
+  }
+
+
+  /* Brand-yellow accent on the "save" (default) button in light mode so
+     the primary action reads as the app's CTA color rather than raw black. */
+  :root .submit-row input.default,
+  html[data-theme="light"] .submit-row input.default {
+    background: #fcd34d;
+    color: #78350f;
+  }
+  :root .submit-row input.default:hover,
+  html[data-theme="light"] .submit-row input.default:hover {
+    background: #fbbf24;
+    color: #78350f;
+  }
 </style>
 {% endblock %}

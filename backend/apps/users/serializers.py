@@ -15,13 +15,22 @@ class UserSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "email",
+            "first_name",
+            "last_name",
             "timezone",
             "daily_notification_time",
             "is_staff",
             "language",
             "settings_updated_at",
         ]
-        read_only_fields = ["id", "username", "is_staff", "settings_updated_at"]
+        read_only_fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "is_staff",
+            "settings_updated_at",
+        ]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

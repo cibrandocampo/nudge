@@ -5,6 +5,97 @@ description: Frontend architecture patterns and conventions for Nudge. Use when 
 
 # Frontend Patterns — Nudge
 
+## Reuse first — never define the same thing twice
+
+The single most important rule in this codebase: **if a style, component,
+hook, or utility with the same intent already exists, consume it. Do not
+re-implement. Do not duplicate.**
+
+The corollary: **when designing something new, think abstract → concrete.**
+If the thing has reuse potential (it is a modal frame, a date formatter,
+an escape-key handler), build the primitive first and use it from the
+concrete consumer. Don't write 5 local copies and "refactor later" — the
+"later" never comes, and the drift becomes a full-day sweep (see
+`docs/plans/frontend-homogenization.md`).
+
+### Pre-write checklist
+
+Before creating ANY new frontend code, grep the layers below in this order
+and extend / consume what matches. If nothing matches, decide whether this
+belongs in the shared layer (most things with ≥ 2 future consumers do) or
+is a true page-specific one-off.
+
+1. **Design tokens** — `src/index.css` (`--c-*`, `--shadow-*`, `--radius-*`,
+   `--transition`). Never hardcode a color, shadow, radius, or transition
+   that maps to an existing token.
+2. **Shared CSS classes** — `src/styles/shared.module.css`. Covers buttons
+   (`.btn*`, `.btnIcon*`, `.btnAdd*`, `.btnCancel`, `.btnConfirm`,
+   `.btnIconMd/Lg`), inputs, cards, overlays, modal boxes, forms
+   (`.formSection*`, `.formChip*`, `.formToggle*`, `.formFooter`), status
+   dots, typography (`.pageTitle`, `.sectionTitle`, `.helpText`, `.muted`,
+   `.error`).
+3. **Shared components** — `src/components/`. Notable primitives:
+   `ModalFrame`, `Icon`, `AlertBanner`, `OfflineBanner`, `Toast`,
+   `SharePopover`, `ShareWithSection`, `IntervalPicker`, `DateRangePicker`,
+   `Combobox`, `PendingBadge`.
+4. **Shared hooks** — `src/hooks/`. TanStack Query data hooks
+   (`useRoutines`, `useStock`, `useMe`…), `useEscapeKey`,
+   `useClickOutside`, `useServerReachable`, `usePushStatus`,
+   `useOfflineMutation`.
+5. **Shared utils** — `src/utils/`. `cx` (classnames), `time`
+   (`formatShortDate`, `formatAbsoluteDate`, `formatRelativeTime`,
+   `getLocale`), `number` (`parseIntSafe`), `interval` (`hoursToHuman`,
+   `toHours`), `push`, `auth`, `diffPayloads`.
+
+When a new helper fits conceptually into an existing module, add it there
+(a new date helper joins `utils/time.js`, not a new `utils/date.js`).
+
+### The 1 / 2 / 3 rule
+
+- **1 occurrence**: local code is fine.
+- **2 occurrences**: acceptable only if disparate intent. If the intent
+  matches, extract before the second lands.
+- **3 occurrences**: technical debt. Must extract before merging the third.
+
+This is the concretization of CLAUDE.md's "three similar lines is better
+than a premature abstraction" — the third occurrence is where the pattern
+has proven itself and the abstraction earns its keep.
+
+### When NOT to abstract
+
+- Single usage with no visible future twin → keep local.
+- Superficially similar but semantically different (two buttons that share
+  padding but mean different things) → extract **shape**, not **context**.
+  The shape goes to shared; the context stays local.
+- The abstraction needs to grow 4 props and 3 if-branches to fit every
+  consumer → it's the wrong shape. Split it, or inline.
+
+### Concrete examples already applied in this repo
+
+- **`<ModalFrame>`** (`components/ModalFrame.jsx`) replaces 5 copies of
+  overlay + modalBox + Escape handler + click-outside that used to live
+  in `ConfirmModal`, `ShareModal`, `GroupPickerModal`, `LotSelectionModal`,
+  `ChangePasswordModal`. New modals always go through it.
+- **`useEscapeKey` / `useClickOutside`** (`hooks/`) — one hook instead of
+  the same `useEffect` scaffolding in every modal/popover.
+- **`formatShortDate`** (`utils/time.js`) — consolidates the
+  `formatDepletionDate` that used to be triple-copied across `StockCard`,
+  `StockDetailPage`, `InventoryPage`.
+- **`.btnCancel` / `.btnConfirm`** (`shared.module.css`) — a single source
+  of truth for modal action buttons; previously each modal defined its
+  own local `.cancelBtn` / `.confirmBtn`.
+- **`.btnIcon` / `.btnIconMd` / `.btnIconLg`** — 32 / 36 / 40 px icon
+  button variants with documented convention (in-card / form-level /
+  top-bar triggers). No more hardcoded `width: 36px; height: 36px;` in
+  page-local CSS.
+- **`--shadow-sm/md/lg` and `--radius-sm/lg/xl/xxl`** tokens in
+  `index.css` — no more raw `0 6px 20px rgba(...)` or `border-radius:
+  12px` in module CSS.
+
+These are the kind of wins to protect. If you find yourself writing
+something that could be one of these — stop, find the existing primitive
+or propose it first.
+
 ## Architecture
 
 - **Vite + React** SPA with CSS Modules (`.module.css`)

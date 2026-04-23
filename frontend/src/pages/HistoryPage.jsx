@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import DateRangePicker from '../components/DateRangePicker'
-import Icon from '../components/Icon'
+import HistoryEntryCard from '../components/HistoryEntryCard'
 import { useEntries, useStockConsumptions } from '../hooks/useEntries'
 import { useRoutines } from '../hooks/useRoutines'
 import { useStockList } from '../hooks/useStock'
 import { useUpdateConsumption } from '../hooks/mutations/useUpdateConsumption'
 import { useUpdateEntry } from '../hooks/mutations/useUpdateEntry'
+import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
-import { getLocale } from '../utils/time'
+import { groupEntriesByDate } from '../utils/historyGroups'
 import shared from '../styles/shared.module.css'
 import s from './HistoryPage.module.css'
+
+const VALID_TYPES = new Set(['all', 'routines', 'consumptions'])
 
 function defaultDateFrom() {
   const d = new Date()
@@ -24,14 +28,29 @@ function todayStr() {
 
 export default function HistoryPage() {
   const { t } = useTranslation()
+  // Initial filters come from the URL query so deep-links like
+  // `/history?routine=12` (opened from a routine's history button) land on
+  // a pre-filtered view. `type` defaults to "routines" when a `routine` id
+  // is present to keep the view focused on that routine's entries.
+  const [searchParams] = useSearchParams()
+  const initialRoutine = searchParams.get('routine') ?? ''
+  const initialStock = searchParams.get('stock') ?? ''
+  const typeParam = searchParams.get('type')
+  const initialType = VALID_TYPES.has(typeParam)
+    ? typeParam
+    : initialRoutine
+      ? 'routines'
+      : initialStock
+        ? 'consumptions'
+        : 'all'
 
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [routineFilter, setRoutineFilter] = useState('')
-  const [stockFilter, setStockFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState(initialType)
+  const [routineFilter, setRoutineFilter] = useState(initialRoutine)
+  const [stockFilter, setStockFilter] = useState(initialStock)
   const [dateFrom, setDateFrom] = useState(defaultDateFrom)
   const [dateTo, setDateTo] = useState(todayStr)
   const [editingNote, setEditingNote] = useState(null)
-  const [savedNote, setSavedNote] = useState(null)
+  const { showToast } = useToast()
 
   const { data: routines = [] } = useRoutines()
   const { data: stocks = [] } = useStockList()
@@ -69,7 +88,7 @@ export default function HistoryPage() {
   const error = entriesFilters.enabled && entriesQuery.isError
 
   const items = mergedItems(typeFilter, entries, consumptions)
-  const grouped = groupByDate(items)
+  const grouped = groupEntriesByDate(items)
   const isEmpty = items.length === 0
 
   const handleSaveNote = async (type, entry, notes) => {
@@ -82,8 +101,7 @@ export default function HistoryPage() {
     try {
       await mutation.mutateAsync(vars)
       setEditingNote(null)
-      setSavedNote(`${type}-${entry.id}`)
-      setTimeout(() => setSavedNote(null), 2000)
+      showToast({ type: 'success', message: t('history.savedNote') })
     } catch {
       setEditingNote(null)
     }
@@ -100,7 +118,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className={s.container}>
+    <div>
       <div className={shared.topBar}>
         <h1 className={shared.pageTitle}>{t('history.title')}</h1>
         <DateRangePicker
@@ -183,18 +201,16 @@ export default function HistoryPage() {
         <>
           {grouped.map(({ dateLabel, items: dayItems }) => (
             <section key={dateLabel} className={s.group}>
-              <p className={shared.sectionTitle}>{dateLabel}</p>
+              <p className={cx(shared.sectionTitle, s.dayHeader)}>{dateLabel}</p>
               <div className={s.list}>
                 {dayItems.map((e) => {
                   const key = `${e._type}-${e.id}`
                   const isEditing = editingNote && editingNote.type === e._type && editingNote.id === e.id
-                  const justSaved = savedNote === key
                   return (
-                    <EntryCard
+                    <HistoryEntryCard
                       key={key}
                       entry={e}
                       isEditing={isEditing}
-                      justSaved={justSaved}
                       onStartEdit={() => setEditingNote({ type: e._type, id: e.id, notes: e.notes || '' })}
                       onCancelEdit={() => setEditingNote(null)}
                       onSave={(notes) => handleSaveNote(e._type, e, notes)}
@@ -215,106 +231,10 @@ export default function HistoryPage() {
   )
 }
 
-function EntryCard({ entry, isEditing, justSaved, onStartEdit, onCancelEdit, onSave }) {
-  const { t } = useTranslation()
-  const isRoutine = entry._type === 'routine'
-  const title = isRoutine ? entry.routine_name : entry.stock_name
-  const authorLabel = isRoutine
-    ? entry.completed_by_username && t('sharing.completedBy', { username: entry.completed_by_username })
-    : entry.consumed_by_username && t('sharing.consumedBy', { username: entry.consumed_by_username })
-
-  const totalQty = entry.consumed_lots?.reduce((sum, l) => sum + l.quantity, 0) ?? 0
-  const lotNumbers = (entry.consumed_lots || [])
-    .filter((l) => l.lot_number)
-    .map((l) => l.lot_number)
-    .join(', ')
-
-  return (
-    <div
-      className={cx(shared.card, shared.cardBorderSuccess, s.entryCard)}
-      data-testid="history-entry"
-      data-entry-type={entry._type}
-    >
-      <div className={shared.cardHeader}>
-        <div className={shared.cardMeta}>
-          <span className={cx(shared.cardTitle, shared.cardTitleFlex, s.entryName)}>
-            <Icon name={isRoutine ? 'check' : 'package'} size="sm" />
-            <span>{title}</span>
-          </span>
-          <span className={shared.cardSubtitle}>
-            <span>{formatTime(entry.created_at)}</span>
-            {authorLabel && <span>{authorLabel}</span>}
-            {!isRoutine && <span className={s.entryBadge}>−{entry.quantity}</span>}
-            {isRoutine && <span className={s.entryBadge}>✓</span>}
-          </span>
-          {entry.consumed_lots?.length > 0 && (
-            <span className={shared.cardStockBadge}>
-              <Icon name="package" size="sm" />
-              <span>
-                {totalQty} × {entry.stock_name}
-                {lotNumbers && <span className={s.consumedLot}> ({lotNumbers})</span>}
-              </span>
-            </span>
-          )}
-          <div className={s.notesRow}>
-            {isEditing ? (
-              <input
-                className={cx(shared.input, s.notesInput)}
-                autoFocus
-                defaultValue={entry.notes || ''}
-                placeholder={t('history.notesPlaceholder')}
-                onBlur={(ev) => onSave(ev.target.value)}
-                onKeyDown={(ev) => {
-                  if (ev.key === 'Enter') onSave(ev.target.value)
-                  if (ev.key === 'Escape') onCancelEdit()
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className={cx(s.notesBtn, !entry.notes && s.notesPlaceholder)}
-                onClick={onStartEdit}
-              >
-                {entry.notes || t('history.notesPlaceholder')}
-              </button>
-            )}
-            {justSaved && <span className={s.notesSaved}>{t('history.savedNote')}</span>}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function mergedItems(typeFilter, entries, consumptions) {
   const routineItems = entries.map((e) => ({ ...e, _type: 'routine' }))
   const consumptionItems = consumptions.map((c) => ({ ...c, _type: 'consumption' }))
   if (typeFilter === 'routines') return routineItems
   if (typeFilter === 'consumptions') return consumptionItems
   return [...routineItems, ...consumptionItems].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-}
-
-function groupByDate(entries) {
-  const map = new Map()
-  for (const e of entries) {
-    const label = new Date(e.created_at).toLocaleDateString(getLocale(), {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-    if (!map.has(label)) map.set(label, [])
-    map.get(label).push(e)
-  }
-  return Array.from(map.entries()).map(([dateLabel, items]) => ({
-    dateLabel,
-    items,
-  }))
-}
-
-function formatTime(isoString) {
-  return new Date(isoString).toLocaleTimeString(getLocale(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

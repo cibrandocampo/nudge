@@ -15,9 +15,12 @@ describe('queryClient', () => {
   it('has offline-friendly defaults', () => {
     const defaults = queryClient.getDefaultOptions()
     expect(defaults.queries.gcTime).toBe(Infinity)
-    // staleTime is intentionally unset — instant paint offline comes from
-    // the persister + `gcTime: Infinity`, not from deferring refetches.
-    expect(defaults.queries.staleTime).toBeUndefined()
+    // staleTime: 30 s dampens the navigation-path refetch storm while
+    // keeping data fresh after mutations (which still invalidate
+    // explicitly). Offline instant-paint comes from the persister +
+    // `gcTime: Infinity`, not from staleTime.
+    expect(defaults.queries.staleTime).toBe(30_000)
+    expect(defaults.queries.refetchOnWindowFocus).toBe(false)
     expect(defaults.mutations.retry).toBe(false)
   })
 

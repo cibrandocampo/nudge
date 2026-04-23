@@ -2,6 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
 import { usePushStatus } from '../hooks/usePushStatus'
+import { useRoutines } from '../hooks/useRoutines'
 import AlertBanner from './AlertBanner'
 import Header from './Header'
 import Icon from './Icon'
@@ -11,9 +12,16 @@ import s from './Layout.module.css'
 export default function Layout() {
   const { active } = usePushStatus()
   const { t } = useTranslation()
+  const { data: routines = [] } = useRoutines()
+  const hasPendingRoutines = routines.some((r) => r.is_due)
 
   const NAV = [
-    { to: '/', icon: 'nav-dashboard', label: t('nav.home'), end: true },
+    {
+      to: '/',
+      icon: hasPendingRoutines ? 'badge-alert' : 'badge',
+      label: t('nav.home'),
+      end: true,
+    },
     { to: '/inventory', icon: 'nav-inventory', label: t('nav.inventory'), end: false },
     { to: '/history', icon: 'nav-history', label: t('nav.history'), end: false },
     { to: '/settings', icon: 'nav-settings', label: t('nav.settings'), end: false },
@@ -43,6 +51,9 @@ export default function Layout() {
               <Icon name={icon} size="lg" />
               <span className={s.navLabel}>{label}</span>
               {to === '/settings' && !active && (
+                <span className={cx(shared.dot, shared.dotBrand, s.badge)} aria-hidden="true" />
+              )}
+              {to === '/' && hasPendingRoutines && (
                 <span className={cx(shared.dot, shared.dotBrand, s.badge)} aria-hidden="true" />
               )}
             </span>

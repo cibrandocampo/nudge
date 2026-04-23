@@ -1,11 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
+import { beforeEach, vi } from 'vitest'
 import { clear, list } from '../../offline/queue'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import StockDetailPage from '../StockDetailPage'
+
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
 
 const BASE = 'http://localhost/api'
 
@@ -35,6 +41,7 @@ function renderDetail() {
   return renderWithProviders(
     <Routes>
       <Route path="/inventory/:id" element={<StockDetailPage />} />
+      <Route path="/inventory/:id/edit" element={<div>Edit form stub</div>} />
       <Route path="/inventory" element={<div>Inventory home</div>} />
     </Routes>,
     { initialEntries: ['/inventory/1'] },
@@ -43,6 +50,7 @@ function renderDetail() {
 
 describe('StockDetailPage', () => {
   beforeEach(() => {
+    reachableRef.current = true
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)),
       http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [] })),
@@ -68,39 +76,37 @@ describe('StockDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/Stock not found/)).toBeInTheDocument())
   })
 
-  it('edits the name on Enter and calls the update mutation', async () => {
-    let patchBody = null
-    server.use(
-      http.patch(`${BASE}/stock/1/`, async ({ request }) => {
-        patchBody = await request.json()
-        return HttpResponse.json({ ...stock, name: patchBody.name })
-      }),
-    )
+  it('renders the stock name as static text, not as an editable input', async () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    // Clicking the name must NOT turn it into an input (inline edit retired).
     await user.click(screen.getByText('Water filter'))
-    const input = screen.getByDisplayValue('Water filter')
-    await user.clear(input)
-    await user.type(input, 'Renamed filter{Enter}')
-    await waitFor(() => expect(patchBody?.name).toBe('Renamed filter'))
+    expect(screen.queryByDisplayValue('Water filter')).not.toBeInTheDocument()
   })
 
-  it('cancels the inline rename on Escape without calling the mutation', async () => {
-    const patchSpy = vi.fn()
-    server.use(
-      http.patch(`${BASE}/stock/1/`, () => {
-        patchSpy()
-        return HttpResponse.json(stock)
-      }),
-    )
+  it('navigates to /inventory/:id/edit when the Edit button is clicked', async () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByText('Water filter'))
-    const input = screen.getByDisplayValue('Water filter')
-    await user.clear(input)
-    await user.type(input, 'Temporary')
-    await user.keyboard('{Escape}')
-    expect(patchSpy).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByText('Edit form stub')).toBeInTheDocument()
+  })
+
+  it('disables the Edit button when offline', async () => {
+    reachableRef.current = false
+    renderDetail()
+    await screen.findByText('Water filter')
+    const btn = screen.getByRole('button', { name: 'Edit' })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', 'Requires connection')
+  })
+
+  it('hides the Edit button when the current user is not the owner', async () => {
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_username: 'alice' })),
+    )
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('ignores add-lot submission with an invalid quantity', async () => {
@@ -246,34 +252,6 @@ describe('StockDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/Could not load data/)).toBeInTheDocument())
   })
 
-  it('no-ops when saving the name without changes', async () => {
-    const patchSpy = vi.fn()
-    server.use(
-      http.patch(`${BASE}/stock/1/`, () => {
-        patchSpy()
-        return HttpResponse.json(stock)
-      }),
-    )
-    const { user } = renderDetail()
-    await screen.findByText('Water filter')
-    await user.click(screen.getByText('Water filter'))
-    // Blur without changes → saveName exits early.
-    const input = screen.getByDisplayValue('Water filter')
-    input.blur()
-    expect(patchSpy).not.toHaveBeenCalled()
-  })
-
-  it('shows error toast when save name hits a server error', async () => {
-    server.use(http.patch(`${BASE}/stock/1/`, () => new HttpResponse(null, { status: 500 })))
-    const { user } = renderDetail()
-    await screen.findByText('Water filter')
-    await user.click(screen.getByText('Water filter'))
-    const input = screen.getByDisplayValue('Water filter')
-    await user.clear(input)
-    await user.type(input, 'X{Enter}')
-    await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
-  })
-
   it('shows error toast when add-lot fails with a server error', async () => {
     server.use(http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
@@ -307,6 +285,8 @@ describe('StockDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText(/Recent consumption/)).toBeInTheDocument())
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    // HistoryEntryCard renders consumed_by_username via the sharing.consumedBy
+    // i18n key → "by alice".
+    expect(screen.getByText('by alice')).toBeInTheDocument()
   })
 })

@@ -90,6 +90,33 @@ describe('PendingBadge', () => {
     expect(hits).toBe(0)
   })
 
+  it('reports the "syncing" dominant state when an entry is in flight', async () => {
+    await enqueue(entry({ id: 'sync', status: 'syncing' }))
+    render(<PendingBadge />)
+    await waitFor(() =>
+      expect(screen.getByTestId('pending-badge')).toHaveAttribute('data-state', 'syncing'),
+    )
+  })
+
+  it('opens the panel when the "open-pending-badge" event fires', async () => {
+    await enqueue(entry({ id: 'a' }))
+    render(<PendingBadge />)
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    window.dispatchEvent(new Event('open-pending-badge'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+  })
+
+  it('closes the panel via the close button in the panel header', async () => {
+    await enqueue(entry({ id: 'a' }))
+    const user = userEvent.setup()
+    render(<PendingBadge />)
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /^close$/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('closes the panel on outside click', async () => {
     await enqueue(entry({ id: 'a' }))
     const user = userEvent.setup()

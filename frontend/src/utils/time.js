@@ -24,6 +24,22 @@ export function formatAbsoluteDate(isoString) {
 }
 
 /**
+ * Formats an ISO date or `YYYY-MM-DD` string as a short locale date.
+ * Date-only strings are anchored at local midnight to avoid TZ drift.
+ */
+export function formatShortDate(isoString, { withYear = true, withDay = true } = {}) {
+  if (!isoString) return ''
+  const anchored =
+    typeof isoString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoString) ? `${isoString}T00:00:00` : isoString
+  const d = new Date(anchored)
+  if (Number.isNaN(d.getTime())) return ''
+  const options = { month: 'short' }
+  if (withDay) options.day = 'numeric'
+  if (withYear) options.year = 'numeric'
+  return d.toLocaleDateString(getLocale(), options)
+}
+
+/**
  * Formats a UTC ISO datetime string as a human-readable relative label.
  * The browser's local timezone is used automatically via the Date API.
  */

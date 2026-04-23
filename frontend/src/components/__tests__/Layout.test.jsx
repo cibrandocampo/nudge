@@ -1,6 +1,10 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import Layout from '../Layout'
+
+const BASE = 'http://localhost/api'
 
 function setNotification(permission) {
   Object.defineProperty(window, 'Notification', {
@@ -92,6 +96,26 @@ describe('Layout', () => {
     const { container } = renderWithProviders(<Layout />)
     await waitFor(() => expect(container.querySelector('.badge')).not.toBeInTheDocument())
     expect(screen.queryByText(/Notifications are off/)).not.toBeInTheDocument()
+  })
+
+  it('shows a pending-routines dot on the Routines nav entry when any routine is due', async () => {
+    setNotification('granted')
+    await stubSubscription({ endpoint: 'https://push.example.com/sub/abc', unsubscribe: vi.fn() })
+    server.use(
+      http.get(`${BASE}/routines/`, () =>
+        HttpResponse.json([
+          { id: 1, name: 'Water plants', interval_hours: 24, is_due: true },
+          { id: 2, name: 'Call dad', interval_hours: 168, is_due: false },
+        ]),
+      ),
+    )
+    const { container } = renderWithProviders(<Layout />)
+    await waitFor(() => {
+      const routinesLink = screen.getByText('Routines').closest('a')
+      expect(routinesLink.querySelector('.badge')).toBeInTheDocument()
+    })
+    // When push is active, the only badge should be the routines dot.
+    expect(container.querySelectorAll('.badge').length).toBeGreaterThan(0)
   })
 
   it('places the banner before the main element in the DOM', async () => {

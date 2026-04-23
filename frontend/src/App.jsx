@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { AuthProvider } from './contexts/AuthContext'
 import ConflictOrchestrator from './components/ConflictOrchestrator'
+import IconsSprite from './components/IconsSprite'
 import Layout from './components/Layout'
 import OfflineBanner from './components/OfflineBanner'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -18,6 +19,8 @@ import HistoryPage from './pages/HistoryPage'
 import InventoryPage from './pages/InventoryPage'
 import SettingsPage from './pages/SettingsPage'
 import StockDetailPage from './pages/StockDetailPage'
+import StockFormPage from './pages/StockFormPage'
+import StockGroupsPage from './pages/StockGroupsPage'
 
 function AppRuntime() {
   // `useSyncToasts` must be mounted inside ToastProvider — keep it in a
@@ -36,6 +39,7 @@ function AppRuntime() {
 export default function App() {
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+      <IconsSprite />
       <ToastProvider>
         <AppRuntime />
         <AuthProvider>
@@ -52,7 +56,10 @@ export default function App() {
                   <Route path="/routines/:id/edit" element={<RoutineFormPage />} />
                   <Route path="/history" element={<HistoryPage />} />
                   <Route path="/inventory" element={<InventoryPage />} />
+                  <Route path="/inventory/new" element={<StockFormPage />} />
+                  <Route path="/inventory/groups" element={<StockGroupsPage />} />
                   <Route path="/inventory/:id" element={<StockDetailPage />} />
+                  <Route path="/inventory/:id/edit" element={<StockFormPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>
               </Route>

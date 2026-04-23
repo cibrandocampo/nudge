@@ -49,14 +49,14 @@ describe('ShareModal', () => {
   it('calls onClose when overlay clicked', () => {
     const onClose = vi.fn()
     renderWithProviders(<ShareModal {...defaultProps} onClose={onClose} />)
-    fireEvent.click(screen.getByRole('dialog'))
+    fireEvent.click(screen.getByRole('dialog').parentElement)
     expect(onClose).toHaveBeenCalled()
   })
 
   it('does not close when modal box clicked', () => {
     const onClose = vi.fn()
     renderWithProviders(<ShareModal {...defaultProps} onClose={onClose} />)
-    fireEvent.click(screen.getByText('alice').closest('ul').parentElement)
+    fireEvent.click(screen.getByRole('dialog'))
     expect(onClose).not.toHaveBeenCalled()
   })
 

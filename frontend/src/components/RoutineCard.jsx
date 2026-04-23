@@ -17,7 +17,7 @@ function statusTokens(routine) {
   return { border: shared.cardBorderWarning, dot: shared.dotWarning, text: shared.statusDue }
 }
 
-export default function RoutineCard({ routine, onMarkDone, completing, contacts, onShare }) {
+export default function RoutineCard({ routine, onMarkDone, completing }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const timeLabel = routine.next_due_at
@@ -27,22 +27,18 @@ export default function RoutineCard({ routine, onMarkDone, completing, contacts,
   const resourceKey = `routine:${routine.id}`
   const tokens = statusTokens(routine)
 
-  const canShare = routine.is_owner !== false && contacts?.length > 0
-  const alreadyShared = routine.shared_with?.length > 0
-
-  const shareButton = canShare && (
-    <button
-      type="button"
-      className={cx(shared.btnIcon, alreadyShared ? shared.btnIconShared : shared.btnIconShare)}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onShare && onShare(routine.id)
-      }}
-      aria-label={t('card.share', 'Share')}
+  // Passive badge only — sharing is edited from the routine form
+  // (ShareWithSection → ShareModal). Mirrors the pattern used on StockCard.
+  const isShared = routine.shared_with?.length > 0 && routine.is_owner !== false
+  const sharedBadge = isShared && (
+    <span
+      className={cx(shared.btnIcon, shared.btnIconShared)}
+      aria-label={t('sharing.sharedWith')}
+      title={t('sharing.sharedWith')}
+      data-testid="shared-badge"
     >
       <Icon name="users" size="sm" />
-    </button>
+    </span>
   )
 
   // Block completion when the routine consumes a stock with no inventory
@@ -101,7 +97,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, contacts,
         )}
       </div>
       <div className={shared.cardActions}>
-        {shareButton}
+        {sharedBadge}
         {doneButton}
         {chevronButton}
       </div>

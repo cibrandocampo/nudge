@@ -1,0 +1,106 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem 0.25rem 0;
+}
+.back:hover {
+  color: var(--c-text-2);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.fieldLabel {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+/* ── Batches ────────────────────────────────────────────────── */
+
+.batchesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.batchRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  background: var(--c-bg, var(--c-surface));
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius);
+}
+
+.batchFields {
+  flex: 1;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.batchField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 90px;
+}
+
+.batchFieldFlex {
+  flex: 1;
+}
+
+.batchFieldLabel {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.batchInputQty {
+  width: 90px;
+  text-align: center;
+}
+
+.batchRemove {
+  flex-shrink: 0;
+}
+
+/* Submit button grows to fill the footer while Cancel stays at 128 px
+   via `.formSecondaryBtn`. Both share the same 36 px height through
+   that shared class. */
+.submitBtn {
+  flex: 1;
+}

@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { SEED } from './constants.js'
 import { routineCard } from './locators.js'
+import { goToRoutineDetail } from './navigation.js'
 
 /**
  * Mark a routine as done from the Dashboard card.
@@ -38,23 +39,23 @@ export async function markRoutineDone(page, routineKey, { expectBlocked = false,
  * Create a new routine via the `/routines/new` form.
  * @param {{
  *   name: string,
- *   intervalPreset?: string,
- *   intervalHours?: number,
- *   intervalUnit?: 'hours'|'days'|'weeks'|'months'
+ *   intervalValue?: number,
+ *   intervalUnit?: 'hours'|'days'|'weeks'|'months'|'years'
  * }} data
- *   `intervalPreset` is the accessible name of one of the preset buttons
- *   ("1 day", "1 week", "2 weeks"…). `intervalHours` + `intervalUnit` drive
- *   the custom number+unit UI; only used when no preset is supplied.
+ *   `intervalValue` + `intervalUnit` drive the IntervalPicker (segmented
+ *   unit tab + stepper). Omit both to use the default (Days = 1).
  */
-export async function createRoutine(page, { name, intervalPreset, intervalHours, intervalUnit = 'hours' }) {
+export async function createRoutine(page, { name, intervalValue, intervalUnit = 'days' }) {
   await page.goto('/routines/new')
   await page.getByPlaceholder(/change water filter/i).fill(name)
 
-  if (intervalPreset) {
-    await page.getByRole('button', { name: intervalPreset, exact: true }).click()
-  } else if (intervalHours != null) {
-    await page.locator('input[type="number"]').first().fill(String(intervalHours))
-    await page.locator('select').first().selectOption(intervalUnit)
+  if (intervalValue != null) {
+    await page.getByRole('tab', { name: intervalUnit }).click()
+    // Stepper defaults to value=1 after switching units; step up to target.
+    const increase = page.getByRole('button', { name: 'Increase' })
+    for (let i = 1; i < Math.max(1, intervalValue); i += 1) {
+      await increase.click()
+    }
   }
 
   await page.getByRole('button', { name: 'Save' }).click()
@@ -94,18 +95,26 @@ export async function deleteRoutine(page, routineKeyOrName) {
 }
 
 /**
- * Toggle a contact in the share popover of a routine on the Dashboard.
- * Opens the popover, clicks the contact row and closes it. Works both for
- * share and un-share — the popover is a checkbox-style toggle.
+ * Toggle a contact in the routine's share list. The old dashboard-card
+ * popover was dropped — sharing is now edited from the routine form
+ * (ShareWithSection → ShareModal), matching the stock flow. Works both
+ * for share and un-share (toggle semantics); call twice to revert.
  */
 export async function shareRoutineWith(page, routineKey, username) {
-  const card = routineCard(page, routineKey)
-  await card.getByRole('button', { name: 'Share' }).click()
+  await goToRoutineDetail(page, routineKey)
+  await page.getByRole('link', { name: 'Edit' }).click()
+  await page.waitForURL(/\/routines\/\d+\/edit$/)
+  // The ShareWithSection header button label is "Share with…" (with the
+  // ellipsis). `exact: true` excludes the per-chip "Unshare with <name>"
+  // remove buttons.
+  await page.getByRole('button', { name: 'Share with…', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await dialog.locator('li').filter({ hasText: username }).click()
   await page.keyboard.press('Escape')
-  await expect(dialog).not.toBeVisible()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.waitForURL(/\/routines\/\d+$/)
 }
 
 export async function unshareRoutineFrom(page, routineKey, username) {

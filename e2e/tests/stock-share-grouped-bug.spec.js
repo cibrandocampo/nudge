@@ -41,40 +41,35 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   const groupName = `Demo Group ${Date.now()}`
   const stockName = `Demo Stock ${Date.now()}`
 
-  // ── 3. Create a stock group via the Categories modal ───────────────────
-  // Button text: t('inventory.manageGroups') = "Categories"
+  // ── 3. Create a category via the Categories page ───────────────────────
+  // Clicking the "Categories" top-bar button navigates to /inventory/groups
+  // (StockGroupsPage — this is not a modal anymore).
   await page.getByRole('button', { name: 'Categories' }).click()
-  const groupManagerModal = page.getByRole('dialog')
-  await expect(groupManagerModal).toBeVisible()
+  await expect(page).toHaveURL('/inventory/groups')
+  await page.getByPlaceholder('Category name').fill(groupName)
+  await page.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByText(groupName)).toBeVisible()
 
-  // Input placeholder: t('inventory.groupName') = "Category name"
-  await groupManagerModal.getByPlaceholder('Category name').fill(groupName)
-  // Submit button: t('inventory.createGroup') = "Create"
-  await groupManagerModal.getByRole('button', { name: 'Create' }).click()
-  await expect(groupManagerModal.getByText(groupName)).toBeVisible()
-  await groupManagerModal.getByRole('button', { name: 'Close' }).click()
-  await expect(groupManagerModal).not.toBeVisible()
+  // Back to inventory — StockGroupsPage uses a button with the "← Back to
+  // inventory" label, not a link.
+  await page.getByRole('button', { name: '← Back to inventory' }).click()
+  await expect(page).toHaveURL('/inventory')
 
-  // ── 4. Create a stock item ─────────────────────────────────────────────
+  // ── 4. Create a stock item and assign the category inline ──────────────
   await page.getByRole('button', { name: '+ New' }).click()
-  await page.getByPlaceholder(/item name/i).fill(stockName)
-  await page.getByRole('button', { name: 'Create item' }).click()
+  await expect(page).toHaveURL('/inventory/new')
+  await page.getByLabel('Name').fill(stockName)
+  await page.getByLabel('Category').selectOption({ label: groupName })
+  await page.getByRole('button', { name: 'Create' }).click()
+  await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
+  // Back to inventory from the stock detail page.
+  await page.getByRole('link', { name: /back to inventory/i }).click()
   const ownerCard = page.locator('[data-testid="product-card"]').filter({ hasText: stockName })
   await expect(ownerCard).toBeVisible()
-
-  // ── 5. Assign the stock to the group ──────────────────────────────────
-  // Button title: t('inventory.assignGroup') = "Category"
-  await ownerCard.getByTitle('Category').click()
-  const groupPickerModal = page.getByRole('dialog')
-  await expect(groupPickerModal).toBeVisible()
-  await groupPickerModal.getByText(groupName).click()
-  // Group picker closes after selection
-  await expect(groupPickerModal).not.toBeVisible()
-  // Stock now appears in the group section
   await expect(page.locator('[data-testid="group-box"]').filter({ hasText: groupName })).toBeVisible()
 
-  // ── 6. Share the stock with user2 via API ─────────────────────────────
+  // ── 5. Share the stock with user2 via API ─────────────────────────────
   await page.evaluate(
     async ({ sName, contactUsername }) => {
       const token = localStorage.getItem('access_token')
@@ -121,8 +116,8 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // Owner label should appear on the card
   await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
 
-  // Share button must NOT appear (user2 is not the owner)
-  await expect(sharedCard.getByTitle('Share with')).not.toBeVisible()
+  // Shared badge must NOT appear (user2 is not the owner).
+  await expect(sharedCard.getByTestId('shared-badge')).toHaveCount(0)
 
   // ── Screenshot 2: close-up of user2's shared card (with owner label) ──
   await sharedCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '2-user2-shared-card.png') })

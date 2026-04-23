@@ -11,7 +11,7 @@
   width: 100%;
   max-width: 360px;
   background: var(--c-surface);
-  border-radius: 12px;
+  border-radius: var(--radius-xxl);
   padding: 2.5rem 2rem;
   border: 1px solid var(--c-border);
   text-align: center;
@@ -20,7 +20,7 @@
 .logoImg {
   width: 72px;
   height: 72px;
-  border-radius: 16px;
+  border-radius: var(--radius-xxl);
   margin-bottom: 1rem;
 }
 
@@ -42,7 +42,7 @@
   background: var(--c-primary);
   color: var(--c-surface);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;

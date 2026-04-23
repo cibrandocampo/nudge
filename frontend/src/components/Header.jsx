@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import cx from '../utils/cx'
 import { unsubscribeFromPush } from '../utils/push'
-import ChangePasswordModal from './ChangePasswordModal'
 import Icon from './Icon'
 import PendingBadge from './PendingBadge'
 import s from './Header.module.css'
@@ -13,18 +10,6 @@ export default function Header() {
   const { user, logout } = useAuth()
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [showPwModal, setShowPwModal] = useState(false)
-  const menuRef = useRef(null)
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuOpen])
 
   const goToAdmin = () => {
     const token = localStorage.getItem('access_token')
@@ -40,8 +25,10 @@ export default function Header() {
     form.submit()
   }
 
+  // Direct log-out affordance — the old dropdown (change password / sign out)
+  // was replaced by: change-password button inside Settings → Profile, and
+  // this header button only logs out.
   const handleLogout = async () => {
-    setMenuOpen(false)
     await unsubscribeFromPush().catch(() => {})
     logout()
     navigate('/login')
@@ -60,36 +47,16 @@ export default function Header() {
             {t('header.admin', 'Admin')}
           </button>
         )}
-        <div className={s.userWrap} ref={menuRef}>
-          <button
-            type="button"
-            className={s.userBtn}
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label={user?.username ?? 'User menu'}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-          >
-            <Icon name="user" />
-          </button>
-          {menuOpen && (
-            <div className={s.dropdown} role="menu">
-              <button
-                className={s.dropItem}
-                onClick={() => {
-                  setShowPwModal(true)
-                  setMenuOpen(false)
-                }}
-              >
-                {t('header.changePassword')}
-              </button>
-              <button className={cx(s.dropItem, s.dropItemDanger)} onClick={handleLogout}>
-                {t('header.signOut')}
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          className={s.userBtn}
+          onClick={handleLogout}
+          aria-label={t('header.signOut')}
+          title={t('header.signOut')}
+        >
+          <Icon name="log-out" />
+        </button>
       </div>
-      {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} />}
     </header>
   )
 }

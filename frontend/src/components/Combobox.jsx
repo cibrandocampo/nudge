@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { useClickOutside } from '../hooks/useClickOutside'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './Combobox.module.css'
@@ -34,17 +36,19 @@ export default function Combobox({
       ? options.slice(0, maxResults)
       : options.filter((o) => String(getLabel(o)).toLowerCase().includes(normalizedQuery)).slice(0, maxResults)
 
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false)
-        setQuery('')
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  useClickOutside(
+    wrapRef,
+    () => {
+      setOpen(false)
+      setQuery('')
+    },
+    open,
+  )
+
+  useEscapeKey(() => {
+    setOpen(false)
+    setQuery('')
+  }, open)
 
   useEffect(() => {
     setHighlightedIndex(0)
@@ -77,11 +81,6 @@ export default function Combobox({
       e.preventDefault()
       const idx = Math.min(highlightedIndex, filtered.length - 1)
       selectOption(filtered[idx])
-    } else if (e.key === 'Escape') {
-      if (!open) return
-      e.preventDefault()
-      setOpen(false)
-      setQuery('')
     }
   }
 

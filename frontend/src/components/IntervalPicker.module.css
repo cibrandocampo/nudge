@@ -1,0 +1,96 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmentedItem {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.5rem 0.25rem;
+  background: transparent;
+  border: none;
+  color: var(--c-text-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.segmentedItem + .segmentedItem {
+  border-left: 1px solid var(--c-border);
+}
+
+.segmentedItem:hover:not(.segmentedItemActive) {
+  background: var(--c-border-inner);
+}
+
+.segmentedItemActive {
+  background: var(--c-primary);
+  color: var(--c-surface);
+}
+
+.stepperRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stepperBtn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  color: var(--c-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stepperBtn:hover:not(:disabled) {
+  background: var(--c-border-inner);
+}
+
+.stepperBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepperInput {
+  width: 64px;
+  text-align: center;
+  padding: 0.45rem 0.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepperInput:focus {
+  outline: none;
+  border-color: var(--c-primary);
+}
+
+.stepperHint {
+  color: var(--c-text-3);
+  font-size: 0.85rem;
+  margin-left: 0.25rem;
+}
