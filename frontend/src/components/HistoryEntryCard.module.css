@@ -23,6 +23,9 @@
 }
 
 .notesView {
+  background: none;
+  border: none;
+  margin: 0;
   padding: 0.25rem 0.5rem;
   font-size: 0.8rem;
   color: var(--c-text-2);

@@ -109,14 +109,14 @@ export default function HistoryEntryCard({
               />
             ) : (
               <>
-                {entry.notes && (
-                  <span
-                    className={cx(s.notesView, editable && s.notesViewEditable)}
-                    onClick={editable ? onStartEdit : undefined}
-                  >
-                    {entry.notes}
-                  </span>
-                )}
+                {entry.notes &&
+                  (editable ? (
+                    <button type="button" className={cx(s.notesView, s.notesViewEditable)} onClick={onStartEdit}>
+                      {entry.notes}
+                    </button>
+                  ) : (
+                    <span className={s.notesView}>{entry.notes}</span>
+                  ))}
                 {editable && (
                   <button
                     type="button"

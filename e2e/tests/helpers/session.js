@@ -50,22 +50,13 @@ export async function freshSession(page, context, { loginAs: who } = {}) {
 }
 
 /**
- * Sign out via the header user menu and wait for the /login redirect.
- * Uses `exact: true` to avoid matching the "Admin" Django link button.
+ * Sign out via the Header's direct log-out button and wait for the
+ * /login redirect. The old user-menu dropdown was replaced by a single
+ * button with `aria-label="Sign out"` — the change-password action now
+ * lives under Settings → Profile.
  */
 export async function logout(page) {
-  const username =
-    (await page.evaluate(() => {
-      const token = localStorage.getItem('access_token')
-      if (!token) return null
-      try {
-        return JSON.parse(atob(token.split('.')[1])).username ?? null
-      } catch {
-        return null
-      }
-    })) ?? SEED.admin.username
-  await page.getByRole('button', { name: username, exact: true }).click()
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click()
   await page.waitForURL('/login')
 }
 
