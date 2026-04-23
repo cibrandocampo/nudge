@@ -30,10 +30,10 @@
   top: 100%;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 0.4rem;
   z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
   min-width: 140px;
 }
 
@@ -52,7 +52,7 @@
 
 .popoverItem:hover {
   background: var(--c-bg);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .checkbox {

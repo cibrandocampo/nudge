@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useClickOutside } from '../hooks/useClickOutside'
 import cx from '../utils/cx'
 import Icon from './Icon'
 import s from './SharePopover.module.css'
 
 export default function SharePopover({ sharedWith, contacts, isOwner, onToggleShare }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
 
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  useClickOutside(wrapRef, () => setOpen(false), open)
 
   if (!isOwner || !contacts || contacts.length === 0) return null
 
@@ -29,7 +25,7 @@ export default function SharePopover({ sharedWith, contacts, isOwner, onToggleSh
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        aria-label="Share"
+        aria-label={t('sharing.share')}
       >
         <Icon name="users" size="sm" />
       </button>

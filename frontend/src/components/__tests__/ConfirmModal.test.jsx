@@ -32,8 +32,14 @@ describe('ConfirmModal', () => {
 
   it('calls onCancel when overlay is clicked', () => {
     renderWithProviders(<ConfirmModal {...props} />)
-    fireEvent.click(screen.getByRole('dialog'))
+    fireEvent.click(screen.getByRole('dialog').parentElement)
     expect(props.onCancel).toHaveBeenCalled()
+  })
+
+  it('does not call onCancel when the dialog box is clicked', () => {
+    renderWithProviders(<ConfirmModal {...props} />)
+    fireEvent.click(screen.getByRole('dialog'))
+    expect(props.onCancel).not.toHaveBeenCalled()
   })
 
   it('calls onCancel on Escape key', () => {

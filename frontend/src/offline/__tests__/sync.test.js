@@ -24,6 +24,15 @@ function fakeQueryClient() {
   }
 }
 
+async function waitForEmptyQueue({ timeout = 2000, interval = 10 } = {}) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if ((await list()).length === 0) return
+    await new Promise((r) => setTimeout(r, interval))
+  }
+  expect(await list()).toHaveLength(0)
+}
+
 function pendingEntry(overrides = {}) {
   return {
     id: 'k-1',
@@ -204,21 +213,18 @@ describe('offline sync worker', () => {
 
   it("'online' window event triggers a drain", async () => {
     const qc = fakeQueryClient()
-    // initSyncWorker also drains immediately; register AFTER enqueue so the
-    // drain we observe is the one fired by the online event.
+    // initSyncWorker intentionally does NOT auto-drain (see sync.js) — the
+    // online event is the sole driver of the drain we're asserting on.
     await enqueue(pendingEntry())
 
     server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({}, { status: 201 })))
     initSyncWorker(qc)
-    // Let the immediate drain finish
-    await new Promise((r) => setTimeout(r, 10))
-
-    // Now enqueue another and fire 'online'
     await enqueue(pendingEntry({ id: 'k-2', createdAt: '2026-04-17T08:01:00.000Z' }))
     window.dispatchEvent(new Event('online'))
-    await new Promise((r) => setTimeout(r, 20))
 
-    expect(await list()).toHaveLength(0)
+    // Poll the queue instead of a fixed sleep — draining both entries
+    // involves a few awaited round-trips and 20 ms was flaky on GH Actions.
+    await waitForEmptyQueue()
   })
 
   it('processes without a query client (invalidation step is a no-op)', async () => {

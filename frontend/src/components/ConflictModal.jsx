@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { diffPayloads } from '../utils/diffPayloads'
 import Icon from './Icon'
+import ModalFrame from './ModalFrame'
 import s from './ConflictModal.module.css'
 
 function formatValue(value) {
@@ -9,8 +10,6 @@ function formatValue(value) {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (Array.isArray(value)) return `[${value.map(formatValue).join(',')}]`
   if (typeof value === 'object') {
-    // Objects are uncommon in mutation payloads (mostly flat patches); when
-    // they show up, a k:v preview reads cleaner than raw JSON.
     const entries = Object.entries(value).map(([k, v]) => `${k}: ${formatValue(v)}`)
     return `{ ${entries.join(', ')} }`
   }
@@ -34,14 +33,8 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
   const diffs = diffPayloads(local, server)
 
   return (
-    <div
-      className={s.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="conflict-title"
-      data-testid="conflict-modal"
-    >
-      <div className={s.modal}>
+    <ModalFrame onClose={onClose} variant="framed" size="md">
+      <div data-testid="conflict-modal" className={s.inner}>
         <div className={s.header}>
           <div>
             <h2 id="conflict-title" className={s.title}>
@@ -93,6 +86,6 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
           </button>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   )
 }

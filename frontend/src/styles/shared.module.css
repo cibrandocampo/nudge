@@ -87,7 +87,28 @@
 }
 .input:focus {
   border-color: var(--c-text-3);
-  box-shadow: 0 0 0 2px var(--c-ring);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Native `<select>` paints its dropdown arrow flush against the right
+ * border regardless of padding. Hide the native arrow and draw our own
+ * via background-image so we control the exact gap from the edge. The
+ * SVG is a `chevron-down` (Lucide) inline-encoded with var(--c-text-3)
+ * hard-coded as #9ca3af to match the light theme. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  /* Reserve room for the chevron so long option text doesn't collide. */
+  padding-right: 2.25rem;
+}
+/* Firefox still renders a focus-outline "X" glyph on selects — kill it. */
+select.input::-ms-expand {
+  display: none;
 }
 
 /* ── Overlay / Modal ─────────────────────────────────────────── */
@@ -105,11 +126,11 @@
 
 .modalBox {
   background: var(--c-surface);
-  border-radius: 12px;
+  border-radius: var(--radius-xxl);
   padding: 1.5rem;
   max-width: 360px;
   width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
 }
 
 .modalTitle {
@@ -420,6 +441,28 @@
   background: var(--c-primary-hover);
 }
 
+.btnAddSecondary {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+}
+.btnAddSecondary:hover {
+  background: var(--c-border-inner);
+}
+
+/* Destructive twin of .btnAddSecondary — used for top-bar Delete affordances
+ * that must match the 40×40 size of .btnAdd while reading as danger. */
+.btnAddDanger {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-delete);
+}
+.btnAddDanger:hover {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--c-border-danger);
+}
+
 /* ── Stock — specific elements within cards ──────────────────── */
 
 .stockQty {
@@ -501,7 +544,7 @@
   bottom: 0;
   width: 3px;
   background: var(--c-muted);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 .groupHeader {
   display: flex;
@@ -522,4 +565,254 @@
 .groupCount {
   font-size: 0.7rem;
   color: var(--c-text-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Form primitives (T097)
+   Shared layout classes consumed by StockFormPage, RoutineFormPage
+   and future form pages. Keep them in sync with the patterns
+   established by StockFormPage — any style tweak here must work
+   for every form consumer.
+   ═══════════════════════════════════════════════════════════════ */
+
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+}
+
+.formSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.formSectionTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+/* Uniform 128×36 box for the three secondary actions (Share with /
+   Add batch / Cancel) so they line up identically across the page.
+   `.btn` alone leaves height to content — with the icons + font
+   stack each button rounds to a slightly different pixel count. */
+.formSecondaryBtn {
+  height: 36px;
+  min-width: 128px;
+  padding-top: 0;
+  padding-bottom: 0;
+  justify-content: center;
+}
+
+.formFooter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  /* Match the inner padding of `.formSection` (1rem) **plus** the
+     section's 1 px border, so the submit/cancel buttons line up
+     pixel-perfect with the secondary buttons that live inside the
+     bordered section cards above. */
+  padding: 0 calc(1rem + 1px);
+}
+
+.formChipsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.formChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--c-border-inner);
+  color: var(--c-text);
+  padding: 0.25rem 0.35rem 0.25rem 0.25rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.formChipAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.formChipRemove {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-3);
+  cursor: pointer;
+  border-radius: 50%;
+}
+.formChipRemove:hover {
+  background: var(--c-surface);
+  color: var(--c-text);
+}
+
+/* iOS-style pill toggle. Native checkbox with role="switch" lives
+   hidden behind the visual pill so screen readers + keyboard work
+   exactly like a standard input. */
+.formToggleSwitch {
+  position: relative;
+  display: inline-flex;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.formToggleSwitch input[type='checkbox'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.formToggleTrack {
+  position: absolute;
+  inset: 0;
+  background: var(--c-border);
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.formToggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--c-surface);
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+  transition: transform 0.15s ease;
+}
+
+.formToggleSwitch input[type='checkbox']:checked ~ .formToggleTrack {
+  background: var(--c-primary);
+}
+
+.formToggleSwitch input[type='checkbox']:checked ~ .formToggleTrack > .formToggleThumb,
+.formToggleSwitch input[type='checkbox']:checked + .formToggleTrack > .formToggleThumb {
+  transform: translateX(18px);
+}
+
+.formToggleSwitch input[type='checkbox']:disabled ~ .formToggleTrack {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.formToggleSwitch input[type='checkbox']:focus-visible ~ .formToggleTrack {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+/* ── Modal action buttons ─────────────────────────────────────── */
+.btnCancel {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.btnCancel:hover {
+  background: var(--c-border-inner);
+}
+
+.btnConfirm {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.btnConfirm:hover {
+  background: var(--c-primary-hover);
+}
+.btnConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnConfirmDanger {
+  background: var(--c-danger);
+}
+.btnConfirmDanger:hover {
+  background: var(--c-danger);
+  filter: brightness(0.92);
+}
+
+/* ── Icon-button size variants ────────────────────────────────── */
+/* Convention:
+ *   .btnIcon    → 32x32 (in-card actions)
+ *   .btnIconMd  → 36x36 (form-level)
+ *   .btnIconLg  → 40x40 (top-bar triggers, primary affordances)
+ */
+.btnIconMd {
+  width: 36px;
+  height: 36px;
+}
+.btnIconLg {
+  width: 40px;
+  height: 40px;
+}
+
+/* ── Modal box size variants ──────────────────────────────────── */
+/* Convention:
+ *   .modalBox       → default ~360px (short confirms, small pickers)
+ *   .modalBoxMd     → ~420px (ShareModal, GroupPickerModal, ConflictModal)
+ *   .modalBoxLg     → ~500px (LotSelectionModal, ChangePasswordModal)
+ *   .modalBoxFramed → bare frame (header/body/footer layout with
+ *                    internal scroll) — used by ConflictModal.
+ */
+.modalBoxMd {
+  max-width: 420px;
+}
+.modalBoxLg {
+  max-width: 500px;
+}
+.modalBoxFramed {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  width: 100%;
+  padding: 0;
 }

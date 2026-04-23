@@ -15,13 +15,13 @@ test.describe('Routines', () => {
     await expect(page.getByText('New routine')).toBeVisible()
   })
 
-  test('create a routine with preset interval', async ({ page }) => {
+  test('create a routine with a weekly interval via the picker', async ({ page }) => {
     await page.goto('/routines/new')
 
     await page.getByPlaceholder(/change water filter/i).fill(ROUTINE_NAME)
 
-    // Click the "1 week" preset
-    await page.getByRole('button', { name: '1 week' }).click()
+    // Switch the IntervalPicker unit to Weeks; default value = 1.
+    await page.getByRole('tab', { name: 'weeks' }).click()
 
     await page.getByRole('button', { name: 'Save' }).click()
 
@@ -71,13 +71,10 @@ test.describe('Routines', () => {
     await page.goto('/routines/new')
     await page.getByPlaceholder(/change water filter/i).fill(`Interval test ${Date.now()}`)
 
-    // Set 6 months via custom input
-    const valueInput = page.locator('input[type="number"]').first()
-    await valueInput.click()
-    await valueInput.fill('6')
-
-    const unitSelect = page.locator('select').first()
-    await unitSelect.selectOption('months')
+    // Pick Months via the segmented tab, then step up to 6.
+    await page.getByRole('tab', { name: 'months' }).click()
+    const plus = page.getByRole('button', { name: 'Increase' })
+    for (let i = 0; i < 5; i += 1) await plus.click()
 
     await page.getByRole('button', { name: 'Save' }).click()
     await page.waitForURL(/\/routines\/\d+$/)

@@ -19,36 +19,20 @@ test.describe('Sharing — Routines', () => {
     await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
-  test('share popover appears on routine cards', async ({ page }) => {
-    // Should be on dashboard after login
-    await expect(page.getByText('Today')).toBeVisible()
+  test('share modal lists contacts when opened from the routine form', async ({ page }) => {
+    // The old popover on routine cards was replaced by a ShareWithSection
+    // (→ ShareModal) inside the routine form. Open the "New routine" form
+    // and confirm the modal renders and lists the seeded contact.
+    await page.getByRole('link', { name: '+ New routine' }).click()
+    await expect(page).toHaveURL('/routines/new')
 
-    // Look for at least one share button (👥) on the page
-    const shareButtons = page.getByRole('button', { name: 'Share' })
-    const count = await shareButtons.count()
-
-    if (count === 0) {
-      // No routines on dashboard — create one first
-      await page.getByRole('link', { name: '+ New routine' }).click()
-      await page.getByPlaceholder(/change water filter/i).fill(`Share test ${Date.now()}`)
-      await page.getByRole('button', { name: 'Save' }).click()
-      await page.waitForURL(/\/routines\/\d+$/)
-
-      // Go back to dashboard
-      await page.goto('/')
-      await expect(page.getByRole('button', { name: 'Share' }).first()).toBeVisible()
-    }
-
-    // Click the first share button
-    await page.getByRole('button', { name: 'Share' }).first().click()
-
-    // Modal should open with a contact listed
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText(USER2.username)).toBeVisible()
   })
 
-  test('share routine via API and verify dashboard reflects it', async ({ page }) => {
+  test('share routine via API and verify the edit form reflects it', async ({ page }) => {
     // Create a routine
     await page.getByRole('link', { name: '+ New routine' }).click()
     const routineName = `Shared routine ${Date.now()}`
@@ -58,7 +42,9 @@ test.describe('Sharing — Routines', () => {
 
     const routineId = page.url().match(/\/routines\/(\d+)$/)[1]
 
-    // Share via API (the checkbox inside RoutineCard Link causes navigation — known issue)
+    // Share via API — RoutineCard has no Share trigger; sharing is edited
+    // from the routine form, so setting via API + re-opening the form is
+    // the equivalent end-to-end round-trip.
     await page.evaluate(
       async ({ rid, contactUsername }) => {
         const token = localStorage.getItem('access_token')
@@ -80,13 +66,16 @@ test.describe('Sharing — Routines', () => {
       { rid: routineId, contactUsername: USER2.username },
     )
 
-    // Go to dashboard and find the specific routine card
+    // Dashboard: the card should carry the passive shared badge.
     await page.goto('/')
     const card = page.getByTestId('routine-card').filter({ hasText: routineName })
     await expect(card).toBeVisible()
+    await expect(card.getByTestId('shared-badge')).toBeVisible()
 
-    // Open share modal for this specific routine and verify contact is selected
-    await card.getByRole('button', { name: 'Share' }).click()
+    // Open the routine's edit form — the ShareModal should show USER2
+    // as already selected.
+    await page.goto(`/routines/${routineId}/edit`)
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
@@ -148,87 +137,77 @@ test.describe('Sharing — Inventory', () => {
     await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
-  test('share popover appears on stock cards', async ({ page }) => {
-    // Create a stock item first
-    const name = `Share stock ${Date.now()}`
+  test('share modal lists contacts when opened from the stock form', async ({ page }) => {
+    // Sharing for stock happens on the form page (ShareWithSection), not on
+    // the list card. Navigate into the "New product" form and open the modal.
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByPlaceholder(/item name/i).fill(name)
-    await page.getByRole('button', { name: 'Create item' }).click()
+    await expect(page).toHaveURL('/inventory/new')
 
-    const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
-    await expect(card).toBeVisible()
-
-    // Share button should be on the card
-    const shareBtn = card.getByTitle('Share with')
-    await expect(shareBtn).toBeVisible()
-
-    // Click to open modal
-    await shareBtn.click()
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText(USER2.username)).toBeVisible()
   })
 
-  test('share stock with contact via popover', async ({ page }) => {
-    // Create a stock item
+  test('stock shared from the form is persisted and shows a shared badge', async ({ page }) => {
     const name = `Shared stock ${Date.now()}`
-    await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByPlaceholder(/item name/i).fill(name)
-    await page.getByRole('button', { name: 'Create item' }).click()
 
+    await page.getByRole('button', { name: '+ New' }).click()
+    await page.getByLabel('Name').fill(name)
+
+    // Open share modal, pick USER2, close with Escape.
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('li').filter({ hasText: USER2.username }).click()
+    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+
+    // A chip with the contact should render below the Share with button.
+    await expect(page.getByText(USER2.username, { exact: true })).toBeVisible()
+
+    // Submit the form and confirm we land on the detail page.
+    await page.getByRole('button', { name: 'Create' }).click()
+    await expect(page).toHaveURL(/\/inventory\/\d+$/)
+
+    // Inventory list should show the card with the shared badge for the owner.
+    await page.getByRole('link', { name: /back to inventory/i }).click()
     const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(card).toBeVisible()
-
-    // Open share modal and select the contact
-    await card.getByTitle('Share with').click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toBeVisible()
-    await Promise.all([
-      page.waitForResponse((res) => res.url().includes('/stock/') && res.request().method() === 'PATCH'),
-      dialog.locator('li').filter({ hasText: USER2.username }).click(),
-    ])
-
-    // Close modal with Escape, re-open and verify contact is selected
-    await page.keyboard.press('Escape')
-    await card.getByTitle('Share with').click()
-    const reopened = page.getByRole('dialog')
-    await expect(reopened.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
+    await expect(card.getByTestId('shared-badge')).toBeVisible()
   })
 
-  test('shared stock visible to second user with owner label', async ({ page, context }) => {
-    // Create and share a stock as admin
+  test('shared stock is visible to the recipient with owner label', async ({ page, context }) => {
+    // Create a stock shared with USER2 as admin.
     const name = `Stock for user2 ${Date.now()}`
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByPlaceholder(/item name/i).fill(name)
-    await page.getByRole('button', { name: 'Create item' }).click()
+    await page.getByLabel('Name').fill(name)
 
-    const card = page.locator('[data-testid="product-card"]').filter({ hasText: name })
-    await expect(card).toBeVisible()
-
-    // Open share modal and wait for PATCH to confirm sharing was saved
-    await card.getByTitle('Share with').click()
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
-    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toBeVisible()
-    await Promise.all([
-      page.waitForResponse((res) => res.url().includes('/stock/') && res.request().method() === 'PATCH'),
-      dialog.locator('li').filter({ hasText: USER2.username }).click(),
-    ])
+    await dialog.locator('li').filter({ hasText: USER2.username }).click()
+    await page.keyboard.press('Escape')
 
-    // Login as second user
+    await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/api/stock/') && res.request().method() === 'POST' && res.status() === 201,
+      ),
+      page.getByRole('button', { name: 'Create' }).click(),
+    ])
+    await expect(page).toHaveURL(/\/inventory\/\d+$/)
+
+    // USER2 logs in on a separate page and visits Inventory.
     const page2 = await context.newPage()
     await loginAs(page2, USER2.username, USER2.password)
     await page2.getByRole('link', { name: 'Inventory' }).click()
     await expect(page2).toHaveURL('/inventory')
 
-    // The shared stock should appear
     const sharedCard = page2.locator('[data-testid="product-card"]').filter({ hasText: name })
-    await expect(sharedCard).toBeVisible({ timeout: 10000 })
+    await expect(sharedCard).toBeVisible({ timeout: 10_000 })
 
-    // Owner label should show admin username (scoped to the specific card)
+    // The recipient sees the admin username as the owner label, no shared badge.
     await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
-
-    // Share button should NOT appear (user2 is not the owner)
-    await expect(sharedCard.getByTitle('Share with')).not.toBeVisible()
+    await expect(sharedCard.getByTestId('shared-badge')).toHaveCount(0)
 
     await page2.close()
   })

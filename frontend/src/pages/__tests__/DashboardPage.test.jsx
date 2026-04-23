@@ -46,14 +46,21 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Upcoming')).toBeInTheDocument()
   })
 
-  it('shows empty message when no routines due', async () => {
+  it('shows empty message when no routines due but the user has routines', async () => {
+    // The dashboard distinguishes "all caught up today" (at least one
+    // routine exists) from "no routines yet". Here we simulate the former.
+    server.use(
+      http.get(`${BASE}/routines/`, () =>
+        HttpResponse.json([{ id: 1, name: 'Vitamins', next_due_at: null }]),
+      ),
+    )
     renderWithProviders(<DashboardPage />)
     await waitFor(() => expect(screen.getByText('All caught up!')).toBeInTheDocument())
   })
 
   it('renders the page title and the new-routine link in the top bar', async () => {
     renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Routines' })).toBeInTheDocument())
     expect(screen.getByRole('link', { name: '+ New routine' })).toBeInTheDocument()
   })
 
@@ -61,7 +68,7 @@ describe('DashboardPage', () => {
     reachableRef.current = false
     try {
       renderWithProviders(<DashboardPage />)
-      await waitFor(() => expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Routines' })).toBeInTheDocument())
       const btn = screen.getByRole('button', { name: '+ New routine' })
       expect(btn).toBeDisabled()
       expect(btn).toHaveAttribute('title', 'Requires connection')
@@ -301,6 +308,10 @@ describe('DashboardPage', () => {
     let logCalled = false
     server.use(
       http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: logCalled ? [] : [dueRoutine], upcoming: [] })),
+      // The full routines list has the routine the user just logged — so
+      // the post-log empty state resolves to "all caught up", not
+      // "no routines yet".
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([dueRoutine])),
       http.post(`${BASE}/routines/1/log/`, () => {
         logCalled = true
         return HttpResponse.json({ id: 1 }, { status: 201 })
@@ -316,8 +327,12 @@ describe('DashboardPage', () => {
   })
 
   // ── Sharing ────────────────────────────────────────────────────────────────
+  // Dashboard cards no longer expose share actions — sharing is edited from
+  // the routine form. The card only surfaces a passive `shared-badge` when
+  // the owner has shared the routine, and an owner label when the viewer is
+  // the recipient.
 
-  it('shows share popover button on routine cards when contacts exist', async () => {
+  it('surfaces a passive shared-badge on owner cards when the routine is shared', async () => {
     server.use(
       http.get(`${BASE}/dashboard/`, () =>
         HttpResponse.json({
@@ -332,8 +347,8 @@ describe('DashboardPage', () => {
               hours_until_due: -1,
               stock_name: null,
               stock_quantity: null,
-              shared_with: [],
-              shared_with_details: [],
+              shared_with: [10],
+              shared_with_details: [{ id: 10, username: 'alice' }],
               is_owner: true,
               owner_username: 'testuser',
             },
@@ -341,54 +356,12 @@ describe('DashboardPage', () => {
           upcoming: [],
         }),
       ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
     )
     renderWithProviders(<DashboardPage />)
     await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
-  })
-
-  it('toggles share on a routine via the share popover', async () => {
-    let patchBody = null
-    server.use(
-      http.get(`${BASE}/dashboard/`, () =>
-        HttpResponse.json({
-          due: [
-            {
-              id: 1,
-              name: 'Vitamins',
-              next_due_at: new Date(Date.now() - 3600000).toISOString(),
-              created_at: '2025-01-01T00:00:00Z',
-              is_due: true,
-              is_overdue: true,
-              hours_until_due: -1,
-              stock_name: null,
-              stock_quantity: null,
-              shared_with: [],
-              shared_with_details: [],
-              is_owner: true,
-              owner_username: 'testuser',
-            },
-          ],
-          upcoming: [],
-        }),
-      ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-      http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
-        patchBody = await request.json()
-        return HttpResponse.json({})
-      }),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    // Open share popover
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    // Toggle alice checkbox
-    await user.click(screen.getByText('alice'))
-
-    await waitFor(() => expect(patchBody).not.toBeNull())
-    expect(patchBody.shared_with).toEqual([10])
+    expect(screen.getByTestId('shared-badge')).toBeInTheDocument()
+    // No interactive share affordance remains on the card.
+    expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument()
   })
 
   it('shows error when the stock cache has no lots available for selection', async () => {
@@ -452,130 +425,6 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
 
-  it('toggles share on routine with null shared_with', async () => {
-    let patchBody = null
-    server.use(
-      http.get(`${BASE}/dashboard/`, () =>
-        HttpResponse.json({
-          due: [
-            {
-              id: 1,
-              name: 'Vitamins',
-              next_due_at: new Date(Date.now() - 3600000).toISOString(),
-              created_at: '2025-01-01T00:00:00Z',
-              is_due: true,
-              is_overdue: true,
-              hours_until_due: -1,
-              stock_name: null,
-              stock_quantity: null,
-              shared_with: null,
-              shared_with_details: [],
-              is_owner: true,
-              owner_username: 'testuser',
-            },
-          ],
-          upcoming: [],
-        }),
-      ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-      http.patch(`${BASE}/routines/:id/`, async ({ request }) => {
-        patchBody = await request.json()
-        return HttpResponse.json({})
-      }),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    await user.click(screen.getByText('alice'))
-
-    await waitFor(() => expect(patchBody).not.toBeNull())
-    expect(patchBody.shared_with).toEqual([10])
-  })
-
-  it('opens ShareModal for routine and closes it', async () => {
-    server.use(
-      http.get(`${BASE}/dashboard/`, () =>
-        HttpResponse.json({
-          due: [
-            {
-              id: 1,
-              name: 'Vitamins',
-              next_due_at: new Date(Date.now() - 3600000).toISOString(),
-              created_at: '2025-01-01T00:00:00Z',
-              is_due: true,
-              is_overdue: true,
-              hours_until_due: -1,
-              stock_name: null,
-              stock_quantity: null,
-              shared_with: [],
-              shared_with_details: [],
-              is_owner: true,
-              owner_username: 'testuser',
-            },
-          ],
-          upcoming: [],
-        }),
-      ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: /close/i }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  })
-
-  it('renders null when shareRoutineId points to routine no longer in data', async () => {
-    let fetchCount = 0
-    server.use(
-      http.get(`${BASE}/dashboard/`, () => {
-        fetchCount++
-        if (fetchCount === 1) {
-          return HttpResponse.json({
-            due: [
-              {
-                id: 1,
-                name: 'Vitamins',
-                next_due_at: new Date(Date.now() - 3600000).toISOString(),
-                created_at: '2025-01-01T00:00:00Z',
-                is_due: true,
-                is_overdue: true,
-                hours_until_due: -1,
-                stock_name: null,
-                stock_quantity: null,
-                shared_with: [],
-                shared_with_details: [],
-                is_owner: true,
-                owner_username: 'testuser',
-              },
-            ],
-            upcoming: [],
-          })
-        }
-        // Second fetch (after share toggle) returns empty lists
-        return HttpResponse.json({ due: [], upcoming: [] })
-      }),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-      http.patch(`${BASE}/routines/:id/`, () => HttpResponse.json({})),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    // Open ShareModal
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-
-    // Toggle share — triggers handleToggleShare → patch + fetchDashboard
-    // After re-fetch, routine disappears from data but shareRoutineId remains set
-    await user.click(screen.getByText('alice'))
-    // Modal should close or render null since routine no longer in data
-    await waitFor(() => expect(screen.queryByText('Vitamins')).not.toBeInTheDocument())
-  })
-
   it('queues the log offline when the POST hits a network error', async () => {
     // T065: the per-action "Saved / will sync later" toast was removed;
     // instead the mutation lands in the offline queue and the optimistic
@@ -603,82 +452,6 @@ describe('DashboardPage', () => {
 
     await waitFor(async () => expect(await list()).toHaveLength(1))
     await clear()
-  })
-
-  it('queues the share toggle offline when the PATCH hits a network error', async () => {
-    await clear()
-    server.use(
-      http.get(`${BASE}/dashboard/`, () =>
-        HttpResponse.json({
-          due: [
-            {
-              id: 1,
-              name: 'Vitamins',
-              next_due_at: new Date(Date.now() - 3600000).toISOString(),
-              created_at: '2025-01-01T00:00:00Z',
-              updated_at: '2026-04-17T10:00:00Z',
-              is_due: true,
-              is_overdue: true,
-              hours_until_due: -1,
-              stock_name: null,
-              stock_quantity: null,
-              shared_with: [],
-              shared_with_details: [],
-              is_owner: true,
-              owner_username: 'testuser',
-            },
-          ],
-          upcoming: [],
-        }),
-      ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-      mockNetworkError('patch', '/routines/1/'),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    await user.click(screen.getByText('alice'))
-
-    await waitFor(async () => expect(await list()).toHaveLength(1))
-    await clear()
-  })
-
-  it('shows error toast when toggling share fails with a server error', async () => {
-    server.use(
-      http.get(`${BASE}/dashboard/`, () =>
-        HttpResponse.json({
-          due: [
-            {
-              id: 1,
-              name: 'Vitamins',
-              next_due_at: new Date(Date.now() - 3600000).toISOString(),
-              created_at: '2025-01-01T00:00:00Z',
-              updated_at: '2026-04-17T10:00:00Z',
-              is_due: true,
-              is_overdue: true,
-              hours_until_due: -1,
-              stock_name: null,
-              stock_quantity: null,
-              shared_with: [],
-              shared_with_details: [],
-              is_owner: true,
-              owner_username: 'testuser',
-            },
-          ],
-          upcoming: [],
-        }),
-      ),
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
-      http.patch(`${BASE}/routines/:id/`, () => new HttpResponse(null, { status: 500 })),
-    )
-    const { user } = renderWithProviders(<DashboardPage />)
-    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    await user.click(screen.getByText('alice'))
-
-    await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
   })
 
   it('shows owner label on shared routine where user is not owner', async () => {

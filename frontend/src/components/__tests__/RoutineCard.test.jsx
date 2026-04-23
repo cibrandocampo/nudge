@@ -81,34 +81,19 @@ describe('RoutineCard', () => {
   })
 
   // ── Sharing ────────────────────────────────────────────────────────────────
+  // Sharing is edited from the routine form (ShareWithSection). The card only
+  // surfaces a passive `shared-badge` when the owner has shared the routine —
+  // mirroring StockCard.
 
-  it('shows share button when owner with contacts', () => {
+  it('hides the shared badge when owner has not shared', () => {
     const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_username: 'testuser' }
-    const contacts = [{ id: 10, username: 'alice' }]
-    renderWithProviders(
-      <RoutineCard
-        routine={routine}
-        onMarkDone={vi.fn()}
-        completing={false}
-        contacts={contacts}
-        onToggleShare={vi.fn()}
-      />,
-    )
-    expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument()
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
   })
 
-  it('hides share button when not owner', () => {
-    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'other' }
-    const contacts = [{ id: 10, username: 'alice' }]
-    renderWithProviders(
-      <RoutineCard
-        routine={routine}
-        onMarkDone={vi.fn()}
-        completing={false}
-        contacts={contacts}
-        onToggleShare={vi.fn()}
-      />,
-    )
+  it('does not expose an interactive share button', () => {
+    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_username: 'testuser' }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument()
   })
 
@@ -127,63 +112,42 @@ describe('RoutineCard', () => {
     await waitFor(() => expect(screen.getByText('Detail page')).toBeInTheDocument())
   })
 
-  it('calls onShare with routine id when share button clicked on due routine', async () => {
-    const onShare = vi.fn()
-    const routine = {
-      ...baseRoutine,
-      is_due: true,
-      is_overdue: true,
-      shared_with: [],
-      is_owner: true,
-      owner_username: 'testuser',
-    }
-    const contacts = [{ id: 10, username: 'alice' }]
-    const { user } = renderWithProviders(
-      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
-    )
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    expect(onShare).toHaveBeenCalledWith(1)
-  })
-
-  it('calls onShare with routine id when share button clicked on not-due routine', async () => {
-    const onShare = vi.fn()
-    const routine = {
-      ...baseRoutine,
-      is_due: false,
-      is_overdue: false,
-      shared_with: [],
-      is_owner: true,
-      owner_username: 'testuser',
-    }
-    const contacts = [{ id: 10, username: 'alice' }]
-    const { user } = renderWithProviders(
-      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={onShare} />,
-    )
-    await user.click(screen.getByRole('button', { name: /share/i }))
-    expect(onShare).toHaveBeenCalledWith(1)
-  })
-
   it('shows owner label when not owner', () => {
     const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'other' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.getByText('other')).toBeInTheDocument()
   })
 
-  it('uses the shared-active icon variant on due routine when already shared', () => {
-    const routine = { ...baseRoutine, is_due: true, is_overdue: true, shared_with: [10], is_owner: true }
-    const contacts = [{ id: 10, username: 'alice' }]
-    const { container } = renderWithProviders(
-      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
-    )
-    expect(container.querySelector('[aria-label="Share"]').className).toContain('btnIconShared')
+  it('shows the shared badge when owner has shared the routine', () => {
+    const routine = { ...baseRoutine, shared_with: [10], is_owner: true }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge).toBeInTheDocument()
+    expect(badge.className).toContain('btnIconShared')
   })
 
-  it('uses the shared-active icon variant on non-due routine when already shared', () => {
-    const routine = { ...baseRoutine, is_due: false, is_overdue: false, shared_with: [10], is_owner: true }
-    const contacts = [{ id: 10, username: 'alice' }]
-    const { container } = renderWithProviders(
-      <RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} contacts={contacts} onShare={vi.fn()} />,
-    )
-    expect(container.querySelector('[aria-label="Share"]').className).toContain('btnIconShared')
+  it('hides the shared badge for recipients (is_owner=false) even when shared_with is populated', () => {
+    const routine = { ...baseRoutine, shared_with: [10], is_owner: false, owner_username: 'alice' }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
+  })
+
+  it('disables the Done button with a tooltip when the backing stock is depleted', () => {
+    const routine = {
+      ...baseRoutine,
+      stock_name: 'Ibuprofen',
+      stock_quantity: 0,
+      stock_usage: 1,
+    }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const done = screen.getByRole('button', { name: /done/i })
+    expect(done).toBeDisabled()
+    expect(done).toHaveAttribute('title', expect.stringMatching(/no stock/i))
+  })
+
+  it('shows the interval label when provided on the routine', () => {
+    const routine = { ...baseRoutine, interval_label: 'every 8 h' }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    expect(screen.getByText('every 8 h')).toBeInTheDocument()
   })
 })

@@ -49,6 +49,10 @@ const FAKE_SUBSCRIPTION_INIT_SCRIPT = () => {
     get: () => 'granted',
     configurable: true,
   })
+  // SettingsPage calls Notification.requestPermission() before subscribing,
+  // and headless Chromium still returns 'default' there. Stub it to
+  // propagate the granted state the test has already asserted.
+  Notification.requestPermission = async () => 'granted'
 
   const endpoint = `https://e2e.nudge.local/push/${Math.random().toString(36).slice(2, 10)}`
   const encoder = new TextEncoder()
@@ -67,13 +71,59 @@ const FAKE_SUBSCRIPTION_INIT_SCRIPT = () => {
   }
   window.__nudgeFakeSubActive = false
 
-  navigator.serviceWorker.ready.then((reg) => {
-    reg.pushManager.subscribe = async () => {
+  const fakePushManager = {
+    subscribe: async () => {
       window.__nudgeFakeSubActive = true
       return fakeSub
+    },
+    getSubscription: async () => (window.__nudgeFakeSubActive ? fakeSub : null),
+  }
+  const fakeRegistration = { pushManager: fakePushManager, scope: '/' }
+
+  // When the test runs against host.docker.internal (non-secure, non-localhost
+  // origin), Chromium disables navigator.serviceWorker entirely. Stub it so
+  // subscribeToPush/unsubscribeFromPush can still run the UI path under test,
+  // and expose a helper that simulates the SW broadcasting a push payload
+  // back to the page — what sw.js does in production — so the delivery test
+  // can exercise the page-side listener contract without a real SW.
+  const listeners = new Set()
+  const fakeSwContainer = {
+    ready: Promise.resolve(fakeRegistration),
+    register: async () => fakeRegistration,
+    getRegistration: async () => fakeRegistration,
+    addEventListener: (type, fn) => {
+      if (type === 'message') listeners.add(fn)
+    },
+    removeEventListener: (type, fn) => {
+      if (type === 'message') listeners.delete(fn)
+    },
+    dispatchEvent: (evt) => {
+      if (evt.type === 'message') listeners.forEach((fn) => fn(evt))
+      return true
+    },
+  }
+  if (!('serviceWorker' in navigator)) {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: fakeSwContainer,
+      configurable: true,
+    })
+  } else {
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.pushManager.subscribe = fakePushManager.subscribe
+      reg.pushManager.getSubscription = fakePushManager.getSubscription
+    })
+  }
+
+  // Helper the delivery test uses instead of CDP.ServiceWorker.deliverPushMessage
+  // when running against an insecure origin (no real SW to target).
+  window.__nudgeSimulatePush = (payload) => {
+    const evt = new MessageEvent('message', { data: { type: 'push-received', payload } })
+    if (navigator.serviceWorker.dispatchEvent) {
+      navigator.serviceWorker.dispatchEvent(evt)
+    } else {
+      listeners.forEach((fn) => fn(evt))
     }
-    reg.pushManager.getSubscription = async () => (window.__nudgeFakeSubActive ? fakeSub : null)
-  })
+  }
 }
 
 const pushTestStatus = (page) =>
@@ -127,41 +177,45 @@ test.describe('Push notifications — subscribe / deliver / unsubscribe', () => 
       })
     })
 
-    const cdp = await context.newCDPSession(page)
-    // Attach the handler BEFORE `ServiceWorker.enable` — enable replays
-    // the current registration list, so a late listener misses the event
-    // and stalls the test for 10s.
-    const registrationIdPromise = new Promise((resolve) => {
-      cdp.on('ServiceWorker.workerRegistrationUpdated', (evt) => {
-        const reg = evt.registrations?.find(
-          (r) => r.scopeURL?.startsWith('http://localhost:5173') && !r.isDeleted,
-        )
-        if (reg) resolve(reg.registrationId)
+    // Two delivery strategies:
+    //   1. Real SW path (localhost / https): CDP.ServiceWorker.deliverPushMessage
+    //      exercises the full sw.js → postMessage chain.
+    //   2. Stubbed SW path (host.docker.internal, insecure origin): the
+    //      FAKE_SUBSCRIPTION_INIT_SCRIPT replaces navigator.serviceWorker,
+    //      so CDP has no SW to target. Trigger the same broadcast via the
+    //      `__nudgeSimulatePush` helper the stub installs.
+    const targetOrigin = page.url().match(/^https?:\/\/[^/]+/)?.[0] ?? ''
+    const isStubbed = await page.evaluate(() => typeof window.__nudgeSimulatePush === 'function')
+    const payload = { title: 'Push test', body: 'It works!', type: 'test', data: {} }
+
+    if (isStubbed) {
+      await page.evaluate((p) => window.__nudgeSimulatePush(p), payload)
+    } else {
+      const cdp = await context.newCDPSession(page)
+      const registrationIdPromise = new Promise((resolve) => {
+        cdp.on('ServiceWorker.workerRegistrationUpdated', (evt) => {
+          const reg = evt.registrations?.find((r) => r.scopeURL?.startsWith(targetOrigin) && !r.isDeleted)
+          if (reg) resolve(reg.registrationId)
+        })
       })
-    })
-    await cdp.send('ServiceWorker.enable')
-    const registrationId = await registrationIdPromise
+      await cdp.send('ServiceWorker.enable')
+      const registrationId = await registrationIdPromise
+      await cdp.send('ServiceWorker.deliverPushMessage', {
+        origin: targetOrigin,
+        registrationId,
+        data: JSON.stringify(payload),
+      })
+    }
 
-    await cdp.send('ServiceWorker.deliverPushMessage', {
-      origin: 'http://localhost:5173',
-      registrationId,
-      data: JSON.stringify({
-        title: 'Push test',
-        body: 'It works!',
-        type: 'test',
-        data: {},
-      }),
-    })
-
-    const payload = await page.evaluate(
+    const received = await page.evaluate(
       () =>
         Promise.race([
           window.__nudgePushReceived,
           new Promise((_, reject) => setTimeout(() => reject(new Error('push timeout')), 10_000)),
         ]),
     )
-    expect(payload).toMatchObject({ title: 'Push test', type: 'test' })
-    expect(payload).toHaveProperty('body', 'It works!')
+    expect(received).toMatchObject({ title: 'Push test', type: 'test' })
+    expect(received).toHaveProperty('body', 'It works!')
   })
 
   test('clicking Disable notifications unsubscribes the browser and the backend', async ({ page }) => {

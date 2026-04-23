@@ -9,9 +9,18 @@ const IDB_KEY = 'nudge-query-cache'
 // `gcTime: Infinity` keeps data in memory so the persister can write the
 // full snapshot on every change; eviction happens when the persister's
 // `maxAge` expires (configured by the provider). Instant paint offline
-// comes from this + the persister, NOT from `staleTime` — so we use the
-// TanStack default of 0 (fetch on mount/focus/reconnect). For a ~10-user
-// app the extra refetches are negligible and guarantee fresh data.
+// comes from this + the persister.
+//
+// `staleTime: 30s` — during typical page-to-page navigation the same
+// queries would refetch instantly under the default staleTime of 0,
+// producing visible network noise (routines/stock/contacts fired 3×+ on
+// a single session). 30 s keeps the data fresh enough after a mutation
+// while silencing the navigation-path refetch storm; mutations still
+// invalidate caches explicitly, so we don't hide stale writes.
+//
+// `refetchOnWindowFocus: false` — window-focus refetches stacked on top
+// of the per-mount refetch and felt redundant in practice. The offline
+// sync worker + explicit invalidations cover the intent.
 //
 // Retry policy: do NOT retry 4xx (client bugs / auth failures). Retry up to
 // 2 times on network / 5xx errors so intermittent connectivity doesn't flap
@@ -21,6 +30,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       gcTime: Infinity,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
       retry: (failureCount, error) => {
         const status = error?.status ?? error?.response?.status
         if (status >= 400 && status < 500) return false

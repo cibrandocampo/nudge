@@ -11,7 +11,6 @@ const baseStock = {
   group: null,
   has_expiring_lots: false,
   expiring_lots: [],
-  requires_lot_selection: false,
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
@@ -24,44 +23,31 @@ const baseStock = {
   updated_at: '2026-04-17T10:00:00Z',
 }
 
-const defaultAddLotForm = { show: false, qty: '', expiry: '', lotNumber: '', adding: false }
-
-function noop() {}
-
 function renderCard(overrides = {}) {
   const props = {
     stock: baseStock,
     consuming: false,
     flashing: false,
-    canShare: false,
     onConsume: vi.fn(),
-    onAssignGroup: vi.fn(),
-    onToggleShare: vi.fn(),
-    addLotForm: defaultAddLotForm,
-    onLotFieldChange: noop,
-    onToggleAddLot: noop,
-    onSubmitAddLot: noop,
-    onDeleteLot: vi.fn(),
     ...overrides,
   }
   return renderWithProviders(<StockCard {...props} />)
 }
 
 describe('StockCard', () => {
-  it('renders name, total quantity, and lot number', () => {
+  it('renders name and quantity', () => {
     renderCard()
     expect(screen.getByText('Water filter')).toBeInTheDocument()
-    expect(screen.getByText(/5 total/)).toBeInTheDocument()
-    expect(screen.getByText('LOT-A')).toBeInTheDocument()
+    expect(screen.getByText('(5 total)')).toBeInTheDocument()
   })
 
   it('shows the depletion date when provided', () => {
-    renderCard({ stock: { ...baseStock, estimated_depletion_date: '2026-06-15' } })
+    renderCard({ stock: { ...baseStock, estimated_depletion_date: '2026-06-01' } })
     expect(screen.getByTestId('depletion-date')).toBeInTheDocument()
   })
 
   it('hides the consume button when quantity is 0', () => {
-    renderCard({ stock: { ...baseStock, quantity: 0, lots: [] } })
+    renderCard({ stock: { ...baseStock, quantity: 0 } })
     expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
   })
 
@@ -72,20 +58,20 @@ describe('StockCard', () => {
     expect(onConsume).toHaveBeenCalledWith(baseStock)
   })
 
-  it('calls onAssignGroup with the stock id when the category button is clicked', async () => {
-    const onAssignGroup = vi.fn()
-    const { user } = renderCard({ onAssignGroup })
-    await user.click(screen.getByLabelText('Category'))
-    expect(onAssignGroup).toHaveBeenCalledWith(1)
+  it('exposes a shared badge (no onClick) when the owner shares with someone', () => {
+    renderCard({ stock: { ...baseStock, shared_with: [2, 3] } })
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge).toBeInTheDocument()
+    // Informational only: it is a <span>, not a <button>.
+    expect(badge.tagName).toBe('SPAN')
   })
 
-  it('renders the share button only when canShare is true and the user is owner', async () => {
-    renderCard({ canShare: false })
-    expect(screen.queryByLabelText('Share with')).not.toBeInTheDocument()
-
-    const { user } = renderCard({ canShare: true })
-    const shareBtn = screen.getByLabelText('Share with')
-    await user.click(shareBtn)
+  it('does not render the shared badge when the user is not the owner', () => {
+    renderCard({
+      stock: { ...baseStock, is_owner: false, shared_with: [], owner_username: 'alice' },
+    })
+    expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
   })
 
   it('renders the chevron with the "Open details" aria-label', () => {
@@ -93,11 +79,43 @@ describe('StockCard', () => {
     expect(screen.getByLabelText('Open details')).toBeInTheDocument()
   })
 
-  it('calls onDeleteLot with stockId, lotId, and updatedAt when the trash icon is clicked', async () => {
-    const onDeleteLot = vi.fn()
-    const { user } = renderCard({ onDeleteLot })
-    await user.click(screen.getByLabelText('Delete'))
-    expect(onDeleteLot).toHaveBeenCalledWith(1, 10, '2026-04-17T10:00:00Z')
+  it('does not expose add-lot, delete-lot, assign-group or share-toggle controls on the card', () => {
+    renderCard({ stock: { ...baseStock, shared_with: [2] } })
+    // The refactor moved all of these to StockDetailPage (lots) and
+    // StockFormPage (group + share). They MUST NOT appear on the list card.
+    expect(screen.queryByRole('button', { name: /add batch/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^category$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /share with/i })).not.toBeInTheDocument()
+  })
+
+  it('disables the consume button while a consume is already in flight', () => {
+    renderCard({ consuming: true })
+    expect(screen.getByLabelText('Consume 1 unit')).toBeDisabled()
+  })
+
+  it('renders the warning border + dot when quantity is in the low range (1-3)', () => {
+    renderCard({ stock: { ...baseStock, quantity: 2 } })
+    expect(screen.getByText('(2 total)')).toBeInTheDocument()
+  })
+
+  it('renders the daily consumption row combining own and shared values', () => {
+    renderCard({
+      stock: { ...baseStock, daily_consumption_own: 1.5, daily_consumption_shared: 0.5 },
+    })
+    const row = screen.getByTestId('consumption-row')
+    expect(row).toBeInTheDocument()
+    expect(row.textContent).toContain('1.5')
+    expect(row.textContent).toContain('0.5')
+    expect(row.textContent).toContain(' + ')
+  })
+
+  it('renders an integer-formatted rate (no trailing decimals)', () => {
+    renderCard({
+      stock: { ...baseStock, daily_consumption_own: 2, daily_consumption_shared: null },
+    })
+    const row = screen.getByTestId('consumption-row')
+    expect(row.textContent).toMatch(/\b2\/day\b/)
   })
 
   it('navigates to the stock detail when the card itself is clicked', async () => {
@@ -105,22 +123,7 @@ describe('StockCard', () => {
       <Routes>
         <Route
           path="/"
-          element={
-            <StockCard
-              stock={baseStock}
-              consuming={false}
-              flashing={false}
-              canShare={false}
-              onConsume={vi.fn()}
-              onAssignGroup={vi.fn()}
-              onToggleShare={vi.fn()}
-              addLotForm={defaultAddLotForm}
-              onLotFieldChange={noop}
-              onToggleAddLot={noop}
-              onSubmitAddLot={noop}
-              onDeleteLot={vi.fn()}
-            />
-          }
+          element={<StockCard stock={baseStock} consuming={false} flashing={false} onConsume={vi.fn()} />}
         />
         <Route path="/inventory/:id" element={<div>Stock detail</div>} />
       </Routes>,

@@ -1,43 +1,36 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, BASE_URL } from '../api/client'
-import { OfflineError } from '../api/errors'
-import { queryClient } from '../query/queryClient'
 
 export const AuthContext = createContext(null)
 
+// Source of truth for the authenticated user. Reads from the TanStack
+// Query cache key ['me']; any mutation that writes or invalidates that
+// key is automatically reflected here — do not recreate a standalone
+// `useMe` hook.
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('access_token')))
+  const queryClient = useQueryClient()
+  const hasToken = Boolean(localStorage.getItem('access_token'))
 
-  useEffect(() => {
-    if (!loading) return
-    api
-      .get('/auth/me/')
-      .then((r) => r.json())
-      .then((me) => {
-        // Persist `me` in the TQ cache so the offline hydration path
-        // below has something to read after an offline reload. The
-        // persister writes it to IDB automatically on the next flush.
-        queryClient.setQueryData(['me'], me)
-        setUser(me)
-      })
-      .catch((err) => {
-        // The api client already handles 401 (clears storage + redirects to /login).
-        // For transient errors (non-network 5xx) we leave localStorage intact so the
-        // user isn't unexpectedly logged out.
-        //
-        // Offline + valid token: hydrate `user` from the persisted TanStack
-        // Query cache of `['me']` so ProtectedRoute doesn't redirect to
-        // /login on every reload when there's no network. Without this the
-        // PWA is unusable offline even when the full cache was written on
-        // a previous online session.
-        if (err instanceof OfflineError && localStorage.getItem('access_token')) {
-          const cached = queryClient.getQueryData(['me'])
-          if (cached) setUser(cached)
-        }
-      })
-      .finally(() => setLoading(false))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const query = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const res = await api.get('/auth/me/')
+      if (!res.ok) {
+        const err = new Error(`GET /auth/me/ failed (${res.status})`)
+        err.status = res.status
+        throw err
+      }
+      return res.json()
+    },
+    enabled: hasToken,
+  })
+
+  // `data` survives a failed refetch when the persister rehydrated it
+  // from IndexedDB, so reopening the PWA offline still exposes the last
+  // known user without a /login redirect.
+  const user = query.data ?? null
+  const loading = hasToken && query.isPending
 
   const login = async (username, password) => {
     const res = await fetch(`${BASE_URL}/auth/token/`, {
@@ -53,13 +46,16 @@ export function AuthProvider({ children }) {
 
     const me = await api.get('/auth/me/').then((r) => r.json())
     queryClient.setQueryData(['me'], me)
-    setUser(me)
   }
 
   const logout = () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
-    setUser(null)
+    // Null (not removeQueries) so the active observer sees user=null this
+    // render. removeQueries would transition the observer to a fresh
+    // Query and — because the re-render that flips `enabled` to false
+    // hasn't run yet — trigger an unwanted refetch of the old session.
+    queryClient.setQueryData(['me'], null)
   }
 
   return <AuthContext.Provider value={{ user, login, logout, loading }}>{children}</AuthContext.Provider>

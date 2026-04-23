@@ -13,7 +13,7 @@ export default defineConfig({
       '/admin':         { target: 'http://backend:8000' },
       '/django-static': { target: 'http://backend:8000' },
     },
-    allowedHosts: 'all',
+    allowedHosts: true,
   },
   preview: {
     // Used by the `frontend-preview` service in dev/docker-compose.yml to
@@ -24,7 +24,7 @@ export default defineConfig({
       '/admin':         { target: 'http://backend:8000' },
       '/django-static': { target: 'http://backend:8000' },
     },
-    allowedHosts: 'all',
+    allowedHosts: true,
     host: true,
     port: 4173,
     strictPort: true,

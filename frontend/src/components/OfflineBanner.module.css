@@ -11,5 +11,5 @@
   font-weight: 600;
   background: var(--c-brand);
   color: var(--c-brand-text);
-  border-bottom: 1px solid #f5c843;
+  border-bottom: 1px solid var(--c-brand);
 }

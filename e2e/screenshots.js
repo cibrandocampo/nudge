@@ -3,7 +3,7 @@
  * Regenerate docs/screenshots/*.png for the README and the landing.
  *
  * Thirteen scenes captured in a single run from the `seed_demo`
- * fixture (cibran + maria, 6 stocks, 6 routines, 6 entries). Seeding
+ * fixture (cibran + maria, 10 stocks, 5 routines, 6 entries). Seeding
  * is the Makefile target's responsibility — this script only logs in
  * and captures.
  *
@@ -114,25 +114,32 @@ async function main() {
     await page.goto(`${BASE}/`)
     await screenshot(page, 'dashboard')
 
-    // 4. Dashboard with share popover open on the first shared routine.
-    const shareBtn = page.getByRole('button', { name: 'Share' }).first()
-    if (await shareBtn.isVisible()) {
-      await shareBtn.click()
-      await page.waitForTimeout(300)
-      await screenshot(page, 'dashboard-sharing')
-      await page.keyboard.press('Escape')
-      await page.waitForTimeout(200)
-    }
-
     // Fetch routines + stocks once so downstream scenes can address
     // specific rows by name rather than relying on DOM order.
     const routines = items(await api(page, 'GET', '/api/routines/'))
     const stocks = items(await api(page, 'GET', '/api/stock/'))
     const vitaminD = routines.find((r) => r.name === 'Take Vitamin D')
-    const vitaminDStock = stocks.find((s) => s.name === 'Vitamin D 1000IU')
-    if (!vitaminD || !vitaminDStock) {
-      throw new Error('Fixture missing "Take Vitamin D" routine or "Vitamin D 1000IU" stock — is seed_demo seeded?')
+    const vitaminDStock = stocks.find((s) => s.name === 'Hidroferol drops')
+    const brita = routines.find((r) => r.name === 'Change Brita filter')
+    if (!vitaminD || !vitaminDStock || !brita) {
+      throw new Error(
+        'Fixture missing "Take Vitamin D" routine, "Hidroferol drops" stock or "Change Brita filter" routine — is seed_demo seeded?',
+      )
     }
+
+    // 4. Sharing — ShareModal open on the Brita routine. The UX refresh
+    //    moved sharing off the dashboard cards (now a read-only badge)
+    //    and onto the routine form, so we open the modal from there.
+    //    Keeping the filename `dashboard-sharing.png` to match the
+    //    landing carousel (site/src/pages/index.astro).
+    await page.goto(`${BASE}/routines/${brita.id}/edit`)
+    await page.waitForLoadState('networkidle')
+    await page.getByRole('button', { name: 'Share with…' }).click()
+    await page.getByRole('dialog').waitFor({ state: 'visible' })
+    await page.waitForTimeout(300)
+    await screenshot(page, 'dashboard-sharing')
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
 
     // 5. Routine detail — Take Vitamin D (stock-linked, multi-lot).
     await page.goto(`${BASE}/routines/${vitaminD.id}`)
@@ -159,19 +166,20 @@ async function main() {
     await page.goto(`${BASE}/settings`)
     await screenshot(page, 'settings')
 
-    // 11. Shared dashboard — login as maria in a second page, see the
-    //     routine cibran shared with her.
+    // 11. Shared dashboard — login as maria in a FRESH context so she
+    //     doesn't inherit cibran's persisted React Query cache from
+    //     IndexedDB (gcTime: Infinity + shared context would replay
+    //     cibran's routines/stock queries under maria's session).
     if (USER2) {
-      const page2 = await context.newPage()
+      const context2 = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        locale: 'en-US',
+      })
+      const page2 = await context2.newPage()
       await login(page2, USER2, PASS)
       await page2.goto(`${BASE}/`)
       await screenshot(page2, 'shared-dashboard')
-      await page2.close()
-      // localStorage is shared across pages in a context — maria's login
-      // overwrote `access_token`. Re-login cibran so downstream scenes
-      // see cibran's dashboard, not maria's (she has only the one
-      // shared routine).
-      await login(page, USER, PASS)
+      await context2.close()
     }
 
     // 12. Offline banner — force reachability=false, abort the
