@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { vi } from 'vitest'
 import { server } from '../../test/mocks/server'
@@ -63,16 +63,30 @@ describe('SettingsPage', () => {
     expect(await screen.findByDisplayValue('08:00')).toBeInTheDocument()
   })
 
-  it('submits settings form successfully', async () => {
+  it('autosaves the daily-notification-time on blur', async () => {
+    let patchedBody = null
+    server.use(
+      http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+        patchedBody = await request.json()
+        return HttpResponse.json({})
+      }),
+    )
     const { user } = renderWithProviders(<SettingsPage />)
-    await user.click(screen.getByText('Save changes'))
-    await waitFor(() => expect(screen.getByText('Saved!')).toBeInTheDocument())
+    const input = await screen.findByDisplayValue('08:00')
+    await user.clear(input)
+    await user.type(input, '09:15')
+    input.blur()
+    await waitFor(() => expect(patchedBody).not.toBeNull())
+    expect(patchedBody).toEqual({ daily_notification_time: '09:15' })
   })
 
-  it('shows error on save failure', async () => {
+  it('surfaces an error toast when autosave fails', async () => {
     server.use(http.patch(`${BASE}/auth/me/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderWithProviders(<SettingsPage />)
-    await user.click(screen.getByText('Save changes'))
+    const input = await screen.findByDisplayValue('08:00')
+    await user.clear(input)
+    await user.type(input, '09:15')
+    input.blur()
     await waitFor(() => expect(screen.getByText('Error — try again')).toBeInTheDocument())
   })
 
@@ -355,12 +369,13 @@ describe('SettingsPage', () => {
 
   it('removes contact with confirmation', async () => {
     server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])))
-    window.confirm = vi.fn(() => true)
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await user.click(screen.getByTitle('Remove contact'))
+    // ConfirmModal renders a dialog with the contact name in the message.
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.queryByText('alice')).not.toBeInTheDocument())
-    expect(window.confirm).toHaveBeenCalled()
   })
 
   it('shows "Action not available offline" when add contact hits a network error', async () => {
@@ -394,10 +409,11 @@ describe('SettingsPage', () => {
       http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
       http.delete(`${BASE}/auth/contacts/:id/`, () => HttpResponse.error()),
     )
-    window.confirm = vi.fn(() => true)
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await user.click(screen.getByTitle('Remove contact'))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
   })
 
@@ -406,17 +422,21 @@ describe('SettingsPage', () => {
       http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10, username: 'alice' }])),
       http.delete(`${BASE}/auth/contacts/:id/`, () => new HttpResponse(null, { status: 500 })),
     )
-    window.confirm = vi.fn(() => true)
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await user.click(screen.getByTitle('Remove contact'))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument())
   })
 
-  it('save button shows the offline label when updateMe fails with no connection', async () => {
+  it('surfaces the offline label when the autosave PATCH hits a network error', async () => {
     server.use(http.patch(`${BASE}/auth/me/`, () => HttpResponse.error()))
     const { user } = renderWithProviders(<SettingsPage />)
-    await user.click(screen.getByText('Save changes'))
+    const input = await screen.findByDisplayValue('08:00')
+    await user.clear(input)
+    await user.type(input, '09:15')
+    input.blur()
     await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
   })
 
@@ -458,11 +478,12 @@ describe('SettingsPage', () => {
         return new HttpResponse(null, { status: 204 })
       }),
     )
-    window.confirm = vi.fn(() => false)
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await user.click(screen.getByTitle('Remove contact'))
-    expect(window.confirm).toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(deleteSpy).not.toHaveBeenCalled()
     expect(screen.getByText('alice')).toBeInTheDocument()
   })
@@ -516,23 +537,6 @@ describe('SettingsPage', () => {
     // Should not crash, results just remain empty
     await waitFor(() => expect(screen.queryByRole('button', { name: 'fail' })).not.toBeInTheDocument())
     vi.useRealTimers()
-  })
-
-  it('shows saving state when form is submitting', async () => {
-    let resolve
-    server.use(
-      http.patch(
-        `${BASE}/auth/me/`,
-        () =>
-          new Promise((r) => {
-            resolve = r
-          }),
-      ),
-    )
-    const { user } = renderWithProviders(<SettingsPage />)
-    await user.click(screen.getByText('Save changes'))
-    expect(screen.getByText('Saving…')).toBeDisabled()
-    resolve(HttpResponse.json({}))
   })
 
   it('shows alert when VAPID key is missing on enable', async () => {
@@ -654,7 +658,7 @@ describe('SettingsPage', () => {
       expect(await screen.findByText(/Settings require a connection/i)).toBeInTheDocument()
     })
 
-    it('disables the daily-time input, all comboboxes and the save button offline', async () => {
+    it('disables the daily-time input and all comboboxes offline', async () => {
       reachableRef.current = false
       renderWithProviders(<SettingsPage />)
       await screen.findByText(/Settings require a connection/i)
@@ -663,7 +667,6 @@ describe('SettingsPage', () => {
       const comboboxes = screen.getAllByRole('combobox')
       expect(comboboxes.length).toBeGreaterThan(0)
       for (const cb of comboboxes) expect(cb).toBeDisabled()
-      expect(screen.getByRole('button', { name: /Save changes/i })).toBeDisabled()
     })
 
     it('disables the language toggle buttons offline', async () => {

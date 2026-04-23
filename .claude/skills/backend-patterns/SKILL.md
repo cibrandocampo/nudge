@@ -5,6 +5,104 @@ description: Backend architecture patterns and conventions for Nudge. Use when c
 
 # Backend Patterns — Nudge
 
+## Reuse first — never define the same thing twice
+
+The single most important rule in this codebase: **if a mixin, base class,
+service, manager, serializer, or utility with the same intent already
+exists, consume it. Do not re-implement. Do not duplicate.**
+
+The corollary: **when designing something new, think abstract → concrete.**
+If the thing has reuse potential (optimistic locking, idempotency handling,
+owner-vs-shared querysets, a FEFO ordering), build the mixin / helper / base
+class first and use it from the concrete model / viewset / serializer.
+Don't spread the same 5-line block across three viewsets and "refactor
+later".
+
+### Pre-write checklist
+
+Before creating ANY new backend code, grep the layers below in this order
+and extend / consume what matches. If nothing matches, decide whether this
+belongs in a shared layer (mixin / base class / util) or is a true
+one-off.
+
+1. **Mixins & base classes** — notably
+   `apps.core.mixins.OptimisticLockingMixin` (ETag / If-Match + 412 on
+   stale writes) and `apps.core.mixins.ClientCreatedAtMixin` (accept
+   client-sent `client_created_at` in offline queue replays). If a new
+   viewset mutates a model that already has `updated_at`, it almost
+   certainly should mix `OptimisticLockingMixin`.
+2. **Serializer base patterns** — `ModelSerializer` is always the base;
+   validation belongs in `validate_<field>()` or `validate()`, never in
+   the view. Computed read-only fields use `SerializerMethodField`. Owner
+   visibility (`user=request.user | shared_with=request.user`) is a
+   queryset filter, not a per-serializer decision.
+3. **Querysets** — the "owner OR shared" pattern
+   (`Q(user=request.user) | Q(shared_with=request.user)` + `.distinct()`)
+   appears in routines and stock. If a third sharable model needs it,
+   promote it to a manager method rather than re-pasting the Q expression.
+4. **Test helpers** — the `make_*` pattern
+   (`make_user`, `make_stock`, `make_lot`, `make_routine`) lives in
+   `tests.py` modules. New tests reuse these; don't redefine them in
+   every module.
+5. **Transactional patterns** — stock mutations ALWAYS go inside
+   `transaction.atomic()`. Every call site uses the same shape —
+   consume it verbatim.
+6. **Push / Celery** — `apps.notifications.push.send_push_to_user`
+   already handles translation + stale-subscription cleanup. New
+   notification types go through it, not direct `pywebpush` calls.
+7. **Admin** — new models follow the pattern in `apps/users/admin.py`
+   (`@admin.register`, `list_display`, `list_filter`, `search_fields`).
+   If list filters, search, or custom actions repeat across admins, they
+   become a shared `admin.ModelAdmin` base.
+
+### The 1 / 2 / 3 rule
+
+- **1 occurrence**: local code is fine.
+- **2 occurrences**: acceptable only if disparate intent. If the intent
+  matches, extract before the second lands.
+- **3 occurrences**: technical debt. Must extract before merging the
+  third.
+
+Same rule as frontend — aligns with CLAUDE.md's "three similar lines is
+better than a premature abstraction". The third occurrence is where the
+pattern has proven itself.
+
+### When NOT to abstract
+
+- Single endpoint with no visible twin → keep local.
+- Superficially similar but semantically different (two serializers that
+  share a `validate_name` but validate against different rules) → extract
+  **shape** (the validation protocol), not **context** (the rule).
+- A mixin that grows conditionals for every consumer → wrong shape. Split
+  into smaller mixins (e.g. `OptimisticLockingMixin` separate from
+  `ClientCreatedAtMixin` — they solve different problems).
+
+### Concrete examples already applied in this repo
+
+- **`OptimisticLockingMixin`** (`apps.core.mixins`) — wraps every mutable
+  viewset to honour If-Match / return 412 on stale updated_at. No viewset
+  reimplements the concurrency check.
+- **`ClientCreatedAtMixin`** — accepts `client_created_at` with bounded
+  skew, lets the offline mutation queue replay with the original
+  timestamp. Single source of truth for the skew envelope.
+- **`IdempotencyKey` middleware + model** (`apps.idempotency`) — any
+  POST that could be retried by the offline queue is idempotent via the
+  same mechanism. New mutable endpoints ride on it, they don't invent
+  their own dedup.
+- **`StockLot.post_save` signal** (`delete_empty_lot`) — auto-deletes
+  any lot with `quantity=0`. Every consume / reconcile path in the codebase
+  relies on this instead of deleting manually. (Gotcha: bulk paths bypass
+  signals — see `MEMORY.md`.)
+- **`send_push_to_user`** — one callsite for push, handles i18n + stale
+  subs. Celery tasks never instantiate `pywebpush` directly.
+- **`seed_e2e` / `seed_demo` management commands** — shared fixture
+  builders. Test-writers extend these instead of crafting inline
+  fixtures.
+
+These are the reuses to protect. If you find yourself writing something
+that could be one of these — stop, find the existing primitive or propose
+it first.
+
 ## Architecture
 
 - **Django 5 + DRF** with JWT auth (simplejwt)

@@ -7,25 +7,30 @@ description: Django admin customization patterns for Nudge. Use when modifying t
 
 ## Branding
 
-The admin is branded with Nudge's indigo color scheme via a custom template:
+The admin is branded to match Nudge's zinc-neutral + yellow-accent palette via a custom template:
 `backend/templates/admin/base_site.html`
 
 This template:
 - Extends `admin/base.html` (NOT `admin/base_site.html` — that would loop)
 - Overrides Django's CSS variables for both light and dark mode
 - Sets the "Nudge" logo linking to `/` (the app, not `/admin/`)
-- Forces white text on indigo headers in all theme modes
+- Forces white text on dark headers in all theme modes
+- Repaints the "save" (default) submit button with the brand yellow (`#fcd34d`) so the primary CTA matches the app
 
-### Color palette (from frontend)
+### Color palette
 
-| Token            | Light          | Dark           |
-|------------------|----------------|----------------|
-| Primary          | `#6366f1`      | `#6366f1`      |
-| Primary dark     | `#4f46e5`      | `#4f46e5`      |
-| Secondary bg     | `#eef2ff`      | `#312e81`      |
-| Links            | `#6366f1`      | `#a5b4fc`      |
-| Links hover      | `#4f46e5`      | `#c7d2fe`      |
-| Body bg          | `#f9fafb`      | `#1e1e2e`      |
+Mirrors `frontend/src/index.css` — **source of truth lives there**. If it changes, update this template too.
+
+| Token           | Light      | Dark       |
+|-----------------|------------|------------|
+| Primary (text / bg dark) | `#18181b` | `#fafafa` |
+| Primary hover   | `#27272a`  | `#e4e4e7`  |
+| Accent (brand)  | `#fcd34d`  | `#fcd34d`  |
+| Body bg         | `#fafafa`  | `#0a0a0b`  |
+| Surface         | `#ffffff`  | `#18181b`  |
+| Border          | `#e4e4e7`  | `#27272a`  |
+| Link            | `#09090b`  | `#fafafa`  |
+| Link hover      | `#27272a`  | `#fcd34d`  |
 
 ### Django CSS variables to override
 

@@ -126,12 +126,16 @@ class Command(BaseCommand):
         specs = [
             {
                 "username": "cibran",
+                "first_name": "Cibrán",
+                "last_name": "Docampo",
                 "timezone": "Europe/Madrid",
                 "language": "en",
                 "daily_notification_time": time(8, 0),
             },
             {
                 "username": "maria",
+                "first_name": "María",
+                "last_name": "González",
                 "timezone": "Europe/Madrid",
                 "language": "en",
                 "daily_notification_time": time(9, 0),

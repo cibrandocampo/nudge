@@ -1,20 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
+import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
 import shared from '../styles/shared.module.css'
 import s from './StockCard.module.css'
-
-function formatExpiry(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-}
-
-function formatDepletionDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function formatRate(rate) {
   return rate % 1 === 0 ? String(rate) : rate.toFixed(1)
@@ -30,20 +21,7 @@ function borderTokens(stock) {
   return { border: shared.cardBorderSuccess, dot: shared.dotSuccess }
 }
 
-export default function StockCard({
-  stock,
-  consuming,
-  flashing,
-  canShare,
-  onConsume,
-  onAssignGroup,
-  onToggleShare,
-  addLotForm,
-  onLotFieldChange,
-  onToggleAddLot,
-  onSubmitAddLot,
-  onDeleteLot,
-}) {
+export default function StockCard({ stock, consuming, flashing, onConsume }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const tokens = borderTokens(stock)
@@ -51,7 +29,7 @@ export default function StockCard({
   const goDetail = () => navigate(`/inventory/${stock.id}`)
   const stop = (e) => e.stopPropagation()
 
-  const isShared = stock.shared_with?.length > 0
+  const isShared = stock.shared_with?.length > 0 && stock.is_owner !== false
   const totalRate = (stock.daily_consumption_own || 0) + (stock.daily_consumption_shared || 0)
 
   return (
@@ -72,7 +50,7 @@ export default function StockCard({
                 className={cx(shared.stockDepletion, stock.is_low_stock && shared.stockDepletionWarn)}
                 data-testid="depletion-date"
               >
-                {t('inventory.depletionDate', { date: formatDepletionDate(stock.estimated_depletion_date) })}
+                {t('inventory.depletionDate', { date: formatShortDate(stock.estimated_depletion_date) })}
               </span>
             )}
           </span>
@@ -81,6 +59,16 @@ export default function StockCard({
           )}
         </div>
         <div className={shared.cardActions} onClick={stop}>
+          {isShared && (
+            <span
+              className={cx(shared.btnIcon, shared.btnIconShared, s.sharedBadge)}
+              aria-label={t('sharing.sharedWith')}
+              title={t('sharing.sharedWith')}
+              data-testid="shared-badge"
+            >
+              <Icon name="users" size="sm" />
+            </span>
+          )}
           {stock.quantity > 0 && (
             <button
               type="button"
@@ -92,28 +80,6 @@ export default function StockCard({
             >
               <Icon name="package" className={shared.consumeBox} />
               <Icon name="arrow-down" className={shared.consumeArrow} />
-            </button>
-          )}
-          {stock.is_owner !== false && (
-            <button
-              type="button"
-              className={cx(shared.btnIcon, shared.btnIconAction)}
-              onClick={() => onAssignGroup(stock.id)}
-              aria-label={t('inventory.assignGroup')}
-              title={t('inventory.assignGroup')}
-            >
-              <Icon name="tag" size="sm" />
-            </button>
-          )}
-          {stock.is_owner !== false && canShare && (
-            <button
-              type="button"
-              className={cx(shared.btnIcon, isShared ? shared.btnIconShared : shared.btnIconShare)}
-              onClick={() => onToggleShare(stock.id)}
-              aria-label={t('sharing.shareWith')}
-              title={t('sharing.shareWith')}
-            >
-              <Icon name={isShared ? 'users' : 'user-plus'} size="sm" />
             </button>
           )}
           <button
@@ -128,47 +94,6 @@ export default function StockCard({
         </div>
       </div>
 
-      {stock.lots.length > 0 && (
-        <div onClick={stop}>
-          {stock.lots.map((lot) => {
-            const expiring = stock.expiring_lots.some((el) => el.id === lot.id)
-            return (
-              <div
-                key={lot.id}
-                className={shared.lotRow}
-                data-testid="lot-row"
-                data-expiring={expiring ? 'true' : 'false'}
-              >
-                <div className={shared.lotInfo}>
-                  {lot.lot_number && <span className={shared.lotNumber}>{lot.lot_number}</span>}
-                  <span className={shared.lotQty}>
-                    {lot.quantity} {t('common.unit')}
-                  </span>
-                  <span className={cx(shared.lotExpiry, expiring && s.lotExpiryDanger)}>
-                    {lot.expiry_date ? formatExpiry(lot.expiry_date) : t('inventory.noExpiry')}
-                    {expiring && (
-                      <>
-                        {' '}
-                        <Icon name="alert-triangle" size="sm" />
-                      </>
-                    )}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className={cx(shared.btnIcon, shared.btnIconDelete)}
-                  onClick={() => onDeleteLot(stock.id, lot.id, lot.updated_at)}
-                  aria-label={t('inventory.deleteTooltip')}
-                  title={t('inventory.deleteTooltip')}
-                >
-                  <Icon name="trash" size="sm" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
       {totalRate > 0 && (
         <div className={shared.consumptionRow} data-testid="consumption-row" onClick={stop}>
           {stock.daily_consumption_own && (
@@ -182,59 +107,6 @@ export default function StockCard({
           )}
         </div>
       )}
-
-      <div onClick={stop} className={s.addLotWrap}>
-        {addLotForm.show ? (
-          <form onSubmit={onSubmitAddLot} className={s.addLotForm}>
-            <div className={s.addLotRow}>
-              <div className={s.addLotField}>
-                <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
-                <input
-                  className={cx(shared.input, s.inputNarrow)}
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={addLotForm.qty}
-                  onChange={(e) => onLotFieldChange('qty', e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className={s.addLotField}>
-                <label className={s.fieldLabel}>{t('inventory.lotExpiry')}</label>
-                <input
-                  className={shared.input}
-                  type="date"
-                  value={addLotForm.expiry}
-                  onChange={(e) => onLotFieldChange('expiry', e.target.value)}
-                />
-              </div>
-              <div className={cx(s.addLotField, s.inputFlex)}>
-                <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
-                <input
-                  className={shared.input}
-                  type="text"
-                  placeholder={t('inventory.lotNumber')}
-                  value={addLotForm.lotNumber}
-                  onChange={(e) => onLotFieldChange('lotNumber', e.target.value)}
-                />
-              </div>
-            </div>
-            <div className={s.addLotActions}>
-              <button type="submit" className={s.createBtn} disabled={addLotForm.adding}>
-                {addLotForm.adding ? t('inventory.adding') : t('inventory.addLot')}
-              </button>
-              <button type="button" className={s.cancelBtn} onClick={onToggleAddLot}>
-                {t('inventory.cancel')}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button type="button" className={s.addLotBtn} onClick={onToggleAddLot}>
-            + {t('inventory.addLot')}
-          </button>
-        )}
-      </div>
     </div>
   )
 }

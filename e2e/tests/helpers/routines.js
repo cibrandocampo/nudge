@@ -38,23 +38,23 @@ export async function markRoutineDone(page, routineKey, { expectBlocked = false,
  * Create a new routine via the `/routines/new` form.
  * @param {{
  *   name: string,
- *   intervalPreset?: string,
- *   intervalHours?: number,
- *   intervalUnit?: 'hours'|'days'|'weeks'|'months'
+ *   intervalValue?: number,
+ *   intervalUnit?: 'hours'|'days'|'weeks'|'months'|'years'
  * }} data
- *   `intervalPreset` is the accessible name of one of the preset buttons
- *   ("1 day", "1 week", "2 weeks"…). `intervalHours` + `intervalUnit` drive
- *   the custom number+unit UI; only used when no preset is supplied.
+ *   `intervalValue` + `intervalUnit` drive the IntervalPicker (segmented
+ *   unit tab + stepper). Omit both to use the default (Days = 1).
  */
-export async function createRoutine(page, { name, intervalPreset, intervalHours, intervalUnit = 'hours' }) {
+export async function createRoutine(page, { name, intervalValue, intervalUnit = 'days' }) {
   await page.goto('/routines/new')
   await page.getByPlaceholder(/change water filter/i).fill(name)
 
-  if (intervalPreset) {
-    await page.getByRole('button', { name: intervalPreset, exact: true }).click()
-  } else if (intervalHours != null) {
-    await page.locator('input[type="number"]').first().fill(String(intervalHours))
-    await page.locator('select').first().selectOption(intervalUnit)
+  if (intervalValue != null) {
+    await page.getByRole('tab', { name: intervalUnit }).click()
+    // Stepper defaults to value=1 after switching units; step up to target.
+    const increase = page.getByRole('button', { name: 'Increase' })
+    for (let i = 1; i < Math.max(1, intervalValue); i += 1) {
+      await increase.click()
+    }
   }
 
   await page.getByRole('button', { name: 'Save' }).click()

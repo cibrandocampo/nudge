@@ -1,0 +1,16 @@
+/* Share-blue accent for the "Share with…" button. Mirrors the
+   `--c-shared` tokens already used by StockCard's informational
+   shared badge so every "share" affordance across the app speaks
+   the same visual language. */
+.shareBtn {
+  color: var(--c-shared);
+  border-color: var(--c-shared-light);
+}
+.shareBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-shared) 6%, transparent);
+  border-color: var(--c-shared);
+}
+.shareBtn:disabled {
+  color: var(--c-muted);
+  border-color: var(--c-border);
+}

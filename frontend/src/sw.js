@@ -14,7 +14,14 @@ precacheAndRoute(self.__WB_MANIFEST)
 // React Router navigating to /settings, /history, etc.) resolves to the
 // precached index.html. Without this, offline reloads of deep links
 // fail with net::ERR_FAILED because the URL has no server-side route.
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
+// Denylist backend paths so the SW never shadows Django admin / static
+// (otherwise /admin/ would return the SPA shell and the catch-all route
+// would redirect to "/").
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/^\/admin/, /^\/django-static/, /^\/api/],
+  }),
+)
 
 // ── Runtime caching for /api/ GETs ───────────────────────────────────────────
 // NetworkFirst: go to network with a short timeout; on failure (offline or
@@ -49,6 +56,8 @@ registerRoute(
   ({ url, request, sameOrigin }) =>
     sameOrigin &&
     !url.pathname.startsWith('/api/') &&
+    !url.pathname.startsWith('/admin') &&
+    !url.pathname.startsWith('/django-static') &&
     (request.destination === 'script' ||
       request.destination === 'style' ||
       request.destination === 'document' ||

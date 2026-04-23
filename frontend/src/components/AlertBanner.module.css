@@ -13,7 +13,7 @@
 .warning {
   background: var(--c-brand);
   color: var(--c-brand-text);
-  border-bottom-color: #f5c843;
+  border-bottom-color: var(--c-brand);
 }
 
 .danger {

@@ -6,8 +6,11 @@ import { goToInventory, goToStockDetail } from './navigation.js'
 export async function createStock(page, { name }) {
   await goToInventory(page)
   await page.getByRole('button', { name: '+ New' }).click()
-  await page.getByPlaceholder(/item name/i).fill(name)
-  await page.getByRole('button', { name: 'Create item' }).click()
+  await page.getByLabel('Name').fill(name)
+  await page.getByRole('button', { name: 'Create' }).click()
+  // Create navigates to the detail page — go back to the list before returning.
+  await page.waitForURL(/\/inventory\/\d+$/)
+  await page.getByRole('link', { name: /back to inventory/i }).click()
   await expect(stockCard(page, name)).toBeVisible()
 }
 
@@ -53,13 +56,25 @@ export async function consumeStock(page, stockKeyOrName, quantity = 1) {
   }
 }
 
+/**
+ * Share (or toggle — call twice to unshare) a stock with a contact.
+ * The card on the inventory list has no share button after T090+; sharing
+ * is edited from the stock detail page via the "Edit" action → StockFormPage
+ * → ShareWithSection → ShareModal.
+ */
 export async function shareStockWith(page, stockKeyOrName, username) {
-  await goToInventory(page)
-  const card = stockCard(page, stockKeyOrName)
-  await card.getByTitle('Share with').click()
+  await goToStockDetail(page, stockKeyOrName)
+  await page.getByRole('button', { name: 'Edit', exact: true }).click()
+  await page.waitForURL(/\/inventory\/\d+\/edit$/)
+  // The ShareWithSection header button label is "Share with…" (with the
+  // ellipsis). Match it exactly so the "Unshare with <name>" chip remove
+  // button — which also contains "share with" — is not selected.
+  await page.getByRole('button', { name: 'Share with…', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await dialog.locator('li').filter({ hasText: username }).click()
   await page.keyboard.press('Escape')
-  await expect(dialog).not.toBeVisible()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.waitForURL(/\/inventory\/\d+$/)
 }

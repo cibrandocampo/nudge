@@ -250,19 +250,18 @@ describe('HistoryPage — type filter', () => {
 })
 
 describe('HistoryPage — consumption entries display', () => {
-  it('consumption entries show stock name and −1 badge', async () => {
+  it('consumption entries expose data-entry-type="consumption"', async () => {
     setupHandlers({ entries: [] })
     const { container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(getEntryNames(container)).toContain('Insulin pens'))
-    expect(screen.getByText('−1')).toBeInTheDocument()
+    expect(container.querySelectorAll('[data-entry-type="consumption"]').length).toBeGreaterThan(0)
   })
 
-  it('routine entries show ✓ badge', async () => {
+  it('routine entries expose data-entry-type="routine"', async () => {
     setupHandlers({ consumptions: [] })
     const { container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
-    const badges = screen.getAllByText('✓')
-    expect(badges.length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-entry-type="routine"]').length).toBeGreaterThan(0)
   })
 
   it('routine entries show consumed stock as "N × name (lot)"', async () => {
@@ -286,12 +285,12 @@ describe('HistoryPage — consumption entries display', () => {
 })
 
 describe('HistoryPage — notes editing', () => {
-  it('shows notes placeholder for entries without notes', async () => {
+  it('shows add-note button for entries without notes', async () => {
     setupHandlers()
     renderWithProviders(<HistoryPage />)
     await waitFor(() => {
-      const placeholders = screen.getAllByText('Add a note…')
-      expect(placeholders.length).toBeGreaterThan(0)
+      const addNoteButtons = screen.getAllByRole('button', { name: 'Add note' })
+      expect(addNoteButtons.length).toBeGreaterThan(0)
     })
   })
 
@@ -384,9 +383,9 @@ describe('HistoryPage — notes editing', () => {
     const { user, container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(getEntryNames(container)).toContain('Insulin pens'))
 
-    // Consumption has empty notes, click the placeholder
-    const placeholder = screen.getByText('Add a note…')
-    await user.click(placeholder)
+    // Consumption has empty notes, click the add-note button
+    const addBtn = screen.getByRole('button', { name: 'Add note' })
+    await user.click(addBtn)
 
     const input = screen.getByPlaceholderText('Add a note…')
     await user.type(input, 'my consumption note')

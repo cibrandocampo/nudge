@@ -1,0 +1,97 @@
+.entryCard {
+  margin-bottom: 0.5rem;
+}
+
+.entryName {
+  font-size: 0.875rem;
+}
+
+.consumedLot {
+  color: var(--c-text-3);
+}
+
+/* ── Notes (right side of card) ──────────────────────────────── */
+
+.notesSide {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  max-width: 50%;
+  align-self: center;
+  margin-left: auto;
+}
+
+.notesView {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--c-text-2);
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  border-radius: var(--radius);
+}
+
+.notesViewEditable {
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.notesViewEditable:hover {
+  background: var(--c-border-inner);
+}
+
+.notesInput {
+  font-size: 0.8rem;
+  min-width: 180px;
+}
+
+/* ── Compact (detail pages) ──────────────────────────────────── */
+
+.compactCard {
+  border-left-color: var(--c-border);
+  margin-bottom: 0.375rem;
+}
+
+.compactRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  min-width: 0;
+}
+
+.compactTime {
+  color: var(--c-text-2);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.compactAuthor {
+  color: var(--c-text-3);
+  flex-shrink: 0;
+}
+
+.compactLot {
+  color: var(--c-text-3);
+  flex-shrink: 0;
+}
+
+.compactNotes {
+  color: var(--c-text-2);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.compactQty {
+  font-weight: 600;
+  color: var(--c-text-3);
+  margin-left: auto;
+  flex-shrink: 0;
+}

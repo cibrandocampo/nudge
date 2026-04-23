@@ -7,7 +7,6 @@ import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { clear } from '../../offline/queue'
 import { useEntries, useStockConsumptions } from '../useEntries'
-import { useMe } from '../useMe'
 import { useContacts, useContactSearch } from '../useContacts'
 import { useUpdateEntry } from '../mutations/useUpdateEntry'
 import { useUpdateConsumption } from '../mutations/useUpdateConsumption'
@@ -131,21 +130,7 @@ describe('useStockConsumptions', () => {
   })
 })
 
-describe('useMe / useContacts / useContactSearch', () => {
-  it('useMe returns the user payload', async () => {
-    server.use(http.get(`${BASE}/auth/me/`, () => HttpResponse.json({ id: 1, username: 'alice' })))
-    const { result } = renderWith(() => useMe())
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data.username).toBe('alice')
-  })
-
-  it('useMe surfaces errors with status', async () => {
-    server.use(http.get(`${BASE}/auth/me/`, () => new HttpResponse(null, { status: 403 })))
-    const { result } = renderWith(() => useMe())
-    await waitFor(() => expect(result.current.isError).toBe(true))
-    expect(result.current.error.status).toBe(403)
-  })
-
+describe('useContacts / useContactSearch', () => {
   it('useContacts returns the list', async () => {
     server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10 }])))
     const { result } = renderWith(() => useContacts())

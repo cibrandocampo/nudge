@@ -31,7 +31,7 @@ describe('AlertBanner', () => {
     )
     const svg = container.querySelector('svg')
     expect(svg).not.toBeNull()
-    expect(svg.querySelector('use').getAttribute('href')).toBe('/icons.svg#i-alert-triangle')
+    expect(svg.querySelector('use').getAttribute('href')).toBe('#i-alert-triangle')
   })
 
   it('omits the Icon when the icon prop is not provided', () => {

@@ -68,26 +68,45 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByText(/Could not load data/)).toBeInTheDocument())
   })
 
-  it('renders preset interval buttons', async () => {
+  it('renders the IntervalPicker segmented tabs', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByText('1 days')).toBeInTheDocument())
-    expect(screen.getByText('1 weeks')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'hours' })).toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'days' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'weeks' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'months' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'years' })).toBeInTheDocument()
   })
 
-  it('clicking a preset updates the interval', async () => {
+  it('defaults to Days=1 (24 hours) in create mode', async () => {
+    renderCreate()
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'days' })).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  it('switching the picker unit updates the submitted interval_hours', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('1 weeks')).toBeInTheDocument())
-    await user.click(screen.getByText('1 weeks'))
-    // The 1 weeks button should now have active class
-    expect(screen.getByText('1 weeks').className).toContain('presetActive')
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Weekly routine')
+    // days=1 → click weeks → weeks=1 (168h).
+    await user.click(screen.getByRole('tab', { name: 'weeks' }))
+    await user.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(capturedBody?.interval_hours).toBe(168))
   })
 
   it('shows stock fields when track stock is checked', async () => {
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([{ id: 1, name: 'Filters', quantity: 5 }])))
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('Track stock for this routine')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Stock tracking' })).toBeInTheDocument())
 
-    await user.click(screen.getByText('Track stock for this routine'))
+    await user.click(screen.getByRole('switch', { name: 'Stock tracking' }))
     await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
     expect(screen.getByText('Units used per log')).toBeInTheDocument()
   })
@@ -129,22 +148,6 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
   })
 
-  it('changes custom interval value and unit', async () => {
-    const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument())
-
-    // Change the unit dropdown to weeks
-    const unitSelect = screen.getByDisplayValue('days')
-    await user.selectOptions(unitSelect, 'weeks')
-
-    // The custom value input should reflect the current value
-    const valueInput = screen.getByRole('spinbutton')
-    await user.click(valueInput) // focus (sets draft)
-    await user.clear(valueInput)
-    await user.type(valueInput, '3')
-    await user.tab() // blur to apply
-  })
-
   it('handles description textarea input', async () => {
     const { user, container } = renderCreate()
     await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument())
@@ -160,26 +163,7 @@ describe('RoutineFormPage', () => {
 
   it('renders back button', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByText('← Back')).toBeInTheDocument())
-  })
-
-  it('shows all unit options in dropdown', async () => {
-    renderCreate()
-    await waitFor(() => expect(screen.getByText('Save')).toBeInTheDocument())
-    expect(screen.getByText('hours')).toBeInTheDocument()
-    expect(screen.getByText('days')).toBeInTheDocument()
-    expect(screen.getByText('weeks')).toBeInTheDocument()
-    expect(screen.getByText('months')).toBeInTheDocument()
-    expect(screen.getByText('years')).toBeInTheDocument()
-  })
-
-  it('renders all preset interval buttons', async () => {
-    renderCreate()
-    await waitFor(() => expect(screen.getByText('8 hours')).toBeInTheDocument())
-    expect(screen.getByText('12 hours')).toBeInTheDocument()
-    expect(screen.getByText('2 days')).toBeInTheDocument()
-    expect(screen.getByText('1 months')).toBeInTheDocument()
-    expect(screen.getByText('1 years')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
   })
 
   it('edits with stock pre-selected', async () => {
@@ -199,22 +183,22 @@ describe('RoutineFormPage', () => {
 
   it('shows "already did this" checkbox in create mode', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Already completed' })).toBeInTheDocument())
   })
 
   it('does not show "already did this" checkbox in edit mode', async () => {
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(editRoutine)))
     renderEdit()
     await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
-    expect(screen.queryByText('I already did this recently')).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Already completed' })).not.toBeInTheDocument()
   })
 
   it('checking "already did this" reveals datetime input with default value', async () => {
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Already completed' })).toBeInTheDocument())
 
     expect(screen.queryByDisplayValue(/T/)).not.toBeInTheDocument()
-    await user.click(screen.getByText('I already did this recently'))
+    await user.click(screen.getByRole('switch', { name: 'Already completed' }))
 
     const datetimeInput = screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
     expect(datetimeInput).toBeInTheDocument()
@@ -222,9 +206,9 @@ describe('RoutineFormPage', () => {
 
   it('changing the datetime input updates the value', async () => {
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('I already did this recently')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Already completed' })).toBeInTheDocument())
 
-    await user.click(screen.getByText('I already did this recently'))
+    await user.click(screen.getByRole('switch', { name: 'Already completed' }))
     const datetimeInput = screen.getByDisplayValue(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)
     fireEvent.change(datetimeInput, { target: { value: '2026-02-27T10:00' } })
     expect(datetimeInput.value).toBe('2026-02-27T10:00')
@@ -242,27 +226,11 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
 
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Water cactus')
-    await user.click(screen.getByText('I already did this recently'))
+    await user.click(screen.getByRole('switch', { name: 'Already completed' }))
     await user.click(screen.getByText('Save'))
 
     await waitFor(() => expect(capturedBody?.last_done_at).toBeDefined())
     expect(new Date(capturedBody.last_done_at).getTime()).not.toBeNaN()
-  })
-
-  it('renders preset label for hours-based interval', async () => {
-    renderCreate()
-    // The 8 hours preset triggers hoursToHuman fallback (hours unit)
-    await waitFor(() => expect(screen.getByText('8 hours')).toBeInTheDocument())
-  })
-
-  it('handles zero interval_hours in edit mode gracefully', async () => {
-    const zeroRoutine = { ...editRoutine, interval_hours: 0 }
-    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(zeroRoutine)))
-    renderEdit()
-    await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
-    // The interval should show "0 hours" in the custom input
-    const valueInput = screen.getByRole('spinbutton')
-    expect(valueInput.value).toBe('0')
   })
 
   it('shows saving state on submit', async () => {
@@ -286,20 +254,12 @@ describe('RoutineFormPage', () => {
     resolve(HttpResponse.json({ id: 99 }, { status: 201 }))
   })
 
-  it('interval input blur without prior focus does not throw', async () => {
-    renderCreate()
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toBeInTheDocument())
-    // Fire blur directly without focus so intervalDraft remains null
-    fireEvent.blur(screen.getByRole('spinbutton'))
-    expect(screen.getByRole('spinbutton')).toBeInTheDocument()
-  })
-
   it('shows owner name for shared stocks in dropdown', async () => {
     const sharedStock = { id: 2, name: 'Shared Item', quantity: 10, is_owner: false, owner_username: 'alice' }
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([sharedStock])))
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('Track stock for this routine')).toBeInTheDocument())
-    await user.click(screen.getByText('Track stock for this routine'))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Stock tracking' })).toBeInTheDocument())
+    await user.click(screen.getByRole('switch', { name: 'Stock tracking' }))
     await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
     // Shared stock should show owner in the option
     const option = screen.getByText(/Shared Item.*alice/)
@@ -310,8 +270,8 @@ describe('RoutineFormPage', () => {
     const ownStock = { id: 1, name: 'My Item', quantity: 5, is_owner: true, owner_username: 'me' }
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([ownStock])))
     const { user } = renderCreate()
-    await waitFor(() => expect(screen.getByText('Track stock for this routine')).toBeInTheDocument())
-    await user.click(screen.getByText('Track stock for this routine'))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Stock tracking' })).toBeInTheDocument())
+    await user.click(screen.getByRole('switch', { name: 'Stock tracking' }))
     await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
     const option = screen.getByText('My Item (5 left)')
     expect(option).toBeInTheDocument()
@@ -340,5 +300,71 @@ describe('RoutineFormPage', () => {
     } finally {
       reachableRef.current = true
     }
+  })
+
+  it('submits shared_with when a contact is selected via ShareWithSection', async () => {
+    let capturedBody
+    server.use(
+      http.get(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json([
+          { id: 7, username: 'alice' },
+          { id: 8, username: 'bob' },
+        ]),
+      ),
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Shared routine')
+    // Open the share modal from the section's button.
+    await user.click(screen.getByRole('button', { name: /^share with/i }))
+    const { within } = await import('@testing-library/react')
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByText('alice'))
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(capturedBody?.shared_with).toEqual([7]))
+  })
+
+  it('turning off Stock tracking clears the stock fields before submit', async () => {
+    let capturedBody
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([{ id: 1, name: 'Filters', quantity: 5 }])),
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Toggle reset')
+
+    const toggle = await screen.findByRole('switch', { name: 'Stock tracking' })
+    // Turn on + pick stock.
+    await user.click(toggle)
+    // The Field wrapper keeps label + select as siblings; grab the combobox directly.
+    await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
+    await user.selectOptions(screen.getByRole('combobox'), '1')
+    // Turn off → fields should be reset in state.
+    await user.click(toggle)
+
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.stock).toBeNull())
+    expect(capturedBody.stock_usage).toBe(1)
+  })
+
+  it('prefills the shared_with chips when editing a routine shared with contacts', async () => {
+    server.use(
+      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 7, username: 'alice' }])),
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...editRoutine, shared_with: [7], shared_with_details: [{ id: 7, username: 'alice' }] }),
+      ),
+    )
+    renderEdit()
+    expect(await screen.findByDisplayValue('Take vitamins')).toBeInTheDocument()
+    // Chip for alice must be visible in the share section.
+    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
   })
 })

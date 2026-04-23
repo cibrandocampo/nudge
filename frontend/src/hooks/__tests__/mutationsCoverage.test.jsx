@@ -212,10 +212,12 @@ describe('useCreateRoutine — branches', () => {
 
 describe('useUpdateMe — branches', () => {
   it('merges server response into me cache on success', async () => {
+    let calls = 0
     server.use(
-      http.patch(`${BASE}/auth/me/`, () =>
-        HttpResponse.json({ id: 1, username: 'u', language: 'es', timezone: 'Europe/Madrid' }),
-      ),
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json({ id: 1, username: 'u', language: 'es', timezone: 'Europe/Madrid' })
+      }),
     )
     const { result, qc } = renderWith(() => useUpdateMe())
     qc.setQueryData(['me'], { id: 1, username: 'u', language: 'en', timezone: 'Europe/Madrid' })
@@ -223,18 +225,96 @@ describe('useUpdateMe — branches', () => {
     await act(async () => {
       await result.current.mutateAsync({ patch: { language: 'es' } })
     })
+    expect(calls).toBe(1)
     expect(qc.getQueryData(['me']).language).toBe('es')
   })
 
-  it('invalidates me when the response lacks an id', async () => {
-    server.use(http.patch(`${BASE}/auth/me/`, () => HttpResponse.json({ detail: 'ok' })))
+  it('auto-recovers from 412 by priming the cache and replaying with fresh updated_at', async () => {
+    const freshTs = '2026-04-22T10:00:00Z'
+    const finalTs = '2026-04-22T10:00:05Z'
+    const calls = []
+    server.use(
+      http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+        calls.push({ body: await request.json(), ifUnmodified: request.headers.get('if-unmodified-since') })
+        if (calls.length === 1) {
+          return HttpResponse.json(
+            {
+              error: 'conflict',
+              current: { id: 1, username: 'u', language: 'en', settings_updated_at: freshTs },
+            },
+            { status: 412 },
+          )
+        }
+        return HttpResponse.json({ id: 1, username: 'u', language: 'gl', settings_updated_at: finalTs })
+      }),
+    )
     const { result, qc } = renderWith(() => useUpdateMe())
-    qc.setQueryData(['me'], { id: 1 })
+    qc.setQueryData(['me'], { id: 1, username: 'u', language: 'en', settings_updated_at: '2026-01-01T00:00:00Z' })
 
     await act(async () => {
-      await result.current.mutateAsync({ patch: { language: 'gl' } })
+      await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
     })
-    expect(qc.getQueryState(['me']).isInvalidated).toBe(true)
+
+    expect(calls).toHaveLength(2)
+    expect(calls[1].ifUnmodified).toBe(new Date(freshTs).toUTCString())
+    const me = qc.getQueryData(['me'])
+    expect(me.language).toBe('gl')
+    expect(me.settings_updated_at).toBe(finalTs)
+  })
+
+  it('propagates a second 412 without retrying again', async () => {
+    const freshTs = '2026-04-22T10:00:00Z'
+    let calls = 0
+    server.use(
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json(
+          {
+            error: 'conflict',
+            current: { id: 1, username: 'u', language: 'en', settings_updated_at: freshTs },
+          },
+          { status: 412 },
+        )
+      }),
+    )
+    const { result } = renderWith(() => useUpdateMe())
+
+    let caught = null
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
+      } catch (err) {
+        caught = err
+      }
+    })
+
+    expect(calls).toBe(2)
+    expect(caught?.name).toBe('ConflictError')
+    expect(caught?.current?.settings_updated_at).toBe(freshTs)
+  })
+
+  it('does not retry when a 412 arrives without a current body', async () => {
+    let calls = 0
+    server.use(
+      http.patch(`${BASE}/auth/me/`, () => {
+        calls += 1
+        return HttpResponse.json({ error: 'conflict' }, { status: 412 })
+      }),
+    )
+    const { result } = renderWith(() => useUpdateMe())
+
+    let caught = null
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ patch: { language: 'gl' }, updatedAt: '2026-01-01T00:00:00Z' })
+      } catch (err) {
+        caught = err
+      }
+    })
+
+    expect(calls).toBe(1)
+    expect(caught?.name).toBe('ConflictError')
+    expect(caught?.current).toBeUndefined()
   })
 })
 
