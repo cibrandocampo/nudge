@@ -534,6 +534,35 @@ describe('HistoryPage — sharing', () => {
   })
 })
 
+describe('HistoryPage — initial filters from URL query', () => {
+  it('defaults the type filter to "routines" when ?routine= is present and no type is given', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />, { initialEntries: ['/?routine=1'] })
+    // The stock filter is hidden while type is "routines".
+    await waitFor(() => expect(screen.getByDisplayValue('Routines')).toBeInTheDocument())
+    expect(screen.queryByText('All items')).not.toBeInTheDocument()
+    // And the routine select is pre-populated with the URL value.
+    await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+  })
+
+  it('defaults the type filter to "consumptions" when ?stock= is present and no type is given', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />, { initialEntries: ['/?stock=1'] })
+    // The routine filter is hidden while type is "consumptions".
+    await waitFor(() => expect(screen.getByDisplayValue('Stock')).toBeInTheDocument())
+    expect(screen.queryByText('All routines')).not.toBeInTheDocument()
+    // And the stock select is pre-populated with the URL value.
+    await waitFor(() => expect(screen.getByDisplayValue('Insulin pens')).toBeInTheDocument())
+  })
+
+  it('honours an explicit ?type= when it is one of the allowed values', async () => {
+    setupHandlers()
+    renderWithProviders(<HistoryPage />, { initialEntries: ['/?type=routines'] })
+    await waitFor(() => expect(screen.getByDisplayValue('Routines')).toBeInTheDocument())
+    expect(screen.queryByText('All items')).not.toBeInTheDocument()
+  })
+})
+
 describe('HistoryPage — API format variants', () => {
   it('handles routines paginated response format', async () => {
     server.use(

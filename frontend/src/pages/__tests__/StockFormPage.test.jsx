@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import StockFormPage from '../StockFormPage'
@@ -294,6 +294,47 @@ describe('StockFormPage — create error paths', () => {
 
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
     expect(patchCalls).toBe(1)
+  })
+})
+
+describe('StockFormPage — batch uid fallback', () => {
+  // `newBatchUid` falls back to a counter+timestamp when `crypto.randomUUID`
+  // is unavailable. Production hits this path on plain-HTTP LAN deploys and
+  // on `host.docker.internal` in e2e, where secure-context crypto is off.
+  let originalRandomUUID
+  beforeEach(() => {
+    originalRandomUUID = globalThis.crypto?.randomUUID
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    })
+  })
+  afterEach(() => {
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      configurable: true,
+      writable: true,
+      value: originalRandomUUID,
+    })
+  })
+
+  it('still generates distinct batch row keys when crypto.randomUUID is unavailable', async () => {
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    const addBatchBtn = screen.getByRole('button', { name: 'Add batch' })
+    // Two batches → two invocations of the fallback uid generator. If it
+    // returned the same value React would warn about duplicate keys and the
+    // second <input> would share state with the first.
+    await user.click(addBatchBtn)
+    await user.click(addBatchBtn)
+    const qtyInputs = screen.getAllByLabelText(/Batch \d+ quantity/)
+    expect(qtyInputs).toHaveLength(2)
+    await user.type(qtyInputs[0], '1')
+    await user.type(qtyInputs[1], '2')
+    expect(qtyInputs[0]).toHaveValue(1)
+    expect(qtyInputs[1]).toHaveValue(2)
   })
 })
 

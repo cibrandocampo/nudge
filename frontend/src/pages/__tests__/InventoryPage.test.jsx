@@ -184,6 +184,20 @@ describe('InventoryPage — −1 lot picker', () => {
     expect(consumeBody.lot_selections).toEqual([{ lot_id: 10, quantity: 1 }])
   })
 
+  it('shows an error toast and does not open the picker when the stock has no lots', async () => {
+    // Defensive guard: the card hides the −1 button when quantity is 0, but
+    // backend drift could surface a stock whose quantity > 0 yet whose lots
+    // array is empty. In that case handleConsume short-circuits to a toast.
+    mockStocks([stock({ lots: [] })])
+    mockGroups([])
+    const { user } = renderPage()
+    await screen.findByText('Water filter')
+
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+    expect(await screen.findByText('Something went wrong. Please try again.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('cancelling the modal does not consume', async () => {
     let consumeCalls = 0
     mockStocks([stock()])

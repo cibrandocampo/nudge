@@ -121,13 +121,11 @@ export default function StockFormPage() {
         )
         const failed = results.filter((r) => r.status === 'rejected').length
         if (failed > 0) {
-          const detail =
-            results.find((r) => r.status === 'rejected')?.reason instanceof OfflineError
-              ? t('offline.actionUnavailable')
-              : t('common.actionError')
+          // Offline rejections never land here — useCreateStockLot queues
+          // them transparently — so the detail copy is always the generic one.
           showToast({
             type: 'error',
-            message: t('stockForm.batchesPartial', { failed, detail }),
+            message: t('stockForm.batchesPartial', { failed, detail: t('common.actionError') }),
           })
         }
       }
