@@ -177,6 +177,88 @@ describe('StockGroupsPage', () => {
     expect(byId[3]).toBe(1) // C shifted up
   })
 
+  it('shows a create error when the POST rejects', async () => {
+    mockGroups([])
+    server.use(http.post(`${BASE}/stock-groups/`, () => new HttpResponse(null, { status: 500 })))
+
+    const { user } = render()
+    const input = await screen.findByLabelText(/category name/i)
+    await user.type(input, 'Tools')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    expect(await screen.findByText(/could not create/i)).toBeInTheDocument()
+  })
+
+  it('shows a rename error when the PATCH rejects and restores the name', async () => {
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    server.use(http.patch(`${BASE}/stock-groups/1/`, () => new HttpResponse(null, { status: 500 })))
+
+    const { user } = render()
+    await user.click(await screen.findByRole('button', { name: /rename/i }))
+    const input = await screen.findByRole('textbox', { name: /rename/i })
+    await user.clear(input)
+    await user.type(input, 'Despensa{Enter}')
+    expect(await screen.findByText(/could not rename/i)).toBeInTheDocument()
+  })
+
+  it('shows a delete error when the DELETE rejects', async () => {
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    server.use(http.delete(`${BASE}/stock-groups/1/`, () => new HttpResponse(null, { status: 500 })))
+
+    const { user } = render()
+    await user.click(await screen.findByRole('button', { name: /^delete$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
+    expect(await screen.findByText(/could not delete/i)).toBeInTheDocument()
+  })
+
+  it('shows a reorder error and rolls back local order when a PATCH rejects during reorder', async () => {
+    mockGroups([
+      { id: 1, name: 'A', display_order: 0 },
+      { id: 2, name: 'B', display_order: 1 },
+    ])
+    server.use(
+      http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })),
+    )
+
+    render()
+    const rows = await screen.findAllByRole('listitem')
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.dragStart(rows[0], { dataTransfer })
+    fireEvent.dragOver(rows[1], { dataTransfer })
+    fireEvent.drop(rows[1], { dataTransfer })
+
+    expect(await screen.findByText(/could not save the new order/i)).toBeInTheDocument()
+  })
+
+  it('clears drag-over state on dragLeave and abandons on dragEnd', async () => {
+    mockGroups([
+      { id: 1, name: 'A', display_order: 0 },
+      { id: 2, name: 'B', display_order: 1 },
+    ])
+    let patchCalls = 0
+    server.use(
+      http.patch(`${BASE}/stock-groups/:id/`, () => {
+        patchCalls += 1
+        return HttpResponse.json({})
+      }),
+    )
+
+    render()
+    const rows = await screen.findAllByRole('listitem')
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
+    const { fireEvent } = await import('@testing-library/react')
+
+    fireEvent.dragStart(rows[0], { dataTransfer })
+    fireEvent.dragEnter(rows[1], { dataTransfer })
+    // Leaving the row entirely (no relatedTarget inside currentTarget) clears dragOverId.
+    fireEvent.dragLeave(rows[1], { dataTransfer, relatedTarget: document.body })
+    // dragEnd without a drop must not PATCH anything.
+    fireEvent.dragEnd(rows[0], { dataTransfer })
+
+    expect(patchCalls).toBe(0)
+  })
+
   it('disables all actions when offline', async () => {
     reachableRef.current = false
     try {

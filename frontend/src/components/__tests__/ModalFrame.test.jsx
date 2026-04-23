@@ -82,4 +82,35 @@ describe('ModalFrame', () => {
     )
     expect(screen.getByRole('dialog').className).toMatch(/modalBoxFramed/)
   })
+
+  it('applies both framed and md size classes when variant="framed" and size="md"', () => {
+    renderWithProviders(
+      <ModalFrame onClose={vi.fn()} variant="framed" size="md">
+        <p>body</p>
+      </ModalFrame>,
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.className).toMatch(/modalBoxFramed/)
+    expect(dialog.className).toMatch(/modalBoxMd/)
+  })
+
+  it('applies both framed and lg size classes when variant="framed" and size="lg"', () => {
+    renderWithProviders(
+      <ModalFrame onClose={vi.fn()} variant="framed" size="lg">
+        <p>body</p>
+      </ModalFrame>,
+    )
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.className).toMatch(/modalBoxFramed/)
+    expect(dialog.className).toMatch(/modalBoxLg/)
+  })
+
+  it('uses the closeAriaLabel override when there is no title', () => {
+    renderWithProviders(
+      <ModalFrame onClose={vi.fn()} closeAriaLabel="Dismiss settings">
+        <p>body</p>
+      </ModalFrame>,
+    )
+    expect(screen.getByRole('dialog', { name: 'Dismiss settings' })).toBeInTheDocument()
+  })
 })

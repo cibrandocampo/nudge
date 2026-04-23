@@ -155,6 +155,16 @@ describe('Combobox', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  it('clicking a combobox that is already open keeps it open (no-op branch)', async () => {
+    const { user } = renderCombobox()
+    const input = screen.getByRole('combobox')
+    await user.click(input)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    // Second click on the open input must not throw or close.
+    await user.click(input)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
   it('delegates filtering to the parent when onInputChange is provided', async () => {
     const onInputChange = vi.fn()
     // Parent controls the options list — Combobox must not filter locally.

@@ -215,6 +215,88 @@ describe('StockFormPage — create', () => {
   })
 })
 
+describe('StockFormPage — create error paths', () => {
+  it('surfaces a generic error when the stock create responds without an id', async () => {
+    server.use(http.post(`${BASE}/stock/`, () => HttpResponse.json({}, { status: 201 })))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await user.type(screen.getByLabelText('Name'), 'NoId')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+    // Still on the form (no navigation) because we never got a valid id back.
+    expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
+  })
+
+  it('shows a partial-failure toast when some batch POSTs reject', async () => {
+    let lotCalls = 0
+    server.use(
+      http.post(`${BASE}/stock/`, () =>
+        HttpResponse.json(
+          { id: 12, name: 'Partial', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' },
+          { status: 201 },
+        ),
+      ),
+      http.post(`${BASE}/stock/12/lots/`, () => {
+        lotCalls += 1
+        if (lotCalls === 1) return new HttpResponse(null, { status: 500 })
+        return HttpResponse.json({ id: 100 + lotCalls }, { status: 201 })
+      }),
+      http.get(`${BASE}/stock/12/`, () =>
+        HttpResponse.json({ id: 12, name: 'Partial', lots: [], quantity: 0, updated_at: '2026-04-22T10:00:00Z' }),
+      ),
+    )
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await user.type(screen.getByLabelText('Name'), 'Partial')
+    const addBatchBtn = screen.getByRole('button', { name: 'Add batch' })
+    await user.click(addBatchBtn)
+    await user.click(addBatchBtn)
+    const qtyInputs = screen.getAllByLabelText(/Batch \d+ quantity/)
+    await user.type(qtyInputs[0], '3')
+    await user.type(qtyInputs[1], '7')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    // Toast appears with the partial-failure copy. Still navigates (stock exists).
+    expect(await screen.findByText(/1 batch.*could not be added/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+  })
+
+  it('still navigates after a failing shared_with PATCH (non-fatal)', async () => {
+    let patchCalls = 0
+    server.use(
+      http.post(`${BASE}/stock/`, () =>
+        HttpResponse.json(
+          { id: 21, name: 'Share', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' },
+          { status: 201 },
+        ),
+      ),
+      http.patch(`${BASE}/stock/21/`, () => {
+        patchCalls += 1
+        return new HttpResponse(null, { status: 500 })
+      }),
+    )
+    mockGroups()
+    mockContacts([{ id: 2, username: 'alice' }])
+
+    const { user } = renderCreate()
+    await user.type(screen.getByLabelText('Name'), 'Share')
+    await user.click(screen.getByRole('button', { name: /Share with/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByText('alice'))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(patchCalls).toBe(1)
+  })
+})
+
 describe('StockFormPage — edit', () => {
   it('prefills the form and PATCHes on submit without showing the batches section', async () => {
     mockStock({

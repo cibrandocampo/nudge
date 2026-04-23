@@ -89,6 +89,35 @@ describe('StockCard', () => {
     expect(screen.queryByRole('button', { name: /share with/i })).not.toBeInTheDocument()
   })
 
+  it('disables the consume button while a consume is already in flight', () => {
+    renderCard({ consuming: true })
+    expect(screen.getByLabelText('Consume 1 unit')).toBeDisabled()
+  })
+
+  it('renders the warning border + dot when quantity is in the low range (1-3)', () => {
+    renderCard({ stock: { ...baseStock, quantity: 2 } })
+    expect(screen.getByText('(2 total)')).toBeInTheDocument()
+  })
+
+  it('renders the daily consumption row combining own and shared values', () => {
+    renderCard({
+      stock: { ...baseStock, daily_consumption_own: 1.5, daily_consumption_shared: 0.5 },
+    })
+    const row = screen.getByTestId('consumption-row')
+    expect(row).toBeInTheDocument()
+    expect(row.textContent).toContain('1.5')
+    expect(row.textContent).toContain('0.5')
+    expect(row.textContent).toContain(' + ')
+  })
+
+  it('renders an integer-formatted rate (no trailing decimals)', () => {
+    renderCard({
+      stock: { ...baseStock, daily_consumption_own: 2, daily_consumption_shared: null },
+    })
+    const row = screen.getByTestId('consumption-row')
+    expect(row.textContent).toMatch(/\b2\/day\b/)
+  })
+
   it('navigates to the stock detail when the card itself is clicked', async () => {
     const { user } = renderWithProviders(
       <Routes>

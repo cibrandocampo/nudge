@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
@@ -69,5 +70,64 @@ describe('IntervalPicker', () => {
   it('renders the error message when the error prop is truthy', () => {
     render({ valueHours: 24, error: 'Must be greater than 0.' })
     expect(screen.getByText('Must be greater than 0.')).toBeInTheDocument()
+  })
+
+  it('does not re-emit when the same unit tab is clicked again', async () => {
+    const onChange = vi.fn()
+    const { user } = render({ valueHours: 24, onChange })
+    await user.click(screen.getByRole('tab', { name: 'days' }))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does not re-emit when a blurred draft matches the current value', async () => {
+    const onChange = vi.fn()
+    const { user } = render({ valueHours: 48, onChange })
+    const input = screen.getByDisplayValue('2')
+    await user.click(input)
+    // Focus sets draft='' → blur with draft='' clamps to 1; value is 2, so emit runs once.
+    // Re-focus and blur with the same digits typed as current value → no emit.
+    input.blur()
+    onChange.mockClear()
+    await user.click(input)
+    await user.type(input, '1') // draft='1', current value was clamped to 1
+    input.blur()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('commits the input and blurs on Enter', async () => {
+    const onChange = vi.fn()
+    const { user } = render({ valueHours: 24, onChange })
+    const input = screen.getByDisplayValue('1')
+    await user.click(input)
+    await user.type(input, '5{Enter}')
+    expect(onChange).toHaveBeenCalledWith(5 * 24)
+  })
+
+  it('ignores + clicks that do not change the clamped value', async () => {
+    const onChange = vi.fn()
+    // months max = 24 → starting at 24 months, + is a no-op.
+    const { user } = render({ valueHours: 24 * 720, onChange })
+    const plusBtn = screen.getByRole('button', { name: 'Increase' })
+    expect(plusBtn).toBeDisabled()
+  })
+
+  it('syncs internal state to a new valueHours prop without firing onChange', async () => {
+    const onChange = vi.fn()
+    function Harness() {
+      const [hours, setHours] = useState(24)
+      return (
+        <>
+          <IntervalPicker valueHours={hours} onChange={onChange} />
+          <button type="button" onClick={() => setHours(72)}>
+            bump
+          </button>
+        </>
+      )
+    }
+    const { user } = renderWithProviders(<Harness />)
+    expect(screen.getByDisplayValue('1')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'bump' }))
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

@@ -131,4 +131,23 @@ describe('RoutineCard', () => {
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
   })
+
+  it('disables the Done button with a tooltip when the backing stock is depleted', () => {
+    const routine = {
+      ...baseRoutine,
+      stock_name: 'Ibuprofen',
+      stock_quantity: 0,
+      stock_usage: 1,
+    }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const done = screen.getByRole('button', { name: /done/i })
+    expect(done).toBeDisabled()
+    expect(done).toHaveAttribute('title', expect.stringMatching(/no stock/i))
+  })
+
+  it('shows the interval label when provided on the routine', () => {
+    const routine = { ...baseRoutine, interval_label: 'every 8 h' }
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    expect(screen.getByText('every 8 h')).toBeInTheDocument()
+  })
 })

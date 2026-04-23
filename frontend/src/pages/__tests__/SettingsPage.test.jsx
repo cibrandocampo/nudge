@@ -23,6 +23,25 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('testuser')).toBeInTheDocument()
   })
 
+  it('renders "First Last (username)" when the user has a first and last name', async () => {
+    renderWithProviders(<SettingsPage />, {
+      auth: {
+        user: {
+          id: 1,
+          username: 'jdoe',
+          first_name: 'Jane',
+          last_name: 'Doe',
+          is_staff: false,
+          timezone: 'Europe/Madrid',
+          language: 'en',
+          daily_notification_time: '08:00:00',
+        },
+      },
+    })
+    const heading = await screen.findByRole('heading', { name: /Jane Doe/ })
+    expect(heading.textContent).toContain('jdoe')
+  })
+
   it('renders language buttons', async () => {
     renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('English')).toBeInTheDocument()

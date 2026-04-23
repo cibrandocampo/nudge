@@ -47,6 +47,15 @@ describe('AuthContext', () => {
     expect(result.current.user).toBeNull()
   })
 
+  it('remains user=null and captures the status when /auth/me/ returns a non-ok response', async () => {
+    localStorage.setItem('access_token', 'tok')
+    server.use(http.get(`${BASE}/auth/me/`, () => new HttpResponse(null, { status: 401 })))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toBeNull()
+    expect(qc.getQueryState(['me']).error).toMatchObject({ status: 401 })
+  })
+
   it('hydrates user from cache when /auth/me/ fails offline and token is valid', async () => {
     // Simulates reopening the PWA while the backend is unreachable: the
     // persister has already re-hydrated ['me'], so ProtectedRoute must not

@@ -90,6 +90,14 @@ describe('LotPickerModal', () => {
     expect(onConsumed).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the "(no id)" fallback label when a lot has no lot_number', () => {
+    const stock = buildStock({
+      lots: [{ id: 20, quantity: 1, expiry_date: '2027-01-01', lot_number: null }],
+    })
+    renderModal({ stock })
+    expect(screen.getByText(/no id/i)).toBeInTheDocument()
+  })
+
   it('renders the no-lots copy when the stock has no available batches', () => {
     renderModal({ stock: buildStock({ lots: [] }) })
     expect(screen.getByText(/no available batches/i)).toBeInTheDocument()

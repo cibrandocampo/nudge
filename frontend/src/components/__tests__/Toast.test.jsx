@@ -64,6 +64,56 @@ describe('Toast', () => {
     expect(screen.getByTestId('toast-weird')).toBeInTheDocument()
   })
 
+  it('invokes the action callback and dismisses when the action button is clicked', () => {
+    function ActionTrigger({ onAction }) {
+      const { showToast } = useToast()
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            showToast({
+              type: 'info',
+              message: 'with action',
+              action: { label: 'Undo', onClick: onAction },
+            })
+          }
+        >
+          fire
+        </button>
+      )
+    }
+    const onAction = vi.fn()
+    render(<ActionTrigger onAction={onAction} />, { wrapper: Wrapper })
+    fireEvent.click(screen.getByRole('button', { name: 'fire' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('with action')).not.toBeInTheDocument()
+  })
+
+  it('tolerates an action without an onClick callback', () => {
+    function ActionTrigger() {
+      const { showToast } = useToast()
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            showToast({
+              type: 'info',
+              message: 'silent action',
+              action: { label: 'OK' },
+            })
+          }
+        >
+          fire
+        </button>
+      )
+    }
+    render(<ActionTrigger />, { wrapper: Wrapper })
+    fireEvent.click(screen.getByRole('button', { name: 'fire' }))
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+    expect(screen.queryByText('silent action')).not.toBeInTheDocument()
+  })
+
   it('stacks multiple toasts simultaneously', () => {
     render(
       <>

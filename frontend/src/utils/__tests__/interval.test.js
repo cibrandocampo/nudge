@@ -67,4 +67,9 @@ describe('interval util — clampValue', () => {
     expect(clampValue(12, 'hours')).toBe(12)
     expect(clampValue(24, 'months')).toBe(24)
   })
+
+  it('falls back to the hours cap when the unit is unknown', () => {
+    // Unknown unit → uses UNIT_MAX_VALUES.hours (17520) as the cap.
+    expect(clampValue(99999, 'decades')).toBe(17520)
+  })
 })
