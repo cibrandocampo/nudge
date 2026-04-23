@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { SEED } from './constants.js'
 import { routineCard } from './locators.js'
+import { goToRoutineDetail } from './navigation.js'
 
 /**
  * Mark a routine as done from the Dashboard card.
@@ -94,18 +95,26 @@ export async function deleteRoutine(page, routineKeyOrName) {
 }
 
 /**
- * Toggle a contact in the share popover of a routine on the Dashboard.
- * Opens the popover, clicks the contact row and closes it. Works both for
- * share and un-share — the popover is a checkbox-style toggle.
+ * Toggle a contact in the routine's share list. The old dashboard-card
+ * popover was dropped — sharing is now edited from the routine form
+ * (ShareWithSection → ShareModal), matching the stock flow. Works both
+ * for share and un-share (toggle semantics); call twice to revert.
  */
 export async function shareRoutineWith(page, routineKey, username) {
-  const card = routineCard(page, routineKey)
-  await card.getByRole('button', { name: 'Share' }).click()
+  await goToRoutineDetail(page, routineKey)
+  await page.getByRole('link', { name: 'Edit' }).click()
+  await page.waitForURL(/\/routines\/\d+\/edit$/)
+  // The ShareWithSection header button label is "Share with…" (with the
+  // ellipsis). `exact: true` excludes the per-chip "Unshare with <name>"
+  // remove buttons.
+  await page.getByRole('button', { name: 'Share with…', exact: true }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await dialog.locator('li').filter({ hasText: username }).click()
   await page.keyboard.press('Escape')
-  await expect(dialog).not.toBeVisible()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.waitForURL(/\/routines\/\d+$/)
 }
 
 export async function unshareRoutineFrom(page, routineKey, username) {

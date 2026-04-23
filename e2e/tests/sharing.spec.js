@@ -19,36 +19,20 @@ test.describe('Sharing — Routines', () => {
     await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
-  test('share popover appears on routine cards', async ({ page }) => {
-    // Should be on dashboard after login
-    await expect(page.getByText('Today')).toBeVisible()
+  test('share modal lists contacts when opened from the routine form', async ({ page }) => {
+    // The old popover on routine cards was replaced by a ShareWithSection
+    // (→ ShareModal) inside the routine form. Open the "New routine" form
+    // and confirm the modal renders and lists the seeded contact.
+    await page.getByRole('link', { name: '+ New routine' }).click()
+    await expect(page).toHaveURL('/routines/new')
 
-    // Look for at least one share button (👥) on the page
-    const shareButtons = page.getByRole('button', { name: 'Share' })
-    const count = await shareButtons.count()
-
-    if (count === 0) {
-      // No routines on dashboard — create one first
-      await page.getByRole('link', { name: '+ New routine' }).click()
-      await page.getByPlaceholder(/change water filter/i).fill(`Share test ${Date.now()}`)
-      await page.getByRole('button', { name: 'Save' }).click()
-      await page.waitForURL(/\/routines\/\d+$/)
-
-      // Go back to dashboard
-      await page.goto('/')
-      await expect(page.getByRole('button', { name: 'Share' }).first()).toBeVisible()
-    }
-
-    // Click the first share button
-    await page.getByRole('button', { name: 'Share' }).first().click()
-
-    // Modal should open with a contact listed
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText(USER2.username)).toBeVisible()
   })
 
-  test('share routine via API and verify dashboard reflects it', async ({ page }) => {
+  test('share routine via API and verify the edit form reflects it', async ({ page }) => {
     // Create a routine
     await page.getByRole('link', { name: '+ New routine' }).click()
     const routineName = `Shared routine ${Date.now()}`
@@ -58,7 +42,9 @@ test.describe('Sharing — Routines', () => {
 
     const routineId = page.url().match(/\/routines\/(\d+)$/)[1]
 
-    // Share via API (the checkbox inside RoutineCard Link causes navigation — known issue)
+    // Share via API — RoutineCard has no Share trigger; sharing is edited
+    // from the routine form, so setting via API + re-opening the form is
+    // the equivalent end-to-end round-trip.
     await page.evaluate(
       async ({ rid, contactUsername }) => {
         const token = localStorage.getItem('access_token')
@@ -80,13 +66,16 @@ test.describe('Sharing — Routines', () => {
       { rid: routineId, contactUsername: USER2.username },
     )
 
-    // Go to dashboard and find the specific routine card
+    // Dashboard: the card should carry the passive shared badge.
     await page.goto('/')
     const card = page.getByTestId('routine-card').filter({ hasText: routineName })
     await expect(card).toBeVisible()
+    await expect(card.getByTestId('shared-badge')).toBeVisible()
 
-    // Open share modal for this specific routine and verify contact is selected
-    await card.getByRole('button', { name: 'Share' }).click()
+    // Open the routine's edit form — the ShareModal should show USER2
+    // as already selected.
+    await page.goto(`/routines/${routineId}/edit`)
+    await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
