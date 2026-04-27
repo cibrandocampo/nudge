@@ -112,12 +112,16 @@ describe('routine mutation hooks — optimistic updates (T062)', () => {
     await clear()
   })
 
-  it('useLogRoutine removes the routine from dashboard.due optimistically', async () => {
+  it('useLogRoutine moves the routine from dashboard.due to dashboard.upcoming optimistically', async () => {
+    // T112: the optimistic now MOVES the routine instead of just dropping
+    // it from `due`, so the user doesn't see it vanish offline. The
+    // backend invalidate after onSuccess overwrites the local
+    // approximation when online.
     server.use(http.post(`${BASE}/routines/5/log/`, () => HttpResponse.json({ id: 42 }, { status: 201 })))
     const { result, qc } = renderMut(() => useLogRoutine())
     qc.setQueryData(['dashboard'], {
-      due: [{ id: 5, name: 'Pills' }],
-      upcoming: [{ id: 6, name: 'Yoga' }],
+      due: [{ id: 5, name: 'Pills', interval_hours: 24 }],
+      upcoming: [{ id: 6, name: 'Yoga', next_due_at: '2099-01-01T00:00:00Z' }],
     })
 
     await act(async () => {
@@ -125,7 +129,14 @@ describe('routine mutation hooks — optimistic updates (T062)', () => {
     })
     const dash = qc.getQueryData(['dashboard'])
     expect(dash.due).toEqual([])
-    expect(dash.upcoming).toEqual([{ id: 6, name: 'Yoga' }])
+    // Pills sits BEFORE Yoga because Yoga's next_due_at is far future.
+    expect(dash.upcoming).toHaveLength(2)
+    expect(dash.upcoming.map((r) => r.id)).toEqual([5, 6])
+    const moved = dash.upcoming[0]
+    expect(moved.id).toBe(5)
+    expect(moved.is_due).toBe(false)
+    expect(moved.is_overdue).toBe(false)
+    expect(moved.next_due_at).toBeTruthy()
   })
 
   it('useLogRoutine rolls back the dashboard when the server rejects', async () => {

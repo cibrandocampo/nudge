@@ -21,10 +21,14 @@ import {
  * the dedup scenarios don't inherit mutations from each other.
  *
  * The `data-expiring` attribute on `[data-testid="lot-row"]`
- * (StockCard) is the single assertable signal for the expiry
- * indicator — the UI also renders an alert-triangle icon but testids
- * + data attributes keep the test independent from the design system's
- * CSS class hashes.
+ * (StockDetailPage) is the assertable signal for the expiry
+ * indicator. As of T106 it is tri-state:
+ *   - `'reached'` → the lot's `expiry_date <= today` (already expired)
+ *   - `'soon'`    → `today < expiry_date < today + 30 days`
+ *   - `'none'`    → either no expiry_date, or it falls outside the
+ *                   30-day window
+ * Using data attributes keeps the test independent from the design
+ * system's CSS class hashes.
  */
 test.describe('Stock expiry and dedup', () => {
   test.beforeEach(async ({ page, context }) => {
@@ -39,12 +43,12 @@ test.describe('Stock expiry and dedup', () => {
     // the aggregate quantity + optional alert banner).
     await goToStockDetail(page, 'vitaminD')
 
-    // VIT-A expires in 7 days → flagged. VIT-B expires in 180 days → not flagged.
+    // VIT-A expires in 7 days → 'soon'. VIT-B expires in 180 days → 'none'.
     const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
-    await expect(vitaRow).toHaveAttribute('data-expiring', 'true')
+    await expect(vitaRow).toHaveAttribute('data-expiring', 'soon')
 
     const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_FAR })
-    await expect(vitbRow).toHaveAttribute('data-expiring', 'false')
+    await expect(vitbRow).toHaveAttribute('data-expiring', 'none')
   })
 
   test('lot without expiry_date is not flagged', async ({ page }) => {
@@ -52,7 +56,7 @@ test.describe('Stock expiry and dedup', () => {
     // to expire, nothing to flag.
     await goToStockDetail(page, 'filterCartridge')
     const row = page.getByTestId('lot-row').first()
-    await expect(row).toHaveAttribute('data-expiring', 'false')
+    await expect(row).toHaveAttribute('data-expiring', 'none')
   })
 
   test('Consume chooses VIT-A by FEFO (nearest expiry)', async ({ page }) => {

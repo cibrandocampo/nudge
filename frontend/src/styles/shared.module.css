@@ -111,6 +111,17 @@ select.input::-ms-expand {
   display: none;
 }
 
+/* `<input type="time">`: tone the WebKit picker indicator (a stark
+ * black clock by default) into the muted palette so it sits next to
+ * the value the way the chevron does on selects. Width stays at the
+ * shared `.input` 100% so it looks identical to the timezone field
+ * inside the same card. */
+input[type='time'].input::-webkit-calendar-picker-indicator {
+  opacity: 0.55;
+  cursor: pointer;
+  filter: grayscale(100%);
+}
+
 /* ── Overlay / Modal ─────────────────────────────────────────── */
 
 .overlay {
@@ -150,8 +161,8 @@ select.input::-ms-expand {
 
 .sectionTitle {
   font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--c-text-2);
+  font-weight: 600;
+  color: var(--c-ink);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0 0 0 0.125rem;
@@ -161,7 +172,7 @@ select.input::-ms-expand {
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.4;
-  color: var(--c-text-3);
+  color: var(--c-text-2);
 }
 
 .pageTitle {
@@ -313,6 +324,12 @@ select.input::-ms-expand {
   color: var(--c-text-3);
   margin-top: 0.1rem;
 }
+/* When a stock badge sits right under the card title (the InventoryPage
+ * alert blocks: Sin stock, Stock bajo, etc.), give it a touch of top
+ * margin so the title isn't cramped against the first item. */
+.cardTitle + .cardStockBadge {
+  margin-top: 0.4rem;
+}
 
 /* ── Status text ─────────────────────────────────────────────── */
 
@@ -397,7 +414,7 @@ select.input::-ms-expand {
   bottom: 4px;
   right: 4px;
   stroke-width: 2.5;
-  color: var(--c-delete);
+  color: var(--c-brand);
 }
 
 .btnIconShare {
@@ -476,6 +493,9 @@ select.input::-ms-expand {
 .stockDepletionWarn {
   color: var(--c-warning);
 }
+.stockDepletionDanger {
+  color: var(--c-danger);
+}
 .sharedOwner {
   font-size: 0.65rem;
   color: var(--c-text-3);
@@ -525,10 +545,6 @@ select.input::-ms-expand {
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--c-border);
 }
-.alertDetail {
-  font-size: 0.7rem;
-  color: var(--c-text-3);
-}
 
 /* ── Group (left rail connecting cards) ──────────────────────── */
 
@@ -543,7 +559,7 @@ select.input::-ms-expand {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--c-muted);
+  background: var(--c-shared);
   border-radius: var(--radius-sm);
 }
 .groupHeader {
@@ -556,7 +572,7 @@ select.input::-ms-expand {
   border: none;
   cursor: pointer;
   text-align: left;
-  color: var(--c-text);
+  color: var(--c-shared);
 }
 .groupName {
   font-weight: 600;

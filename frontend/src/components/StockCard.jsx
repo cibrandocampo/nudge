@@ -12,10 +12,10 @@ function formatRate(rate) {
 }
 
 function borderTokens(stock) {
-  if (stock.quantity === 0) {
+  if (stock.stock_severity === 'out') {
     return { border: shared.cardBorderDanger, dot: shared.dotDanger }
   }
-  if (stock.quantity <= 3) {
+  if (stock.stock_severity === 'low') {
     return { border: shared.cardBorderWarning, dot: shared.dotWarning }
   }
   return { border: shared.cardBorderSuccess, dot: shared.dotSuccess }
@@ -47,7 +47,11 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
             </span>
             {stock.estimated_depletion_date && (
               <span
-                className={cx(shared.stockDepletion, stock.is_low_stock && shared.stockDepletionWarn)}
+                className={cx(
+                  shared.stockDepletion,
+                  stock.stock_severity === 'low' && shared.stockDepletionWarn,
+                  stock.stock_severity === 'out' && shared.stockDepletionDanger,
+                )}
                 data-testid="depletion-date"
               >
                 {t('inventory.depletionDate', { date: formatShortDate(stock.estimated_depletion_date) })}

@@ -16,7 +16,6 @@
   padding: 1rem;
 }
 
-
 .username {
   color: var(--c-text);
   font-weight: 600;
@@ -127,6 +126,21 @@
   font-size: 0.875rem;
   cursor: pointer;
   align-self: flex-start;
+}
+
+/* T111 — Troubleshooting collapsible: groups the two diagnostic
+ * push buttons (Send test, Schedule test) under a chevron header so
+ * they don't compete visually with the primary Disable action. */
+.troubleshootingSection {
+  margin-top: 0.75rem;
+  align-self: stretch;
+}
+
+.troubleshootingBody {
+  padding: 0.5rem 0 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* ── Contacts ──────────────────────────────────────────────── */

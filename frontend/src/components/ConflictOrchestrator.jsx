@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { useQueueEntries } from '../hooks/useQueueEntries'
-import { enqueue, remove } from '../offline/queue'
+import { discard, enqueue, remove } from '../offline/queue'
 import { forceSync } from '../offline/sync'
 import ConflictModal from './ConflictModal'
 
@@ -31,7 +31,13 @@ export default function ConflictOrchestrator() {
     // The server's state is the truth: invalidate the cache so every
     // consumer refetches. TanStack Query already holds the NetworkFirst
     // SW response (T025) as the freshest snapshot.
-    await remove(conflict.id)
+    //
+    // T113: use `discard(id, qc)` so the optimistic update gets rolled
+    // back before the entry is dropped. Offline this restores the
+    // cache locally (the invalidate below has no effect until network
+    // returns); online the rollback + invalidate combination converges
+    // to the server's truth as before.
+    await discard(conflict.id, queryClient)
     await queryClient.invalidateQueries()
     setDismissedId(null)
   }

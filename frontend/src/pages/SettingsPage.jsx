@@ -146,11 +146,12 @@ export default function SettingsPage() {
 
   const confirmRemoveContact = async () => {
     const contactId = contactToRemove?.id
+    const username = contactToRemove?.username
     setContactToRemove(null)
     if (contactId == null) return
     setContactError('')
     try {
-      await deleteContact.mutateAsync({ contactId })
+      await deleteContact.mutateAsync({ contactId, username })
     } catch (err) {
       setContactError(err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError'))
     }
@@ -175,8 +176,8 @@ export default function SettingsPage() {
           </span>
           <div className={s.profileMeta}>
             {/* Show "First Last (username)" when names exist; fall back to
-              * just the username. The "(username)" tail is rendered in the
-              * helpText style so it reads as secondary. */}
+             * just the username. The "(username)" tail is rendered in the
+             * helpText style so it reads as secondary. */}
             {user?.first_name || user?.last_name ? (
               <h2 className={s.username}>
                 {[user.first_name, user.last_name].filter(Boolean).join(' ')}
@@ -319,6 +320,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
   const [testStatus, setTestStatus] = useState(null) // 'sent' | 'error'
   const [schedLoading, setSchedLoading] = useState(false)
   const [schedStatus, setSchedStatus] = useState(null) // 'scheduled' | 'error'
+  const [showTroubleshooting, setShowTroubleshooting] = useState(false)
 
   const active = permission === 'granted' && subscribed
   const denied = permission === 'denied'
@@ -395,36 +397,53 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
           >
             {loading ? '…' : t('settings.pushDisable')}
           </button>
-          <button
-            className={cx(s.pushBtnGhost, (testLoading || disabled) && shared.disabled)}
-            type="button"
-            onClick={sendTest}
-            disabled={testLoading || disabled}
-            title={disabled ? t('offline.requiresConnection') : undefined}
-          >
-            {testLoading
-              ? '…'
-              : testStatus === 'sent'
-                ? t('settings.pushTestSent')
-                : testStatus === 'error'
-                  ? t('settings.pushTestError')
-                  : t('settings.pushTestSend')}
-          </button>
-          <button
-            className={cx(s.pushBtnGhost, (schedLoading || disabled) && shared.disabled)}
-            type="button"
-            onClick={scheduleTest}
-            disabled={schedLoading || disabled}
-            title={disabled ? t('offline.requiresConnection') : undefined}
-          >
-            {schedLoading
-              ? '…'
-              : schedStatus === 'scheduled'
-                ? t('settings.pushTestScheduled')
-                : schedStatus === 'error'
-                  ? t('settings.pushTestError')
-                  : t('settings.pushTestSchedule')}
-          </button>
+          <div className={s.troubleshootingSection}>
+            <button
+              type="button"
+              className={shared.groupHeader}
+              onClick={() => setShowTroubleshooting((v) => !v)}
+              aria-expanded={showTroubleshooting}
+              data-testid="push-troubleshooting-toggle"
+            >
+              <Icon name={showTroubleshooting ? 'chevron-down' : 'chevron-right'} size="sm" />
+              <span>{t('settings.pushTroubleshooting')}</span>
+            </button>
+            {showTroubleshooting && (
+              <div className={s.troubleshootingBody}>
+                <p className={shared.helpText}>{t('settings.pushTroubleshootingHint')}</p>
+                <button
+                  className={cx(s.pushBtnGhost, (testLoading || disabled) && shared.disabled)}
+                  type="button"
+                  onClick={sendTest}
+                  disabled={testLoading || disabled}
+                  title={disabled ? t('offline.requiresConnection') : undefined}
+                >
+                  {testLoading
+                    ? '…'
+                    : testStatus === 'sent'
+                      ? t('settings.pushTestSent')
+                      : testStatus === 'error'
+                        ? t('settings.pushTestError')
+                        : t('settings.pushTestSend')}
+                </button>
+                <button
+                  className={cx(s.pushBtnGhost, (schedLoading || disabled) && shared.disabled)}
+                  type="button"
+                  onClick={scheduleTest}
+                  disabled={schedLoading || disabled}
+                  title={disabled ? t('offline.requiresConnection') : undefined}
+                >
+                  {schedLoading
+                    ? '…'
+                    : schedStatus === 'scheduled'
+                      ? t('settings.pushTestScheduled')
+                      : schedStatus === 'error'
+                        ? t('settings.pushTestError')
+                        : t('settings.pushTestSchedule')}
+                </button>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

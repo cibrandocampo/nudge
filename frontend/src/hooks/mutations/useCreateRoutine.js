@@ -5,6 +5,10 @@ export function useCreateRoutine() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
+    label: ({ payload }) => ({
+      key: 'offline.label.createRoutine',
+      args: { name: payload?.name ?? '?' },
+    }),
     request: ({ payload }) => ({
       method: 'POST',
       path: '/routines/',

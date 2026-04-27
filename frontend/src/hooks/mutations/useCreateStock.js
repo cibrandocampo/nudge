@@ -5,6 +5,10 @@ export function useCreateStock() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
+    label: ({ name }) => ({
+      key: 'offline.label.createStock',
+      args: { name: name ?? '?' },
+    }),
     request: ({ name, group }) => ({
       method: 'POST',
       path: '/stock/',

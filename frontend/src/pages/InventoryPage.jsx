@@ -13,10 +13,6 @@ import { formatShortDate } from '../utils/time'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
 
-function formatRate(rate) {
-  return rate % 1 === 0 ? String(rate) : rate.toFixed(1)
-}
-
 export default function InventoryPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -55,9 +51,16 @@ export default function InventoryPage() {
 
   if (isLoading) return <div className={shared.spinner} data-testid="spinner" />
 
-  const expiringStocks = stocks.filter((st) => st.has_expiring_lots)
-  const lowStockItems = stocks.filter((st) => st.is_low_stock)
-  const hasAlerts = expiringStocks.length > 0 || lowStockItems.length > 0
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const outOfStockItems = stocks.filter((st) => st.stock_severity === 'out')
+  const expiryReachedItems = stocks.filter((st) => st.expiry_severity === 'reached')
+  const lowStockItems = stocks.filter((st) => st.stock_severity === 'low')
+  const expiringSoonItems = stocks.filter((st) => st.expiry_severity === 'soon')
+  const hasAlerts =
+    outOfStockItems.length > 0 ||
+    expiryReachedItems.length > 0 ||
+    lowStockItems.length > 0 ||
+    expiringSoonItems.length > 0
 
   const knownGroupIds = new Set(groups.map((g) => g.id))
   const groupedSections = groups.map((group) => ({
@@ -106,27 +109,59 @@ export default function InventoryPage() {
 
       {hasAlerts && (
         <div className={shared.alertsSection} data-testid="alert-box">
-          {expiringStocks.length > 0 && (
-            <div className={cx(shared.card, shared.cardBorderDanger)}>
+          {/* Red — out of stock */}
+          {outOfStockItems.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderDanger)} data-testid="out-of-stock-alert">
               <div className={shared.cardHeader}>
                 <div className={shared.cardMeta}>
                   <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
                     <span className={cx(shared.dot, shared.dotDanger)} />
-                    {t('inventory.expiringSoon')}
+                    {t('inventory.outOfStockAlert')}
                   </div>
-                  {expiringStocks.map((st) =>
-                    st.expiring_lots.map((lot) => (
-                      <div key={`${st.id}-${lot.id}`} className={shared.alertDetail}>
-                        {st.name} —{' '}
-                        {t('inventory.expiringLot', { qty: lot.quantity, date: formatShortDate(lot.expiry_date, { withDay: false }) })}
-                      </div>
-                    )),
+                  {outOfStockItems.map((st) => (
+                    <span key={st.id} className={shared.cardStockBadge}>
+                      <Icon name="package" size="sm" />
+                      <span>{t('inventory.outOfStockItem', { name: st.name })}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Red — expiry already reached */}
+          {expiryReachedItems.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderDanger)} data-testid="expiry-reached-alert">
+              <div className={shared.cardHeader}>
+                <div className={shared.cardMeta}>
+                  <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+                    <span className={cx(shared.dot, shared.dotDanger)} />
+                    {t('inventory.expiryReachedAlert')}
+                  </div>
+                  {expiryReachedItems.flatMap((st) =>
+                    (st.expiring_lots ?? [])
+                      .filter((lot) => lot.expiry_date && lot.expiry_date <= todayISO)
+                      .map((lot) => (
+                        <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
+                          <Icon name="package" size="sm" />
+                          <span>
+                            {t('inventory.expiryReachedItem', { name: st.name, qty: lot.quantity })}
+                          </span>
+                          <span className={shared.stockDepletionDanger}>
+                            {' '}
+                            {t('inventory.expiryReachedSince', {
+                              date: formatShortDate(lot.expiry_date, { withDay: false }),
+                            })}
+                          </span>
+                        </span>
+                      )),
                   )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* Orange — low stock */}
           {lowStockItems.length > 0 && (
             <div className={cx(shared.card, shared.cardBorderWarning)} data-testid="low-stock-alert">
               <div className={shared.cardHeader}>
@@ -135,18 +170,52 @@ export default function InventoryPage() {
                     <span className={cx(shared.dot, shared.dotWarning)} />
                     {t('inventory.lowStockAlert')}
                   </div>
-                  {lowStockItems.map((st) => {
-                    const totalRate = (st.daily_consumption_own || 0) + (st.daily_consumption_shared || 0)
-                    return (
-                      <div key={st.id} className={shared.alertDetail}>
-                        {st.name} —{' '}
-                        {t('inventory.lowStockItem', {
-                          date: formatShortDate(st.estimated_depletion_date),
-                          rate: formatRate(totalRate),
-                        })}
-                      </div>
-                    )
-                  })}
+                  {lowStockItems.map((st) => (
+                    <span key={st.id} className={shared.cardStockBadge}>
+                      <Icon name="package" size="sm" />
+                      <span>{t('inventory.lowStockItem', { name: st.name, qty: st.quantity })}</span>
+                      {st.estimated_depletion_date && (
+                        <span className={shared.stockDepletionWarn}>
+                          {' '}
+                          {t('inventory.lowStockItemUntil', {
+                            date: formatShortDate(st.estimated_depletion_date),
+                          })}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Orange — expiring soon (within 30 days) */}
+          {expiringSoonItems.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderWarning)} data-testid="expiring-soon-alert">
+              <div className={shared.cardHeader}>
+                <div className={shared.cardMeta}>
+                  <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+                    <span className={cx(shared.dot, shared.dotWarning)} />
+                    {t('inventory.expiringSoonAlert')}
+                  </div>
+                  {expiringSoonItems.flatMap((st) =>
+                    (st.expiring_lots ?? [])
+                      .filter((lot) => lot.expiry_date && lot.expiry_date > todayISO)
+                      .map((lot) => (
+                        <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
+                          <Icon name="package" size="sm" />
+                          <span>
+                            {t('inventory.expiringSoonItem', { name: st.name, qty: lot.quantity })}
+                          </span>
+                          <span className={shared.stockDepletionWarn}>
+                            {' '}
+                            {t('inventory.expiringSoonItemUntil', {
+                              date: formatShortDate(lot.expiry_date, { withDay: false }),
+                            })}
+                          </span>
+                        </span>
+                      )),
+                  )}
                 </div>
               </div>
             </div>
@@ -154,9 +223,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {stocks.length === 0 && (
-        <EmptyCard title={t('inventory.emptyTitle')} message={t('inventory.emptyBody')} />
-      )}
+      {stocks.length === 0 && <EmptyCard title={t('inventory.emptyTitle')} message={t('inventory.emptyBody')} />}
 
       {groupedSections.map(
         (section) =>

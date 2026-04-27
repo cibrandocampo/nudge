@@ -1,6 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — Patches a single lot inside `stock.lots`; reverting the exact
+// pre-patch fields would require persisting per-lot snapshots.
+// Invalidate so the next refetch reconciles.
+registerRollback('updateStockLot', (qc, { stockId }) => {
+  const id = Number(stockId)
+  qc.invalidateQueries({ queryKey: ['stock'] })
+  qc.invalidateQueries({ queryKey: ['stock', id] })
+  qc.invalidateQueries({ queryKey: ['stock-lots', id] })
+})
 
 /**
  * PATCH /api/stock/{stockId}/lots/{lotId}/ — updates fields (quantity,
@@ -11,6 +22,11 @@ export function useUpdateStockLot() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ stockId, lotId }) => `stock:${stockId}:lot:${lotId}`,
+    label: ({ stockName }) => ({
+      key: 'offline.label.updateStockLot',
+      args: { stockName: stockName ?? '?' },
+    }),
+    rollback: ({ stockId, lotId }) => ({ type: 'updateStockLot', args: { stockId, lotId } }),
     request: ({ stockId, lotId, patch, updatedAt }) => ({
       method: 'PATCH',
       path: `/stock/${stockId}/lots/${lotId}/`,

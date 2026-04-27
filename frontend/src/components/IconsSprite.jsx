@@ -14,7 +14,5 @@ import spriteRaw from '../assets/icons.svg?raw'
  * file entry.
  */
 export default function IconsSprite() {
-  return (
-    <div style={{ display: 'none' }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: spriteRaw }} />
-  )
+  return <div style={{ display: 'none' }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: spriteRaw }} />
 }

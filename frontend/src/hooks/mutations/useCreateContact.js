@@ -5,6 +5,10 @@ export function useCreateContact() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
+    label: ({ username }) => ({
+      key: 'offline.label.createContact',
+      args: { username: username ?? '?' },
+    }),
     request: ({ username }) => ({
       method: 'POST',
       path: '/auth/contacts/',

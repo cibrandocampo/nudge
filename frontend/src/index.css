@@ -3,18 +3,19 @@
   --c-brand: #fcd34d;
   --c-brand-text: #78350f;
 
-  /* Neutral (zinc) */
-  --c-primary: #18181b;
-  --c-primary-hover: #27272a;
+  /* Neutral (slate) */
+  --c-primary: #454961;
+  --c-primary-hover: #5a5f7d;
   --c-bg: #fafafa;
   --c-surface: #ffffff;
-  --c-text: #09090b;
-  --c-text-2: #3f3f46;
+  --c-ink: #0a0a0a;
+  --c-text: #454961;
+  --c-text-2: #6c7188;
   --c-text-3: #a1a1aa;
   --c-muted: #d4d4d8;
   --c-border: #e4e4e7;
   --c-border-inner: #f4f4f5;
-  --c-ring: rgba(9, 9, 11, 0.12);
+  --c-ring: rgba(69, 73, 97, 0.18);
 
   /* Status */
   --c-success: #22c55e;
@@ -25,8 +26,8 @@
   --c-border-danger: rgba(239, 68, 68, 0.22);
 
   /* Accents */
-  --c-shared: #1d4ed8;
-  --c-shared-light: #93c5fd;
+  --c-shared: #4a56a1;
+  --c-shared-light: #c5c9e3;
   --c-delete: #fca5a5;
   --c-delete-hover: #f87171;
 

@@ -38,7 +38,7 @@
 }
 
 .linkActive {
-  color: var(--c-text);
+  color: var(--c-ink);
 }
 
 .linkInner {

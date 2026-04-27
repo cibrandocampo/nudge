@@ -3,6 +3,7 @@ import { useOfflineMutation } from '../useOfflineMutation'
 export function useChangePassword() {
   return useOfflineMutation({
     queueable: false,
+    label: () => ({ key: 'offline.label.changePassword', args: {} }),
     request: ({ oldPassword, newPassword }) => ({
       method: 'POST',
       path: '/auth/change-password/',
