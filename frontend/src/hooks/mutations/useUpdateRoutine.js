@@ -1,6 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — Update mutations apply an arbitrary `patch` to the optimistic
+// caches; reverting the exact pre-patch fields would require persisting
+// a snapshot. Pragmatic inverse: invalidate the touched queries so the
+// next refetch (online) reconciles. Offline the patched values stay
+// until reconnect — acceptable for the rare offline discard.
+registerRollback('updateRoutine', (qc, { routineId }) => {
+  const id = Number(routineId)
+  qc.invalidateQueries({ queryKey: ['routine', id] })
+  qc.invalidateQueries({ queryKey: ['routines'] })
+  qc.invalidateQueries({ queryKey: ['dashboard'] })
+})
 
 /**
  * PATCH /api/routines/{id}/ — partial update. The caller must pass the
@@ -20,6 +33,11 @@ export function useUpdateRoutine() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ routineId }) => `routine:${routineId}`,
+    label: ({ routineName }) => ({
+      key: 'offline.label.updateRoutine',
+      args: { name: routineName ?? '?' },
+    }),
+    rollback: ({ routineId }) => ({ type: 'updateRoutine', args: { routineId } }),
     request: ({ routineId, patch, updatedAt }) => ({
       method: 'PATCH',
       path: `/routines/${routineId}/`,

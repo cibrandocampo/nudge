@@ -360,27 +360,11 @@ class StockSerializerTest(TestCase):
         self.assertEqual(len(data["lots"]), 1)
         self.assertEqual(data["lots"][0]["lot_number"], "L1")
 
-    def test_has_expiring_lots_true_within_window(self):
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=30))
-        data = StockSerializer(stock).data
-        self.assertTrue(data["has_expiring_lots"])
-
-    def test_has_expiring_lots_false_outside_window(self):
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=200))
-        data = StockSerializer(stock).data
-        self.assertFalse(data["has_expiring_lots"])
-
-    def test_has_expiring_lots_false_for_no_expiry_lots(self):
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=3)  # no expiry_date
-        data = StockSerializer(stock).data
-        self.assertFalse(data["has_expiring_lots"])
-
     def test_expiring_lots_contains_correct_lots(self):
         stock = make_stock(self.user)
-        expiring = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=60))
+        # T104: threshold dropped from 90 to 30 days. Was +60 (in window
+        # under the old rule); now must be <= 30.
+        expiring = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=20))
         make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=200))
         data = StockSerializer(stock).data
         self.assertEqual(len(data["expiring_lots"]), 1)
@@ -390,8 +374,76 @@ class StockSerializerTest(TestCase):
         stock = make_stock(self.user)
         make_lot(stock, quantity=0, expiry_date=date.today() + timedelta(days=30))
         data = StockSerializer(stock).data
-        self.assertFalse(data["has_expiring_lots"])
         self.assertEqual(len(data["expiring_lots"]), 0)
+
+    # ── expiry_severity (T104) ─────────────────────────────────────────────
+
+    def test_expiry_severity_ok_when_no_lots(self):
+        stock = make_stock(self.user)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "ok")
+
+    def test_expiry_severity_ok_when_lot_no_expiry(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=10)  # no expiry_date
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "ok")
+
+    def test_expiry_severity_ok_when_far_future(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=10, expiry_date=date.today() + timedelta(days=200))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "ok")
+
+    def test_expiry_severity_soon_when_within_30_days(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "soon")
+
+    def test_expiry_severity_ok_when_exactly_30_days(self):
+        # Boundary: get_expiry_severity uses '< 30 days' (strict). Day 30
+        # falls into 'ok' for that method. NB: _expiring_lots uses '<= 30'
+        # (inclusive) — discrepancy is intentional; the array can include
+        # a +30d lot that does not flip the severity flag.
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=30))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "ok")
+
+    def test_expiry_severity_reached_when_today(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today())
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "reached")
+
+    def test_expiry_severity_reached_when_past(self):
+        # StockLotSerializer.validate_expiry_date forbids creating a lot
+        # with a past date. Create with a future date and back-date via
+        # queryset.update() to bypass model-level validators.
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        StockLot.objects.filter(pk=lot.pk).update(expiry_date=date.today() - timedelta(days=5))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "reached")
+
+    def test_expiry_severity_reached_takes_precedence_over_soon(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        past_lot = make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=10))
+        StockLot.objects.filter(pk=past_lot.pk).update(expiry_date=date.today() - timedelta(days=5))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "reached")
+
+    def test_expiry_severity_ignores_zero_quantity_lots(self):
+        # The post_save signal `delete_empty_lot` would normally remove a
+        # qty=0 lot; bypass with queryset.update() to test the safeguard
+        # in the serializer itself.
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        StockLot.objects.filter(pk=lot.pk).update(quantity=0, expiry_date=date.today() - timedelta(days=5))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["expiry_severity"], "ok")
 
 
 # ── RoutineSerializer ────────────────────────────────────────────────────────
@@ -571,8 +623,9 @@ class StockViewSetTest(APITestCase):
         self.assertEqual(response.status_code, 201)
         data = response.json()
         self.assertIn("lots", data)
-        self.assertIn("has_expiring_lots", data)
         self.assertIn("expiring_lots", data)
+        self.assertIn("stock_severity", data)
+        self.assertIn("expiry_severity", data)
 
     def test_retrieve_own_stock(self):
         stock = make_stock(self.user)
@@ -2179,7 +2232,6 @@ class StockDepletionSerializerTest(TestCase):
         self.assertIsNone(data["estimated_depletion_date"])
         self.assertIsNone(data["daily_consumption_own"])
         self.assertIsNone(data["daily_consumption_shared"])
-        self.assertFalse(data["is_low_stock"])
 
     def test_single_own_routine_daily_consumption(self):
         stock = make_stock(self.alice)
@@ -2233,7 +2285,8 @@ class StockDepletionSerializerTest(TestCase):
         make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
         data = self._get_stock_data(stock)
         self.assertEqual(data["estimated_depletion_date"], date.today())
-        self.assertTrue(data["is_low_stock"])
+        # qty == 0 → severity 'out' regardless of consumption rate.
+        self.assertEqual(data["stock_severity"], "out")
 
     def test_inactive_routine_not_counted(self):
         stock = make_stock(self.alice)
@@ -2245,22 +2298,6 @@ class StockDepletionSerializerTest(TestCase):
         self.assertEqual(data["daily_consumption_own"], 1.0)
         expected = date.today() + timedelta(days=20)
         self.assertEqual(data["estimated_depletion_date"], expected)
-
-    def test_is_low_stock_true_within_threshold(self):
-        stock = make_stock(self.alice)
-        make_lot(stock, quantity=10)
-        # 1/day → 10 days → within 60-day threshold
-        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
-        data = self._get_stock_data(stock)
-        self.assertTrue(data["is_low_stock"])
-
-    def test_is_low_stock_false_beyond_threshold(self):
-        stock = make_stock(self.alice)
-        make_lot(stock, quantity=200)
-        # 1/day → 200 days → beyond 60-day threshold
-        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
-        data = self._get_stock_data(stock)
-        self.assertFalse(data["is_low_stock"])
 
     def test_multiple_routines_accumulate(self):
         stock = make_stock(self.alice)
@@ -2289,10 +2326,86 @@ class StockDepletionSerializerTest(TestCase):
         self.assertIn("estimated_depletion_date", stock_data)
         self.assertIn("daily_consumption_own", stock_data)
         self.assertIn("daily_consumption_shared", stock_data)
-        self.assertIn("is_low_stock", stock_data)
+        self.assertIn("stock_severity", stock_data)
+        self.assertIn("expiry_severity", stock_data)
         self.assertEqual(stock_data["daily_consumption_own"], 1.0)
         expected = date.today() + timedelta(days=30)
         self.assertEqual(stock_data["estimated_depletion_date"], expected.isoformat())
+
+    # ── stock_severity (T104) ────────────────────────────────────────────────
+
+    def test_stock_severity_out_when_quantity_zero(self):
+        """qty == 0 → 'out'."""
+        stock = make_stock(self.alice)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "out")
+
+    def test_stock_severity_low_when_quantity_one(self):
+        """qty == 1 → 'low'."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=1)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_stock_severity_low_when_quantity_two(self):
+        """qty == 2 → 'low' (boundary)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=2)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_stock_severity_ok_when_quantity_three_no_consumption(self):
+        """qty == 3 without active routines → 'ok' (neither qty nor consumption rule)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=3)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_stock_severity_ok_when_quantity_high_no_consumption(self):
+        """qty == 50 without consumption → 'ok'."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=50)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_stock_severity_low_when_qty_three_weekly_consumption(self):
+        """qty == 3 with a weekly routine → depletion in 21 days < 30 → 'low' via consumption rule.
+
+        This is the canonical case the consumption branch is meant to catch:
+        a 3-unit weekly medication looks fine on quantity alone but the user
+        is one week from running out.
+        """
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=3)
+        make_routine(self.alice, name="Weekly", interval_hours=168, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_stock_severity_low_when_qty_ten_daily_consumption(self):
+        """qty == 10 with a daily routine → depletion in 10 days → 'low'."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=10)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_stock_severity_ok_when_qty_high_slow_consumption(self):
+        """qty == 50 with one consumption every 240h (10 days)
+        → depletion in 500 days → 'ok'."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=50)
+        make_routine(self.alice, name="Slow", interval_hours=240, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_stock_severity_ok_when_inactive_routine_consumes_stock(self):
+        """An inactive routine does NOT count toward depletion → 'ok'
+        even though it would consume rapidly if active."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=10)
+        make_routine(self.alice, name="Disabled", interval_hours=24, stock=stock, is_active=False)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
 
 
 # ── updated_at on mutable child models ─────────────────────────────────────

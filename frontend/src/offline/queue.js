@@ -1,4 +1,5 @@
 import { clear as idbClear, createStore, del, entries, get, set } from 'idb-keyval'
+import { applyRollback, hasRollback } from './rollbacks'
 
 /**
  * Persistent FIFO queue of mutations waiting to be replayed when the browser
@@ -13,6 +14,22 @@ import { clear as idbClear, createStore, del, entries, get, set } from 'idb-keyv
  *     endpoint: string (API path, relative to BASE_URL),
  *     body: any | null,
  *     resourceKey: string | null ('routine:5', 'stock:3:lot:7', …),
+ *     labelKey: string | null (T108 — i18n key, e.g.
+ *         'offline.label.consumeStock'. PendingBadge runs `t(labelKey,
+ *         labelArgs)` at render time so the description follows the
+ *         user's current language even if the entry was enqueued in a
+ *         different one. `null` for legacy entries enqueued before T108
+ *         and for hooks that don't declare a label factory yet.),
+ *     labelArgs: object | null (T108 — interpolation args, e.g.
+ *         { name: 'Vit D', qty: 1 }; `null` when there is no label),
+ *     rollbackType: string | null (T113 — registry key into
+ *         `frontend/src/offline/rollbacks.js`. `discard(id, qc)`
+ *         dispatches against this when the user discards the entry,
+ *         so the optimistic cache update gets reversed. `null` for
+ *         legacy entries enqueued before T113 and for hooks that
+ *         don't declare a rollback factory.),
+ *     rollbackArgs: object | null (T113 — args passed to the inverse
+ *         function; shape is registry-key specific),
  *     ifUnmodifiedSince: string | null (ISO timestamp),
  *     createdAt: string (ISO timestamp),
  *     status: 'pending' | 'syncing' | 'error' | 'conflict',
@@ -130,4 +147,61 @@ export async function remove(id) {
 export async function clear() {
   await idbClear(STORE)
   emit()
+}
+
+/**
+ * Resource-key prefix → query-key mapping for the legacy fallback used
+ * by `discard()` when the entry has no `rollbackType`. Returns null
+ * when the prefix is unknown — `discard()` treats that as "no
+ * fallback" and just removes the entry.
+ *
+ * Coverage:
+ *   'stock:N'         → ['stock']
+ *   'stock:N:lot:M'   → ['stock'] (lot mutations affect the parent)
+ *   'routine:N'       → ['routine', N]
+ *   'entry:N'         → ['entries']
+ *   'consumption:N'   → ['stock-consumptions']
+ */
+function resourceKeyToQueryKey(resourceKey) {
+  if (!resourceKey || typeof resourceKey !== 'string') return null
+  if (resourceKey.startsWith('stock:')) {
+    return ['stock']
+  }
+  if (resourceKey.startsWith('routine:')) {
+    return ['routine', Number(resourceKey.split(':')[1])]
+  }
+  if (resourceKey.startsWith('entry:')) {
+    return ['entries']
+  }
+  if (resourceKey.startsWith('consumption:')) {
+    return ['stock-consumptions']
+  }
+  return null
+}
+
+/**
+ * Discard a queued mutation. Applies the rollback registered for the
+ * entry's `rollbackType`, then removes the entry from IndexedDB. For
+ * entries without a `rollbackType` (legacy entries enqueued before
+ * T113, or hooks that haven't declared a rollback factory),
+ * invalidates the related queries as a best-effort fallback so the
+ * cache reconciles when the user comes back online.
+ *
+ * @param {string} id — queue entry id (== Idempotency-Key)
+ * @param {import('@tanstack/react-query').QueryClient} qc — TanStack
+ *   Query client to mutate. The caller is responsible for passing the
+ *   live client (PendingBadge gets it via `useQueryClient()`).
+ */
+export async function discard(id, qc) {
+  const entry = await get(id, STORE)
+  if (!entry) return
+  let applied = false
+  if (entry.rollbackType && hasRollback(entry.rollbackType)) {
+    applied = applyRollback(qc, entry.rollbackType, entry.rollbackArgs ?? {})
+  }
+  if (!applied && entry.resourceKey) {
+    const queryKey = resourceKeyToQueryKey(entry.resourceKey)
+    if (queryKey) qc.invalidateQueries({ queryKey })
+  }
+  await remove(id)
 }

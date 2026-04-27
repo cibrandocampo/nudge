@@ -1,7 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — The optimistic appends a temp lot with `id: -Date.now()`. The
+// id isn't determinable from `vars`, so we can't pinpoint the temp row
+// from the inverse. Invalidate the parent stock + the lot list so a
+// refetch reconciles. Offline the temp lot stays visible until reconnect.
+registerRollback('createStockLot', (qc, { stockId }) => {
+  const id = Number(stockId)
+  qc.invalidateQueries({ queryKey: ['stock'] })
+  qc.invalidateQueries({ queryKey: ['stock', id] })
+  qc.invalidateQueries({ queryKey: ['stock-lots', id] })
+})
 
 /**
  * POST /api/stock/{stockId}/lots/ — creates a new lot inside an existing
@@ -14,6 +26,11 @@ export function useCreateStockLot() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ stockId }) => `stock:${stockId}`,
+    label: ({ stockName, quantity }) => ({
+      key: 'offline.label.createStockLot',
+      args: { stockName: stockName ?? '?', qty: quantity },
+    }),
+    rollback: ({ stockId }) => ({ type: 'createStockLot', args: { stockId } }),
     request: ({ stockId, quantity, expiryDate, lotNumber }) => ({
       method: 'POST',
       path: `/stock/${stockId}/lots/`,

@@ -212,8 +212,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/`, () => new HttpResponse(null, { status: 204 })))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Send test notification')).toBeInTheDocument())
-    await user.click(screen.getByText('Send test notification'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Send test notification'))
     await waitFor(() => expect(screen.getByText('Sent!')).toBeInTheDocument())
   })
 
@@ -231,8 +231,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/`, () => HttpResponse.error()))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Send test notification')).toBeInTheDocument())
-    await user.click(screen.getByText('Send test notification'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Send test notification'))
     await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
   })
 
@@ -250,8 +250,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/`, () => new HttpResponse(null, { status: 500 })))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Send test notification')).toBeInTheDocument())
-    await user.click(screen.getByText('Send test notification'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Send test notification'))
     await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
   })
 
@@ -269,8 +269,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/scheduled/`, () => new HttpResponse(null, { status: 202 })))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
-    await user.click(screen.getByText('Schedule test (5 min)'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Schedule test (5 min)'))
     await waitFor(() => expect(screen.getByText('Scheduled!')).toBeInTheDocument())
   })
 
@@ -288,8 +288,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/scheduled/`, () => HttpResponse.error()))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
-    await user.click(screen.getByText('Schedule test (5 min)'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Schedule test (5 min)'))
     await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
   })
 
@@ -307,8 +307,8 @@ describe('SettingsPage', () => {
     server.use(http.post(`${BASE}/push/test/scheduled/`, () => new HttpResponse(null, { status: 500 })))
 
     const { user } = renderWithProviders(<SettingsPage />)
-    await waitFor(() => expect(screen.getByText('Schedule test (5 min)')).toBeInTheDocument())
-    await user.click(screen.getByText('Schedule test (5 min)'))
+    await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+    await user.click(await screen.findByText('Schedule test (5 min)'))
     await waitFor(() => expect(screen.getByText('Failed — try again')).toBeInTheDocument())
   })
 
@@ -707,6 +707,56 @@ describe('SettingsPage', () => {
         .filter((btn) => btn.getAttribute('aria-label') === 'Remove contact')
       expect(removeButtons.length).toBeGreaterThan(0)
       for (const btn of removeButtons) expect(btn).toBeDisabled()
+    })
+  })
+
+  describe('Troubleshooting section (T111)', () => {
+    /**
+     * Mount SettingsPage with push active (Notification.permission='granted'
+     * + a fake serviceWorker subscription). Mirrors the setup used by the
+     * existing push tests above.
+     */
+    async function renderWithPushActive() {
+      Object.defineProperty(window, 'Notification', {
+        value: { permission: 'granted', requestPermission: vi.fn() },
+        writable: true,
+      })
+      const reg = await navigator.serviceWorker.ready
+      reg.pushManager.getSubscription.mockResolvedValueOnce({
+        endpoint: 'https://push.example.com/sub/123',
+        unsubscribe: vi.fn().mockResolvedValue(true),
+      })
+      return renderWithProviders(<SettingsPage />)
+    }
+
+    it('hides the Send/Schedule test buttons by default when push is active', async () => {
+      await renderWithPushActive()
+      // Wait for push to mount before asserting the toggle.
+      expect(await screen.findByTestId('push-troubleshooting-toggle')).toBeInTheDocument()
+      // Both diagnostic buttons must be absent from the DOM until the user expands.
+      expect(screen.queryByText('Send test notification')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Schedule test \(5 min\)/)).not.toBeInTheDocument()
+      // The hint paragraph is also gated behind expansion.
+      expect(screen.queryByText(/Use these only if you suspect/i)).not.toBeInTheDocument()
+    })
+
+    it('reveals the test buttons + hint after expanding the Troubleshooting header', async () => {
+      const { user } = await renderWithPushActive()
+      const toggle = await screen.findByTestId('push-troubleshooting-toggle')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      await user.click(toggle)
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByText('Send test notification')).toBeInTheDocument()
+      expect(screen.getByText(/Schedule test \(5 min\)/)).toBeInTheDocument()
+      expect(screen.getByText(/Use these only if you suspect/i)).toBeInTheDocument()
+    })
+
+    it('does not render the Troubleshooting toggle when push is not active', async () => {
+      // No Notification override / no fake subscription → push is NOT active.
+      renderWithProviders(<SettingsPage />)
+      // Wait for the page to mount; checking a stable element first.
+      await screen.findByText('Settings')
+      expect(screen.queryByTestId('push-troubleshooting-toggle')).not.toBeInTheDocument()
     })
   })
 })

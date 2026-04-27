@@ -147,11 +147,7 @@ export default function LotSelectionModal({ routine, lots, onConfirm, onCancel }
         <button className={shared.btnCancel} onClick={onCancel}>
           {t('common.cancel')}
         </button>
-        <button
-          className={shared.btnConfirm}
-          onClick={handleConfirm}
-          disabled={!isSingle && total !== needed}
-        >
+        <button className={shared.btnConfirm} onClick={handleConfirm} disabled={!isSingle && total !== needed}>
           {t('lot.modal.confirm')}
         </button>
       </div>

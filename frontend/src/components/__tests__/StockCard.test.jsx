@@ -9,12 +9,12 @@ const baseStock = {
   name: 'Water filter',
   quantity: 5,
   group: null,
-  has_expiring_lots: false,
   expiring_lots: [],
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
-  is_low_stock: false,
+  stock_severity: 'ok',
+  expiry_severity: 'ok',
   lots: [{ id: 10, quantity: 5, expiry_date: null, lot_number: 'LOT-A', updated_at: '2026-04-17T10:00:00Z' }],
   shared_with: [],
   shared_with_details: [],
@@ -47,7 +47,7 @@ describe('StockCard', () => {
   })
 
   it('hides the consume button when quantity is 0', () => {
-    renderCard({ stock: { ...baseStock, quantity: 0 } })
+    renderCard({ stock: { ...baseStock, quantity: 0, stock_severity: 'out' } })
     expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
   })
 
@@ -94,9 +94,56 @@ describe('StockCard', () => {
     expect(screen.getByLabelText('Consume 1 unit')).toBeDisabled()
   })
 
-  it('renders the warning border + dot when quantity is in the low range (1-3)', () => {
-    renderCard({ stock: { ...baseStock, quantity: 2 } })
-    expect(screen.getByText('(2 total)')).toBeInTheDocument()
+  it('applies cardBorderDanger when stock_severity is "out"', () => {
+    const { container } = renderCard({ stock: { ...baseStock, quantity: 0, stock_severity: 'out' } })
+    expect(container.querySelector('[data-testid="product-card"]').className).toMatch(/cardBorderDanger/)
+  })
+
+  it('applies cardBorderWarning when stock_severity is "low"', () => {
+    const { container } = renderCard({ stock: { ...baseStock, quantity: 2, stock_severity: 'low' } })
+    expect(container.querySelector('[data-testid="product-card"]').className).toMatch(/cardBorderWarning/)
+  })
+
+  it('applies cardBorderSuccess when stock_severity is "ok"', () => {
+    const { container } = renderCard({ stock: { ...baseStock, quantity: 5, stock_severity: 'ok' } })
+    expect(container.querySelector('[data-testid="product-card"]').className).toMatch(/cardBorderSuccess/)
+  })
+
+  it('paints the depletion date orange when stock_severity is "low"', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        quantity: 10,
+        stock_severity: 'low',
+        estimated_depletion_date: '2026-05-15',
+      },
+    })
+    const depletion = screen.getByTestId('depletion-date')
+    expect(depletion.className).toMatch(/stockDepletionWarn/)
+    expect(depletion.className).not.toMatch(/stockDepletionDanger/)
+  })
+
+  it('paints the depletion date red when stock_severity is "out"', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        quantity: 0,
+        stock_severity: 'out',
+        estimated_depletion_date: '2026-04-27',
+      },
+    })
+    const depletion = screen.getByTestId('depletion-date')
+    expect(depletion.className).toMatch(/stockDepletionDanger/)
+    expect(depletion.className).not.toMatch(/stockDepletionWarn/)
+  })
+
+  it('leaves the depletion date neutral when stock_severity is "ok"', () => {
+    renderCard({
+      stock: { ...baseStock, stock_severity: 'ok', estimated_depletion_date: '2027-01-01' },
+    })
+    const depletion = screen.getByTestId('depletion-date')
+    expect(depletion.className).not.toMatch(/stockDepletionWarn/)
+    expect(depletion.className).not.toMatch(/stockDepletionDanger/)
   })
 
   it('renders the daily consumption row combining own and shared values', () => {

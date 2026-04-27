@@ -50,7 +50,11 @@ export function formatRelativeTime(isoString) {
   if (diffHours < -1) return i18next.t('time.overdueBy', { n: Math.round(Math.abs(diffHours)) })
   if (diffHours < 0) return i18next.t('time.dueNow')
   if (diffHours < 1) return i18next.t('time.inMin', { n: Math.round(diffHours * 60) })
-  if (diffHours < 24) return i18next.t('time.inHours', { n: Math.round(diffHours) })
+  // Use the rounded hour count for the bucket cutoff so a value that
+  // rounds to 24h (e.g. 23.9999... after a few µs of test latency)
+  // bumps into the "days" branch and renders as "In 1 day", not "In 24h".
+  const roundedHours = Math.round(diffHours)
+  if (roundedHours < 24) return i18next.t('time.inHours', { n: roundedHours })
   const days = Math.round(diffHours / 24)
   return days === 1 ? i18next.t('time.inDay') : i18next.t('time.inDays', { n: days })
 }

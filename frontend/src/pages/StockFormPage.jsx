@@ -92,6 +92,7 @@ export default function StockFormPage() {
       if (isEditing) {
         await updateStock.mutateAsync({
           stockId,
+          stockName: form.name.trim() || stock?.name,
           patch: { name: form.name.trim(), group: groupValue, shared_with: sharedWith },
           updatedAt: stock?.updated_at,
         })
@@ -113,6 +114,7 @@ export default function StockFormPage() {
           batches.map((b) =>
             createStockLot.mutateAsync({
               stockId: newStockId,
+              stockName: form.name.trim(),
               quantity: parseIntSafe(b.quantity),
               expiryDate: b.expiry_date || null,
               lotNumber: b.lot_number || '',
@@ -134,6 +136,7 @@ export default function StockFormPage() {
         try {
           await updateStock.mutateAsync({
             stockId: newStockId,
+            stockName: form.name.trim(),
             patch: { shared_with: sharedWith },
             updatedAt: created.updated_at,
           })

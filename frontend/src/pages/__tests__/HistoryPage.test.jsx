@@ -40,7 +40,17 @@ const mockConsumptions = [
   },
 ]
 
-const mockStocks = [{ id: 1, name: 'Insulin pens', quantity: 5, lots: [], expiring_lots: [], has_expiring_lots: false }]
+const mockStocks = [
+  {
+    id: 1,
+    name: 'Insulin pens',
+    quantity: 5,
+    lots: [],
+    expiring_lots: [],
+    stock_severity: 'ok',
+    expiry_severity: 'ok',
+  },
+]
 
 function setupHandlers({ entries = mockEntries, consumptions = mockConsumptions, stocks = mockStocks } = {}) {
   server.use(

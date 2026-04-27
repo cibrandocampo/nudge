@@ -17,11 +17,7 @@ describe('EmptyCard', () => {
 
   it('renders the action link when provided', () => {
     renderWithRouter(
-      <EmptyCard
-        title="Empty"
-        message="Go add one"
-        action={{ label: 'Add stock', to: '/inventory/new' }}
-      />,
+      <EmptyCard title="Empty" message="Go add one" action={{ label: 'Add stock', to: '/inventory/new' }} />,
     )
     const link = screen.getByRole('link', { name: 'Add stock' })
     expect(link).toHaveAttribute('href', '/inventory/new')

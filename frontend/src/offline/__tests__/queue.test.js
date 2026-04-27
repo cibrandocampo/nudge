@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clear,
+  discard,
   enqueue,
   list,
   markConflict,
@@ -157,5 +158,37 @@ describe('offline queue', () => {
     const restored = await markPending('abc')
     expect(restored.retryCount).toBe(2)
     expect(restored.nextAttemptAt).toBe('2030-01-01T00:00:00.000Z')
+  })
+
+  // discard() falls back to invalidating queries by resourceKey when no
+  // rollbackType was registered. Each prefix maps to a distinct queryKey.
+
+  it('discard with entry: resourceKey invalidates the entries query', async () => {
+    await enqueue(baseEntry({ id: 'd1', resourceKey: 'entry:42' }))
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('d1', qc)
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['entries'] })
+    expect(await list()).toHaveLength(0)
+  })
+
+  it('discard with consumption: resourceKey invalidates stock-consumptions', async () => {
+    await enqueue(baseEntry({ id: 'd2', resourceKey: 'consumption:9' }))
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('d2', qc)
+    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['stock-consumptions'] })
+  })
+
+  it('discard with an unknown resourceKey prefix removes the entry without invalidating', async () => {
+    await enqueue(baseEntry({ id: 'd3', resourceKey: 'unknown:1' }))
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('d3', qc)
+    expect(qc.invalidateQueries).not.toHaveBeenCalled()
+    expect(await list()).toHaveLength(0)
+  })
+
+  it('discard is a no-op when the id is not in the queue', async () => {
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('does-not-exist', qc)
+    expect(qc.invalidateQueries).not.toHaveBeenCalled()
   })
 })

@@ -2,6 +2,18 @@
   margin-bottom: 0.5rem;
 }
 
+/* Type-tinted left border lets the eye separate routine logs (royal
+ * blue) from stock consumptions (brand yellow) at a glance — pairs
+ * with the badge-check / package icon already in the title row. */
+.entryCard[data-entry-type='routine'],
+.compactCard[data-entry-type='routine'] {
+  border-left-color: var(--c-shared);
+}
+.entryCard[data-entry-type='consumption'],
+.compactCard[data-entry-type='consumption'] {
+  border-left-color: var(--c-brand);
+}
+
 .entryName {
   font-size: 0.875rem;
 }

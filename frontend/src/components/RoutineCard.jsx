@@ -89,7 +89,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
         {routine.stock_name && (
           <span className={shared.cardStockBadge}>
             <Icon name="package" size="sm" />
-            {routine.stock_quantity} · {routine.stock_name}
+            {routine.stock_usage ?? 1} × {routine.stock_name}
           </span>
         )}
         {routine.is_owner === false && routine.owner_username && (

@@ -105,6 +105,7 @@ export default function RoutineFormPage() {
       if (isEditing) {
         await updateRoutine.mutateAsync({
           routineId: Number(id),
+          routineName: payload.name ?? routine?.name,
           patch: payload,
           updatedAt: routine?.updated_at,
         })

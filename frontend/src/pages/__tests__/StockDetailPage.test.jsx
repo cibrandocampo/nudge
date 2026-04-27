@@ -20,12 +20,12 @@ const stock = {
   name: 'Water filter',
   quantity: 10,
   group: null,
-  has_expiring_lots: false,
   expiring_lots: [],
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
-  is_low_stock: false,
+  stock_severity: 'ok',
+  expiry_severity: 'ok',
   is_owner: true,
   owner_username: 'testuser',
   shared_with: [],
@@ -211,12 +211,29 @@ describe('StockDetailPage', () => {
       ...stock,
       estimated_depletion_date: '2026-05-06',
       daily_consumption_own: 2.5,
-      is_low_stock: true,
+      stock_severity: 'low',
       quantity: 2,
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(lowStock)))
     renderDetail()
     await waitFor(() => expect(screen.getByTestId('depletion-date')).toBeInTheDocument())
+    const depletion = screen.getByTestId('depletion-date')
+    expect(depletion.className).toMatch(/stockDepletionWarn/)
+  })
+
+  it('paints the depletion date red when stock_severity is "out"', async () => {
+    const empty = {
+      ...stock,
+      quantity: 0,
+      stock_severity: 'out',
+      estimated_depletion_date: '2026-04-27',
+      lots: [],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
+    renderDetail()
+    await waitFor(() => expect(screen.getByTestId('depletion-date')).toBeInTheDocument())
+    const depletion = screen.getByTestId('depletion-date')
+    expect(depletion.className).toMatch(/stockDepletionDanger/)
   })
 
   it('shows the owner username when the stock is shared with the current user', async () => {
@@ -226,12 +243,12 @@ describe('StockDetailPage', () => {
     await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
   })
 
-  it('renders the danger-status dot when the quantity is 0', async () => {
-    const empty = { ...stock, quantity: 0, lots: [] }
+  it('renders the danger border when stock_severity is "out"', async () => {
+    const empty = { ...stock, quantity: 0, stock_severity: 'out', lots: [] }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
-    expect(container.querySelector('.cardBorderDanger')).toBeInTheDocument()
+    expect(container.querySelector('[class*="cardBorderDanger"]')).toBeInTheDocument()
   })
 
   it('renders the group name when the stock belongs to a group', async () => {
@@ -288,5 +305,52 @@ describe('StockDetailPage', () => {
     // HistoryEntryCard renders consumed_by_username via the sharing.consumedBy
     // i18n key → "by alice".
     expect(screen.getByText('by alice')).toBeInTheDocument()
+  })
+
+  // Lot highlight tri-state — derived in-page from each lot.expiry_date so
+  // it does not depend on the stock-level expiring_lots array. Today's
+  // clock is 2026-04-27 in the test environment.
+  it('marks a lot expired in the past as data-expiring="reached"', async () => {
+    const past = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-04-20', lot_number: 'OLD' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(past)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    expect(row).toHaveAttribute('data-expiring', 'reached')
+  })
+
+  it('marks a lot expiring within 30 days as data-expiring="soon"', async () => {
+    const soon = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soon)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    expect(row).toHaveAttribute('data-expiring', 'soon')
+  })
+
+  it('leaves a far-future lot as data-expiring="none"', async () => {
+    const far = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2027-01-01', lot_number: 'FAR' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(far)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    expect(row).toHaveAttribute('data-expiring', 'none')
+  })
+
+  it('leaves a lot without expiry_date as data-expiring="none"', async () => {
+    const unbounded = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: null, lot_number: '' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(unbounded)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    expect(row).toHaveAttribute('data-expiring', 'none')
   })
 })

@@ -39,12 +39,12 @@ function stock(overrides = {}) {
     name: 'Water filter',
     quantity: 5,
     group: null,
-    has_expiring_lots: false,
     expiring_lots: [],
     estimated_depletion_date: null,
     daily_consumption_own: null,
     daily_consumption_shared: null,
-    is_low_stock: false,
+    stock_severity: 'ok',
+    expiry_severity: 'ok',
     lots: [{ id: 10, quantity: 5, expiry_date: null, lot_number: 'LOT-A', updated_at: '2026-04-17T10:00:00Z' }],
     shared_with: [],
     shared_with_details: [],
@@ -251,24 +251,144 @@ describe('InventoryPage — grouping', () => {
   })
 })
 
-describe('InventoryPage — alerts', () => {
-  it('shows the expiring-soon alert card', async () => {
+describe('InventoryPage — alerts (4 severity-driven blocks)', () => {
+  // Today is 2026-04-27 in the test runner's clock.
+  // expiring_lots <= today  → 'reached' bucket items.
+  // expiring_lots  > today  → 'soon' bucket items.
+  const PAST_DATE = '2026-04-20'
+  const FUTURE_DATE = '2026-05-15'
+
+  it('does not render the alert section when no stock has any severity', async () => {
+    mockStocks([stock()])
+    mockGroups([])
+    renderPage()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('alert-box')).not.toBeInTheDocument()
+  })
+
+  it('renders the out-of-stock alert with the stock name', async () => {
+    mockStocks([stock({ id: 1, name: 'Vitamin D', quantity: 0, stock_severity: 'out', lots: [] })])
+    mockGroups([])
+    renderPage()
+    const alert = await screen.findByTestId('out-of-stock-alert')
+    expect(alert).toBeInTheDocument()
+    expect(within(alert).getByText('Vitamin D')).toBeInTheDocument()
+    expect(within(alert).getByText(/out of stock/i)).toBeInTheDocument()
+  })
+
+  it('renders the expiry-reached alert with each expired lot', async () => {
     mockStocks([
       stock({
-        has_expiring_lots: true,
-        expiring_lots: [{ id: 10, quantity: 1, expiry_date: '2026-05-01' }],
+        id: 1,
+        name: 'Aspirin',
+        expiry_severity: 'reached',
+        expiring_lots: [{ id: 10, quantity: 4, expiry_date: PAST_DATE }],
       }),
     ])
     mockGroups([])
     renderPage()
-    await waitFor(() => expect(screen.getByText(/expiring soon/i)).toBeInTheDocument())
+    const alert = await screen.findByTestId('expiry-reached-alert')
+    expect(within(alert).getByText(/expiry reached/i)).toBeInTheDocument()
+    expect(within(alert).getByText(/4 × Aspirin/i)).toBeInTheDocument()
+    expect(within(alert).getByText(/expired ~/i)).toBeInTheDocument()
   })
 
-  it('shows the low-stock alert card', async () => {
-    mockStocks([stock({ is_low_stock: true, estimated_depletion_date: '2026-06-01', daily_consumption_own: 1 })])
+  it('renders the low-stock alert with the (until) suffix when depletion date is known', async () => {
+    mockStocks([
+      stock({
+        id: 1,
+        name: 'Insulin',
+        quantity: 10,
+        stock_severity: 'low',
+        estimated_depletion_date: '2026-05-15',
+      }),
+    ])
     mockGroups([])
     renderPage()
-    await waitFor(() => expect(screen.getByText(/low stock/i)).toBeInTheDocument())
-    expect(screen.getByTestId('low-stock-alert')).toBeInTheDocument()
+    const alert = await screen.findByTestId('low-stock-alert')
+    expect(within(alert).getByText(/low stock/i)).toBeInTheDocument()
+    // Format follows the RoutineCard stock badge: "{qty} × {name} (until ~{date})".
+    expect(within(alert).getByText(/10 × Insulin/i)).toBeInTheDocument()
+    expect(within(alert).getByText(/until ~/i)).toBeInTheDocument()
+  })
+
+  it('renders the low-stock alert without suffix when no depletion date is available', async () => {
+    mockStocks([
+      stock({
+        id: 1,
+        name: 'Bandages',
+        quantity: 2,
+        stock_severity: 'low',
+        estimated_depletion_date: null,
+      }),
+    ])
+    mockGroups([])
+    renderPage()
+    const alert = await screen.findByTestId('low-stock-alert')
+    expect(within(alert).getByText('2 × Bandages')).toBeInTheDocument()
+    expect(within(alert).queryByText(/until ~/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the expiring-soon alert with each near-future lot', async () => {
+    mockStocks([
+      stock({
+        id: 1,
+        name: 'Vitamin D',
+        expiry_severity: 'soon',
+        expiring_lots: [{ id: 10, quantity: 7, expiry_date: FUTURE_DATE }],
+      }),
+    ])
+    mockGroups([])
+    renderPage()
+    const alert = await screen.findByTestId('expiring-soon-alert')
+    expect(within(alert).getByText(/expiring soon/i)).toBeInTheDocument()
+    expect(within(alert).getByText(/7 × Vitamin D/i)).toBeInTheDocument()
+    expect(within(alert).getByText(/expires ~/i)).toBeInTheDocument()
+  })
+
+  it('lists a stock in both blocks when it qualifies for two orthogonal severities', async () => {
+    // qty=0 (out) AND a past-expiry lot (reached) → appears in both red blocks.
+    mockStocks([
+      stock({
+        id: 1,
+        name: 'Ibuprofen',
+        quantity: 0,
+        stock_severity: 'out',
+        expiry_severity: 'reached',
+        expiring_lots: [{ id: 99, quantity: 1, expiry_date: PAST_DATE }],
+        lots: [],
+      }),
+    ])
+    mockGroups([])
+    renderPage()
+    const out = await screen.findByTestId('out-of-stock-alert')
+    const reached = await screen.findByTestId('expiry-reached-alert')
+    expect(within(out).getByText('Ibuprofen')).toBeInTheDocument()
+    expect(within(reached).getByText(/Ibuprofen/)).toBeInTheDocument()
+  })
+
+  it('splits expiring_lots between reached and soon for stocks that have both', async () => {
+    // expiry_severity is 'reached' (precedence) but expiring_lots contains
+    // both a past lot and a future lot — the past lot must surface in the
+    // reached block, and the future lot would surface in the soon block
+    // only if expiry_severity were 'soon'. With precedence the soon block
+    // is omitted entirely (no expiring_soon entry for this stock).
+    mockStocks([
+      stock({
+        id: 1,
+        name: 'Mixed',
+        expiry_severity: 'reached',
+        expiring_lots: [
+          { id: 1, quantity: 1, expiry_date: PAST_DATE },
+          { id: 2, quantity: 2, expiry_date: FUTURE_DATE },
+        ],
+      }),
+    ])
+    mockGroups([])
+    renderPage()
+    const reached = await screen.findByTestId('expiry-reached-alert')
+    expect(within(reached).getByText(/1 × Mixed/i)).toBeInTheDocument()
+    // Backend awarded 'reached' precedence — the soon block stays hidden.
+    expect(screen.queryByTestId('expiring-soon-alert')).not.toBeInTheDocument()
   })
 })

@@ -70,13 +70,13 @@ class StockSerializer(serializers.ModelSerializer):
     lots = StockLotSerializer(many=True, read_only=True)
     quantity = serializers.SerializerMethodField()
     group_name = serializers.CharField(source="group.name", read_only=True, default=None)
-    has_expiring_lots = serializers.SerializerMethodField()
     expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
     estimated_depletion_date = serializers.SerializerMethodField()
     daily_consumption_own = serializers.SerializerMethodField()
     daily_consumption_shared = serializers.SerializerMethodField()
-    is_low_stock = serializers.SerializerMethodField()
+    stock_severity = serializers.SerializerMethodField()
+    expiry_severity = serializers.SerializerMethodField()
     shared_with = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=User.objects.all(),
@@ -86,7 +86,8 @@ class StockSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     owner_username = serializers.CharField(source="user.username", read_only=True)
 
-    LOW_STOCK_THRESHOLD_DAYS = 60
+    WARNING_THRESHOLD_DAYS = 30
+    LOW_STOCK_THRESHOLD_UNITS = 3
 
     class Meta:
         model = Stock
@@ -97,13 +98,13 @@ class StockSerializer(serializers.ModelSerializer):
             "group_name",
             "quantity",
             "lots",
-            "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
             "daily_consumption_own",
             "daily_consumption_shared",
-            "is_low_stock",
+            "stock_severity",
+            "expiry_severity",
             "shared_with",
             "shared_with_details",
             "is_owner",
@@ -115,13 +116,13 @@ class StockSerializer(serializers.ModelSerializer):
             "quantity",
             "group_name",
             "lots",
-            "has_expiring_lots",
             "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
             "daily_consumption_own",
             "daily_consumption_shared",
-            "is_low_stock",
+            "stock_severity",
+            "expiry_severity",
             "shared_with_details",
             "is_owner",
             "owner_username",
@@ -163,15 +164,12 @@ class StockSerializer(serializers.ModelSerializer):
 
     def _expiring_lots(self, obj):
         """Return expiring lots from the prefetch cache (no extra queries)."""
-        threshold = date.today() + timedelta(days=90)
+        threshold = date.today() + timedelta(days=self.WARNING_THRESHOLD_DAYS)
         return [
             lot
             for lot in obj.lots.all()
             if lot.expiry_date is not None and lot.expiry_date <= threshold and lot.quantity > 0
         ]
-
-    def get_has_expiring_lots(self, obj):
-        return len(self._expiring_lots(obj)) > 0
 
     def get_expiring_lots(self, obj):
         return StockLotSerializer(self._expiring_lots(obj), many=True).data
@@ -197,7 +195,6 @@ class StockSerializer(serializers.ModelSerializer):
                 "own": None,
                 "shared": None,
                 "depletion_date": None,
-                "is_low_stock": False,
             }
             setattr(obj, cache_attr, result)
             return result
@@ -220,14 +217,10 @@ class StockSerializer(serializers.ModelSerializer):
         else:
             depletion_date = date.today()
 
-        threshold = date.today() + timedelta(days=self.LOW_STOCK_THRESHOLD_DAYS)
-        is_low = depletion_date is not None and depletion_date <= threshold
-
         result = {
             "own": round(own, 2) if own > 0 else None,
             "shared": round(shared, 2) if shared > 0 else None,
             "depletion_date": depletion_date,
-            "is_low_stock": is_low,
         }
         setattr(obj, cache_attr, result)
         return result
@@ -241,8 +234,52 @@ class StockSerializer(serializers.ModelSerializer):
     def get_daily_consumption_shared(self, obj):
         return self._consumption_data(obj)["shared"]
 
-    def get_is_low_stock(self, obj):
-        return self._consumption_data(obj)["is_low_stock"]
+    def get_stock_severity(self, obj):
+        """Combine quantity-based and consumption-based criteria.
+
+        - qty == 0           → 'out'
+        - qty in {1, 2}      → 'low'
+        - qty >= 3 and depletion_date < today + 30 days → 'low'
+        - otherwise          → 'ok'
+        """
+        qty = self.get_quantity(obj)
+        if qty == 0:
+            return "out"
+        if qty < self.LOW_STOCK_THRESHOLD_UNITS:
+            return "low"
+        depletion = self._consumption_data(obj)["depletion_date"]
+        if depletion is not None:
+            cutoff = date.today() + timedelta(days=self.WARNING_THRESHOLD_DAYS)
+            if depletion < cutoff:
+                return "low"
+        return "ok"
+
+    def get_expiry_severity(self, obj):
+        """Severity tier for stock lots' expiry dates.
+
+        - any lot with qty > 0 and expiry_date <= today              → 'reached'
+        - any lot with qty > 0 and today < expiry_date < today + 30d → 'soon'
+        - otherwise                                                  → 'ok'
+
+        'reached' takes precedence: a stock with one expired lot AND one
+        soon-to-expire lot returns 'reached'.
+        """
+        today = date.today()
+        cutoff = today + timedelta(days=self.WARNING_THRESHOLD_DAYS)
+        has_reached = False
+        has_soon = False
+        for lot in obj.lots.all():
+            if lot.expiry_date is None or lot.quantity <= 0:
+                continue
+            if lot.expiry_date <= today:
+                has_reached = True
+            elif lot.expiry_date < cutoff:
+                has_soon = True
+        if has_reached:
+            return "reached"
+        if has_soon:
+            return "soon"
+        return "ok"
 
 
 class StockConsumptionSerializer(serializers.ModelSerializer):

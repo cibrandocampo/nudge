@@ -21,11 +21,11 @@ describe('RoutineCard', () => {
     expect(screen.getByText('Take vitamins')).toBeInTheDocument()
   })
 
-  it('shows stock info when present', () => {
-    const routine = { ...baseRoutine, stock_name: 'Filters', stock_quantity: 5 }
+  it('shows stock usage per execution when stock is linked', () => {
+    const routine = { ...baseRoutine, stock_name: 'Filters', stock_quantity: 5, stock_usage: 2 }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    expect(screen.getByText(/Filters/)).toBeInTheDocument()
-    expect(screen.getByText(/5/)).toBeInTheDocument()
+    expect(screen.getByText(/2 × Filters/)).toBeInTheDocument()
+    expect(screen.queryByText(/5/)).not.toBeInTheDocument()
   })
 
   it('shows Done button only when is_due', () => {

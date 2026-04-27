@@ -57,18 +57,31 @@
   border-top: 1px solid var(--c-border-inner);
 }
 
+/* Tri-state expiry severity (T105). The boolean `data-expiring`
+ * attribute became `'reached' | 'soon' | 'none'` so the user sees a
+ * visual cue that mirrors the inventory alert blocks: red for lots
+ * already past their expiry date, orange for lots within 30 days. */
+.lotRow[data-expiring='reached'] {
+  border-left: 3px solid var(--c-danger);
+  background: var(--c-border-danger);
+}
+.lotRow[data-expiring='soon'] {
+  border-left: 3px solid var(--c-warning);
+  background: var(--c-border-warning);
+}
+
 .addLotForm {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: 0.875rem;
+  padding: 1rem;
   border-top: 1px solid var(--c-border-inner);
 }
 
 .addLotRow {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.875rem;
 }
 
 .addLotField {
@@ -77,34 +90,19 @@
   gap: 0.25rem;
 }
 
+.addLotField input {
+  width: 100%;
+}
+
 .fieldLabel {
   font-size: 0.7rem;
   color: var(--c-text-3);
   font-weight: 500;
 }
 
-.inputNarrow {
-  width: 80px;
-  text-align: center;
-}
-
-.inputFlex {
-  flex: 1;
-}
-
-.primaryBtn {
-  align-self: flex-start;
-  padding: 0.5rem 1rem;
-  background: var(--c-primary);
-  color: var(--c-surface);
-  border: none;
-  border-radius: var(--radius);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.primaryBtn:hover {
-  background: var(--c-primary-hover);
+.submitBtn {
+  width: 100%;
+  margin-top: 0.25rem;
 }
 
 .entryList {
@@ -130,4 +128,3 @@
   /* Same breathing-room pattern as HistoryPage + RoutineDetailPage. */
   margin-top: 0.5rem;
 }
-

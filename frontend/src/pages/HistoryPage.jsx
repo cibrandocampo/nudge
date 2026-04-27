@@ -95,8 +95,18 @@ export default function HistoryPage() {
     const mutation = type === 'routine' ? updateEntry : updateConsumption
     const vars =
       type === 'routine'
-        ? { entryId: entry.id, patch: { notes }, updatedAt: entry.updated_at }
-        : { consumptionId: entry.id, patch: { notes }, updatedAt: entry.updated_at }
+        ? {
+            entryId: entry.id,
+            routineName: entry.routine_name,
+            patch: { notes },
+            updatedAt: entry.updated_at,
+          }
+        : {
+            consumptionId: entry.id,
+            stockName: entry.stock_name,
+            patch: { notes },
+            updatedAt: entry.updated_at,
+          }
 
     try {
       await mutation.mutateAsync(vars)

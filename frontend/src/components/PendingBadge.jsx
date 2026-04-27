@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useQueueEntries } from '../hooks/useQueueEntries'
-import { remove } from '../offline/queue'
+import { discard } from '../offline/queue'
 import { forceSync } from '../offline/sync'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
@@ -23,6 +24,7 @@ const STATUS_ICON = {
  */
 export default function PendingBadge() {
   const entries = useQueueEntries()
+  const qc = useQueryClient()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef(null)
@@ -78,7 +80,7 @@ export default function PendingBadge() {
                 </span>
                 <div className={s.itemBody}>
                   <div className={s.itemTitle}>
-                    {entry.method} {entry.endpoint}
+                    {entry.labelKey ? t(entry.labelKey, entry.labelArgs ?? {}) : `${entry.method} ${entry.endpoint}`}
                   </div>
                   <div className={s.itemMeta}>
                     {t(`offline.status.${entry.status}`)} · {formatShortDate(entry.createdAt)}
@@ -87,7 +89,7 @@ export default function PendingBadge() {
                 <button
                   type="button"
                   className={s.discard}
-                  onClick={() => remove(entry.id)}
+                  onClick={() => discard(entry.id, qc)}
                   aria-label={t('offline.panel.discard')}
                 >
                   {t('offline.panel.discard')}
