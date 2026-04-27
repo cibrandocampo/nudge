@@ -216,9 +216,7 @@ describe('StockGroupsPage', () => {
       { id: 1, name: 'A', display_order: 0 },
       { id: 2, name: 'B', display_order: 1 },
     ])
-    server.use(
-      http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })),
-    )
+    server.use(http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })))
 
     render()
     const rows = await screen.findAllByRole('listitem')

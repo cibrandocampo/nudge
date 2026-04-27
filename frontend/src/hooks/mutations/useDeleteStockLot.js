@@ -1,7 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — The optimistic drops the lot from `stock.lots` and recomputes
+// totals. Reconstructing the lot would require persisting it; invalidate
+// the parent so the next refetch repaints both the lot and the totals.
+registerRollback('deleteStockLot', (qc, { stockId }) => {
+  const id = Number(stockId)
+  qc.invalidateQueries({ queryKey: ['stock'] })
+  qc.invalidateQueries({ queryKey: ['stock', id] })
+  qc.invalidateQueries({ queryKey: ['stock-lots', id] })
+})
 
 /**
  * DELETE /api/stock/{stockId}/lots/{lotId}/ — removes a lot from its
@@ -12,6 +23,11 @@ export function useDeleteStockLot() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ stockId, lotId }) => `stock:${stockId}:lot:${lotId}`,
+    label: ({ stockName }) => ({
+      key: 'offline.label.deleteStockLot',
+      args: { stockName: stockName ?? '?' },
+    }),
+    rollback: ({ stockId, lotId }) => ({ type: 'deleteStockLot', args: { stockId, lotId } }),
     request: ({ stockId, lotId, updatedAt }) => ({
       method: 'DELETE',
       path: `/stock/${stockId}/lots/${lotId}/`,

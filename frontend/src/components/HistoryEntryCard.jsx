@@ -49,11 +49,7 @@ export default function HistoryEntryCard({
 
   if (compact) {
     return (
-      <div
-        className={cx(shared.card, s.compactCard)}
-        data-testid="history-entry"
-        data-entry-type={entry._type}
-      >
+      <div className={cx(shared.card, s.compactCard)} data-testid="history-entry" data-entry-type={entry._type}>
         <div className={s.compactRow}>
           <span className={s.compactTime}>{formatEntryTime(entry.created_at)}</span>
           {authorLabel && <span className={s.compactAuthor}>{authorLabel}</span>}
@@ -66,11 +62,7 @@ export default function HistoryEntryCard({
   }
 
   return (
-    <div
-      className={cx(shared.card, s.entryCard)}
-      data-testid="history-entry"
-      data-entry-type={entry._type}
-    >
+    <div className={cx(shared.card, s.entryCard)} data-testid="history-entry" data-entry-type={entry._type}>
       <div className={shared.cardHeader}>
         <div className={shared.cardMeta}>
           {showTitle && (

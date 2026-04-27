@@ -14,11 +14,7 @@ export default function ModalFrame({ onClose, title, size = 'sm', variant = 'box
     return (
       <div className={shared.overlay} onClick={onClose}>
         <div
-          className={cx(
-            shared.modalBoxFramed,
-            size === 'md' && shared.modalBoxMd,
-            size === 'lg' && shared.modalBoxLg,
-          )}
+          className={cx(shared.modalBoxFramed, size === 'md' && shared.modalBoxMd, size === 'lg' && shared.modalBoxLg)}
           role="dialog"
           aria-modal="true"
           aria-label={ariaLabel}

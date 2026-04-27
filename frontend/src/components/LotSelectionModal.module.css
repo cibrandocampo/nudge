@@ -9,7 +9,7 @@
 .subtitle {
   margin: 0 0 1rem;
   font-size: 0.8rem;
-  color: var(--c-muted);
+  color: var(--c-text-2);
 }
 
 .list {
@@ -89,13 +89,13 @@
 
 .available {
   font-size: 0.75rem;
-  color: var(--c-muted);
+  color: var(--c-text-3);
   white-space: nowrap;
 }
 
 .expiry {
   font-size: 0.75rem;
-  color: var(--c-muted);
+  color: var(--c-text-3);
 }
 
 .qtyRow {

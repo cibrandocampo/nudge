@@ -1,6 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — The optimistic clears `['stock', id]` (sets it to undefined),
+// so we can't rebuild the row from the detail cache. Invalidate the
+// list and the (now-empty) detail so the next refetch reconciles.
+registerRollback('deleteStock', (qc, { stockId }) => {
+  const id = Number(stockId)
+  qc.invalidateQueries({ queryKey: ['stock'] })
+  qc.invalidateQueries({ queryKey: ['stock', id] })
+})
 
 /**
  * DELETE /api/stock/{id}/ — removes a stock item. Optimistic: drops the
@@ -11,6 +21,11 @@ export function useDeleteStock() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ stockId }) => `stock:${stockId}`,
+    label: ({ stockName }) => ({
+      key: 'offline.label.deleteStock',
+      args: { name: stockName ?? '?' },
+    }),
+    rollback: ({ stockId }) => ({ type: 'deleteStock', args: { stockId } }),
     request: ({ stockId, updatedAt }) => ({
       method: 'DELETE',
       path: `/stock/${stockId}/`,

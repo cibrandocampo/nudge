@@ -5,16 +5,24 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Brand yellow — the notification-dot accent on the favicon and
+        // the routine "consume" arrow in the app. Used sparingly for
+        // hero highlights and key accents on the marketing site.
+        brand: '#FCD34D',
+        // Royal-blue scale anchored on `--c-shared` (#4A56A1) — the same
+        // hue used in the app for shared resources, the inventory group
+        // rail, and routine-entry borders. Replaces the previous indigo
+        // ramp so the marketing site reads as the same brand as the app.
         nudge: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          300: '#a5b4fc',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
+          50: '#f1f2f8',
+          100: '#dde0ec',
+          300: '#8d96bf',
+          500: '#4A56A1',
+          600: '#3d4787',
+          700: '#34396a',
+          800: '#2a2e54',
+          900: '#1f2340',
+          950: '#14162a',
         },
       },
       fontFamily: {

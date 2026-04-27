@@ -44,23 +44,14 @@ describe('HistoryEntryCard — compact', () => {
   })
 
   it('shows an author line when completed_by_username is set on a routine', () => {
-    renderWithProviders(
-      <HistoryEntryCard
-        entry={routineEntry({ completed_by_username: 'alice' })}
-        compact
-      />,
-    )
+    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'alice' })} compact />)
     expect(screen.getByText(/alice/)).toBeInTheDocument()
   })
 })
 
 describe('HistoryEntryCard — full card', () => {
   it('renders a read-only notes view when editable callbacks are not wired', () => {
-    renderWithProviders(
-      <HistoryEntryCard
-        entry={routineEntry({ notes: 'After breakfast' })}
-      />,
-    )
+    renderWithProviders(<HistoryEntryCard entry={routineEntry({ notes: 'After breakfast' })} />)
     expect(screen.getByText('After breakfast')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /edit|add/i })).not.toBeInTheDocument()
   })

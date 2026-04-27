@@ -1,5 +1,6 @@
 .filterRow {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
@@ -8,8 +9,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  flex: 1 1 auto;
-  min-width: 0;
+  /* Each field claims at least ~8rem so the select label stays
+   * readable. flex-wrap on the row drops fields to a new line
+   * instead of clipping when the viewport can't fit three across. */
+  flex: 1 1 8rem;
+  min-width: 8rem;
 }
 
 .filterLabel {

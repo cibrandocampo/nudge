@@ -37,6 +37,22 @@
   overflow: hidden;
 }
 
+/* On narrow viewports the wrapper isn't anchored to the viewport's right
+ * edge (the header's admin + logout buttons sit between it and the edge),
+ * so `right: 0` on an absolutely positioned panel placed it off-screen
+ * to the left. `position: fixed` resolves against the viewport directly,
+ * sidestepping the wrapper's offset entirely. The 480px breakpoint covers
+ * iPhone-class viewports with headroom. */
+@media (max-width: 480px) {
+  .panel {
+    position: fixed;
+    top: 54px; /* header height (48px) + 6px gap, mirrors the desktop offset */
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+  }
+}
+
 .panelHeader {
   display: flex;
   align-items: center;
@@ -119,7 +135,6 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--c-text);
-  font-family: ui-monospace, monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

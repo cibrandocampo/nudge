@@ -1,6 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
+
+// T114 — Patches an arbitrary subset of the stock; invalidate the
+// touched queries so the next refetch reconciles.
+registerRollback('updateStock', (qc, { stockId }) => {
+  const id = Number(stockId)
+  qc.invalidateQueries({ queryKey: ['stock'] })
+  qc.invalidateQueries({ queryKey: ['stock', id] })
+})
 
 /**
  * PATCH /api/stock/{id}/ — partial update (name, group, shared_with, …).
@@ -14,6 +23,11 @@ export function useUpdateStock() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ stockId }) => `stock:${stockId}`,
+    label: ({ stockName }) => ({
+      key: 'offline.label.updateStock',
+      args: { name: stockName ?? '?' },
+    }),
+    rollback: ({ stockId }) => ({ type: 'updateStock', args: { stockId } }),
     request: ({ stockId, patch, updatedAt }) => ({
       method: 'PATCH',
       path: `/stock/${stockId}/`,

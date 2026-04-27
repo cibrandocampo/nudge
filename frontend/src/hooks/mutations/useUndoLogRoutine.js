@@ -21,6 +21,10 @@ export function useUndoLogRoutine() {
   const qc = useQueryClient()
   return useOfflineMutation({
     resourceKey: ({ entryId }) => `entry:${entryId}`,
+    label: ({ routineName }) => ({
+      key: 'offline.label.undoLogRoutine',
+      args: { name: routineName ?? '?' },
+    }),
     request: ({ entryId }) => ({
       method: 'DELETE',
       path: `/entries/${entryId}/`,

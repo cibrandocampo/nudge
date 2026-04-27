@@ -35,6 +35,7 @@ export default function LotPickerModal({ stock, onClose, onConsumed }) {
     try {
       await consumeStock.mutateAsync({
         stockId: stock.id,
+        stockName: stock.name,
         quantity: 1,
         lotSelections: [{ lot_id: selectedLotId, quantity: 1 }],
       })

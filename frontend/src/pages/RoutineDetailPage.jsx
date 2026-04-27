@@ -45,7 +45,7 @@ export default function RoutineDetailPage() {
   const runLog = async (lotSelections) => {
     setCompleting(true)
     try {
-      await logMutation.mutateAsync({ routineId: Number(id), lotSelections })
+      await logMutation.mutateAsync({ routineId: Number(id), routineName: routine?.name, lotSelections })
     } catch {
       showToast({ type: 'error', message: t('common.actionError') })
     } finally {
@@ -86,6 +86,7 @@ export default function RoutineDetailPage() {
     try {
       await updateMutation.mutateAsync({
         routineId: Number(id),
+        routineName: routine.name,
         patch: { is_active: !routine.is_active },
         updatedAt: routine.updated_at,
       })
@@ -98,6 +99,7 @@ export default function RoutineDetailPage() {
     try {
       await deleteMutation.mutateAsync({
         routineId: Number(id),
+        routineName: routine.name,
         updatedAt: routine.updated_at,
       })
       navigate('/')
@@ -227,18 +229,16 @@ export default function RoutineDetailPage() {
         <section className={s.section}>
           <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
           <div className={s.entryList}>
-            {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(
-              ({ dateLabel, items }) => (
-                <section key={dateLabel} className={s.dayGroup}>
-                  <p className={s.dayHeader}>{dateLabel}</p>
-                  <div className={s.dayList}>
-                    {items.map((entry) => (
-                      <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
-                    ))}
-                  </div>
-                </section>
-              ),
-            )}
+            {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(({ dateLabel, items }) => (
+              <section key={dateLabel} className={s.dayGroup}>
+                <p className={s.dayHeader}>{dateLabel}</p>
+                <div className={s.dayList}>
+                  {items.map((entry) => (
+                    <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
         </section>
       )}

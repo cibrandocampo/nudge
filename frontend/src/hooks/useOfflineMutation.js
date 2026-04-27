@@ -32,6 +32,36 @@ import { enqueue } from '../offline/queue'
  * (whatever their own `onMutate` returned) — the internal rollback handle
  * is kept private.
  *
+ * @param {Function} [label] - Optional factory `(vars) => { key, args }`
+ *   returning an i18n key + interpolation args. Persisted in the queue
+ *   entry as `labelKey` + `labelArgs` so PendingBadge can render a
+ *   human-readable description in the user's current language at render
+ *   time (not at enqueue time — survives a language switch). Vars passed
+ *   here are the same vars the caller supplies to `mutate`/`mutateAsync`,
+ *   so the call-site is responsible for including any context fields the
+ *   factory needs (e.g. `stockName`, `routineName`).
+ *
+ *   Example:
+ *     label: ({ stockName, quantity }) => ({
+ *       key: 'offline.label.consumeStock',
+ *       args: { name: stockName, qty: quantity },
+ *     })
+ *
+ * @param {Function} [rollback] - Optional factory `(vars) => { type, args }`
+ *   returning a serializable inverse descriptor. Persisted in the queue
+ *   entry as `rollbackType` + `rollbackArgs`. When the user discards the
+ *   entry from PendingBadge (or via the conflict modal's discard branch),
+ *   `discard(id, qc)` reads the descriptor and dispatches against the
+ *   registry in `frontend/src/offline/rollbacks.js` to undo the
+ *   optimistic side effects. The `args` shape is hook-specific and must
+ *   match what the registered inverse function expects.
+ *
+ *   Example:
+ *     rollback: ({ stockId, quantity }) => ({
+ *       type: 'consumeStock',
+ *       args: { stockId, quantity },
+ *     })
+ *
  * Example:
  *
  *   const mutation = useOfflineMutation({
@@ -51,6 +81,8 @@ import { enqueue } from '../offline/queue'
 export function useOfflineMutation({
   request,
   resourceKey,
+  label,
+  rollback,
   parseResponse,
   queueable = true,
   optimistic,
@@ -125,12 +157,18 @@ export function useOfflineMutation({
         if (err instanceof OfflineError) {
           if (queueable === false) throw err
           const rk = typeof resourceKey === 'function' ? resourceKey(vars) : resourceKey
+          const lbl = typeof label === 'function' ? label(vars) : null
+          const rb = typeof rollback === 'function' ? rollback(vars) : null
           await enqueue({
             id: idempotencyKey,
             method,
             endpoint: path,
             body: body ?? null,
             resourceKey: rk ?? null,
+            labelKey: lbl?.key ?? null,
+            labelArgs: lbl?.args ?? null,
+            rollbackType: rb?.type ?? null,
+            rollbackArgs: rb?.args ?? null,
             ifUnmodifiedSince: ifUnmodifiedSince ?? null,
             createdAt: new Date().toISOString(),
             status: 'pending',

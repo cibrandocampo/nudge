@@ -51,7 +51,7 @@ export default function StockGroupsPage() {
     const current = orderedGroups.find((g) => g.id === groupId)
     if (!current || current.name === trimmed) return
     try {
-      await updateGroup.mutateAsync({ groupId, patch: { name: trimmed } })
+      await updateGroup.mutateAsync({ groupId, groupName: trimmed, patch: { name: trimmed } })
       setActionError(null)
     } catch {
       setActionError(t('stockGroups.errorRename'))
@@ -72,10 +72,10 @@ export default function StockGroupsPage() {
   }
 
   const handleDelete = async () => {
-    const { id } = confirmDelete
+    const { id, name } = confirmDelete
     setConfirmDelete(null)
     try {
-      await deleteGroup.mutateAsync({ groupId: id })
+      await deleteGroup.mutateAsync({ groupId: id, groupName: name })
       setActionError(null)
     } catch {
       setActionError(t('stockGroups.errorDelete'))
@@ -85,12 +85,14 @@ export default function StockGroupsPage() {
   const persistReorder = async (newOrder) => {
     // Only PATCH groups whose display_order would actually change.
     const diffs = newOrder
-      .map((g, idx) => ({ id: g.id, displayOrder: idx, prev: g.display_order }))
+      .map((g, idx) => ({ id: g.id, name: g.name, displayOrder: idx, prev: g.display_order }))
       .filter((d) => d.prev !== d.displayOrder)
     if (diffs.length === 0) return
     try {
       await Promise.all(
-        diffs.map((d) => updateGroup.mutateAsync({ groupId: d.id, patch: { display_order: d.displayOrder } })),
+        diffs.map((d) =>
+          updateGroup.mutateAsync({ groupId: d.id, groupName: d.name, patch: { display_order: d.displayOrder } }),
+        ),
       )
       setActionError(null)
     } catch {

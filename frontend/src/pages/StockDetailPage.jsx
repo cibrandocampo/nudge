@@ -20,9 +20,26 @@ import shared from '../styles/shared.module.css'
 import s from './StockDetailPage.module.css'
 
 function borderTokens(stock) {
-  if (!stock || stock.quantity === 0) return { border: shared.cardBorderDanger, dot: shared.dotDanger }
-  if (stock.quantity <= 3) return { border: shared.cardBorderWarning, dot: shared.dotWarning }
+  if (!stock || stock.stock_severity === 'out') {
+    return { border: shared.cardBorderDanger, dot: shared.dotDanger }
+  }
+  if (stock.stock_severity === 'low') {
+    return { border: shared.cardBorderWarning, dot: shared.dotWarning }
+  }
   return { border: shared.cardBorderSuccess, dot: shared.dotSuccess }
+}
+
+// Tri-state lot expiry severity derived from the lot's own expiry_date.
+// Independent of stock.expiring_lots (which the InventoryPage alert blocks
+// consume). Returned values match the data-expiring attribute on lot rows.
+function lotExpirySeverity(lot, today) {
+  if (lot.expiry_date == null) return 'none'
+  const expiry = new Date(lot.expiry_date)
+  if (expiry <= today) return 'reached'
+  const cutoff = new Date(today)
+  cutoff.setDate(cutoff.getDate() + 30)
+  if (expiry < cutoff) return 'soon'
+  return 'none'
 }
 
 export default function StockDetailPage() {
@@ -53,6 +70,9 @@ export default function StockDetailPage() {
 
   const tokens = borderTokens(stock)
   const groupName = groups.find((g) => g.id === stock.group)?.name
+  // Local-midnight today for lot expiry comparison; matches the backend's
+  // `date.today()` semantics (a lot expiring today reads as 'reached').
+  const today = new Date(new Date().toISOString().slice(0, 10))
 
   const handleAddLot = async (e) => {
     e.preventDefault()
@@ -62,6 +82,7 @@ export default function StockDetailPage() {
     try {
       await createLot.mutateAsync({
         stockId,
+        stockName: stock.name,
         quantity: qty,
         expiryDate: addForm.expiry,
         lotNumber: addForm.lotNumber.trim(),
@@ -77,7 +98,7 @@ export default function StockDetailPage() {
     const { lotId, updatedAt } = confirmRemoveLot
     setConfirmRemoveLot(null)
     try {
-      await deleteLot.mutateAsync({ stockId, lotId, updatedAt })
+      await deleteLot.mutateAsync({ stockId, stockName: stock.name, lotId, updatedAt })
     } catch {
       showToast({ type: 'error', message: t('common.actionError') })
     }
@@ -86,7 +107,7 @@ export default function StockDetailPage() {
   const doDeleteStock = async () => {
     setConfirmDelete(false)
     try {
-      await deleteStock.mutateAsync({ stockId, updatedAt: stock.updated_at })
+      await deleteStock.mutateAsync({ stockId, stockName: stock.name, updatedAt: stock.updated_at })
       navigate('/inventory')
     } catch {
       showToast({ type: 'error', message: t('common.actionError') })
@@ -150,7 +171,11 @@ export default function StockDetailPage() {
               </span>
               {stock.estimated_depletion_date && (
                 <span
-                  className={cx(shared.stockDepletion, stock.is_low_stock && shared.stockDepletionWarn)}
+                  className={cx(
+                    shared.stockDepletion,
+                    stock.stock_severity === 'low' && shared.stockDepletionWarn,
+                    stock.stock_severity === 'out' && shared.stockDepletionDanger,
+                  )}
                   data-testid="depletion-date"
                 >
                   {t('inventory.depletionDate', { date: formatShortDate(stock.estimated_depletion_date) })}
@@ -171,21 +196,18 @@ export default function StockDetailPage() {
           {stock.lots.length > 0 && (
             <div className={s.lotsList}>
               {stock.lots.map((lot) => {
-                const isExpiring = (stock.expiring_lots ?? []).some((el) => el.id === lot.id)
+                const sev = lotExpirySeverity(lot, today)
                 return (
-                  <div
-                    key={lot.id}
-                    className={s.lotRow}
-                    data-testid="lot-row"
-                    data-expiring={isExpiring ? 'true' : 'false'}
-                  >
+                  <div key={lot.id} className={s.lotRow} data-testid="lot-row" data-expiring={sev}>
                     <div className={shared.lotInfo}>
                       {lot.lot_number && <span className={shared.lotNumber}>{lot.lot_number}</span>}
                       <span className={shared.lotQty}>
                         {lot.quantity} {t('common.unit')}
                       </span>
                       <span className={shared.lotExpiry}>
-                        {lot.expiry_date ? formatShortDate(lot.expiry_date, { withDay: false }) : t('inventory.noExpiry')}
+                        {lot.expiry_date
+                          ? formatShortDate(lot.expiry_date, { withDay: false })
+                          : t('inventory.noExpiry')}
                       </span>
                     </div>
                     <button
@@ -208,7 +230,7 @@ export default function StockDetailPage() {
               <div className={s.addLotField}>
                 <label className={s.fieldLabel}>{t('inventory.lotQty')} *</label>
                 <input
-                  className={cx(shared.input, s.inputNarrow)}
+                  className={shared.input}
                   type="number"
                   min={0}
                   placeholder="0"
@@ -226,7 +248,7 @@ export default function StockDetailPage() {
                   onChange={(e) => setAddForm((f) => ({ ...f, expiry: e.target.value }))}
                 />
               </div>
-              <div className={cx(s.addLotField, s.inputFlex)}>
+              <div className={s.addLotField}>
                 <label className={s.fieldLabel}>{t('inventory.lotNumber')}</label>
                 <input
                   className={shared.input}
@@ -237,7 +259,7 @@ export default function StockDetailPage() {
                 />
               </div>
             </div>
-            <button type="submit" className={s.primaryBtn} disabled={addForm.adding}>
+            <button type="submit" className={cx(shared.btnConfirm, s.submitBtn)} disabled={addForm.adding}>
               {addForm.adding ? t('inventory.adding') : t('inventory.addLot')}
             </button>
           </form>
@@ -248,18 +270,18 @@ export default function StockDetailPage() {
         <section className={s.section}>
           <p className={shared.sectionTitle}>{t('stockDetail.recentConsumption')}</p>
           <div className={s.entryList}>
-            {groupEntriesByDate(
-              consumptions.slice(0, 5).map((c) => ({ ...c, _type: 'consumption' })),
-            ).map(({ dateLabel, items }) => (
-              <section key={dateLabel} className={s.dayGroup}>
-                <p className={s.dayHeader}>{dateLabel}</p>
-                <div className={s.dayList}>
-                  {items.map((entry) => (
-                    <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
-                  ))}
-                </div>
-              </section>
-            ))}
+            {groupEntriesByDate(consumptions.slice(0, 5).map((c) => ({ ...c, _type: 'consumption' }))).map(
+              ({ dateLabel, items }) => (
+                <section key={dateLabel} className={s.dayGroup}>
+                  <p className={s.dayHeader}>{dateLabel}</p>
+                  <div className={s.dayList}>
+                    {items.map((entry) => (
+                      <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
+                    ))}
+                  </div>
+                </section>
+              ),
+            )}
           </div>
         </section>
       )}

@@ -48,7 +48,8 @@ export default function DashboardPage() {
   const runLog = async (routineId, lotSelections) => {
     setCompleting(routineId)
     try {
-      const result = await logMutation.mutateAsync({ routineId, lotSelections })
+      const routineName = allRoutines.find((r) => r.id === routineId)?.name
+      const result = await logMutation.mutateAsync({ routineId, routineName, lotSelections })
       // `result.__queued` means the mutation was enqueued offline (no
       // entry id yet). Skip the Undo toast in that case — the user can
       // still discard the queued entry from the PendingBadge panel.
@@ -61,7 +62,7 @@ export default function DashboardPage() {
           action: {
             label: t('card.undo'),
             onClick: () => {
-              undoLogMutation.mutate({ entryId })
+              undoLogMutation.mutate({ entryId, routineName })
             },
           },
         })
@@ -133,12 +134,7 @@ export default function DashboardPage() {
           )
         }
       />
-      <Section
-        title={t('dashboard.upcoming')}
-        routines={upcomingList}
-        onMarkDone={markDone}
-        completing={completing}
-      />
+      <Section title={t('dashboard.upcoming')} routines={upcomingList} onMarkDone={markDone} completing={completing} />
       {lotModal && (
         <LotSelectionModal
           routine={lotModal.routine}
@@ -160,12 +156,7 @@ function Section({ title, routines, onMarkDone, completing, empty }) {
         : routines.length > 0 && (
             <div className={s.list}>
               {routines.map((r) => (
-                <RoutineCard
-                  key={r.id}
-                  routine={r}
-                  onMarkDone={onMarkDone}
-                  completing={completing === r.id}
-                />
+                <RoutineCard key={r.id} routine={r} onMarkDone={onMarkDone} completing={completing === r.id} />
               ))}
             </div>
           )}

@@ -49,11 +49,7 @@ describe('DashboardPage', () => {
   it('shows empty message when no routines due but the user has routines', async () => {
     // The dashboard distinguishes "all caught up today" (at least one
     // routine exists) from "no routines yet". Here we simulate the former.
-    server.use(
-      http.get(`${BASE}/routines/`, () =>
-        HttpResponse.json([{ id: 1, name: 'Vitamins', next_due_at: null }]),
-      ),
-    )
+    server.use(http.get(`${BASE}/routines/`, () => HttpResponse.json([{ id: 1, name: 'Vitamins', next_due_at: null }])))
     renderWithProviders(<DashboardPage />)
     await waitFor(() => expect(screen.getByText('All caught up!')).toBeInTheDocument())
   })
