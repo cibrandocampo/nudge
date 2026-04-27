@@ -66,15 +66,15 @@ const lifecycleSteps = [
 ] as const
 
 const features = [
-  { icon: '📶', title: 'Offline-first PWA', body: 'Queue in IndexedDB, sync on reconnect, optimistic updates, conflict resolution with visual diff, idempotent retries.' },
-  { icon: '🔔', title: 'Push notifications', body: 'Daily heads-up at your chosen time, a due alert the moment the interval expires, follow-up reminders every 8 hours until done.' },
-  { icon: '👥', title: 'Household sharing', body: 'Share routines and stock items with contacts. Shared items show up on the recipient dashboard with an owner label.' },
-  { icon: '📦', title: 'Inventory with FEFO', body: 'Attach a consumable; Nudge decrements stock automatically, lot by lot, First Expired First Out. Expiry warnings 90 days out.' },
-  { icon: '🌍', title: 'Timezone-aware', body: 'Notification schedule follows your local time and adjusts automatically for daylight saving.' },
-  { icon: '🗣️', title: 'Multilingual', body: 'English, Spanish, and Galician. Auto-detected from the browser, overridable per user.' },
-  { icon: '🔒', title: 'Private by design', body: 'No public registration. No SaaS. No telemetry. Backend and database never leave the Docker network.' },
-  { icon: '📱', title: 'Install like an app', body: 'Add to home screen on iOS and Android. Opens from the icon, runs like a native app, push notifications included.' },
-]
+  { icon: 'wifi-off', title: 'Offline-first PWA', body: 'Queue in IndexedDB, sync on reconnect, optimistic updates, conflict resolution with visual diff, idempotent retries.' },
+  { icon: 'bell', title: 'Push notifications', body: 'Daily heads-up at your chosen time, a due alert the moment the interval expires, follow-up reminders every 8 hours until done.' },
+  { icon: 'users', title: 'Household sharing', body: 'Share routines and stock items with contacts. Shared items show up on the recipient dashboard with an owner label.' },
+  { icon: 'package', title: 'Inventory with FEFO', body: 'Attach a consumable; Nudge decrements stock automatically, lot by lot, First Expired First Out. Expiry warnings 90 days out.' },
+  { icon: 'globe', title: 'Timezone-aware', body: 'Notification schedule follows your local time and adjusts automatically for daylight saving.' },
+  { icon: 'languages', title: 'Multilingual', body: 'English, Spanish, and Galician. Auto-detected from the browser, overridable per user.' },
+  { icon: 'shield', title: 'Private by design', body: 'No public registration. No SaaS. No telemetry. Backend and database never leave the Docker network.' },
+  { icon: 'smartphone', title: 'Install like an app', body: 'Add to home screen on iOS and Android. Opens from the icon, runs like a native app, push notifications included.' },
+] as const
 
 const screenshots = [
   { src: 'screenshots/dashboard.png', alt: 'Dashboard — due and upcoming routines', caption: 'Dashboard' },
