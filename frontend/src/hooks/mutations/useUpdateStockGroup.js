@@ -5,10 +5,6 @@ export function useUpdateStockGroup() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
-    label: ({ groupName }) => ({
-      key: 'offline.label.updateStockGroup',
-      args: { name: groupName ?? '?' },
-    }),
     request: ({ groupId, patch }) => ({
       method: 'PATCH',
       path: `/stock-groups/${groupId}/`,

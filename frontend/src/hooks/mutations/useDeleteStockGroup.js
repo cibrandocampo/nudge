@@ -5,10 +5,6 @@ export function useDeleteStockGroup() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
-    label: ({ groupName }) => ({
-      key: 'offline.label.deleteStockGroup',
-      args: { name: groupName ?? '?' },
-    }),
     request: ({ groupId }) => ({
       method: 'DELETE',
       path: `/stock-groups/${groupId}/`,

@@ -5,10 +5,6 @@ export function useDeleteContact() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
-    label: ({ username }) => ({
-      key: 'offline.label.deleteContact',
-      args: { username: username ?? '?' },
-    }),
     request: ({ contactId }) => ({
       method: 'DELETE',
       path: `/auth/contacts/${contactId}/`,
