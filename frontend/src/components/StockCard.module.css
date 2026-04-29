@@ -20,3 +20,8 @@
   pointer-events: none;
   cursor: default;
 }
+
+.compactHeader {
+  min-height: auto;
+  padding: 0.5rem 0.75rem;
+}

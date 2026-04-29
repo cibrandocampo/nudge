@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import EmptyCard from '../components/EmptyCard'
 import Icon from '../components/Icon'
 import LotPickerModal from '../components/LotPickerModal'
+import Spinner from '../components/Spinner'
 import StockCard from '../components/StockCard'
 import { useToast } from '../components/useToast'
 import { useServerReachable } from '../hooks/useServerReachable'
@@ -49,7 +50,7 @@ export default function InventoryPage() {
 
   const toggleCollapse = (key) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  if (isLoading) return <div className={shared.spinner} data-testid="spinner" />
+  if (isLoading) return <Spinner />
 
   const todayISO = new Date().toISOString().slice(0, 10)
   const outOfStockItems = stocks.filter((st) => st.stock_severity === 'out')
@@ -144,9 +145,7 @@ export default function InventoryPage() {
                       .map((lot) => (
                         <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
                           <Icon name="package" size="sm" />
-                          <span>
-                            {t('inventory.expiryReachedItem', { name: st.name, qty: lot.quantity })}
-                          </span>
+                          <span>{t('inventory.expiryReachedItem', { name: st.name, qty: lot.quantity })}</span>
                           <span className={shared.stockDepletionDanger}>
                             {' '}
                             {t('inventory.expiryReachedSince', {
@@ -204,9 +203,7 @@ export default function InventoryPage() {
                       .map((lot) => (
                         <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
                           <Icon name="package" size="sm" />
-                          <span>
-                            {t('inventory.expiringSoonItem', { name: st.name, qty: lot.quantity })}
-                          </span>
+                          <span>{t('inventory.expiringSoonItem', { name: st.name, qty: lot.quantity })}</span>
                           <span className={shared.stockDepletionWarn}>
                             {' '}
                             {t('inventory.expiringSoonItemUntil', {

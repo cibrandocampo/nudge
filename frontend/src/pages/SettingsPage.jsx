@@ -17,6 +17,8 @@ import Icon from '../components/Icon'
 import { useToast } from '../components/useToast'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
+import { avatarInitial, displayLabel, fullName } from '../utils/displayName'
+import { errorToastMessage } from '../utils/errors'
 import shared from '../styles/shared.module.css'
 import s from './SettingsPage.module.css'
 
@@ -86,7 +88,7 @@ export default function SettingsPage() {
           onError: (err) => {
             showToast({
               type: 'error',
-              message: err instanceof OfflineError ? t('offline.actionUnavailable') : t('settings.errorSave'),
+              message: errorToastMessage(err, t, 'settings.errorSave'),
             })
           },
         },
@@ -153,7 +155,7 @@ export default function SettingsPage() {
     try {
       await deleteContact.mutateAsync({ contactId, username })
     } catch (err) {
-      setContactError(err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError'))
+      setContactError(errorToastMessage(err, t))
     }
   }
 
@@ -172,7 +174,7 @@ export default function SettingsPage() {
       <Section title={t('settings.profile')}>
         <div className={s.profileRow}>
           <span className={s.avatar} aria-hidden="true">
-            {(user?.first_name || user?.username || '?').charAt(0).toUpperCase()}
+            {avatarInitial(user)}
           </span>
           <div className={s.profileMeta}>
             {/* Show "First Last (username)" when names exist; fall back to
@@ -180,7 +182,7 @@ export default function SettingsPage() {
              * helpText style so it reads as secondary. */}
             {user?.first_name || user?.last_name ? (
               <h2 className={s.username}>
-                {[user.first_name, user.last_name].filter(Boolean).join(' ')}
+                {fullName(user)}
                 <span className={shared.helpText}> ({user.username})</span>
               </h2>
             ) : (
@@ -206,9 +208,16 @@ export default function SettingsPage() {
             {contacts.map((c) => (
               <li key={c.id} className={s.contactRow}>
                 <span className={s.avatar} aria-hidden="true">
-                  {c.username.charAt(0).toUpperCase()}
+                  {avatarInitial(c)}
                 </span>
-                <span className={s.contactName}>{c.username}</span>
+                {c.first_name || c.last_name ? (
+                  <span className={s.contactName}>
+                    {fullName(c)}
+                    <span className={shared.helpText}> ({c.username})</span>
+                  </span>
+                ) : (
+                  <span className={s.contactName}>{c.username}</span>
+                )}
                 <button
                   type="button"
                   className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
@@ -230,7 +239,7 @@ export default function SettingsPage() {
           value=""
           onChange={handleAddContact}
           options={visibleSearchResults}
-          getLabel={(u) => u.username}
+          getLabel={(u) => displayLabel(u)}
           getKey={(u) => u.id}
           placeholder={t('settings.searchUsers')}
           emptyMessage={t('settings.contactNotFound')}

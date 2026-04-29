@@ -3,11 +3,12 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Sum
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
+from rest_framework import serializers
 
 
 class StockGroup(models.Model):
@@ -71,6 +72,76 @@ class Stock(models.Model):
     @property
     def quantity(self):
         return self.lots.aggregate(total=Sum("quantity"))["total"] or 0
+
+    @transaction.atomic
+    def consume_lots(self, quantity, lot_selections=None):
+        """
+        Decrement units from this stock, either via explicit lot
+        selections (each {lot_id, quantity}) or FEFO fallback.
+
+        Args:
+            quantity: total units to consume.
+            lot_selections: optional list of dicts
+                [{"lot_id": int, "quantity": int}, ...]. When None, FEFO
+                (First Expired, First Out) consumes from earliest expiry
+                until `quantity` reached or lots exhausted.
+
+        Returns: list of consumed_lot dicts
+            [{"lot_number", "expiry_date", "quantity"}, ...]
+
+        Raises:
+            rest_framework.serializers.ValidationError on bad input.
+            DRF translates to 400 when this bubbles from a viewset action.
+        """
+        consumed_lots = []
+
+        if lot_selections is not None:
+            total = sum(sel.get("quantity", 0) for sel in lot_selections)
+            if total != quantity:
+                raise serializers.ValidationError({"lot_selections": "Total quantity must equal quantity."})
+            lot_ids = [sel["lot_id"] for sel in lot_selections]
+            valid_ids = set(self.lots.filter(id__in=lot_ids).values_list("id", flat=True))
+            invalid = set(lot_ids) - valid_ids
+            if invalid:
+                raise serializers.ValidationError({"lot_selections": "One or more lot_ids are invalid."})
+            for sel in lot_selections:
+                qty = sel["quantity"]
+                if qty <= 0:
+                    continue
+                lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=self)
+                consume_qty = min(lot.quantity, qty)
+                lot.quantity -= consume_qty
+                lot.save(update_fields=["quantity"])
+                consumed_lots.append(_lot_consumed_dict(lot, consume_qty))
+        else:
+            remaining = quantity
+            for lot in (
+                self.lots.select_for_update()
+                .filter(quantity__gt=0)
+                .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
+            ):
+                if remaining <= 0:
+                    break
+                consume = min(lot.quantity, remaining)
+                lot.quantity -= consume
+                lot.save(update_fields=["quantity"])
+                remaining -= consume
+                consumed_lots.append(_lot_consumed_dict(lot, consume))
+
+        return consumed_lots
+
+
+def _lot_consumed_dict(lot, qty):
+    """Build the dict shape used by `Stock.consume_lots` for each consumed lot.
+
+    Centralised so the format stays in sync between the explicit-selection
+    and FEFO branches.
+    """
+    return {
+        "lot_number": lot.lot_number or None,
+        "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+        "quantity": qty,
+    }
 
 
 class StockLot(models.Model):

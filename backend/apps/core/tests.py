@@ -5,10 +5,12 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
+from rest_framework import serializers as drf_serializers
 from rest_framework.test import APITestCase
 
-from apps.core.mixins import parse_http_date
+from apps.core.mixins import SharedWithMixin, parse_http_date
+from apps.core.permissions import IsOwner
 from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import PushSubscription
 from apps.routines.models import (
@@ -361,3 +363,116 @@ class E2ESeedEndpointTest(APITestCase):
             response = self.client.post("/api/internal/e2e-seed/")
         self.assertEqual(response.status_code, 403)
         self.assertFalse(User.objects.filter(username="user1").exists())
+
+
+# ── IsOwner permission ──────────────────────────────────────────────────────
+
+
+class IsOwnerPermissionTest(TestCase):
+    """Unit tests for the object-level IsOwner permission."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.owner = User.objects.create_user(username="owner-perm", password="pw")
+        self.other = User.objects.create_user(username="other-perm", password="pw")
+
+    def _make_request(self, user):
+        request = self.factory.get("/")
+        request.user = user
+        return request
+
+    def _make_obj(self, user):
+        return type("Obj", (), {"user": user})()
+
+    def test_grants_access_to_owner(self):
+        request = self._make_request(self.owner)
+        obj = self._make_obj(self.owner)
+        self.assertTrue(IsOwner().has_object_permission(request, None, obj))
+
+    def test_denies_access_to_non_owner(self):
+        request = self._make_request(self.other)
+        obj = self._make_obj(self.owner)
+        self.assertFalse(IsOwner().has_object_permission(request, None, obj))
+
+    def test_message_is_user_facing(self):
+        self.assertEqual(IsOwner.message, "Only the owner can modify this resource.")
+
+
+# ── SharedWithMixin ─────────────────────────────────────────────────────────
+
+
+class _MockSerializer(SharedWithMixin, drf_serializers.Serializer):
+    """Minimal serializer used to exercise SharedWithMixin in isolation."""
+
+    pass
+
+
+class _MockObj:
+    """Stand-in for a model instance with a `shared_with` related manager."""
+
+    def __init__(self, users):
+        self._users = users
+
+    @property
+    def shared_with(self):
+        # Simulate a Django related manager with `.all()`.
+        outer = self
+
+        class _Manager:
+            def all(self_inner):
+                return outer._users
+
+        return _Manager()
+
+
+class SharedWithMixinTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="cibran-mix", password="pw")
+        self.contact = User.objects.create_user(
+            username="maria-mix",
+            password="pw",
+            first_name="María",
+            last_name="González",
+        )
+        self.stranger = User.objects.create_user(username="stranger-mix", password="pw")
+        self.user.contacts.add(self.contact)
+
+    def _serializer(self):
+        request = self.factory.get("/")
+        request.user = self.user
+        return _MockSerializer(context={"request": request})
+
+    def test_validate_shared_with_accepts_contact(self):
+        result = self._serializer().validate_shared_with([self.contact])
+        self.assertEqual(result, [self.contact])
+
+    def test_validate_shared_with_rejects_non_contact(self):
+        with self.assertRaises(drf_serializers.ValidationError):
+            self._serializer().validate_shared_with([self.stranger])
+
+    def test_validate_shared_with_returns_value_without_request(self):
+        # When no request in context, the mixin returns the value unchanged
+        # (defensive fallback for serializers used outside the API flow).
+        serializer = _MockSerializer(context={})
+        result = serializer.validate_shared_with([self.stranger])
+        self.assertEqual(result, [self.stranger])
+
+    def test_get_shared_with_details_returns_full_dicts(self):
+        obj = _MockObj([self.contact])
+        details = _MockSerializer().get_shared_with_details(obj)
+        self.assertEqual(len(details), 1)
+        self.assertEqual(
+            details[0],
+            {
+                "id": self.contact.pk,
+                "username": "maria-mix",
+                "first_name": "María",
+                "last_name": "González",
+            },
+        )
+
+    def test_get_shared_with_details_returns_empty_list_for_no_shares(self):
+        obj = _MockObj([])
+        details = _MockSerializer().get_shared_with_details(obj)
+        self.assertEqual(details, [])

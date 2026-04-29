@@ -9,7 +9,7 @@ import s from './LotSelectionModal.module.css'
  *
  * Props:
  *   routine  — object with { name, stock_usage, stock_name }
- *   lots     — grouped lot list from /lots-for-selection/ endpoint
+ *   lots     — grouped lot list (FEFO order) from `lotsForSelection()`
  *              [{lot_id, lot_number, expiry_date, quantity}]
  *   onConfirm(lotSelections) — called with [{lot_id, quantity}]
  *   onCancel

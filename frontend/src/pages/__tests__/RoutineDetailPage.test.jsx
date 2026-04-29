@@ -400,12 +400,15 @@ describe('RoutineDetailPage', () => {
     expect(nextDueValue).toBeInTheDocument()
   })
 
-  it('shows stock usage with translated format', async () => {
+  it('shows stock summary and per-log usage in separate rows', async () => {
     const { container } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    // "10 × Vitamin D (uses 1 per log)"
-    expect(container.textContent).toMatch(/Vitamin D/)
-    expect(container.textContent).toMatch(/uses 1 per log/)
+    // Stock row: "10 × Vitamin D"
+    expect(container.textContent).toMatch(/10 × Vitamin D/)
+    // Per-log row: separate label "Per log" + value "1 u." (DOM nodes
+    // concatenate without spaces in textContent, so allow optional
+    // whitespace between label and value).
+    expect(container.textContent).toMatch(/Per log\s*1 u\./)
   })
 })
 

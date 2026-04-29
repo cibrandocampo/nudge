@@ -67,13 +67,6 @@ export const handlers = [
 
   http.get(`${BASE}/routines/:id/entries/`, () => HttpResponse.json([])),
 
-  http.get(`${BASE}/routines/:id/lots-for-selection/`, () =>
-    HttpResponse.json([
-      { lot_id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 },
-      { lot_id: 2, lot_number: null, expiry_date: null, quantity: 1 },
-    ]),
-  ),
-
   http.post(`${BASE}/routines/:id/log/`, () => HttpResponse.json({ id: 1 }, { status: 201 })),
 
   http.get(`${BASE}/entries/`, () => HttpResponse.json({ results: [], next: null })),
@@ -247,10 +240,6 @@ export const handlers = [
       is_owner: true,
       owner_username: 'testuser',
     }),
-  ),
-
-  http.get(`${BASE}/stock/:id/lots-for-selection/`, () =>
-    HttpResponse.json([{ lot_id: 100, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2 }]),
   ),
 
   http.get(`${BASE}/push/vapid-public-key/`, () => HttpResponse.json({ public_key: 'BFake-VAPID-Key' })),

@@ -32,18 +32,6 @@
   gap: 1rem;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.fieldLabel {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
-  font-weight: 500;
-}
-
 /* ── Batches ────────────────────────────────────────────────── */
 
 .batchesList {

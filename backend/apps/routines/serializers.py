@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.core.mixins import SharedWithMixin
+
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 
 User = get_user_model()
@@ -66,7 +68,7 @@ class StockGroupSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
-class StockSerializer(serializers.ModelSerializer):
+class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
     lots = StockLotSerializer(many=True, read_only=True)
     quantity = serializers.SerializerMethodField()
     group_name = serializers.CharField(source="group.name", read_only=True, default=None)
@@ -134,21 +136,6 @@ class StockSerializer(serializers.ModelSerializer):
         if value and request and value.user != request.user:
             raise serializers.ValidationError("Invalid stock group.")
         return value
-
-    def validate_shared_with(self, value):
-        request = self.context.get("request")
-        if not request:
-            return value
-        if self.instance and self.instance.user != request.user:
-            raise serializers.ValidationError("Only the owner can modify shared_with.")
-        contact_ids = set(request.user.contacts.values_list("pk", flat=True))
-        for user in value:
-            if user.pk not in contact_ids:
-                raise serializers.ValidationError(f"User {user.pk} is not in your contacts.")
-        return value
-
-    def get_shared_with_details(self, obj):
-        return [{"id": u.pk, "username": u.username} for u in obj.shared_with.all()]
 
     def get_is_owner(self, obj):
         request = self.context.get("request")
@@ -313,7 +300,7 @@ class StockConsumptionSerializer(serializers.ModelSerializer):
         ]
 
 
-class RoutineSerializer(serializers.ModelSerializer):
+class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
     # Read-only convenience field so the frontend doesn't need an extra request
     stock_name = serializers.CharField(source="stock.name", read_only=True)
     stock_quantity = serializers.IntegerField(source="stock.quantity", read_only=True)
@@ -385,21 +372,6 @@ class RoutineSerializer(serializers.ModelSerializer):
             if not is_owner and not is_shared:
                 raise serializers.ValidationError("Invalid stock item.")
         return value
-
-    def validate_shared_with(self, value):
-        request = self.context.get("request")
-        if not request:
-            return value
-        if self.instance and self.instance.user != request.user:
-            raise serializers.ValidationError("Only the owner can modify shared_with.")
-        contact_ids = set(request.user.contacts.values_list("pk", flat=True))
-        for user in value:
-            if user.pk not in contact_ids:
-                raise serializers.ValidationError(f"User {user.pk} is not in your contacts.")
-        return value
-
-    def get_shared_with_details(self, obj):
-        return [{"id": u.pk, "username": u.username} for u in obj.shared_with.all()]
 
     def get_is_owner(self, obj):
         request = self.context.get("request")

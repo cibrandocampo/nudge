@@ -6,9 +6,11 @@ from django.db.models import F, Prefetch, Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.mixins import OptimisticLockingMixin
+from apps.core.permissions import IsOwner
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
@@ -53,14 +55,17 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             .order_by("name")
         )
 
+    def get_permissions(self):
+        if self.action in ("update", "partial_update", "destroy"):
+            return [IsAuthenticated(), IsOwner()]
+        return super().get_permissions()
+
     def perform_create(self, serializer):
         stock = serializer.save(user=self.request.user)
         logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.user != request.user:
-            return Response({"detail": "Only the owner can edit this stock."}, status=status.HTTP_403_FORBIDDEN)
         previous_shared = set(instance.shared_with.values_list("pk", flat=True))
         response = super().update(request, *args, **kwargs)
         instance.refresh_from_db()
@@ -73,34 +78,8 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.user != request.user:
-            return Response({"detail": "Only the owner can delete this stock."}, status=status.HTTP_403_FORBIDDEN)
         logger.info("Stock %r deleted (user %s).", instance.name, request.user.username)
         return super().destroy(request, *args, **kwargs)
-
-    @action(detail=True, methods=["get"], url_path="lots-for-selection")
-    def lots_for_selection(self, request, pk=None):
-        """
-        Return available lots grouped (one row per lot, FEFO order).
-
-        Since T063 the frontend derives this list locally from `stock.lots`
-        (already included in every StockSerializer response) so the lot
-        selection modal works offline without a second round-trip. The
-        endpoint is kept for backwards compatibility with external or
-        future clients.
-        """
-        stock = self.get_object()
-        lots = stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-        data = [
-            {
-                "lot_id": lot.id,
-                "lot_number": lot.lot_number or None,
-                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                "quantity": lot.quantity,
-            }
-            for lot in lots
-        ]
-        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="consume")
     def consume(self, request, pk=None):
@@ -123,59 +102,7 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         lot_selections = request.data.get("lot_selections")
 
         with transaction.atomic():
-            consumed_lots = []
-
-            if lot_selections is not None:
-                total = sum(sel.get("quantity", 0) for sel in lot_selections)
-                if total != quantity:
-                    return Response(
-                        {"lot_selections": "Total quantity must equal quantity."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                lot_ids = [sel["lot_id"] for sel in lot_selections]
-                valid_ids = set(stock.lots.filter(id__in=lot_ids).values_list("id", flat=True))
-                invalid = set(lot_ids) - valid_ids
-                if invalid:
-                    return Response(
-                        {"lot_selections": "One or more lot_ids are invalid."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                for sel in lot_selections:
-                    qty = sel["quantity"]
-                    if qty <= 0:
-                        continue
-                    lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=stock)
-                    consume_qty = min(lot.quantity, qty)
-                    lot.quantity -= consume_qty
-                    lot.save(update_fields=["quantity"])
-                    consumed_lots.append(
-                        {
-                            "lot_number": lot.lot_number or None,
-                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                            "quantity": consume_qty,
-                        }
-                    )
-            else:
-                remaining = quantity
-                for lot in (
-                    stock.lots.select_for_update()
-                    .filter(quantity__gt=0)
-                    .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-                ):
-                    if remaining <= 0:
-                        break
-                    consume = min(lot.quantity, remaining)
-                    lot.quantity -= consume
-                    lot.save(update_fields=["quantity"])
-                    remaining -= consume
-                    consumed_lots.append(
-                        {
-                            "lot_number": lot.lot_number or None,
-                            "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                            "quantity": consume,
-                        }
-                    )
-
+            consumed_lots = stock.consume_lots(quantity, lot_selections)
             StockConsumption.objects.create(
                 stock=stock,
                 consumed_by=request.user,
@@ -247,14 +174,17 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             .prefetch_related(latest_entry, "shared_with")
         )
 
+    def get_permissions(self):
+        if self.action in ("update", "partial_update", "destroy"):
+            return [IsAuthenticated(), IsOwner()]
+        return super().get_permissions()
+
     def perform_create(self, serializer):
         routine = serializer.save(user=self.request.user)
         logger.info("Routine %r created (user %s).", routine.name, self.request.user.username)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.user != request.user:
-            return Response({"detail": "Only the owner can edit this routine."}, status=status.HTTP_403_FORBIDDEN)
         previous_shared = set(instance.shared_with.values_list("pk", flat=True))
         response = super().update(request, *args, **kwargs)
         instance.refresh_from_db()
@@ -267,36 +197,8 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.user != request.user:
-            return Response({"detail": "Only the owner can delete this routine."}, status=status.HTTP_403_FORBIDDEN)
         logger.info("Routine %r deleted (user %s).", instance.name, request.user.username)
         return super().destroy(request, *args, **kwargs)
-
-    @action(detail=True, methods=["get"], url_path="lots-for-selection")
-    def lots_for_selection(self, request, pk=None):
-        """
-        Return available lots grouped (one row per lot, FEFO order).
-
-        Since T063 the frontend derives this list from the cached stock
-        object (`useStockList()` keeps it warm) so marking a routine as
-        done with lot selection works offline without a second request.
-        Retained for backwards compatibility.
-        """
-        routine = self.get_object()
-        if not routine.stock:
-            return Response([])
-
-        lots = routine.stock.lots.filter(quantity__gt=0).order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-        data = [
-            {
-                "lot_id": lot.id,
-                "lot_number": lot.lot_number or None,
-                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                "quantity": lot.quantity,
-            }
-            for lot in lots
-        ]
-        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="log")
     def log(self, request, pk=None):
@@ -341,65 +243,7 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             routine._last_entry_cache = entry
 
             if routine.stock:
-                consumed_lots = []
-
-                if lot_selections is not None:
-                    # Validate total quantity matches stock_usage
-                    total = sum(sel.get("quantity", 0) for sel in lot_selections)
-                    if total != routine.stock_usage:
-                        return Response(
-                            {"lot_selections": "Total quantity must equal stock_usage."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-                    # Validate lot_ids belong to this routine's stock
-                    lot_ids = [sel["lot_id"] for sel in lot_selections]
-                    valid_ids = set(routine.stock.lots.filter(id__in=lot_ids).values_list("id", flat=True))
-                    invalid = set(lot_ids) - valid_ids
-                    if invalid:
-                        return Response(
-                            {"lot_selections": "One or more lot_ids are invalid."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-                    # Decrement specified lots
-                    for sel in lot_selections:
-                        qty = sel["quantity"]
-                        if qty <= 0:
-                            continue
-                        lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=routine.stock)
-                        consume = min(lot.quantity, qty)
-                        lot.quantity -= consume
-                        lot.save(update_fields=["quantity"])
-                        consumed_lots.append(
-                            {
-                                "lot_number": lot.lot_number or None,
-                                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                                "quantity": consume,
-                            }
-                        )
-                else:
-                    # Decrement stock using FEFO (First Expired, First Out)
-                    remaining = routine.stock_usage
-                    for lot in (
-                        routine.stock.lots.select_for_update()
-                        .filter(quantity__gt=0)
-                        .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-                    ):
-                        if remaining <= 0:
-                            break
-                        consume = min(lot.quantity, remaining)
-                        lot.quantity -= consume
-                        lot.save(update_fields=["quantity"])
-                        remaining -= consume
-                        consumed_lots.append(
-                            {
-                                "lot_number": lot.lot_number or None,
-                                "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
-                                "quantity": consume,
-                            }
-                        )
-
+                consumed_lots = routine.stock.consume_lots(routine.stock_usage, lot_selections)
                 entry.consumed_lots = consumed_lots
                 entry.save(update_fields=["consumed_lots"])
                 routine.stock.save(update_fields=["updated_at"])

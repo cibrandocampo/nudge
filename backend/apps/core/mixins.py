@@ -1,7 +1,7 @@
 from datetime import timezone as _dt_timezone
 from email.utils import parsedate_to_datetime
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.response import Response
 
 HEADER_NAME = "If-Unmodified-Since"
@@ -80,3 +80,37 @@ class OptimisticLockingMixin:
         if precondition is not None:
             return precondition
         return super().destroy(request, *args, **kwargs)
+
+
+class SharedWithMixin:
+    """For DRF serializers whose model has `user` (owner) and
+    `shared_with` (M2M to User) fields. Provides:
+
+      - ``validate_shared_with(value)``: ensures every target user is in
+        ``request.user.contacts``. Raises ValidationError otherwise.
+      - ``get_shared_with_details(obj)``: serializes the M2M as a list
+        of ``{id, username, first_name, last_name}`` dicts.
+
+    Both ``Stock`` and ``Routine`` use this; consolidates ~30 LoC.
+    """
+
+    def validate_shared_with(self, value):
+        request = self.context.get("request")
+        if not request:
+            return value
+        contact_ids = set(request.user.contacts.values_list("pk", flat=True))
+        for user in value:
+            if user.pk not in contact_ids:
+                raise serializers.ValidationError(f"User {user.pk} is not in your contacts.")
+        return value
+
+    def get_shared_with_details(self, obj):
+        return [
+            {
+                "id": u.pk,
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+            }
+            for u in obj.shared_with.all()
+        ]

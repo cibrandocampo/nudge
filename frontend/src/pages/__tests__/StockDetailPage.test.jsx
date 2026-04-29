@@ -119,6 +119,7 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     // Typing only '-' keeps qty as empty string in the number input, which
     // parseInt turns into NaN and the handler short-circuits.
     const qtyInput = screen.getByPlaceholderText('0')
@@ -137,6 +138,7 @@ describe('StockDetailPage', () => {
     )
     const { user, container } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     await user.type(screen.getByPlaceholderText('0'), '7')
     const dateInput = container.querySelector('input[type="date"]')
     await user.type(dateInput, '2027-12-31')
@@ -273,6 +275,7 @@ describe('StockDetailPage', () => {
     server.use(http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     await user.type(screen.getByPlaceholderText('0'), '3')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
     await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())

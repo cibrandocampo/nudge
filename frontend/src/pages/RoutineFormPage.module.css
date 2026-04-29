@@ -13,21 +13,6 @@
   gap: 1.25rem;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.label {
-  margin-bottom: 0.1rem;
-}
-
-.hint {
-  font-weight: 400;
-  color: var(--c-muted);
-}
-
 .textarea {
   resize: vertical;
 }

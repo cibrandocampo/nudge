@@ -1,16 +1,14 @@
 /**
  * Build the lot-selection list from a cached Stock object.
  *
- * Mirrors the backend's `lots-for-selection` endpoint
- * (apps/routines/views.py) — FEFO ordering: expiry_date ascending, nulls
- * last, ties broken by created_at. Only lots with `quantity > 0` are
- * included.
+ * FEFO ordering: expiry_date ascending, nulls last, ties broken by
+ * created_at. Only lots with `quantity > 0` are included.
  *
- * The frontend derives this list from the cached stock so the lot
- * selection modal works offline: no extra HTTP call, and the stock's own
- * cache (seeded by `useStockList()` or `useStock(id)`) is the single
- * source of truth. Use `findCachedStock(queryClient, id)` to fetch the
- * stock from whichever cache has it.
+ * Derived from the cached stock so the lot selection modal works offline:
+ * no extra HTTP call, and the stock's own cache (seeded by `useStockList()`
+ * or `useStock(id)`) is the single source of truth. Use
+ * `findCachedStock(queryClient, id)` to fetch the stock from whichever
+ * cache has it.
  */
 export function lotsForSelection(stock) {
   if (!stock || !Array.isArray(stock.lots)) return []
