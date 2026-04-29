@@ -360,9 +360,7 @@ describe('StockDetailPage', () => {
   it('renders the shared-with chips when the owner has shared the stock', async () => {
     const ownedShared = {
       ...stock,
-      shared_with_details: [
-        { id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' },
-      ],
+      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(ownedShared)))
     renderDetail()

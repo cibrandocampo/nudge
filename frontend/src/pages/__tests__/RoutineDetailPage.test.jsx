@@ -537,9 +537,7 @@ describe('RoutineDetailPage — advance button', () => {
     const ownedShared = {
       ...routine,
       is_owner: true,
-      shared_with_details: [
-        { id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' },
-      ],
+      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
     }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(ownedShared)))
     renderDetail()
