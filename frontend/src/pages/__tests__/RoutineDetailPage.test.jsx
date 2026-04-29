@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { clear, list } from '../../offline/queue'
@@ -522,5 +522,30 @@ describe('RoutineDetailPage — advance button', () => {
     await user.click(confirmButtons[confirmButtons.length - 1])
     await waitFor(async () => expect(await list()).toHaveLength(1))
     await clear()
+  })
+
+  it('shows the owner username when the routine is shared with the current user', async () => {
+    const sharedRoutine = { ...routine, is_owner: false, owner_username: 'alice' }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderDetail()
+    await screen.findByText('Take vitamins')
+    expect(screen.getByText('Owner')).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
+
+  it('renders the shared-with chips when the owner has shared the routine', async () => {
+    const ownedShared = {
+      ...routine,
+      is_owner: true,
+      shared_with_details: [
+        { id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' },
+      ],
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(ownedShared)))
+    renderDetail()
+    const block = await screen.findByTestId('shared-with-info')
+    expect(within(block).getByText('Shared with')).toBeInTheDocument()
+    // Read-only chips render the username (not the full display label).
+    expect(within(block).getByText('bob')).toBeInTheDocument()
   })
 })
