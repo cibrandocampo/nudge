@@ -29,6 +29,10 @@
   gap: 0.5rem;
 }
 
+.sharedBlock {
+  margin-bottom: 1.5rem;
+}
+
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
 .lotsCard {
@@ -41,26 +45,17 @@
 .lotsList {
   display: flex;
   flex-direction: column;
+  padding: 0 0.75rem;
 }
 
-/* Local lotRow variant — same layout as shared.lotRow but without the top
- * border on the first row, and with surface bg inherited from .lotsCard. */
+/* Severity highlight overrides on top of shared.cardLotRow.
+ * Composed via cx(shared.cardLotRow, s.lotRow) in JSX so the data-expiring
+ * attribute selector matches the local hashed class. The empty .lotRow
+ * declaration guarantees the class is exported by CSS modules. */
 .lotRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
-  color: var(--c-text-2);
+  /* Marker class — overridden by shared.cardLotRow via cx(); used only as
+   * an attachment point for the [data-expiring] severity rules below. */
 }
-.lotRow + .lotRow {
-  border-top: 1px solid var(--c-border-inner);
-}
-
-/* Tri-state expiry severity (T105). The boolean `data-expiring`
- * attribute became `'reached' | 'soon' | 'none'` so the user sees a
- * visual cue that mirrors the inventory alert blocks: red for lots
- * already past their expiry date, orange for lots within 30 days. */
 .lotRow[data-expiring='reached'] {
   border-left: 3px solid var(--c-danger);
   background: var(--c-border-danger);
@@ -84,25 +79,46 @@
   gap: 0.875rem;
 }
 
-.addLotField {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.addLotField input {
-  width: 100%;
-}
-
-.fieldLabel {
-  font-size: 0.7rem;
-  color: var(--c-text-3);
-  font-weight: 500;
+/* Compact override for inputs inside the addLot form (smaller than the
+ * default `shared.input` to fit the dense lot-add UX). Applied via
+ * cx(shared.input, s.addLotInput) in JSX. */
+.addLotInput {
+  font-size: 0.8rem;
+  padding: 0.5rem 0.65rem;
 }
 
 .submitBtn {
   width: 100%;
   margin-top: 0.25rem;
+}
+
+.addLotActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.addLotActions > button {
+  flex: 1;
+}
+
+.addLotToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--c-border-inner);
+  color: var(--c-text-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+}
+.addLotToggle:hover {
+  background: var(--c-border-inner);
+  color: var(--c-text);
 }
 
 .entryList {

@@ -6,6 +6,7 @@ import EmptyCard from '../components/EmptyCard'
 import Icon from '../components/Icon'
 import LotSelectionModal from '../components/LotSelectionModal'
 import RoutineCard from '../components/RoutineCard'
+import Spinner from '../components/Spinner'
 import { useToast } from '../components/useToast'
 import { useRoutines } from '../hooks/useRoutines'
 import { useDashboard } from '../hooks/useDashboard'
@@ -98,7 +99,7 @@ export default function DashboardPage() {
     await runLog(routineId, lotSelections)
   }
 
-  if (isLoading) return <div className={shared.spinner} data-testid="spinner" />
+  if (isLoading) return <Spinner />
   if (isError) return <p className={shared.muted}>{t('common.error')}</p>
 
   return (

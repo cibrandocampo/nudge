@@ -43,8 +43,8 @@ class UserSerializer(serializers.ModelSerializer):
 class ContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username"]
-        read_only_fields = ["id", "username"]
+        fields = ["id", "username", "first_name", "last_name"]
+        read_only_fields = ["id", "username", "first_name", "last_name"]
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):

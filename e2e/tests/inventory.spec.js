@@ -20,7 +20,7 @@ test.describe('Inventory', () => {
     await page.getByRole('button', { name: '+ New' }).click()
     await expect(page).toHaveURL('/inventory/new')
 
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
     await page.getByRole('button', { name: 'Create' }).click()
 
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
@@ -33,7 +33,7 @@ test.describe('Inventory', () => {
     const name = `Batch test ${Date.now()}`
 
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
 
     const addBatchBtn = page.getByRole('button', { name: 'Add batch' })
     await addBatchBtn.click()
@@ -54,7 +54,7 @@ test.describe('Inventory', () => {
     const name = `Delete item ${Date.now()}`
 
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
     await page.getByRole('button', { name: 'Create' }).click()
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
@@ -70,18 +70,24 @@ test.describe('Inventory', () => {
 
     // Create an empty stock first.
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
     await page.getByRole('button', { name: 'Create' }).click()
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
-    // Detail page still hosts lot CRUD. Fill the add-batch form.
+    // Detail page still hosts lot CRUD. The form is collapsed behind a
+    // toggle button by default — open it first.
+    await page.getByTestId('add-lot-toggle').click()
     await page.getByPlaceholder('0').fill('3')
     await page.getByRole('button', { name: 'Add batch' }).click()
     // Wait for the optimistic lot to settle into the list.
     await expect(page.getByText('3 total', { exact: false })).toBeVisible({ timeout: 10_000 })
 
-    // Delete the lot via the trash icon + confirm.
-    await page.getByTitle('Delete').last().click()
+    // Delete the lot via the trash icon + confirm. Scope the trash icon
+    // to the lot row so we don't hit the top-bar "Delete stock" button
+    // by accident — `getByTitle('Delete').last()` is fragile because
+    // both buttons share the same title prefix.
+    const lotRow = page.locator('[class*="lotRow"]').first()
+    await lotRow.getByRole('button', { name: 'Delete' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
 
     await expect(page.getByText('0 total', { exact: false })).toBeVisible({ timeout: 10_000 })

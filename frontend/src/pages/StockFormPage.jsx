@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { OfflineError } from '../api/errors'
+import FormField from '../components/FormField'
 import Icon from '../components/Icon'
+import QueryHandler from '../components/QueryHandler'
 import ShareWithSection from '../components/ShareWithSection'
 import { useContacts } from '../hooks/useContacts'
 import { useServerReachable } from '../hooks/useServerReachable'
@@ -12,6 +13,7 @@ import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
+import { errorToastMessage } from '../utils/errors'
 import { parseIntSafe } from '../utils/number'
 import shared from '../styles/shared.module.css'
 import s from './StockFormPage.module.css'
@@ -39,7 +41,7 @@ export default function StockFormPage() {
   const { t } = useTranslation()
   const { showToast } = useToast()
 
-  const { data: stock, isLoading: stockLoading, isError: stockError } = useStock(stockId)
+  const { data: stock, isLoading: stockLoading, isError: stockError, error: stockErrorObj } = useStock(stockId)
   const { data: groups = [] } = useStockGroups()
   const { data: contacts = [] } = useContacts()
   const createStock = useCreateStock()
@@ -147,151 +149,152 @@ export default function StockFormPage() {
 
       navigate(`/inventory/${newStockId}`)
     } catch (err) {
-      const message = err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError')
-      setErrors({ submit: message })
+      setErrors({ submit: errorToastMessage(err, t) })
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (isEditing && stockLoading) return <div className={shared.spinner} />
-  if (isEditing && stockError) return <p className={shared.muted}>{t('common.error')}</p>
-
   const disabledCreate = !isEditing && !reachable
 
   return (
-    <div className={s.container}>
-      <div className={s.topBar}>
-        <button type="button" className={s.back} onClick={() => navigate(-1)}>
-          {t('common.backToInventory')}
-        </button>
-        <h1 className={shared.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
-      </div>
-
-      <form onSubmit={handleSubmit} className={s.form} noValidate>
-        <section className={shared.formSection}>
-          <label className={s.field}>
-            <span className={s.fieldLabel}>{t('stockForm.nameLabel')}</span>
-            <input
-              className={shared.input}
-              value={form.name}
-              onChange={field('name')}
-              placeholder={t('stockForm.namePlaceholder')}
-              autoFocus
-            />
-            {errors.name && <span className={shared.error}>{errors.name}</span>}
-          </label>
-
-          <label className={s.field}>
-            <span className={s.fieldLabel}>{t('stockForm.groupLabel')}</span>
-            <select className={shared.input} value={form.group ?? ''} onChange={field('group')}>
-              <option value="">{t('stockForm.groupNone')}</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-
-        <ShareWithSection
-          value={sharedWith}
-          onChange={setSharedWith}
-          contacts={contacts}
-          label={t('stockForm.sharedLabel')}
-        />
-
-        {!isEditing && (
-          <section className={shared.formSection}>
-            <div className={shared.formSectionHeader}>
-              <span className={shared.formSectionTitle}>{t('stockForm.batchesLabel')}</span>
-              <button
-                type="button"
-                className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
-                onClick={addBatch}
-              >
-                <Icon name="plus" size="sm" />
-                <span>{t('stockForm.addBatch')}</span>
-              </button>
-            </div>
-            {batches.length === 0 ? (
-              <p className={shared.helpText}>{t('stockForm.batchesEmpty')}</p>
-            ) : (
-              <ul className={s.batchesList}>
-                {batches.map((b, idx) => (
-                  <li key={b.uid} className={s.batchRow}>
-                    <div className={s.batchFields}>
-                      <label className={s.batchField}>
-                        <span className={s.batchFieldLabel}>{t('stockForm.lotQuantity')}</span>
-                        <input
-                          className={cx(shared.input, s.batchInputQty)}
-                          type="number"
-                          min={1}
-                          value={b.quantity}
-                          onChange={(e) => updateBatch(b.uid, 'quantity', e.target.value)}
-                          aria-label={t('stockForm.batchQuantityAria', { index: idx + 1 })}
-                        />
-                      </label>
-                      <label className={s.batchField}>
-                        <span className={s.batchFieldLabel}>{t('stockForm.lotExpiry')}</span>
-                        <input
-                          className={shared.input}
-                          type="date"
-                          value={b.expiry_date}
-                          onChange={(e) => updateBatch(b.uid, 'expiry_date', e.target.value)}
-                          aria-label={t('stockForm.batchExpiryAria', { index: idx + 1 })}
-                        />
-                      </label>
-                      <label className={cx(s.batchField, s.batchFieldFlex)}>
-                        <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
-                        <input
-                          className={shared.input}
-                          type="text"
-                          value={b.lot_number}
-                          onChange={(e) => updateBatch(b.uid, 'lot_number', e.target.value)}
-                          aria-label={t('stockForm.batchLotAria', { index: idx + 1 })}
-                        />
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      className={cx(shared.btnIcon, shared.btnIconDelete, s.batchRemove)}
-                      onClick={() => removeBatch(b.uid)}
-                      aria-label={t('stockForm.removeBatch', { index: idx + 1 })}
-                      title={t('stockForm.removeBatch', { index: idx + 1 })}
-                    >
-                      <Icon name="x" size="sm" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {errors.batches && <p className={shared.error}>{errors.batches}</p>}
-          </section>
-        )}
-
-        {errors.submit && <p className={shared.error}>{errors.submit}</p>}
-        {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
-
-        <div className={shared.formFooter}>
-          <button
-            type="submit"
-            className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
-            disabled={submitting || disabledCreate}
-            title={disabledCreate ? t('offline.requiresConnection') : undefined}
-          >
-            {submitting ? t('stockForm.saving') : isEditing ? t('stockForm.submitEdit') : t('stockForm.submitCreate')}
+    <QueryHandler
+      isLoading={isEditing && stockLoading}
+      isError={isEditing && stockError}
+      error={stockErrorObj}
+      notFound={isEditing && !stockLoading && !stockError && !stock}
+      notFoundKey="stockDetail.notFound"
+    >
+      <div className={s.container}>
+        <div className={s.topBar}>
+          <button type="button" className={s.back} onClick={() => navigate(-1)}>
+            {t('common.backToInventory')}
           </button>
-          <button
-            type="button"
-            className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
-            onClick={() => navigate(-1)}
-          >
-            {t('stockForm.cancel')}
-          </button>
+          <h1 className={shared.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
         </div>
-      </form>
-    </div>
+
+        <form onSubmit={handleSubmit} className={s.form} noValidate>
+          <section className={shared.formSection}>
+            <FormField label={t('stockForm.nameLabel')} error={errors.name}>
+              <input
+                className={shared.input}
+                value={form.name}
+                onChange={field('name')}
+                placeholder={t('stockForm.namePlaceholder')}
+                autoFocus
+              />
+            </FormField>
+
+            <FormField label={t('stockForm.groupLabel')}>
+              <select className={shared.input} value={form.group ?? ''} onChange={field('group')}>
+                <option value="">{t('stockForm.groupNone')}</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </section>
+
+          <ShareWithSection
+            value={sharedWith}
+            onChange={setSharedWith}
+            contacts={contacts}
+            label={t('stockForm.sharedLabel')}
+          />
+
+          {!isEditing && (
+            <section className={shared.formSection}>
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('stockForm.batchesLabel')}</span>
+                <button
+                  type="button"
+                  className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+                  onClick={addBatch}
+                >
+                  <Icon name="plus" size="sm" />
+                  <span>{t('stockForm.addBatch')}</span>
+                </button>
+              </div>
+              {batches.length === 0 ? (
+                <p className={shared.helpText}>{t('stockForm.batchesEmpty')}</p>
+              ) : (
+                <ul className={s.batchesList}>
+                  {batches.map((b, idx) => (
+                    <li key={b.uid} className={s.batchRow}>
+                      <div className={s.batchFields}>
+                        <label className={s.batchField}>
+                          <span className={s.batchFieldLabel}>{t('stockForm.lotQuantity')}</span>
+                          <input
+                            className={cx(shared.input, s.batchInputQty)}
+                            type="number"
+                            min={1}
+                            value={b.quantity}
+                            onChange={(e) => updateBatch(b.uid, 'quantity', e.target.value)}
+                            aria-label={t('stockForm.batchQuantityAria', { index: idx + 1 })}
+                          />
+                        </label>
+                        <label className={s.batchField}>
+                          <span className={s.batchFieldLabel}>{t('stockForm.lotExpiry')}</span>
+                          <input
+                            className={shared.input}
+                            type="date"
+                            value={b.expiry_date}
+                            onChange={(e) => updateBatch(b.uid, 'expiry_date', e.target.value)}
+                            aria-label={t('stockForm.batchExpiryAria', { index: idx + 1 })}
+                          />
+                        </label>
+                        <label className={cx(s.batchField, s.batchFieldFlex)}>
+                          <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
+                          <input
+                            className={shared.input}
+                            type="text"
+                            value={b.lot_number}
+                            onChange={(e) => updateBatch(b.uid, 'lot_number', e.target.value)}
+                            aria-label={t('stockForm.batchLotAria', { index: idx + 1 })}
+                          />
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        className={cx(shared.btnIcon, shared.btnIconDelete, s.batchRemove)}
+                        onClick={() => removeBatch(b.uid)}
+                        aria-label={t('stockForm.removeBatch', { index: idx + 1 })}
+                        title={t('stockForm.removeBatch', { index: idx + 1 })}
+                      >
+                        <Icon name="x" size="sm" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {errors.batches && <p className={shared.error}>{errors.batches}</p>}
+            </section>
+          )}
+
+          {errors.submit && <p className={shared.error}>{errors.submit}</p>}
+          {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
+
+          <div className={shared.formFooter}>
+            <button
+              type="submit"
+              className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
+              disabled={submitting || disabledCreate}
+              title={disabledCreate ? t('offline.requiresConnection') : undefined}
+            >
+              {submitting ? t('stockForm.saving') : isEditing ? t('stockForm.submitEdit') : t('stockForm.submitCreate')}
+            </button>
+            <button
+              type="button"
+              className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+              onClick={() => navigate(-1)}
+            >
+              {t('stockForm.cancel')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </QueryHandler>
   )
 }

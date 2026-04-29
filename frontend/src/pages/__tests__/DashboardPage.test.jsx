@@ -15,8 +15,8 @@ vi.mock('../../hooks/useServerReachable', () => ({
 const BASE = 'http://localhost/api'
 
 // Stock returned by GET /stock/ for the lot-selection modal tests.
-// T063 replaced the lots-for-selection endpoint with a derivation from the
-// cached stock, so every test that needs the modal must seed the list.
+// The lot list is derived from the cached stock, so every test that
+// needs the modal must seed the list cache.
 const stockForLotSelection = {
   id: 10,
   name: 'Filters',
@@ -361,9 +361,8 @@ describe('DashboardPage', () => {
   })
 
   it('shows error when the stock cache has no lots available for selection', async () => {
-    // T063: the lots-for-selection endpoint is gone from the frontend path.
-    // This test simulates the "cache empty / never fetched" branch by
-    // returning an empty stock list.
+    // Simulates the "cache empty / never fetched" branch by returning an
+    // empty stock list — the lot picker derives lots from the cached stock.
     const dueRoutine = {
       id: 1,
       name: 'Vitamins',

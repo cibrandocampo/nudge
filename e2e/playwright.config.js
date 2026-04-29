@@ -1,9 +1,11 @@
 import { defineConfig } from '@playwright/test'
 
 // Two frontend targets:
-//   - chromium-dev:      Vite dev server (:5173) — HMR, fast iteration.
-//   - chromium-preview:  Vite preview of the production build (:4173) —
+//   - chromium-dev:      Vite dev server on host port 15173 — HMR, fast iteration.
+//   - chromium-preview:  Vite preview of the production build on host port 14173 —
 //     used by offline specs because the SW precaches the full hashed bundle.
+// Dev compose maps these via "1<port>" prefix to avoid clashing with other
+// local projects on the standard 5173/4173/8000 ports.
 // The `BASE_URL` env var still overrides per-project config so manual runs
 // targeting a remote URL keep working.
 const envBase = process.env.BASE_URL
@@ -39,7 +41,7 @@ export default defineConfig({
       name: 'chromium-dev',
       use: {
         browserName: 'chromium',
-        baseURL: envBase ?? 'http://localhost:5173',
+        baseURL: envBase ?? 'http://localhost:15173',
         launchOptions: { args: insecureOriginFlags },
       },
       testIgnore: /offline-.*\.spec\.js/,
@@ -48,7 +50,7 @@ export default defineConfig({
       name: 'chromium-preview',
       use: {
         browserName: 'chromium',
-        baseURL: envBase ?? 'http://localhost:4173',
+        baseURL: envBase ?? 'http://localhost:14173',
         launchOptions: { args: insecureOriginFlags },
       },
       testMatch: /offline-.*\.spec\.js/,

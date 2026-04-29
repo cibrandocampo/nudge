@@ -28,7 +28,7 @@ test.beforeAll(() => {
 
 test.setTimeout(60_000)
 
-test('shared stock in a group is visible to recipient (grouped-stock bug)', async ({ page, context }) => {
+test('shared stock in a group is visible to recipient (grouped-stock bug)', async ({ page, browser }) => {
   // ── 1. Login as admin ──────────────────────────────────────────────────
   await login(page)
   await ensureContact(page, USER2.username)
@@ -58,8 +58,8 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // ── 4. Create a stock item and assign the category inline ──────────────
   await page.getByRole('button', { name: '+ New' }).click()
   await expect(page).toHaveURL('/inventory/new')
-  await page.getByLabel('Name').fill(stockName)
-  await page.getByLabel('Category').selectOption({ label: groupName })
+  await page.getByPlaceholder(/ibuprofen/i).fill(stockName)
+  await page.getByRole('combobox').selectOption({ label: groupName })
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
@@ -103,7 +103,10 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   await groupBox.screenshot({ path: path.join(SCREENSHOTS_DIR, '1-owner-stock-inside-group.png') })
 
   // ── 7. Login as user2 and open inventory ──────────────────────────────
-  const page2 = await context.newPage()
+  // Fresh BrowserContext for the recipient so AuthContext doesn't
+  // hydrate as admin from shared localStorage / IDB.
+  const ctx2 = await browser.newContext()
+  const page2 = await ctx2.newPage()
   await loginAs(page2, USER2.username, USER2.password)
   await page2.getByRole('link', { name: 'Inventory' }).click()
   await expect(page2).toHaveURL('/inventory')
@@ -125,7 +128,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // ── Screenshot 3: user2's full inventory page ─────────────────────────
   await saveScreenshot(page2, '3-user2-full-inventory')
 
-  await page2.close()
+  await ctx2.close()
 
   console.log(`\nScreenshots saved to ${SCREENSHOTS_DIR}/`)
   console.log('  1-owner-inventory-stock-in-group.png  — owner view: stock inside a group')

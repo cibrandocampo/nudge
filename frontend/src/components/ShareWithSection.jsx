@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
 import ShareModal from './ShareModal'
+import SharedWithChips from './SharedWithChips'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './ShareWithSection.module.css'
@@ -59,24 +60,7 @@ export default function ShareWithSection({ value = [], onChange, contacts = [], 
       {selected.length === 0 ? (
         <p className={shared.helpText}>{noContacts ? t('stockForm.sharedNoContacts') : t('stockForm.sharedEmpty')}</p>
       ) : (
-        <div className={shared.formChipsRow}>
-          {selected.map((c) => (
-            <span key={c.id} className={shared.formChip}>
-              <span className={shared.formChipAvatar} aria-hidden="true">
-                {c.username.charAt(0).toUpperCase()}
-              </span>
-              <span>{c.username}</span>
-              <button
-                type="button"
-                className={shared.formChipRemove}
-                onClick={() => remove(c.id)}
-                aria-label={t('stockForm.removeShare', { name: c.username })}
-              >
-                <Icon name="x" size="sm" />
-              </button>
-            </span>
-          ))}
-        </div>
+        <SharedWithChips contacts={selected} onRemove={remove} />
       )}
 
       {open && <ShareModal contacts={contacts} sharedWith={value} onToggle={toggle} onClose={() => setOpen(false)} />}

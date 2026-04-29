@@ -6,6 +6,8 @@ import ConfirmModal from '../components/ConfirmModal'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import LotSelectionModal from '../components/LotSelectionModal'
+import QueryHandler from '../components/QueryHandler'
+import SharedWithChips from '../components/SharedWithChips'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
 import { useRoutine, useRoutineEntries } from '../hooks/useRoutines'
@@ -14,6 +16,7 @@ import { useDeleteRoutine } from '../hooks/mutations/useDeleteRoutine'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
 import cx from '../utils/cx'
+import { errorToastMessage } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
@@ -46,8 +49,8 @@ export default function RoutineDetailPage() {
     setCompleting(true)
     try {
       await logMutation.mutateAsync({ routineId: Number(id), routineName: routine?.name, lotSelections })
-    } catch {
-      showToast({ type: 'error', message: t('common.actionError') })
+    } catch (err) {
+      showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       setCompleting(false)
     }
@@ -90,8 +93,8 @@ export default function RoutineDetailPage() {
         patch: { is_active: !routine.is_active },
         updatedAt: routine.updated_at,
       })
-    } catch {
-      showToast({ type: 'error', message: t('common.actionError') })
+    } catch (err) {
+      showToast({ type: 'error', message: errorToastMessage(err, t) })
     }
   }
 
@@ -103,174 +106,200 @@ export default function RoutineDetailPage() {
         updatedAt: routine.updated_at,
       })
       navigate('/')
-    } catch {
+    } catch (err) {
       setShowDeleteConfirm(false)
-      showToast({ type: 'error', message: t('common.actionError') })
+      showToast({ type: 'error', message: errorToastMessage(err, t) })
     }
   }
 
-  if (routineLoading) return <div className={shared.spinner} data-testid="spinner" />
-  if (routineError) {
-    if (routineErr?.status === 404) return <p className={shared.muted}>{t('routine.detail.notFound')}</p>
-    return <p className={shared.muted}>{t('common.error')}</p>
-  }
-  if (!routine) return <p className={shared.muted}>{t('routine.detail.notFound')}</p>
-
-  const borderClass = !routine.is_due
+  const borderClass = !routine?.is_due
     ? shared.cardBorderSuccess
     : routine.is_overdue
       ? shared.cardBorderDanger
       : shared.cardBorderWarning
 
   return (
-    <div>
-      <div className={shared.topBar}>
-        <Link to="/" className={s.back}>
-          {t('common.backToRoutines')}
-        </Link>
-        <div className={s.topActions}>
-          <Link
-            to={`/history?type=routines&routine=${routine.id}`}
-            className={cx(shared.btnAdd, shared.btnAddSecondary)}
-            aria-label={t('routine.detail.viewAll')}
-            title={t('routine.detail.viewAll')}
-          >
-            <Icon name="history" />
-          </Link>
-          <button
-            type="button"
-            className={cx(shared.btnAdd, shared.btnAddSecondary)}
-            onClick={toggleActive}
-            aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-            title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-          >
-            <Icon name={routine.is_active ? 'pause' : 'play'} />
-          </button>
-          <button
-            type="button"
-            className={cx(shared.btnAdd, shared.btnAddDanger)}
-            onClick={() => setShowDeleteConfirm(true)}
-            aria-label={t('routine.detail.delete')}
-            title={t('routine.detail.delete')}
-          >
-            <Icon name="trash" />
-          </button>
-          <Link
-            to={`/routines/${id}/edit`}
-            className={shared.btnAdd}
-            aria-label={t('routine.detail.edit')}
-            title={t('routine.detail.edit')}
-          >
-            <Icon name="pencil" />
-          </Link>
-        </div>
-      </div>
-
-      <h1 className={s.title}>
-        {routine.name}
-        <SyncStatusBadge resourceKey={`routine:${routine.id}`} />
-      </h1>
-      {routine.description && <p className={s.description}>{routine.description}</p>}
-
-      <div className={cx(shared.card, borderClass, s.meta)}>
-        <div className={s.metaRow}>
-          <span className={s.metaLabel}>{t('routine.detail.interval')}</span>
-          <span className={s.metaValue}>{formatInterval(routine.interval_hours, t)}</span>
-        </div>
-        <div className={s.metaRow}>
-          <span className={s.metaLabel}>{t('routine.detail.status')}</span>
-          <span className={s.metaValue}>
-            {routine.is_active ? t('routine.detail.active') : t('routine.detail.inactive')}
-          </span>
-        </div>
-        <div className={s.metaRow}>
-          <span className={s.metaLabel}>{t('routine.detail.nextDue')}</span>
-          <span className={s.metaValue}>
-            {routine.next_due_at
-              ? `${formatRelativeTime(routine.next_due_at)} · ${formatAbsoluteDate(routine.next_due_at)}`
-              : t('time.dueNow')}
-          </span>
-        </div>
-        {routine.stock_name && (
-          <div className={s.metaRow}>
-            <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
-            <span className={s.metaValue}>
-              {t('routine.detail.stockUsage', {
-                qty: routine.stock_quantity,
-                name: routine.stock_name,
-                usage: routine.stock_usage,
-              })}
-            </span>
+    <QueryHandler
+      isLoading={routineLoading}
+      isError={routineError}
+      error={routineErr}
+      notFound={!routineLoading && !routineError && !routine}
+      notFoundKey="routine.detail.notFound"
+    >
+      {routine && (
+        <div>
+          <div className={shared.topBar}>
+            <Link to="/" className={s.back}>
+              {t('common.backToRoutines')}
+            </Link>
+            <div className={s.topActions}>
+              <Link
+                to={`/history?type=routines&routine=${routine.id}`}
+                className={cx(shared.btnAdd, shared.btnAddSecondary)}
+                aria-label={t('routine.detail.viewAll')}
+                title={t('routine.detail.viewAll')}
+              >
+                <Icon name="history" />
+              </Link>
+              <button
+                type="button"
+                className={cx(shared.btnAdd, routine.is_active ? shared.btnAddDanger : shared.btnAddSuccess)}
+                onClick={toggleActive}
+                aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+                title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+              >
+                <Icon name={routine.is_active ? 'pause' : 'play'} />
+              </button>
+              <button
+                type="button"
+                className={cx(shared.btnAdd, shared.btnAddDanger)}
+                onClick={() => setShowDeleteConfirm(true)}
+                aria-label={t('routine.detail.delete')}
+                title={t('routine.detail.delete')}
+              >
+                <Icon name="trash" />
+              </button>
+              <Link
+                to={`/routines/${id}/edit`}
+                className={shared.btnAdd}
+                aria-label={t('routine.detail.edit')}
+                title={t('routine.detail.edit')}
+              >
+                <Icon name="pencil" />
+              </Link>
+            </div>
           </div>
-        )}
-      </div>
 
-      {routine.is_due && (
-        <button
-          className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
-          onClick={markDone}
-          disabled={completing}
-        >
-          {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
-        </button>
-      )}
+          <h1 className={s.title}>
+            {routine.name}
+            <SyncStatusBadge resourceKey={`routine:${routine.id}`} />
+          </h1>
+          {routine.description && <p className={s.description}>{routine.description}</p>}
 
-      {!routine.is_due && routine.is_active && (
-        <button
-          className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
-          onClick={() => setShowAdvanceConfirm(true)}
-          disabled={completing}
-        >
-          {t('routine.detail.advance')}
-        </button>
-      )}
-
-      {entries.length > 0 && (
-        <section className={s.section}>
-          <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
-          <div className={s.entryList}>
-            {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(({ dateLabel, items }) => (
-              <section key={dateLabel} className={s.dayGroup}>
-                <p className={s.dayHeader}>{dateLabel}</p>
-                <div className={s.dayList}>
-                  {items.map((entry) => (
-                    <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
-                  ))}
+          <div className={cx(shared.card, borderClass, s.meta)}>
+            <div className={s.metaRow}>
+              <span className={s.metaLabel}>{t('routine.detail.interval')}</span>
+              <span className={s.metaValue}>{formatInterval(routine.interval_hours, t)}</span>
+            </div>
+            <div className={s.metaRow}>
+              <span className={s.metaLabel}>{t('routine.detail.status')}</span>
+              <span className={cx(s.metaValue, s.statusValue)}>
+                <span className={cx(shared.dot, routine.is_active ? shared.dotSuccess : shared.dotDanger)} />
+                {routine.is_active ? t('routine.detail.active') : t('routine.detail.inactive')}
+              </span>
+            </div>
+            <div className={s.metaRow}>
+              <span className={s.metaLabel}>{t('routine.detail.nextDue')}</span>
+              <span className={s.metaValue}>
+                {routine.next_due_at
+                  ? `${formatRelativeTime(routine.next_due_at)} · ${formatAbsoluteDate(routine.next_due_at)}`
+                  : t('time.dueNow')}
+              </span>
+            </div>
+            {routine.stock_name && (
+              <>
+                <div className={s.metaRow}>
+                  <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
+                  <span className={s.metaValue}>
+                    {t('routine.detail.stockValue', {
+                      qty: routine.stock_quantity,
+                      name: routine.stock_name,
+                    })}
+                  </span>
                 </div>
-              </section>
-            ))}
+                <div className={s.metaRow}>
+                  <span className={s.metaLabel}>{t('routine.detail.perLog')}</span>
+                  <span className={s.metaValue}>
+                    {routine.stock_usage} {t('common.unit')}
+                  </span>
+                </div>
+              </>
+            )}
+            {routine.is_owner === false && routine.owner_username && (
+              <div className={s.metaRow}>
+                <span className={s.metaLabel}>{t('sharing.owner')}</span>
+                <span className={s.metaValue}>{routine.owner_username}</span>
+              </div>
+            )}
           </div>
-        </section>
-      )}
 
-      {showDeleteConfirm && (
-        <ConfirmModal
-          message={t('routine.detail.confirmDelete', { name: routine.name })}
-          onConfirm={confirmDelete}
-          onCancel={() => setShowDeleteConfirm(false)}
-          confirmLabel={t('routine.detail.delete')}
-        />
+          {routine.is_owner !== false && routine.shared_with_details?.length > 0 && (
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+              </div>
+              <SharedWithChips contacts={routine.shared_with_details} />
+            </section>
+          )}
+
+          {routine.is_due && (
+            <button
+              className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
+              onClick={markDone}
+              disabled={completing}
+            >
+              {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
+            </button>
+          )}
+
+          {!routine.is_due && routine.is_active && (
+            <button
+              className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
+              onClick={() => setShowAdvanceConfirm(true)}
+              disabled={completing}
+            >
+              {t('routine.detail.advance')}
+            </button>
+          )}
+
+          {entries.length > 0 && (
+            <section className={s.section}>
+              <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
+              <div className={s.entryList}>
+                {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(({ dateLabel, items }) => (
+                  <section key={dateLabel} className={s.dayGroup}>
+                    <p className={s.dayHeader}>{dateLabel}</p>
+                    <div className={s.dayList}>
+                      {items.map((entry) => (
+                        <HistoryEntryCard key={entry.id} entry={entry} showTitle={false} compact />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {showDeleteConfirm && (
+            <ConfirmModal
+              message={t('routine.detail.confirmDelete', { name: routine.name })}
+              onConfirm={confirmDelete}
+              onCancel={() => setShowDeleteConfirm(false)}
+              confirmLabel={t('routine.detail.delete')}
+            />
+          )}
+          {showAdvanceConfirm && (
+            <ConfirmModal
+              message={t('routine.detail.advanceConfirm')}
+              onConfirm={() => {
+                setShowAdvanceConfirm(false)
+                markDone()
+              }}
+              onCancel={() => setShowAdvanceConfirm(false)}
+              confirmLabel={t('routine.detail.advance')}
+            />
+          )}
+          {lotModal && (
+            <LotSelectionModal
+              routine={routine}
+              lots={lotModal.lots}
+              onConfirm={handleLotConfirm}
+              onCancel={() => setLotModal(null)}
+            />
+          )}
+        </div>
       )}
-      {showAdvanceConfirm && (
-        <ConfirmModal
-          message={t('routine.detail.advanceConfirm')}
-          onConfirm={() => {
-            setShowAdvanceConfirm(false)
-            markDone()
-          }}
-          onCancel={() => setShowAdvanceConfirm(false)}
-          confirmLabel={t('routine.detail.advance')}
-        />
-      )}
-      {lotModal && (
-        <LotSelectionModal
-          routine={routine}
-          lots={lotModal.lots}
-          onConfirm={handleLotConfirm}
-          onCancel={() => setLotModal(null)}
-        />
-      )}
-    </div>
+    </QueryHandler>
   )
 }
 

@@ -40,8 +40,11 @@ test.describe('Settings › Contacts', () => {
     await searchInput.fill(SEED.admin.username)
 
     // Listbox opens; the admin user appears as an option. The
-    // Combobox uses an `option` role per row.
-    const adminOption = page.getByRole('option', { name: SEED.admin.username, exact: true })
+    // Combobox uses an `option` role per row. Each option's accessible
+    // name is `displayLabel(user)` — "First Last (username)" when names
+    // exist, plain `username` otherwise — so match by substring on the
+    // username instead of an exact equality.
+    const adminOption = page.getByRole('option', { name: new RegExp(`\\b${SEED.admin.username}\\b`) })
     await expect(adminOption).toBeVisible({ timeout: 3_000 })
     await adminOption.click()
 

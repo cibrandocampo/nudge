@@ -99,7 +99,7 @@ test-e2e:         ## Run Playwright e2e tests (reads credentials from .env)
 	docker run --rm --network host \
 		-e E2E_USERNAME=admin \
 		-e E2E_PASSWORD=$(E2E_PASSWORD) \
-		-e BASE_URL=http://localhost:5173 \
+		-e BASE_URL=http://localhost:15173 \
 		nudge-e2e npx playwright test
 
 # ── Lint & format ─────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ screenshots:  ## Regenerate docs/screenshots/*.png against the running dev stack
 		-e DEMO_USERNAME=cibran \
 		-e DEMO_USER2_USERNAME=maria \
 		-e DEMO_PASSWORD=$(DEMO_USER_PASSWORD) \
-		-e BASE_URL=http://localhost:5173 \
+		-e BASE_URL=http://localhost:15173 \
 		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
 		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'
 

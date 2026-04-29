@@ -60,7 +60,7 @@ describe('StockFormPage — create', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Paracetamol')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Paracetamol')
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
@@ -90,7 +90,7 @@ describe('StockFormPage — create', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Ibuprofen')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Ibuprofen')
     // Add three batches.
     const addBatchBtn = screen.getByRole('button', { name: 'Add batch' })
     await user.click(addBatchBtn)
@@ -127,7 +127,7 @@ describe('StockFormPage — create', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'X')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'X')
     const addBatchBtn = screen.getByRole('button', { name: 'Add batch' })
     await user.click(addBatchBtn)
     await user.click(addBatchBtn)
@@ -149,7 +149,7 @@ describe('StockFormPage — create', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Bad')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Bad')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
     const qtyInputs = screen.getAllByLabelText(/Batch \d+ quantity/)
@@ -182,7 +182,7 @@ describe('StockFormPage — create', () => {
     ])
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Water filters')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Water filters')
     await user.click(screen.getByRole('button', { name: /Share with/ }))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByText('alice'))
@@ -222,7 +222,7 @@ describe('StockFormPage — create error paths', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'NoId')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'NoId')
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
@@ -252,7 +252,7 @@ describe('StockFormPage — create error paths', () => {
     mockContacts()
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Partial')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Partial')
     const addBatchBtn = screen.getByRole('button', { name: 'Add batch' })
     await user.click(addBatchBtn)
     await user.click(addBatchBtn)
@@ -284,7 +284,7 @@ describe('StockFormPage — create error paths', () => {
     mockContacts([{ id: 2, username: 'alice' }])
 
     const { user } = renderCreate()
-    await user.type(screen.getByLabelText('Name'), 'Share')
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Share')
     await user.click(screen.getByRole('button', { name: /Share with/ }))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByText('alice'))
