@@ -11,30 +11,38 @@
 <style>
   /* Palette mirrors frontend/src/index.css (zinc neutrals + yellow accent). */
 
-  /* Light mode */
+  /* Light mode — palette mirrors frontend/src/index.css:
+   *   --c-primary:        #454961 (slate-blue)
+   *   --c-primary-hover:  #5a5f7d
+   *   --c-brand:          #fcd34d  (yellow)
+   *   --c-brand-text:     #78350f  (dark amber on yellow)
+   *   --c-shared:         #4a56a1  (richer blue, used as link/selection accent)
+   *   --c-text:           #454961  (matches primary)
+   *   --c-danger:         #ef4444
+   */
   :root, html[data-theme="light"] {
-    --primary: #18181b;
-    --secondary: #27272a;
+    --primary: #454961;
+    --secondary: #5a5f7d;
     --accent: #fcd34d;
     --primary-fg: #ffffff;
 
-    --header-bg: #18181b;
+    --header-bg: #454961;
     --header-color: #ffffff;
     --header-branding-color: #ffffff;
     --header-link-color: #ffffff;
 
-    --breadcrumbs-fg: #3f3f46;
-    --breadcrumbs-link-fg: #09090b;
+    --breadcrumbs-fg: #6c7188;
+    --breadcrumbs-link-fg: #454961;
     --breadcrumbs-bg: #f4f4f5;
 
-    --link-fg: #09090b;
-    --link-hover-color: #27272a;
-    --link-selected-fg: #18181b;
+    --link-fg: #4a56a1;
+    --link-hover-color: #454961;
+    --link-selected-fg: #454961;
 
     --body-bg: #fafafa;
-    --body-fg: #09090b;
-    --body-quiet-color: #3f3f46;
-    --body-loud-color: #09090b;
+    --body-fg: #454961;
+    --body-quiet-color: #6c7188;
+    --body-loud-color: #0a0a0a;
 
     --darkened-bg: #f4f4f5;
     --selected-bg: #fef3c7;
@@ -46,14 +54,14 @@
     --module-bg: #fcd34d;
     --module-fg: #78350f;
 
-    --button-bg: #18181b;
+    --button-bg: #454961;
     --button-fg: #ffffff;
-    --button-hover-bg: #27272a;
-    --default-button-bg: #18181b;
-    --default-button-hover-bg: #27272a;
+    --button-hover-bg: #5a5f7d;
+    --default-button-bg: #454961;
+    --default-button-hover-bg: #5a5f7d;
 
-    --close-button-bg: #71717a;
-    --close-button-hover-bg: #3f3f46;
+    --close-button-bg: #6c7188;
+    --close-button-hover-bg: #454961;
     --delete-button-bg: #ef4444;
     --delete-button-hover-bg: #dc2626;
 

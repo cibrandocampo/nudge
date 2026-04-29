@@ -50,6 +50,13 @@
   min-width: 0; /* allow the value to shrink + wrap inside its column */
 }
 
+.statusValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
 .primaryAction {
   width: 100%;
   padding: 0.75rem;
@@ -59,6 +66,10 @@
 }
 
 .section {
+  margin-bottom: 1.5rem;
+}
+
+.sharedBlock {
   margin-bottom: 1.5rem;
 }
 

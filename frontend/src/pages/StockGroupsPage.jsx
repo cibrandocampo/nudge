@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import AlertBanner from '../components/AlertBanner'
 import ConfirmModal from '../components/ConfirmModal'
 import Icon from '../components/Icon'
+import Spinner from '../components/Spinner'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useStockGroups } from '../hooks/useStock'
 import { useCreateStockGroup } from '../hooks/mutations/useCreateStockGroup'
@@ -133,7 +134,7 @@ export default function StockGroupsPage() {
       )}
 
       {isLoading ? (
-        <div className={shared.spinner} data-testid="spinner" />
+        <Spinner />
       ) : orderedGroups.length === 0 ? (
         <p className={s.empty}>{t('stockGroups.empty')}</p>
       ) : (

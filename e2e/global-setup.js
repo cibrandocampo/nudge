@@ -1,9 +1,10 @@
 export default async function globalSetup() {
   // Seed runs against the backend regardless of which frontend port tests
-  // use. Swap any `:<port>` suffix with `:8000` so the helper works for both
-  // the dev (5173) and preview (4173) URLs that Playwright projects target.
-  const base = process.env.BASE_URL ?? 'http://localhost:5173'
-  const apiBase = base.replace(/:\d+(?=\b|\/|$)/, ':8000')
+  // use. Swap any `:<port>` suffix with the backend host port so the helper
+  // works for the dev (15173) and preview (14173) URLs that Playwright
+  // projects target. Dev compose maps backend to host port 18000.
+  const base = process.env.BASE_URL ?? 'http://localhost:15173'
+  const apiBase = base.replace(/:\d+(?=\b|\/|$)/, ':18000')
   const res = await fetch(`${apiBase}/api/internal/e2e-seed/`, { method: 'POST' })
   if (res.status !== 204) {
     throw new Error(

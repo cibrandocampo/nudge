@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import DateRangePicker from '../components/DateRangePicker'
 import HistoryEntryCard from '../components/HistoryEntryCard'
+import Spinner from '../components/Spinner'
 import { useEntries, useStockConsumptions } from '../hooks/useEntries'
 import { useRoutines } from '../hooks/useRoutines'
 import { useStockList } from '../hooks/useStock'
@@ -202,7 +203,7 @@ export default function HistoryPage() {
       </div>
 
       {loading ? (
-        <div className={shared.spinner} data-testid="spinner" />
+        <Spinner />
       ) : error ? (
         <p className={shared.muted}>{t('common.error')}</p>
       ) : isEmpty ? (

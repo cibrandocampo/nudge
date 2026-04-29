@@ -355,6 +355,18 @@ describe('SettingsPage', () => {
     expect(screen.getByText('charlie')).toBeInTheDocument()
   })
 
+  it('renders contact full name plus username when first/last name are set', async () => {
+    server.use(
+      http.get(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json([{ id: 10, username: 'alice', first_name: 'Alice', last_name: 'Liddell' }]),
+      ),
+    )
+    renderWithProviders(<SettingsPage />)
+    const list = await screen.findByTestId('contacts-list')
+    expect(within(list).getByText('Alice Liddell')).toBeInTheDocument()
+    expect(within(list).getByText('(alice)')).toBeInTheDocument()
+  })
+
   it('search shows results', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
     await screen.findByText('Contacts')

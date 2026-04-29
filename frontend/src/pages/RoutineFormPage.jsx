@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import FormField from '../components/FormField'
 import IntervalPicker from '../components/IntervalPicker'
+import QueryHandler from '../components/QueryHandler'
 import ShareWithSection from '../components/ShareWithSection'
 import { useContacts } from '../hooks/useContacts'
 import { useRoutine } from '../hooks/useRoutines'
@@ -9,8 +11,8 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockList } from '../hooks/useStock'
 import { useCreateRoutine } from '../hooks/mutations/useCreateRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
-import { OfflineError } from '../api/errors'
 import cx from '../utils/cx'
+import { errorToastMessage } from '../utils/errors'
 import { parseIntSafe } from '../utils/number'
 import shared from '../styles/shared.module.css'
 import s from './RoutineFormPage.module.css'
@@ -34,7 +36,12 @@ export default function RoutineFormPage() {
 
   const { data: stocks = [] } = useStockList()
   const { data: contacts = [] } = useContacts()
-  const { data: routine, isLoading: routineLoading, isError: routineError } = useRoutine(isEditing ? id : null)
+  const {
+    data: routine,
+    isLoading: routineLoading,
+    isError: routineError,
+    error: routineErrorObj,
+  } = useRoutine(isEditing ? id : null)
   const createRoutine = useCreateRoutine()
   const updateRoutine = useUpdateRoutine()
   const reachable = useServerReachable()
@@ -117,170 +124,159 @@ export default function RoutineFormPage() {
         navigate(`/routines/${result.id}`)
       }
     } catch (err) {
-      const message = err instanceof OfflineError ? t('offline.actionUnavailable') : t('common.actionError')
-      setErrors({ submit: message })
+      setErrors({ submit: errorToastMessage(err, t) })
     }
   }
-
-  if (isEditing && routineLoading) return <div className={shared.spinner} />
-  if (isEditing && routineError) return <p className={shared.muted}>{t('common.error')}</p>
 
   const saving = createRoutine.isPending || updateRoutine.isPending
   const disabledCreate = !isEditing && !reachable
 
   return (
-    <div>
-      <div className={shared.topBar}>
-        <button type="button" className={s.back} onClick={() => navigate(-1)}>
-          {t('common.backToRoutines')}
-        </button>
-        <h1 className={shared.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
-      </div>
+    <QueryHandler
+      isLoading={isEditing && routineLoading}
+      isError={isEditing && routineError}
+      error={routineErrorObj}
+      notFound={isEditing && !routineLoading && !routineError && !routine}
+      notFoundKey="routine.detail.notFound"
+    >
+      <div>
+        <div className={shared.topBar}>
+          <button type="button" className={s.back} onClick={() => navigate(-1)}>
+            {t('common.backToRoutines')}
+          </button>
+          <h1 className={shared.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
+        </div>
 
-      <form onSubmit={handleSubmit} className={s.form}>
-        {/* Basics */}
-        <section className={shared.formSection}>
-          <Field label={t('routine.form.name')} error={errors.name}>
-            <input
-              className={shared.input}
-              value={form.name}
-              onChange={field('name')}
-              placeholder={t('routine.form.placeholder')}
-              autoFocus
-            />
-          </Field>
-          <Field label={t('routine.form.description')} hint={t('routine.form.optional')}>
-            <textarea
-              className={cx(shared.input, s.textarea)}
-              value={form.description}
-              onChange={field('description')}
-              rows={2}
-            />
-          </Field>
-        </section>
+        <form onSubmit={handleSubmit} className={s.form}>
+          {/* Basics */}
+          <section className={shared.formSection}>
+            <FormField label={t('routine.form.name')} error={errors.name}>
+              <input
+                className={shared.input}
+                value={form.name}
+                onChange={field('name')}
+                placeholder={t('routine.form.placeholder')}
+                autoFocus
+              />
+            </FormField>
+            <FormField label={t('routine.form.description')} hint={t('routine.form.optional')}>
+              <textarea
+                className={cx(shared.input, s.textarea)}
+                value={form.description}
+                onChange={field('description')}
+                rows={2}
+              />
+            </FormField>
+          </section>
 
-        {/* Schedule */}
-        <section className={shared.formSection}>
-          <Field label={t('routine.form.interval')}>
-            <IntervalPicker
-              valueHours={Number(form.interval_hours) || 0}
-              onChange={(hours) => setForm((f) => ({ ...f, interval_hours: hours }))}
-              error={errors.interval_hours}
-            />
-          </Field>
-        </section>
+          {/* Schedule */}
+          <section className={shared.formSection}>
+            <FormField label={t('routine.form.interval')}>
+              <IntervalPicker
+                valueHours={Number(form.interval_hours) || 0}
+                onChange={(hours) => setForm((f) => ({ ...f, interval_hours: hours }))}
+                error={errors.interval_hours}
+              />
+            </FormField>
+          </section>
 
-        {/* Stock tracking — header con toggle iOS-style */}
-        <section className={shared.formSection}>
-          <div className={shared.formSectionHeader}>
-            <span className={shared.formSectionTitle}>{t('routine.form.stockTrackingTitle')}</span>
-            <ToggleSwitch
-              checked={usesStock}
-              onChange={handleToggleStock}
-              ariaLabel={t('routine.form.stockTrackingTitle')}
-            />
-          </div>
-          {usesStock && (
-            <>
-              <Field label={t('routine.form.stockItem')}>
-                <select className={shared.input} value={form.stock} onChange={field('stock')}>
-                  <option value="">{t('routine.form.selectDefault')}</option>
-                  {stocks.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.is_owner === false
-                        ? t('routine.form.sharedStockLabel', {
-                            name: st.name,
-                            qty: st.quantity,
-                            owner: st.owner_username,
-                          })
-                        : `${st.name} (${st.quantity} left)`}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label={t('routine.form.unitsPerLog')}>
-                <input
-                  className={cx(shared.input, s.inputStock)}
-                  type="number"
-                  min={1}
-                  value={form.stock_usage}
-                  onChange={field('stock_usage')}
-                />
-              </Field>
-            </>
-          )}
-        </section>
-
-        {/* Share with */}
-        <ShareWithSection
-          value={sharedWith}
-          onChange={setSharedWith}
-          contacts={contacts}
-          label={t('routine.form.shareLabel')}
-        />
-
-        {/* First completion — create only, header con toggle */}
-        {!isEditing && (
+          {/* Stock tracking — header con toggle iOS-style */}
           <section className={shared.formSection}>
             <div className={shared.formSectionHeader}>
-              <span className={shared.formSectionTitle}>{t('routine.form.firstCompletionTitle')}</span>
+              <span className={shared.formSectionTitle}>{t('routine.form.stockTrackingTitle')}</span>
               <ToggleSwitch
-                checked={lastDoneEnabled}
-                onChange={handleToggleLastDone}
-                ariaLabel={t('routine.form.firstCompletionTitle')}
+                checked={usesStock}
+                onChange={handleToggleStock}
+                ariaLabel={t('routine.form.stockTrackingTitle')}
               />
             </div>
-            {lastDoneEnabled && (
-              <Field label={t('routine.form.firstCompletionWhen')}>
-                <input
-                  className={cx(shared.input, s.lastDoneInput)}
-                  type="datetime-local"
-                  value={lastDoneAt}
-                  max={toLocalDateTimeString(new Date())}
-                  onChange={(e) => setLastDoneAt(e.target.value)}
-                />
-              </Field>
+            {usesStock && (
+              <>
+                <FormField label={t('routine.form.stockItem')}>
+                  <select className={shared.input} value={form.stock} onChange={field('stock')}>
+                    <option value="">{t('routine.form.selectDefault')}</option>
+                    {stocks.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.is_owner === false
+                          ? t('routine.form.sharedStockLabel', {
+                              name: st.name,
+                              qty: st.quantity,
+                              owner: st.owner_username,
+                            })
+                          : `${st.name} (${st.quantity} left)`}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label={t('routine.form.unitsPerLog')}>
+                  <input
+                    className={cx(shared.input, s.inputStock)}
+                    type="number"
+                    min={1}
+                    value={form.stock_usage}
+                    onChange={field('stock_usage')}
+                  />
+                </FormField>
+              </>
             )}
           </section>
-        )}
 
-        {errors.submit && <p className={shared.error}>{errors.submit}</p>}
-        {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
+          {/* Share with */}
+          <ShareWithSection
+            value={sharedWith}
+            onChange={setSharedWith}
+            contacts={contacts}
+            label={t('routine.form.shareLabel')}
+          />
 
-        <div className={shared.formFooter}>
-          <button
-            type="submit"
-            className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
-            disabled={saving || disabledCreate}
-            title={disabledCreate ? t('offline.requiresConnection') : undefined}
-          >
-            {saving ? t('routine.form.saving') : t('routine.form.save')}
-          </button>
-          <button
-            type="button"
-            className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
-            onClick={() => navigate(-1)}
-          >
-            {t('routine.form.cancel')}
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
+          {/* First completion — create only, header con toggle */}
+          {!isEditing && (
+            <section className={shared.formSection}>
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('routine.form.firstCompletionTitle')}</span>
+                <ToggleSwitch
+                  checked={lastDoneEnabled}
+                  onChange={handleToggleLastDone}
+                  ariaLabel={t('routine.form.firstCompletionTitle')}
+                />
+              </div>
+              {lastDoneEnabled && (
+                <FormField label={t('routine.form.firstCompletionWhen')}>
+                  <input
+                    className={cx(shared.input, s.lastDoneInput)}
+                    type="datetime-local"
+                    value={lastDoneAt}
+                    max={toLocalDateTimeString(new Date())}
+                    onChange={(e) => setLastDoneAt(e.target.value)}
+                  />
+                </FormField>
+              )}
+            </section>
+          )}
 
-function Field({ label, children, error, hint }) {
-  return (
-    <div className={s.field}>
-      {label && (
-        <label className={cx(shared.inputLabel, s.label)}>
-          {label}
-          {hint && <span className={s.hint}> · {hint}</span>}
-        </label>
-      )}
-      {children}
-      {error && <p className={shared.error}>{error}</p>}
-    </div>
+          {errors.submit && <p className={shared.error}>{errors.submit}</p>}
+          {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
+
+          <div className={shared.formFooter}>
+            <button
+              type="submit"
+              className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
+              disabled={saving || disabledCreate}
+              title={disabledCreate ? t('offline.requiresConnection') : undefined}
+            >
+              {saving ? t('routine.form.saving') : t('routine.form.save')}
+            </button>
+            <button
+              type="button"
+              className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+              onClick={() => navigate(-1)}
+            >
+              {t('routine.form.cancel')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </QueryHandler>
   )
 }
 

@@ -81,7 +81,7 @@ test.describe('Sharing — Routines', () => {
     await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
   })
 
-  test('shared routine visible to second user', async ({ page, context }) => {
+  test('shared routine visible to second user', async ({ page, browser }) => {
     // Create a routine as admin
     await page.getByRole('link', { name: '+ New routine' }).click()
     const routineName = `Visible to user2 ${Date.now()}`
@@ -114,8 +114,14 @@ test.describe('Sharing — Routines', () => {
       { rid: routineId, contactUsername: USER2.username },
     )
 
-    // Login as second user in a new page
-    const page2 = await context.newPage()
+    // Open the recipient's session in a fresh browser context so the
+    // tab does not inherit admin's localStorage / IDB / cookies. Sharing
+    // the same context (via `context.newPage()`) leaves AuthContext
+    // hydrated as admin even after `loginAs(user2)` because the
+    // persisted query cache and the token live in shared origin
+    // storage.
+    const ctx2 = await browser.newContext()
+    const page2 = await ctx2.newPage()
     await loginAs(page2, USER2.username, USER2.password)
 
     // The shared routine should appear on user2's dashboard
@@ -124,7 +130,7 @@ test.describe('Sharing — Routines', () => {
     // It should show the owner label (admin username)
     await expect(page2.getByText(SEED.admin.username).first()).toBeVisible()
 
-    await page2.close()
+    await ctx2.close()
   })
 })
 
@@ -153,7 +159,7 @@ test.describe('Sharing — Inventory', () => {
     const name = `Shared stock ${Date.now()}`
 
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
 
     // Open share modal, pick USER2, close with Escape.
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
@@ -177,11 +183,11 @@ test.describe('Sharing — Inventory', () => {
     await expect(card.getByTestId('shared-badge')).toBeVisible()
   })
 
-  test('shared stock is visible to the recipient with owner label', async ({ page, context }) => {
+  test('shared stock is visible to the recipient with owner label', async ({ page, browser }) => {
     // Create a stock shared with USER2 as admin.
     const name = `Stock for user2 ${Date.now()}`
     await page.getByRole('button', { name: '+ New' }).click()
-    await page.getByLabel('Name').fill(name)
+    await page.getByPlaceholder(/ibuprofen/i).fill(name)
 
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
@@ -196,8 +202,13 @@ test.describe('Sharing — Inventory', () => {
     ])
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
-    // USER2 logs in on a separate page and visits Inventory.
-    const page2 = await context.newPage()
+    // USER2 logs in on a fresh BrowserContext (separate localStorage /
+    // IDB / cookies) so AuthContext doesn't keep admin's session. With
+    // a shared context, the persisted ['me'] cache + the access token
+    // hydrate as admin before our login form fill applies, and the page
+    // never actually flips to user2.
+    const ctx2 = await browser.newContext()
+    const page2 = await ctx2.newPage()
     await loginAs(page2, USER2.username, USER2.password)
     await page2.getByRole('link', { name: 'Inventory' }).click()
     await expect(page2).toHaveURL('/inventory')
@@ -209,6 +220,6 @@ test.describe('Sharing — Inventory', () => {
     await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
     await expect(sharedCard.getByTestId('shared-badge')).toHaveCount(0)
 
-    await page2.close()
+    await ctx2.close()
   })
 })

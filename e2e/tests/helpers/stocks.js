@@ -6,7 +6,7 @@ import { goToInventory, goToStockDetail } from './navigation.js'
 export async function createStock(page, { name }) {
   await goToInventory(page)
   await page.getByRole('button', { name: '+ New' }).click()
-  await page.getByLabel('Name').fill(name)
+  await page.getByPlaceholder(/ibuprofen/i).fill(name)
   await page.getByRole('button', { name: 'Create' }).click()
   // Create navigates to the detail page — go back to the list before returning.
   await page.waitForURL(/\/inventory\/\d+$/)
@@ -31,6 +31,8 @@ export async function deleteStock(page, stockKeyOrName) {
  */
 export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', lotNumber = '' }) {
   await goToStockDetail(page, stockKeyOrName)
+  // The add-lot form is collapsed by default behind a toggle button.
+  await page.getByTestId('add-lot-toggle').click()
   await page.locator('input[type="number"]').first().fill(String(quantity))
   if (expiryDate) await page.locator('input[type="date"]').first().fill(expiryDate)
   if (lotNumber) await page.getByPlaceholder(/batch id/i).fill(lotNumber)

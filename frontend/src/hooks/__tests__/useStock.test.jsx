@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { clear, list } from '../../offline/queue'
-import { useStock, useStockGroups, useStockList, useStockLots } from '../useStock'
+import { useStock, useStockGroups, useStockList } from '../useStock'
 import { useCreateStock } from '../mutations/useCreateStock'
 import { useUpdateStock } from '../mutations/useUpdateStock'
 import { useDeleteStock } from '../mutations/useDeleteStock'
@@ -78,18 +78,6 @@ describe('stock query hooks', () => {
     const { result } = renderWith(() => useStock(3))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data.name).toBe('Shampoo')
-  })
-
-  it('useStockLots is disabled when stockId is null', () => {
-    const { result } = renderWith(() => useStockLots(null))
-    expect(result.current.fetchStatus).toBe('idle')
-  })
-
-  it('useStockLots fetches lot data', async () => {
-    server.use(http.get(`${BASE}/stock/5/lots-for-selection/`, () => HttpResponse.json([{ lot_id: 1, quantity: 2 }])))
-    const { result } = renderWith(() => useStockLots(5))
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data).toEqual([{ lot_id: 1, quantity: 2 }])
   })
 
   it('useStockGroups unwraps paginated results', async () => {

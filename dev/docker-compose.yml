@@ -5,8 +5,12 @@ services:
     entrypoint: ["sh", "-c"]
     command: ["docker-entrypoint.sh postgres -c log_min_messages=$${POSTGRES_LOG_LEVEL:-warning}"]
     env_file: ../.env
+    # Host ports prefixed with "1" (e.g. 15432 vs 5432) so this dev
+    # compose can coexist with other projects running services on the
+    # standard ports. Internal docker network ports are unchanged —
+    # services still talk to `db:5432`, `redis:6379`, `backend:8000`.
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -22,7 +26,7 @@ services:
     command: sh -c 'redis-server --requirepass "$$REDIS_PASSWORD" --loglevel "$${REDIS_LOG_LEVEL:-debug}"'
     env_file: ../.env
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:16379:6379"
     networks:
       - nudge_net
     healthcheck:
@@ -48,7 +52,7 @@ services:
     volumes:
       - ../backend:/app
     ports:
-      - "8000:8000"
+      - "18000:8000"
     networks:
       - nudge_net
     depends_on:
@@ -85,7 +89,7 @@ services:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
     ports:
-      - "0.0.0.0:5173:5173"
+      - "0.0.0.0:15173:5173"
     networks:
       - nudge_net
     depends_on:
@@ -118,7 +122,7 @@ services:
       - ../frontend:/app
       - frontend_preview_node_modules:/app/node_modules
     ports:
-      - "0.0.0.0:4173:4173"
+      - "0.0.0.0:14173:4173"
     networks:
       - nudge_net
     depends_on:

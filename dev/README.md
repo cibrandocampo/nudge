@@ -38,15 +38,20 @@ The raw `docker compose` commands are documented below for reference.
 make dev-up
 ```
 
-Available services:
+Available services (host ports prefixed with "1" to avoid clashes
+with other local projects on the standard ports):
 
-| Service       | URL                            |
-|---------------|--------------------------------|
-| Backend       | http://localhost:8000          |
-| Frontend      | http://localhost:5173          |
-| Django Admin  | http://localhost:8000/admin    |
-| PostgreSQL    | localhost:5432                 |
-| Redis         | localhost:6379                 |
+| Service       | URL                              |
+|---------------|----------------------------------|
+| Backend       | http://localhost:18000           |
+| Frontend      | http://localhost:15173           |
+| Django Admin  | http://localhost:18000/admin     |
+| PostgreSQL    | localhost:15432                  |
+| Redis         | localhost:16379                  |
+
+Internal docker network ports are unchanged — services still talk
+to `db:5432`, `redis:6379`, `backend:8000`. Only the host-side
+mapping uses the prefixed ports.
 
 The backend runs migrations and creates the admin user automatically on first startup.
 

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { clear, list } from '../../offline/queue'
@@ -400,12 +400,15 @@ describe('RoutineDetailPage', () => {
     expect(nextDueValue).toBeInTheDocument()
   })
 
-  it('shows stock usage with translated format', async () => {
+  it('shows stock summary and per-log usage in separate rows', async () => {
     const { container } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    // "10 × Vitamin D (uses 1 per log)"
-    expect(container.textContent).toMatch(/Vitamin D/)
-    expect(container.textContent).toMatch(/uses 1 per log/)
+    // Stock row: "10 × Vitamin D"
+    expect(container.textContent).toMatch(/10 × Vitamin D/)
+    // Per-log row: separate label "Per log" + value "1 u." (DOM nodes
+    // concatenate without spaces in textContent, so allow optional
+    // whitespace between label and value).
+    expect(container.textContent).toMatch(/Per log\s*1 u\./)
   })
 })
 
@@ -519,5 +522,28 @@ describe('RoutineDetailPage — advance button', () => {
     await user.click(confirmButtons[confirmButtons.length - 1])
     await waitFor(async () => expect(await list()).toHaveLength(1))
     await clear()
+  })
+
+  it('shows the owner username when the routine is shared with the current user', async () => {
+    const sharedRoutine = { ...routine, is_owner: false, owner_username: 'alice' }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderDetail()
+    await screen.findByText('Take vitamins')
+    expect(screen.getByText('Owner')).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
+
+  it('renders the shared-with chips when the owner has shared the routine', async () => {
+    const ownedShared = {
+      ...routine,
+      is_owner: true,
+      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(ownedShared)))
+    renderDetail()
+    const block = await screen.findByTestId('shared-with-info')
+    expect(within(block).getByText('Shared with')).toBeInTheDocument()
+    // Read-only chips render the username (not the full display label).
+    expect(within(block).getByText('bob')).toBeInTheDocument()
   })
 })

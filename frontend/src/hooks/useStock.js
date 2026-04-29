@@ -29,14 +29,6 @@ export function useStock(id) {
   })
 }
 
-export function useStockLots(stockId) {
-  return useQuery({
-    queryKey: ['stock-lots', Number(stockId)],
-    queryFn: () => getJson(`/stock/${stockId}/lots-for-selection/`),
-    enabled: stockId !== undefined && stockId !== null,
-  })
-}
-
 export function useStockGroups() {
   return useQuery({
     queryKey: ['stock-groups'],

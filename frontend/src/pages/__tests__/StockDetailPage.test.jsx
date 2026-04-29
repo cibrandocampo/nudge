@@ -119,6 +119,7 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     // Typing only '-' keeps qty as empty string in the number input, which
     // parseInt turns into NaN and the handler short-circuits.
     const qtyInput = screen.getByPlaceholderText('0')
@@ -137,6 +138,7 @@ describe('StockDetailPage', () => {
     )
     const { user, container } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     await user.type(screen.getByPlaceholderText('0'), '7')
     const dateInput = container.querySelector('input[type="date"]')
     await user.type(dateInput, '2027-12-31')
@@ -273,6 +275,7 @@ describe('StockDetailPage', () => {
     server.use(http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
     await user.type(screen.getByPlaceholderText('0'), '3')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
     await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
@@ -352,5 +355,32 @@ describe('StockDetailPage', () => {
     renderDetail()
     const row = await screen.findByTestId('lot-row')
     expect(row).toHaveAttribute('data-expiring', 'none')
+  })
+
+  it('renders the shared-with chips when the owner has shared the stock', async () => {
+    const ownedShared = {
+      ...stock,
+      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(ownedShared)))
+    renderDetail()
+    const block = await screen.findByTestId('shared-with-info')
+    expect(within(block).getByText('Shared with')).toBeInTheDocument()
+    // Read-only chips render the username (not the full display label).
+    expect(within(block).getByText('bob')).toBeInTheDocument()
+  })
+
+  it('cancel in the add-lot form closes it and clears the qty input', async () => {
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    const qty = screen.getByPlaceholderText('0')
+    await user.type(qty, '7')
+    expect(qty).toHaveValue(7)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    // Form is gone and re-opening it shows an empty qty (state was reset).
+    expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    expect(screen.getByPlaceholderText('0')).toHaveValue(null)
   })
 })

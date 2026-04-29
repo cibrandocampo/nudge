@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  __clearRollbacksForTests,
-  applyRollback,
-  hasRollback,
-  registerRollback,
-} from '../rollbacks'
+import { __clearRollbacksForTests, applyRollback, hasRollback, registerRollback } from '../rollbacks'
 
 describe('registerRollbackHooks side-effect importer', () => {
   it('populates the registry with all 11 hook rollback types', async () => {

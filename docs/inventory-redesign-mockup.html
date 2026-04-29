@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inventory redesign — mockup</title>
+    <style>
+      :root {
+        --c-brand: #fcd34d;
+        --c-primary: #454961;
+        --c-surface: #ffffff;
+        --c-bg: #f9f9fb;
+        --c-text: #454961;
+        --c-text-2: #6c7188;
+        --c-text-3: #a1a1aa;
+        --c-border: #e4e4e7;
+        --c-border-inner: #f4f4f5;
+        --c-success: #22c55e;
+        --c-warning: #ca8a04;
+        --c-danger: #ef4444;
+        --c-shared: #4a56a1;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        color: var(--c-text);
+        background: var(--c-bg);
+        font-size: 15px;
+        line-height: 1.4;
+      }
+
+      .page {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 1rem 1rem 4rem;
+      }
+
+      .topBar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .topBar h1 { font-size: 1.25rem; margin: 0; font-weight: 600; }
+      .topActions { display: flex; gap: 0.5rem; }
+      .btnAdd {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--c-primary);
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .btnAdd.secondary {
+        background: var(--c-surface);
+        color: var(--c-text);
+        border: 1px solid var(--c-border);
+      }
+
+      /* ── Card base ─────────────────────────────────────────────── */
+      .card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-left: 4px solid var(--c-border);
+        border-radius: 10px;
+        padding: 0.75rem 0.875rem;
+        margin-bottom: 0.625rem;
+        cursor: pointer;
+        transition: box-shadow 0.15s ease;
+      }
+      .card:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04); }
+      .cardBorderSuccess { border-left-color: var(--c-success); }
+      .cardBorderWarning { border-left-color: var(--c-warning); }
+      .cardBorderDanger  { border-left-color: var(--c-danger); }
+
+      .cardHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      .cardMeta { flex: 1; min-width: 0; }
+
+      .cardTitle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--c-text);
+      }
+      .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dotSuccess { background: var(--c-success); }
+      .dotWarning { background: var(--c-warning); }
+      .dotDanger  { background: var(--c-danger); }
+
+      .cardSubtitle {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        color: var(--c-text-2);
+        margin-top: 0.2rem;
+      }
+      .stockQty { font-variant-numeric: tabular-nums; }
+      .depletion { color: var(--c-text-3); font-size: 0.8rem; }
+      .depletionWarn   { color: var(--c-warning); }
+      .depletionDanger { color: var(--c-danger); }
+
+      .cardActions {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+      }
+      .btnIcon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--c-border);
+        background: var(--c-surface);
+        color: var(--c-text);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .btnIcon:hover { background: var(--c-border-inner); }
+      .btnIcon.consume .arrow {
+        position: absolute;
+        right: 4px;
+        bottom: 4px;
+        width: 0.7rem;
+        height: 0.7rem;
+        background: var(--c-surface);
+        border-radius: 50%;
+      }
+
+      /* ── Lots list ─────────────────────────────────────────────── */
+      .lots {
+        margin-top: 0.6rem;
+        padding-top: 0.55rem;
+        border-top: 1px dashed var(--c-border-inner);
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .lotRow {
+        display: grid;
+        grid-template-columns: auto 1fr auto auto;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--c-text-2);
+        padding: 0.15rem 0;
+      }
+      .lotIcon {
+        width: 1rem;
+        height: 1rem;
+        color: var(--c-text-2);
+        flex-shrink: 0;
+      }
+      .lotQty {
+        font-variant-numeric: tabular-nums;
+        color: var(--c-text);
+        font-weight: 500;
+      }
+      .lotExpiry { font-size: 0.78rem; color: var(--c-text-3); }
+      .lotExpiry.warn   { color: var(--c-warning); }
+      .lotExpiry.danger { color: var(--c-danger); }
+      .lotNumber {
+        font-size: 0.75rem;
+        color: var(--c-text-3);
+        background: var(--c-border-inner);
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .lotEmpty {
+        font-size: 0.8rem;
+        color: var(--c-text-3);
+        font-style: italic;
+        padding: 0.2rem 0;
+      }
+
+      /* ── Footer (consumption rate) at the bottom of the card ──── */
+      .consumption {
+        margin-top: 0.55rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--c-border-inner);
+        font-size: 0.8rem;
+        color: var(--c-text-3);
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .consumption .own { color: var(--c-text-2); }
+      .consumption .shared { color: var(--c-shared); }
+      .consumption .depletion {
+        margin-left: auto;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: var(--c-text-2);
+      }
+      .consumption .depletion.depletionWarn   { color: var(--c-warning); }
+      .consumption .depletion.depletionDanger { color: var(--c-danger); }
+
+      /* ── Generic icon sizing ───────────────────────────────────── */
+      .icon { width: 1rem; height: 1rem; flex-shrink: 0; }
+      .iconSm { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+
+      /* ── Section labels (mockup-only) ──────────────────────────── */
+      .variantLabel {
+        margin: 1.4rem 0 0.4rem;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--c-text-3);
+        font-weight: 600;
+      }
+      .note {
+        font-size: 0.75rem;
+        color: var(--c-text-3);
+        margin: -0.25rem 0 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Lucide icon sprite -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+      <symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7.5 4.27 9 5.15"/>
+        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+        <path d="m3.3 7 8.7 5 8.7-5"/>
+        <path d="M12 22V12"/>
+      </symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6"/>
+      </symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"/>
+        <path d="m19 12-7 7-7-7"/>
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/>
+        <path d="M12 5v14"/>
+      </symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/>
+        <circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>
+      </symbol>
+    </svg>
+
+    <div class="page">
+      <div class="topBar">
+        <h1>Inventario</h1>
+        <div class="topActions">
+          <button class="btnAdd secondary" title="Grupos">
+            <svg class="icon"><use href="#i-tag"/></svg>
+          </button>
+          <button class="btnAdd" title="Nuevo">
+            <svg class="icon"><use href="#i-plus"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ─────────────────────────────────────────────────────────
+        A1 — consumo SEMANAL (en pie de card)
+      ───────────────────────────────────────────────────────────── -->
+      <div class="variantLabel">A1 · consumo semanal · pie de card</div>
+      <p class="note">
+        Header → lotes → consumo (footer). Daily ratio × 7.
+      </p>
+
+      <!-- Ibuprofeno: consumo propio + compartido, 3 lotes -->
+      <div class="card cardBorderSuccess">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotSuccess"></span>
+              <span>Ibuprofeno 600mg</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">42 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon consume" title="Consumir">
+              <svg class="icon"><use href="#i-package"/></svg>
+              <svg class="arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">20 uds.</span>
+            <span class="lotExpiry">cad. 30 jun</span>
+            <span class="lotNumber">L-A2493</span>
+          </div>
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">14 uds.</span>
+            <span class="lotExpiry warn">cad. 15 may</span>
+            <span class="lotNumber">L-A2510</span>
+          </div>
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">8 uds.</span>
+            <span class="lotExpiry">cad. 02 sep</span>
+            <span class="lotNumber">L-A2538</span>
+          </div>
+        </div>
+
+        <div class="consumption">
+          <span class="own">≈ 3,5/sem</span>
+          <span>+</span>
+          <span class="shared">2/sem compartido</span>
+          <span class="depletion">hasta 12 jul</span>
+        </div>
+      </div>
+
+      <!-- Café molido: low + 1 lote sin caducidad -->
+      <div class="card cardBorderWarning">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotWarning"></span>
+              <span>Café molido</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">3 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon consume" title="Consumir">
+              <svg class="icon"><use href="#i-package"/></svg>
+              <svg class="arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">3 uds.</span>
+            <span class="lotExpiry">—</span>
+            <span class="lotNumber"></span>
+          </div>
+        </div>
+
+        <div class="consumption">
+          <span class="own">≈ 1,5/sem</span>
+          <span class="depletion depletionWarn">hasta 02 may</span>
+        </div>
+      </div>
+
+      <!-- Pilas AA: SIN consumo (sin rutina), 2 lotes con caducidad -->
+      <div class="card cardBorderSuccess">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotSuccess"></span>
+              <span>Pilas AA</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">16 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon consume" title="Consumir">
+              <svg class="icon"><use href="#i-package"/></svg>
+              <svg class="arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">12 uds.</span>
+            <span class="lotExpiry">cad. 12/2028</span>
+            <span class="lotNumber"></span>
+          </div>
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">4 uds.</span>
+            <span class="lotExpiry">cad. 06/2027</span>
+            <span class="lotNumber"></span>
+          </div>
+        </div>
+        <!-- sin footer de consumo: producto sin rutina -->
+      </div>
+
+      <!-- Sal marina: out of stock, sin lotes, con consumo -->
+      <div class="card cardBorderDanger">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotDanger"></span>
+              <span>Sal marina</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">0 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotEmpty">Sin lotes</div>
+        </div>
+
+        <div class="consumption">
+          <span class="own">≈ 0,5/sem</span>
+        </div>
+      </div>
+
+      <!-- ─────────────────────────────────────────────────────────
+        A2 — consumo MENSUAL
+      ───────────────────────────────────────────────────────────── -->
+      <div class="variantLabel">A2 · consumo mensual</div>
+      <p class="note">
+        Daily ratio × 30. Más legible para consumos lentos
+        (sal, detergente), menos preciso en rutinas diarias.
+      </p>
+
+      <div class="card cardBorderSuccess">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotSuccess"></span>
+              <span>Ibuprofeno 600mg</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">42 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon consume" title="Consumir">
+              <svg class="icon"><use href="#i-package"/></svg>
+              <svg class="arrow"><use href="#i-arrow-down"/></svg>
+            </button>
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">20 uds.</span>
+            <span class="lotExpiry">cad. 30 jun</span>
+            <span class="lotNumber">L-A2493</span>
+          </div>
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">14 uds.</span>
+            <span class="lotExpiry warn">cad. 15 may</span>
+            <span class="lotNumber">L-A2510</span>
+          </div>
+          <div class="lotRow">
+            <svg class="lotIcon"><use href="#i-package"/></svg>
+            <span class="lotQty">8 uds.</span>
+            <span class="lotExpiry">cad. 02 sep</span>
+            <span class="lotNumber">L-A2538</span>
+          </div>
+        </div>
+
+        <div class="consumption">
+          <span class="own">≈ 15/mes</span>
+          <span>+</span>
+          <span class="shared">9/mes compartido</span>
+          <span class="depletion">hasta 12 jul</span>
+        </div>
+      </div>
+
+      <div class="card cardBorderDanger">
+        <div class="cardHeader">
+          <div class="cardMeta">
+            <div class="cardTitle">
+              <span class="dot dotDanger"></span>
+              <span>Sal marina</span>
+            </div>
+            <div class="cardSubtitle">
+              <span class="stockQty">0 uds.</span>
+            </div>
+          </div>
+          <div class="cardActions">
+            <button class="btnIcon" title="Detalle">
+              <svg class="icon"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="lots">
+          <div class="lotEmpty">Sin lotes</div>
+        </div>
+
+        <div class="consumption">
+          <span class="own">≈ 2/mes</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from rest_framework import serializers
 from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
@@ -552,10 +553,11 @@ class RoutineSerializerTest(TestCase):
 
 
 class SharedWithValidationTest(TestCase):
-    """Covers the `validate_shared_with` branches in both StockSerializer
-    and RoutineSerializer that are hard to reach from the ViewSet suite:
-    (a) no-request context → pass value through unchanged,
-    (b) non-owner trying to modify → raise ValidationError.
+    """Covers the no-request bail-out branch of `validate_shared_with`
+    in both StockSerializer and RoutineSerializer (inherited from
+    SharedWithMixin). The non-owner enforcement lives at the viewset
+    layer (manual 403 today, `IsOwner` permission post-T128) and is
+    covered end-to-end by SharedRoutineTest / SharedStockTest.
     """
 
     def setUp(self):
@@ -568,31 +570,9 @@ class SharedWithValidationTest(TestCase):
         # the method must pass the value through unchanged.
         self.assertEqual(s.validate_shared_with([]), [])
 
-    def test_stock_shared_with_non_owner_rejected(self):
-        from rest_framework import serializers as drf_serializers
-        from rest_framework.test import APIRequestFactory
-
-        stock = make_stock(self.owner)
-        request = APIRequestFactory().patch("/")
-        request.user = self.other  # not the owner
-        s = StockSerializer(instance=stock, context={"request": request})
-        with self.assertRaises(drf_serializers.ValidationError):
-            s.validate_shared_with([])
-
     def test_routine_shared_with_no_request_returns_value(self):
         s = RoutineSerializer()
         self.assertEqual(s.validate_shared_with([]), [])
-
-    def test_routine_shared_with_non_owner_rejected(self):
-        from rest_framework import serializers as drf_serializers
-        from rest_framework.test import APIRequestFactory
-
-        routine = make_routine(self.owner)
-        request = APIRequestFactory().patch("/")
-        request.user = self.other
-        s = RoutineSerializer(instance=routine, context={"request": request})
-        with self.assertRaises(drf_serializers.ValidationError):
-            s.validate_shared_with([])
 
 
 # ── Stock ViewSet ─────────────────────────────────────────────────────────────
@@ -821,7 +801,7 @@ class StockLotViewSetTest(APITestCase):
         self.assertEqual(res2.data["quantity"], 8)
 
 
-# ── Stock consume / lots-for-selection ───────────────────────────────────────
+# ── Stock consume ────────────────────────────────────────────────────────────
 
 
 class StockConsumeTest(APITestCase):
@@ -921,47 +901,6 @@ class StockConsumeTest(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
         self.assertEqual(response.status_code, 401)
-
-    # ── lots-for-selection endpoint ───────────────────────────────────────────
-
-    def test_lots_for_selection_empty_stock(self):
-        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-
-    def test_lots_for_selection_returns_grouped_lots(self):
-        lot = make_lot(self.stock, quantity=3, lot_number="LOT-1")
-        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["lot_id"], lot.id)
-        self.assertEqual(data[0]["lot_number"], "LOT-1")
-        self.assertEqual(data[0]["quantity"], 3)
-
-    def test_lots_for_selection_fefo_order(self):
-        later = date.today() + timedelta(days=90)
-        soon = date.today() + timedelta(days=10)
-        make_lot(self.stock, quantity=1, lot_number="LATER", expiry_date=later)
-        make_lot(self.stock, quantity=1, lot_number="SOON", expiry_date=soon)
-        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
-        data = response.json()
-        self.assertEqual(data[0]["lot_number"], "SOON")
-        self.assertEqual(data[1]["lot_number"], "LATER")
-
-    def test_lots_for_selection_excludes_zero_quantity_lots(self):
-        make_lot(self.stock, quantity=0, lot_number="EMPTY")
-        make_lot(self.stock, quantity=2, lot_number="FULL")
-        response = self.client.get(f"/api/stock/{self.stock.id}/lots-for-selection/")
-        data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["lot_number"], "FULL")
-        self.assertEqual(data[0]["quantity"], 2)
-
-    def test_lots_for_selection_other_users_stock_returns_404(self):
-        stock = make_stock(self.other)
-        response = self.client.get(f"/api/stock/{stock.id}/lots-for-selection/")
-        self.assertEqual(response.status_code, 404)
 
     # ── requires_lot_selection field ─────────────────────────────────────────
 
@@ -1248,61 +1187,6 @@ class RoutineViewSetTest(APITestCase):
         r = make_routine(self.user, stock=stock)
         response = self.client.get(f"/api/routines/{r.id}/")
         self.assertFalse(response.json()["requires_lot_selection"])
-
-    # ── lots_for_selection action ─────────────────────────────────────────────
-
-    def test_lots_for_selection_returns_grouped_lots(self):
-        """Each lot becomes one row with its quantity."""
-        stock = make_stock(self.user)
-        lot = make_lot(stock, quantity=2, lot_number="LOT-A")
-        r = make_routine(self.user, stock=stock)
-        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["lot_id"], lot.id)
-        self.assertEqual(data[0]["lot_number"], "LOT-A")
-        self.assertEqual(data[0]["quantity"], 2)
-
-    def test_lots_for_selection_fefo_order(self):
-        """Lots are returned in FEFO order (sooner expiry first)."""
-        stock = make_stock(self.user)
-        late = make_lot(stock, quantity=1, expiry_date=date.today() + timedelta(days=120), lot_number="LATE")
-        early = make_lot(stock, quantity=1, expiry_date=date.today() + timedelta(days=30), lot_number="EARLY")
-        r = make_routine(self.user, stock=stock)
-        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
-        data = response.json()
-        self.assertEqual(len(data), 2)
-        self.assertEqual(data[0]["lot_id"], early.id)
-        self.assertEqual(data[1]["lot_id"], late.id)
-
-    def test_lots_for_selection_excludes_zero_quantity(self):
-        """Lots with quantity=0 are excluded."""
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=0, lot_number="EMPTY")
-        make_lot(stock, quantity=3, lot_number="FULL")
-        r = make_routine(self.user, stock=stock)
-        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
-        data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["lot_number"], "FULL")
-        self.assertEqual(data[0]["quantity"], 3)
-
-    def test_lots_for_selection_no_stock_returns_empty(self):
-        """Routine without stock → empty list."""
-        r = make_routine(self.user, stock=None)
-        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-
-    def test_lots_for_selection_no_lot_number_returns_null(self):
-        """Lots without lot_number are served with lot_number: null."""
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=1)
-        r = make_routine(self.user, stock=stock)
-        response = self.client.get(f"/api/routines/{r.id}/lots-for-selection/")
-        data = response.json()
-        self.assertIsNone(data[0]["lot_number"])
 
     # ── log with lot_selections ───────────────────────────────────────────────
 
@@ -2769,3 +2653,113 @@ class ClientCreatedAtTest(APITestCase):
         self.assertEqual(len(entries), 1)
         self.assertIn("client_created_at", entries[0])
         self.assertIsNotNone(entries[0]["client_created_at"])
+
+
+class StockConsumeLotsMethodTests(TestCase):
+    """Unit tests for `Stock.consume_lots()` model method (T126)."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.stock = make_stock(self.user, name="Pills")
+        self.lot1 = make_lot(self.stock, quantity=3, expiry_date=date(2026, 6, 1), lot_number="A")
+        self.lot2 = make_lot(self.stock, quantity=2, expiry_date=date(2026, 12, 31), lot_number="B")
+
+    def test_consume_lots_with_valid_selections(self):
+        """Explicit lot_selections decrement each lot and return one dict per consumed lot."""
+        result = self.stock.consume_lots(
+            quantity=5,
+            lot_selections=[
+                {"lot_id": self.lot1.id, "quantity": 3},
+                {"lot_id": self.lot2.id, "quantity": 2},
+            ],
+        )
+        self.assertEqual(len(result), 2)
+        # Both lots are now depleted; the post_save signal deletes them.
+        self.assertFalse(StockLot.objects.filter(pk=self.lot1.pk).exists())
+        self.assertFalse(StockLot.objects.filter(pk=self.lot2.pk).exists())
+        # Returned dicts carry the canonical shape.
+        self.assertEqual(result[0]["lot_number"], "A")
+        self.assertEqual(result[0]["expiry_date"], "2026-06-01")
+        self.assertEqual(result[0]["quantity"], 3)
+        self.assertEqual(result[1]["lot_number"], "B")
+        self.assertEqual(result[1]["quantity"], 2)
+
+    def test_consume_lots_total_mismatch_raises(self):
+        """Selections summing != quantity raises ValidationError under `lot_selections`."""
+        with self.assertRaises(serializers.ValidationError) as ctx:
+            self.stock.consume_lots(
+                quantity=5,
+                lot_selections=[{"lot_id": self.lot1.id, "quantity": 3}],
+            )
+        self.assertIn("lot_selections", ctx.exception.detail)
+        # No lot was decremented (atomic rollback).
+        self.lot1.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+
+    def test_consume_lots_invalid_lot_id_raises(self):
+        """A lot_id not belonging to this stock raises ValidationError."""
+        other_stock = make_stock(self.user, name="Other")
+        foreign_lot = make_lot(other_stock, quantity=10)
+        with self.assertRaises(serializers.ValidationError) as ctx:
+            self.stock.consume_lots(
+                quantity=1,
+                lot_selections=[{"lot_id": foreign_lot.id, "quantity": 1}],
+            )
+        self.assertIn("lot_selections", ctx.exception.detail)
+        # Original lots untouched.
+        self.lot1.refresh_from_db()
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+        self.assertEqual(self.lot2.quantity, 2)
+
+    def test_consume_lots_fefo_fallback(self):
+        """With lot_selections=None, FEFO consumes the earliest-expiry lot first."""
+        # Add a third lot with no expiry — must be consumed last.
+        no_expiry_lot = make_lot(self.stock, quantity=4, lot_number="C")
+        result = self.stock.consume_lots(quantity=2)
+        self.assertEqual(len(result), 1)
+        # lot1 (2026-06-01) is the earliest expiry, so it's consumed first.
+        self.lot1.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 1)
+        # lot2 and the no-expiry lot are untouched.
+        self.lot2.refresh_from_db()
+        no_expiry_lot.refresh_from_db()
+        self.assertEqual(self.lot2.quantity, 2)
+        self.assertEqual(no_expiry_lot.quantity, 4)
+        self.assertEqual(result[0]["lot_number"], "A")
+        self.assertEqual(result[0]["quantity"], 2)
+
+    def test_consume_lots_fefo_partial(self):
+        """FEFO with quantity > stock total consumes everything available and returns just that."""
+        # Single-lot stock with qty=3, asking for 5.
+        single_stock = make_stock(self.user, name="Single")
+        single_lot = make_lot(single_stock, quantity=3, expiry_date=date(2026, 8, 1))
+        result = single_stock.consume_lots(quantity=5)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["quantity"], 3)
+        # Lot is now depleted (signal deletes it).
+        self.assertFalse(StockLot.objects.filter(pk=single_lot.pk).exists())
+
+    def test_consume_lots_skips_zero_qty_in_selections(self):
+        """A selection with quantity=0 is skipped (no decrement, no entry in result)."""
+        result = self.stock.consume_lots(
+            quantity=3,
+            lot_selections=[
+                {"lot_id": self.lot1.id, "quantity": 3},
+                {"lot_id": self.lot2.id, "quantity": 0},
+            ],
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["lot_number"], "A")
+        # lot2 untouched.
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot2.quantity, 2)
+
+    def test_consume_lots_fefo_zero_quantity_is_noop(self):
+        """FEFO with quantity=0 returns an empty list and does not touch any lot."""
+        result = self.stock.consume_lots(quantity=0)
+        self.assertEqual(result, [])
+        self.lot1.refresh_from_db()
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+        self.assertEqual(self.lot2.quantity, 2)
