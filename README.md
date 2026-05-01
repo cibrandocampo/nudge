@@ -1,8 +1,8 @@
 # Nudge
 
 <p align="center">
-  <a href="https://hub.docker.com/r/cibrandocampo/nudge-backend"><img src="https://img.shields.io/badge/Docker%20Hub-backend-blue?logo=docker" alt="Docker Hub backend"/></a>
-  <a href="https://hub.docker.com/r/cibrandocampo/nudge-frontend"><img src="https://img.shields.io/badge/Docker%20Hub-frontend-blue?logo=docker" alt="Docker Hub frontend"/></a>
+  <a href="https://hub.docker.com/r/cibrandocampo/nudge-backend"><img src="https://img.shields.io/docker/pulls/cibrandocampo/nudge-backend?logo=docker&label=backend%20pulls&color=blue" alt="Docker Hub backend pulls"/></a>
+  <a href="https://hub.docker.com/r/cibrandocampo/nudge-frontend"><img src="https://img.shields.io/docker/pulls/cibrandocampo/nudge-frontend?logo=docker&label=frontend%20pulls&color=blue" alt="Docker Hub frontend pulls"/></a>
   <a href="https://github.com/cibrandocampo/nudge/releases"><img src="https://img.shields.io/github/v/release/cibrandocampo/nudge" alt="GitHub release"/></a>
   <a href="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml"><img src="https://github.com/cibrandocampo/nudge/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://codecov.io/gh/cibrandocampo/nudge"><img src="https://codecov.io/gh/cibrandocampo/nudge/graph/badge.svg" alt="codecov"/></a>
