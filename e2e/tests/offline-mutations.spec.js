@@ -31,26 +31,29 @@ test.describe('offline-mutations', () => {
     await resetSeed(context)
     await freshSession(page, context, { loginAs: 'user1' })
     await waitForServiceWorkerReady(page)
-    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
+    await expect(routineCard(page, 'takeVitaminD')).toBeVisible()
   })
 
   test('mark done online: optimistic removal del Today + persistencia tras reload', async ({ page }) => {
+    // Use `Water cactus` — due, no stock, single click resolves without
+    // firing the lot-picker modal. `takeVitaminD` would open the picker
+    // (Hidroferol multi-lot SN) and the direct Done click would deadlock.
     const todaySection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Today' }) })
     const upcomingSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Upcoming' }) })
-    const takeVitaminsInToday = todaySection.getByTestId('routine-card').filter({ hasText: SEED.routines.takeVitamins })
-    const takeVitaminsInUpcoming = upcomingSection
+    const cactusInToday = todaySection.getByTestId('routine-card').filter({ hasText: SEED.routines.waterCactus })
+    const cactusInUpcoming = upcomingSection
       .getByTestId('routine-card')
-      .filter({ hasText: SEED.routines.takeVitamins })
+      .filter({ hasText: SEED.routines.waterCactus })
 
-    // Starting state: overdue routine lives in Today.
-    await expect(takeVitaminsInToday).toBeVisible()
+    // Starting state: due routine lives in Today.
+    await expect(cactusInToday).toBeVisible()
 
-    await takeVitaminsInToday.getByRole('button', { name: 'Done' }).click()
+    await cactusInToday.getByRole('button', { name: 'Done' }).click()
 
     // Optimistic: the card disappears from Today immediately (<500 ms).
     // `useLogRoutine` filters the entry out of `['dashboard'].due` in its
     // `optimistic()` helper without waiting on the network.
-    await expect(takeVitaminsInToday).toHaveCount(0, { timeout: 500 })
+    await expect(cactusInToday).toHaveCount(0, { timeout: 500 })
 
     // Online → nothing should have landed in the offline queue.
     await expectPendingBadge(page, { count: 0 })
@@ -59,17 +62,17 @@ test.describe('offline-mutations', () => {
     // to the Upcoming section; that proves the mutation actually hit
     // the server (not just the optimistic cache).
     await page.reload()
-    await expect(takeVitaminsInUpcoming).toBeVisible()
-    await expect(takeVitaminsInToday).toHaveCount(0)
+    await expect(cactusInUpcoming).toBeVisible()
+    await expect(cactusInToday).toHaveCount(0)
   })
 
   test('queue persiste tras reload offline y drena al reconectar', async ({ page, context }) => {
-    // Use `SEED.routines.morningStretch` (never started per seed → always
+    // Use `SEED.routines.iplHairRemoval` (never started per seed → always
     // due, no stock). `takeVitamins` is consumed by test 1 in this spec
     // and is no longer due when test 2 runs — can't click Done on it.
     const morningStretch = page
       .getByTestId('routine-card')
-      .filter({ hasText: SEED.routines.morningStretch })
+      .filter({ hasText: SEED.routines.iplHairRemoval })
 
     await goOffline(page, context)
     await expectOfflineBanner(page, { visible: true })
@@ -96,10 +99,10 @@ test.describe('offline-mutations', () => {
   })
 
   test('rename con 422 del servidor revierte la cache y no encola', async ({ page, context }) => {
-    // Rename targets SEED.routines.takeVitamins (the card is still on
+    // Rename targets SEED.routines.takeVitaminD (the card is still on
     // the dashboard even after test 1 moved it to Upcoming; clicking
     // the link navigates to the detail regardless of due state).
-    const card = page.getByTestId('routine-card').filter({ hasText: SEED.routines.takeVitamins })
+    const card = page.getByTestId('routine-card').filter({ hasText: SEED.routines.takeVitaminD })
     await card.first().click()
     await expect(page).toHaveURL(/\/routines\/\d+$/)
     await page.getByRole('link', { name: 'Edit' }).click()
@@ -134,10 +137,10 @@ test.describe('offline-mutations', () => {
     await expectOfflineBanner(page, { visible: false })
 
     // Navigate away and back: the detail page re-reads the cached
-    // routine. If rollback worked, the original `SEED.routines.takeVitamins`
+    // routine. If rollback worked, the original `SEED.routines.takeVitaminD`
     // name is restored.
     await page.goto('/')
-    await expect(page.getByTestId('routine-card').filter({ hasText: SEED.routines.takeVitamins })).toBeVisible()
+    await expect(page.getByTestId('routine-card').filter({ hasText: SEED.routines.takeVitaminD })).toBeVisible()
 
     // Exactly one PATCH was attempted — no implicit retries.
     expect(patchCount).toBe(1)
@@ -147,7 +150,7 @@ test.describe('offline-mutations', () => {
     // Sanity — the dashboard has rendered. The Today section's routine
     // cards are divs (not links), so use the shared `routineCard` helper
     // that targets `data-testid="routine-card"` rather than role=link.
-    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
+    await expect(routineCard(page, 'takeVitaminD')).toBeVisible()
 
     await goOffline(page, context)
     await expectOfflineBanner(page, { visible: true })

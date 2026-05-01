@@ -25,7 +25,7 @@ test.describe('offline-read', () => {
     await waitForServiceWorkerReady(page)
     // The dashboard must render fully before we go offline — otherwise the
     // reload test below cannot fall back to a warm TQ cache.
-    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
+    await expect(routineCard(page, 'takeVitaminD')).toBeVisible()
   })
 
   test('dashboard reload offline mantiene la vista desde caché', async ({ page, context }) => {
@@ -38,7 +38,7 @@ test.describe('offline-read', () => {
     // re-render the dashboard. Any redirect to /login indicates AuthContext
     // evicted the user because /auth/me/ failed (offline-hardening regression).
     await expect(page).toHaveURL('/')
-    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
+    await expect(routineCard(page, 'takeVitaminD')).toBeVisible()
     await expectOfflineBanner(page, { visible: true })
   })
 
@@ -51,7 +51,7 @@ test.describe('offline-read', () => {
     await page.goto('/')
 
     await expect(page).toHaveURL('/')
-    await expect(routineCard(page, 'takeVitamins')).toBeVisible()
+    await expect(routineCard(page, 'takeVitaminD')).toBeVisible()
     await expectOfflineBanner(page, { visible: true })
   })
 
@@ -99,7 +99,7 @@ test.describe('offline-read', () => {
     // Warm: visiting /inventory populates the ['stock'] TQ cache with
     // each stock's lots (incl. Pills' PILL-1/2/3 from the seed).
     await goToInventory(page)
-    await expect(stockCard(page, 'pills')).toBeVisible()
+    await expect(stockCard(page, 'ebastine')).toBeVisible()
 
     await goToDashboard(page)
 
@@ -115,11 +115,11 @@ test.describe('offline-read', () => {
 
     // Medication has Pills with 3 lots (PILL-1/2/3) with SNs and qty > 0
     // → `requires_lot_selection` is true → the lot-selection modal opens.
-    await routineCard(page, 'medication').getByRole('button', { name: 'Done' }).click()
+    await routineCard(page, 'takeAntihistamine').getByRole('button', { name: 'Done' }).click()
 
     const modal = page.getByRole('dialog')
     await expect(modal).toBeVisible()
-    for (const lotNumber of SEED.lots.PILLS) {
+    for (const lotNumber of SEED.lots.EBASTINE_LOTS) {
       await expect(modal.getByText(lotNumber)).toBeVisible()
     }
 

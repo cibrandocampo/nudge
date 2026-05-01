@@ -150,6 +150,28 @@ Every change goes through GitHub Actions with no shortcuts:
 
 A `Makefile` is provided for common tasks — run `make help` to see all targets. See [dev/README.md](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md) for the full development setup, including how to run tests, linters, and install the pre-commit hook.
 
+### Demo seed
+
+A single management command wipes the business tables and rebuilds a deterministic fixture used by both the E2E suite and the public screenshots pipeline:
+
+```bash
+docker compose -f dev/docker-compose.yml exec backend python manage.py seed
+```
+
+The command is destructive — it removes every non-superuser account, every routine, every stock and every history row. The `admin` superuser is preserved. It refuses to run unless `DJANGO_DEBUG=True` (the default in `dev/docker-compose.yml`) **or** `E2E_SEED_ALLOWED=true` is exported. The production `docker-compose.yml` hard-sets both flags to safe values, so this command cannot run against a production deployment without an explicit override.
+
+The same logic is exposed as `POST /api/internal/seed/` (used by `e2e/global-setup.js` to reset state between test runs).
+
+The fixture creates three users — all with the same password (the value of `DEMO_USERS_PASSWORD`, default `change-me`):
+
+| Username | Role |
+|----------|------|
+| `cibran` | Protagonist of every screenshot. Owns 8 of the 10 routines. |
+| `maria`  | Sharing partner. Owns 2 routines (one shared with cibran, one private). |
+| `laura`  | Third mutual contact, no resources (used by the `unshare` E2E spec). |
+
+After seeding, cibran's dashboard shows nine routines (five private, three he shares with maria, one maria shares with him). The full catalogue of stocks, routines, lots, sharing edges and seeded history is documented in the source: [`backend/apps/core/management/commands/seed.py`](https://github.com/cibrandocampo/nudge/blob/main/backend/apps/core/management/commands/seed.py).
+
 ### Documentation
 
 - [Configuration](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md)

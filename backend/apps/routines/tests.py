@@ -1,5 +1,6 @@
 import datetime as dt
 from datetime import date, timedelta
+from math import floor
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -2092,8 +2093,12 @@ class StockDepletionSerializerTest(TestCase):
 
     def _get_stock_data(self, stock):
         """Serialize a stock through the API queryset to get prefetched data."""
-        from django.db.models import Prefetch
+        from datetime import timedelta as _td
 
+        from django.db.models import Prefetch
+        from django.utils import timezone as _tz
+
+        consumptions_window_start = _tz.now() - _td(days=60)
         qs = (
             Stock.objects.filter(pk=stock.pk)
             .select_related("group", "user")
@@ -2104,6 +2109,11 @@ class StockDepletionSerializerTest(TestCase):
                     "routines",
                     queryset=Routine.objects.filter(is_active=True).select_related("user"),
                     to_attr="active_routines",
+                ),
+                Prefetch(
+                    "consumptions",
+                    queryset=StockConsumption.objects.filter(created_at__gte=consumptions_window_start),
+                    to_attr="recent_consumptions",
                 ),
             )
         )
@@ -2194,6 +2204,99 @@ class StockDepletionSerializerTest(TestCase):
         expected = date.today() + timedelta(days=16)
         self.assertEqual(data["estimated_depletion_date"], expected)
 
+    # ── Direct-consumption estimate (T141) ────────────────────────────────
+
+    def _make_consumption(self, stock, days_ago, hours_ago=0, consumed_by=None, quantity=1):
+        """Create a StockConsumption with an explicit `created_at` offset."""
+        return StockConsumption.objects.create(
+            stock=stock,
+            consumed_by=consumed_by,
+            quantity=quantity,
+            created_at=timezone.now() - timedelta(days=days_ago, hours=hours_ago),
+        )
+
+    def test_no_routine_no_direct_consumption_returns_null(self):
+        """Stock without routines and without direct consumptions: all None,
+        is_estimated=False."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        data = self._get_stock_data(stock)
+        self.assertIsNone(data["estimated_depletion_date"])
+        self.assertIsNone(data["daily_consumption_own"])
+        self.assertIsNone(data["daily_consumption_shared"])
+        self.assertFalse(data["depletion_is_estimated"])
+
+    def test_no_routine_only_recent_consumptions_no_trigger(self):
+        """Stock without routines, ≥1u in last 30d but 0u in prev 30d:
+        trigger fails → no estimate."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=20)
+        # 2 consumptions in last 30 days only.
+        self._make_consumption(stock, days_ago=5, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=18, consumed_by=self.alice)
+        data = self._get_stock_data(stock)
+        self.assertIsNone(data["estimated_depletion_date"])
+        self.assertIsNone(data["daily_consumption_own"])
+        self.assertIsNone(data["daily_consumption_shared"])
+        self.assertFalse(data["depletion_is_estimated"])
+
+    def test_no_routine_with_trigger_estimates_depletion(self):
+        """Stock without routines, trigger met (≥1 unit in each half):
+        daily rate = total / 60, depletion calculated, is_estimated=True."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=60)
+        # 2u in last 30d, 1u in prev 30d → 3u total over 60d → 0.05/day.
+        self._make_consumption(stock, days_ago=5, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=18, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=40, consumed_by=self.alice)
+        data = self._get_stock_data(stock)
+        self.assertTrue(data["depletion_is_estimated"])
+        self.assertEqual(data["daily_consumption_own"], 0.05)
+        self.assertIsNone(data["daily_consumption_shared"])
+        # 60 / 0.05 = 1200 days
+        expected = date.today() + timedelta(days=1200)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_routine_plus_direct_consumption_combines(self):
+        """Stock with a daily routine AND trigger met for directs: rates sum,
+        depletion uses combined total, is_estimated=True."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=63)
+        # Routine: 1/day own.
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        # Directs: 3u over 60d → 0.05/day own.
+        self._make_consumption(stock, days_ago=5, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=18, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=40, consumed_by=self.alice)
+        data = self._get_stock_data(stock)
+        self.assertTrue(data["depletion_is_estimated"])
+        self.assertEqual(data["daily_consumption_own"], 1.05)
+        self.assertIsNone(data["daily_consumption_shared"])
+        # 63 / 1.05 = 60 days exact
+        expected = date.today() + timedelta(days=60)
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
+    def test_direct_consumption_split_own_vs_shared(self):
+        """Owner consumes some units, recipient consumes others: split lands
+        on `_own` (owner's units) vs `_shared` (everyone else's)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=120)
+        stock.shared_with.add(self.bob)
+        # Alice (owner): 2u last_month + 1u prev_month → 3u → 0.05/day own.
+        self._make_consumption(stock, days_ago=5, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=18, consumed_by=self.alice)
+        self._make_consumption(stock, days_ago=40, consumed_by=self.alice)
+        # Bob (recipient): 1u last_month + 1u prev_month → 2u → ~0.033/day shared.
+        self._make_consumption(stock, days_ago=10, consumed_by=self.bob)
+        self._make_consumption(stock, days_ago=45, consumed_by=self.bob)
+        data = self._get_stock_data(stock)
+        self.assertTrue(data["depletion_is_estimated"])
+        self.assertEqual(data["daily_consumption_own"], 0.05)
+        self.assertEqual(data["daily_consumption_shared"], 0.03)
+        # Total ≈ 0.083/day; floor(120 / 0.083) = 1440 days
+        expected = date.today() + timedelta(days=floor(120 / (0.05 + 2 / 60)))
+        self.assertEqual(data["estimated_depletion_date"], expected)
+
     def test_api_returns_depletion_fields(self):
         """Verify the fields appear in a real API GET /stock/ response."""
         stock = make_stock(self.alice)
@@ -2208,11 +2311,14 @@ class StockDepletionSerializerTest(TestCase):
         self.assertEqual(response.status_code, 200)
         stock_data = response.json()["results"][0]
         self.assertIn("estimated_depletion_date", stock_data)
+        self.assertIn("depletion_is_estimated", stock_data)
         self.assertIn("daily_consumption_own", stock_data)
         self.assertIn("daily_consumption_shared", stock_data)
         self.assertIn("stock_severity", stock_data)
         self.assertIn("expiry_severity", stock_data)
         self.assertEqual(stock_data["daily_consumption_own"], 1.0)
+        # Routine-only path → not estimated.
+        self.assertFalse(stock_data["depletion_is_estimated"])
         expected = date.today() + timedelta(days=30)
         self.assertEqual(stock_data["estimated_depletion_date"], expected.isoformat())
 

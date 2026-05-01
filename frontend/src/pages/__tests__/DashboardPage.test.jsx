@@ -449,7 +449,7 @@ describe('DashboardPage', () => {
     await clear()
   })
 
-  it('shows owner label on shared routine where user is not owner', async () => {
+  it('surfaces the owner via the recipient-variant shared badge when the user is not the owner', async () => {
     server.use(
       http.get(`${BASE}/dashboard/`, () =>
         HttpResponse.json({
@@ -475,6 +475,8 @@ describe('DashboardPage', () => {
     )
     renderWithProviders(<DashboardPage />)
     await waitFor(() => expect(screen.getByText('Shared routine')).toBeInTheDocument())
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge.getAttribute('data-variant')).toBe('recipient')
+    expect(badge.getAttribute('aria-label')).toContain('alice')
   })
 })

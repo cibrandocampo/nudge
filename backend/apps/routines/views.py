@@ -1,8 +1,10 @@
 import logging
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import F, Prefetch, Q
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
@@ -47,11 +49,19 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             queryset=Routine.objects.filter(is_active=True).select_related("user"),
             to_attr="active_routines",
         )
+        # Mirrors `StockSerializer.DIRECT_CONSUMPTION_WINDOW_DAYS` — kept
+        # locally to avoid a circular import at module load time.
+        consumptions_window_start = timezone.now() - timedelta(days=60)
+        recent_consumptions = Prefetch(
+            "consumptions",
+            queryset=StockConsumption.objects.filter(created_at__gte=consumptions_window_start),
+            to_attr="recent_consumptions",
+        )
         return (
             Stock.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
             .distinct()
             .select_related("group", "user")
-            .prefetch_related("lots", "shared_with", active_routines)
+            .prefetch_related("lots", "shared_with", active_routines, recent_consumptions)
             .order_by("name")
         )
 

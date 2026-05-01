@@ -41,20 +41,20 @@ test.describe('Stock expiry and dedup', () => {
   test('near-expiry lot is flagged on the Vitamin D detail page', async ({ page }) => {
     // Lot rows live on the stock detail page (the inventory card only shows
     // the aggregate quantity + optional alert banner).
-    await goToStockDetail(page, 'vitaminD')
+    await goToStockDetail(page, 'hidroferol')
 
     // VIT-A expires in 7 days → 'soon'. VIT-B expires in 180 days → 'none'.
-    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
+    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_NEAR })
     await expect(vitaRow).toHaveAttribute('data-expiring', 'soon')
 
-    const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_FAR })
+    const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_FAR })
     await expect(vitbRow).toHaveAttribute('data-expiring', 'none')
   })
 
   test('lot without expiry_date is not flagged', async ({ page }) => {
     // Filter cartridge has one lot with no SN and no expiry — nothing
     // to expire, nothing to flag.
-    await goToStockDetail(page, 'filterCartridge')
+    await goToStockDetail(page, 'britaFilter')
     const row = page.getByTestId('lot-row').first()
     await expect(row).toHaveAttribute('data-expiring', 'none')
   })
@@ -63,13 +63,13 @@ test.describe('Stock expiry and dedup', () => {
     // Clicking Consume on a stock card opens the LotPickerModal. The modal's
     // radio list is pre-sorted FEFO and pre-selects the first option, which
     // must be VIT-A (7 days) — not VIT-B (180 days) nor the no-SN lot.
-    const card = stockCard(page, 'vitaminD')
+    const card = stockCard(page, 'hidroferol')
     await card.getByRole('button', { name: 'Consume 1 unit' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     const firstRadio = dialog.getByRole('radio').first()
-    await expect(firstRadio).toContainText(SEED.lots.VITAMIN_D_NEAR_EXPIRY)
+    await expect(firstRadio).toContainText(SEED.lots.HIDROFEROL_NEAR)
 
     // Confirm the pre-selection (VIT-A). LotPickerModal labels the
     // confirm button "Consume 1" (quantity is always 1 from the card).
@@ -78,18 +78,18 @@ test.describe('Stock expiry and dedup', () => {
 
     // Backend records a StockConsumption referencing VIT-A; Stock-detail
     // shows the lot row dropped from 5 → 4.
-    await goToStockDetail(page, 'vitaminD')
-    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
+    await goToStockDetail(page, 'hidroferol')
+    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_NEAR })
     await expect(vitaRow).toContainText(/4\s*u\./)
     // VIT-B (30 u) is untouched — proves the consumption obeyed FEFO.
-    const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_FAR })
+    const vitbRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_FAR })
     await expect(vitbRow).toContainText(/30\s*u\./)
 
     // History confirms the specific lot that was debited.
     await goToHistory(page)
     await page.getByLabel('Type', { exact: true }).selectOption({ label: 'Stock' })
-    await expect(historyEntry(page, { stockKey: 'vitaminD', type: 'consumption' }).first()).toContainText(
-      SEED.lots.VITAMIN_D_NEAR_EXPIRY,
+    await expect(historyEntry(page, { stockKey: 'hidroferol', type: 'consumption' }).first()).toContainText(
+      SEED.lots.HIDROFEROL_NEAR,
     )
   })
 
@@ -97,14 +97,14 @@ test.describe('Stock expiry and dedup', () => {
     // Seed: VIT-A = 5 u at today + 7d. Adding 3 more with exactly the
     // same SN and expiry must bump VIT-A to 8 without spawning a new
     // lot row.
-    await addLot(page, 'vitaminD', {
+    await addLot(page, 'hidroferol', {
       quantity: 3,
       expiryDate: formatExpiryDate(7),
-      lotNumber: SEED.lots.VITAMIN_D_NEAR_EXPIRY,
+      lotNumber: SEED.lots.HIDROFEROL_NEAR,
     })
 
-    await expectLotCount(page, 'vitaminD', 3)
-    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
+    await expectLotCount(page, 'hidroferol', 3)
+    const vitaRow = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_NEAR })
     await expect(vitaRow).toContainText(/8\s*u\./)
   })
 
@@ -112,13 +112,13 @@ test.describe('Stock expiry and dedup', () => {
     // Seed: one lot without SN, 20 u at today + 60d. Same expiry + no
     // SN must merge (the dedup lookup matches on stock + empty SN +
     // expiry, per backend views.py:217).
-    await addLot(page, 'vitaminD', {
+    await addLot(page, 'hidroferol', {
       quantity: 5,
-      expiryDate: formatExpiryDate(SEED.lots.VITAMIN_D_NO_SN_EXPIRY_DAYS),
+      expiryDate: formatExpiryDate(SEED.lots.HIDROFEROL_NO_SN_EXPIRY_DAYS),
       lotNumber: '',
     })
 
-    await expectLotCount(page, 'vitaminD', 3)
+    await expectLotCount(page, 'hidroferol', 3)
     // The row for the merged lot has no SN — locate it by its expiry
     // text (formatted by formatExpiry) and read the qty.
     const rows = page.getByTestId('lot-row')
@@ -129,24 +129,24 @@ test.describe('Stock expiry and dedup', () => {
   test('adding a lot with different SN or expiry creates a new row', async ({ page }) => {
     // Case A: brand-new SN + brand-new expiry → new lot.
     const newSn = uniqueName('VIT-NEW')
-    await addLot(page, 'vitaminD', {
+    await addLot(page, 'hidroferol', {
       quantity: 10,
       expiryDate: formatExpiryDate(30),
       lotNumber: newSn,
     })
-    await expectLotCount(page, 'vitaminD', 4)
+    await expectLotCount(page, 'hidroferol', 4)
 
     // Case B: same SN as VIT-A but different expiry → still new.
     // (Backend dedup matches on (SN + expiry) — both must be equal.)
-    await addLot(page, 'vitaminD', {
+    await addLot(page, 'hidroferol', {
       quantity: 2,
       expiryDate: formatExpiryDate(14),
-      lotNumber: SEED.lots.VITAMIN_D_NEAR_EXPIRY,
+      lotNumber: SEED.lots.HIDROFEROL_NEAR,
     })
-    await expectLotCount(page, 'vitaminD', 5)
+    await expectLotCount(page, 'hidroferol', 5)
 
     // Two distinct VIT-A rows now coexist (different expiries).
-    const vitaRows = page.getByTestId('lot-row').filter({ hasText: SEED.lots.VITAMIN_D_NEAR_EXPIRY })
+    const vitaRows = page.getByTestId('lot-row').filter({ hasText: SEED.lots.HIDROFEROL_NEAR })
     await expect(vitaRows).toHaveCount(2)
   })
 })

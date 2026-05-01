@@ -157,29 +157,38 @@ class OptimisticLockingMixinTest(APITestCase):
         self.assertTrue(Stock.objects.filter(pk=self.stock.pk).exists())
 
 
-# ── seed_e2e management command ─────────────────────────────────────────────
+# ── seed management command ────────────────────────────────────────────────
 
 
 @override_settings(DEBUG=True)
-class SeedE2ECommandTest(TestCase):
-    """Runs the seed and asserts deterministic counts + relationships."""
+class SeedCommandTest(TestCase):
+    """Runs the unified seed and asserts deterministic counts + relationships."""
 
     EXPECTED_ROUTINE_NAMES = {
-        "Take vitamins",
-        "Morning stretch",
-        "Weekly cleaning",
-        "Water filter",
-        "Vitamin D supplement",
-        "Medication",
-        "Pain relief",
+        "Take Vitamin D",
+        "Change pump cannula",
+        "Replace glucose sensor",
+        "Take antihistamine",
+        "Change Brita filter",
+        "Fertilize orchid",
+        "Water cactus",
+        "IPL hair removal",
+        "Descale coffee machine",
+        "Take birth control pill",
     }
 
     EXPECTED_STOCK_NAMES = {
-        "Vitamin D",
-        "Filter cartridge",
-        "Pills",
-        "Ibuprofen",
-        "Personal stock",
+        "Hidroferol drops",
+        "Insulin pump cannulas",
+        "Glucose monitor sensors",
+        "Ibuprofen 600mg",
+        "Paracetamol 1g",
+        "Ebastine",
+        "Biodramina",
+        "Brita filter cartridges",
+        "Orchid fertilizer",
+        "Descaler tablets",
+        "Birth control pills",
     }
 
     def test_creates_expected_fixture(self):
@@ -187,108 +196,183 @@ class SeedE2ECommandTest(TestCase):
         admin = User.objects.create_superuser(username="admin", password="pw")
         doomed = User.objects.create_user(username="doomed", password="pw")
 
-        call_command("seed_e2e")
+        call_command("seed")
 
         self.assertTrue(User.objects.filter(pk=admin.pk).exists())
         self.assertFalse(User.objects.filter(pk=doomed.pk).exists())
 
+        # 3 demo users (cibran/maria/laura) plus the seeded admin = 4 total.
         self.assertEqual(User.objects.filter(is_superuser=False).count(), 3)
-        self.assertEqual(Routine.objects.count(), 7)
-        self.assertEqual(Stock.objects.count(), 5)
-        self.assertEqual(StockLot.objects.count(), 9)
-
-        # Entries live in a range to give headroom if future tweaks shift the
-        # cadence; the ballpark stays stable.
-        entries_total = RoutineEntry.objects.count()
-        self.assertGreaterEqual(entries_total, 70)
-        self.assertLessEqual(entries_total, 100)
-
+        self.assertEqual(Routine.objects.count(), 10)
+        self.assertEqual(Stock.objects.count(), 11)
+        self.assertEqual(StockLot.objects.count(), 16)
+        self.assertEqual(RoutineEntry.objects.count(), 50)
         self.assertEqual(StockConsumption.objects.count(), 6)
 
-        user1 = User.objects.get(username="user1")
-        user2 = User.objects.get(username="user2")
-        user3 = User.objects.get(username="user3")
+        cibran = User.objects.get(username="cibran")
+        maria = User.objects.get(username="maria")
+        laura = User.objects.get(username="laura")
 
-        self.assertIn(user2, user1.contacts.all())
-        self.assertIn(user3, user1.contacts.all())
-        self.assertIn(user3, user2.contacts.all())
+        # All three users are mutual contacts (symmetrical via `contacts.add`).
+        self.assertIn(maria, cibran.contacts.all())
+        self.assertIn(laura, cibran.contacts.all())
+        self.assertIn(laura, maria.contacts.all())
 
-        medication = Routine.objects.get(name="Medication")
-        self.assertIn(user2, medication.shared_with.all())
-        pills = Stock.objects.get(name="Pills")
-        self.assertIn(user2, pills.shared_with.all())
+        # Cibran shares 3 routines with maria; maria shares 1 routine with cibran.
+        for name in ("Change Brita filter", "Fertilize orchid", "Water cactus"):
+            routine = Routine.objects.get(name=name)
+            self.assertEqual(routine.user, cibran)
+            self.assertIn(maria, routine.shared_with.all())
+
+        descale = Routine.objects.get(name="Descale coffee machine")
+        self.assertEqual(descale.user, maria)
+        self.assertIn(cibran, descale.shared_with.all())
+
+        # Brita / Orchid stocks are shared cibran→maria; descaler is maria→cibran.
+        for name in ("Brita filter cartridges", "Orchid fertilizer"):
+            stock = Stock.objects.get(name=name)
+            self.assertEqual(stock.user, cibran)
+            self.assertIn(maria, stock.shared_with.all())
+
+        descaler = Stock.objects.get(name="Descaler tablets")
+        self.assertEqual(descaler.user, maria)
+        self.assertIn(cibran, descaler.shared_with.all())
+
+        # Birth control privacy contract: maria-owned, NOT shared with anyone.
+        bcp_stock = Stock.objects.get(name="Birth control pills")
+        self.assertEqual(bcp_stock.user, maria)
+        self.assertEqual(bcp_stock.shared_with.count(), 0)
+        bcp_routine = Routine.objects.get(name="Take birth control pill")
+        self.assertEqual(bcp_routine.user, maria)
+        self.assertEqual(bcp_routine.shared_with.count(), 0)
 
     def test_routine_and_stock_names_match_spec(self):
-        call_command("seed_e2e")
+        call_command("seed")
         self.assertEqual(set(Routine.objects.values_list("name", flat=True)), self.EXPECTED_ROUTINE_NAMES)
         self.assertEqual(set(Stock.objects.values_list("name", flat=True)), self.EXPECTED_STOCK_NAMES)
 
-    def test_pain_relief_is_blocked_by_depleted_ibuprofen(self):
-        """Pain relief must exist and its ibuprofen stock must sum to 0 units."""
-        call_command("seed_e2e")
-        pain_relief = Routine.objects.get(name="Pain relief")
-        self.assertEqual(pain_relief.stock.name, "Ibuprofen")
-        # quantity property sums all lot quantities; must be 0 so the UI
-        # blocks completion.
-        self.assertEqual(pain_relief.stock.quantity, 0)
-        # The lot itself must still exist (UI renders it as "0 u." with an
-        # empty indicator). bulk_create bypasses the delete-empty-lot signal.
-        self.assertEqual(pain_relief.stock.lots.count(), 1)
-        self.assertEqual(pain_relief.stock.lots.get().lot_number, "IBU-1")
+    def test_change_pump_cannula_is_blocked_by_empty_cannulas(self):
+        """`Change pump cannula` must be vinculated to a stock summing 0 units."""
+        call_command("seed")
+        cannula = Routine.objects.get(name="Change pump cannula")
+        self.assertEqual(cannula.stock.name, "Insulin pump cannulas")
+        # `quantity` sums all lot quantities; must be 0 so the UI blocks Done.
+        self.assertEqual(cannula.stock.quantity, 0)
+        # The lot itself must still exist (bulk_create bypasses delete_empty_lot)
+        # so the UI can render "0 u." instead of "no lots".
+        self.assertEqual(cannula.stock.lots.count(), 1)
+        self.assertEqual(cannula.stock.lots.get().lot_number, "CAN-A")
 
-    def test_vitamin_d_has_three_lots_including_one_without_sn(self):
-        """The dedup test in T037 needs a lot without lot_number + with expiry."""
-        call_command("seed_e2e")
-        vitamin_d = Stock.objects.get(name="Vitamin D")
-        lots = vitamin_d.lots.all()
-        self.assertEqual(lots.count(), 3)
-        # One SN + near expiry, one SN + far expiry, one without SN but with expiry.
+    def test_hidroferol_has_three_lots_for_dedup_tests(self):
+        """`stock-expiry.spec.js` exercises lot-dedup against this stock:
+        two lots with SN (one near expiry, one far) plus one without SN
+        — the dedup paths are by (SN+expiry) and by (no-SN+expiry)."""
+        call_command("seed")
+        hidroferol = Stock.objects.get(name="Hidroferol drops")
+        lots = list(hidroferol.lots.all())
+        self.assertEqual(len(lots), 3)
         sns = {lot.lot_number for lot in lots}
-        self.assertIn("VIT-A", sns)
-        self.assertIn("VIT-B", sns)
-        self.assertIn("", sns)
-        # The empty-SN lot must have an expiry_date (so the "no SN + matching
-        # expiry → merge" dedup test has a concrete target).
-        no_sn = vitamin_d.lots.get(lot_number="")
+        self.assertEqual(sns, {"HID-A", "HID-B", ""})
+        # HID-A is the FEFO front (closest expiry, still valid).
+        hid_a = hidroferol.lots.get(lot_number="HID-A")
+        hid_b = hidroferol.lots.get(lot_number="HID-B")
+        no_sn = hidroferol.lots.get(lot_number="")
+        self.assertLess(hid_a.expiry_date, hid_b.expiry_date)
+        # The no-SN lot must have an expiry_date so the dedup-by-expiry
+        # path has a target.
         self.assertIsNotNone(no_sn.expiry_date)
 
-    def test_never_started_routines_have_no_entries(self):
-        call_command("seed_e2e")
-        for name in ["Morning stretch", "Water filter", "Pain relief"]:
-            routine = Routine.objects.get(name=name)
-            self.assertEqual(
-                routine.entries.count(),
-                0,
-                msg=f"{name} must have 0 entries to represent 'never started'.",
-            )
+    def test_glucose_sensors_is_expiry_reached(self):
+        """Glucose sensors carry the `expiry_severity='reached'` demo case."""
+        call_command("seed")
+        sensors = Stock.objects.get(name="Glucose monitor sensors")
+        self.assertEqual(sensors.lots.count(), 1)
+        lot = sensors.lots.get()
+        self.assertEqual(lot.lot_number, "SEN-OLD")
+        # Expired but still at qty>0 (bulk_create bypasses delete_empty_lot).
+        self.assertGreater(lot.quantity, 0)
+        from datetime import date
+
+        self.assertLess(lot.expiry_date, date.today())
+
+    def test_ebastine_has_three_sn_lots(self):
+        """`offline-read.spec.js` iterates SEED.lots.EBASTINE_LOTS and the
+        FEFO modal needs 3 distinguishable lots with SN."""
+        call_command("seed")
+        ebastine = Stock.objects.get(name="Ebastine")
+        lots = list(ebastine.lots.order_by("expiry_date"))
+        self.assertEqual(len(lots), 3)
+        # FEFO order by expiry must yield EBA-1, EBA-2, EBA-3.
+        self.assertEqual([lot.lot_number for lot in lots], ["EBA-1", "EBA-2", "EBA-3"])
+
+    def test_brita_filter_has_no_sn_no_expiry_single_lot(self):
+        """`stock-expiry.spec.js` "lot without expiry_date is not flagged"
+        and `routine-completion.spec.js` Undo flow both rely on this
+        shape: 1 lot, qty=1, no SN, no expiry_date."""
+        call_command("seed")
+        brita = Stock.objects.get(name="Brita filter cartridges")
+        self.assertEqual(brita.lots.count(), 1)
+        lot = brita.lots.get()
+        self.assertEqual(lot.quantity, 1)
+        self.assertEqual(lot.lot_number, "")
+        self.assertIsNone(lot.expiry_date)
+
+    def test_ibuprofen_is_multi_lot_same_sku(self):
+        """Multi-lot same-SKU exercises FEFO ordering on the lot picker."""
+        call_command("seed")
+        ibuprofen = Stock.objects.get(name="Ibuprofen 600mg")
+        lots = ibuprofen.lots.all()
+        self.assertEqual(lots.count(), 2)
+        sns = {lot.lot_number for lot in lots}
+        self.assertEqual(sns, {"IBU-1", "IBU-2"})
+        # IBU-1 must be the FEFO front: shorter expiry than IBU-2.
+        ibu1 = ibuprofen.lots.get(lot_number="IBU-1")
+        ibu2 = ibuprofen.lots.get(lot_number="IBU-2")
+        self.assertLess(ibu1.expiry_date, ibu2.expiry_date)
+
+    def test_ipl_hair_removal_has_no_entries(self):
+        """The only never-started routine in the seed."""
+        call_command("seed")
+        ipl = Routine.objects.get(name="IPL hair removal")
+        self.assertEqual(ipl.entries.count(), 0)
 
     def test_high_volume_routines_have_realistic_history(self):
-        """Take vitamins and Medication drive the History pagination tests."""
-        call_command("seed_e2e")
-        self.assertGreaterEqual(Routine.objects.get(name="Take vitamins").entries.count(), 25)
-        self.assertGreaterEqual(Routine.objects.get(name="Medication").entries.count(), 35)
+        """Daily routines drive the /history pagination tests."""
+        call_command("seed")
+        antihistamine = Routine.objects.get(name="Take antihistamine")
+        bcp = Routine.objects.get(name="Take birth control pill")
+        vitamin_d = Routine.objects.get(name="Take Vitamin D")
+        self.assertGreaterEqual(antihistamine.entries.count(), 14)
+        self.assertGreaterEqual(bcp.entries.count(), 14)
+        self.assertGreaterEqual(vitamin_d.entries.count(), 6)
 
     def test_upcoming_routines_are_not_due(self):
         """`is_due()` rounds to the user's local date — verify our timing."""
-        call_command("seed_e2e")
-        for name in ["Vitamin D supplement", "Weekly cleaning"]:
+        call_command("seed")
+        for name in ("Replace glucose sensor", "Fertilize orchid", "Descale coffee machine"):
             routine = Routine.objects.get(name=name)
             self.assertFalse(
                 routine.is_due(),
                 msg=f"{name} must evaluate as upcoming (not due) right after seed.",
             )
 
-    def test_overdue_routines_are_due(self):
-        call_command("seed_e2e")
-        for name in ["Take vitamins", "Medication"]:
+    def test_overdue_routine_is_due_and_overdue(self):
+        """Take Vitamin D is the canonical overdue case."""
+        call_command("seed")
+        vitamin_d = Routine.objects.get(name="Take Vitamin D")
+        self.assertTrue(vitamin_d.is_due())
+        self.assertTrue(vitamin_d.is_overdue())
+
+    def test_due_routine_not_overdue(self):
+        """Daily routines (24h) land due-today but not overdue (offset -2h)."""
+        call_command("seed")
+        for name in ("Take antihistamine", "Take birth control pill", "Water cactus"):
             routine = Routine.objects.get(name=name)
-            self.assertTrue(
-                routine.is_due(),
-                msg=f"{name} must evaluate as due/overdue right after seed.",
-            )
+            self.assertTrue(routine.is_due(), msg=f"{name} should be due")
+            self.assertFalse(routine.is_overdue(), msg=f"{name} should not be overdue")
 
     def test_idempotent(self):
-        call_command("seed_e2e")
+        call_command("seed")
         first_counts = (
             User.objects.filter(is_superuser=False).count(),
             Routine.objects.count(),
@@ -298,7 +382,7 @@ class SeedE2ECommandTest(TestCase):
             StockConsumption.objects.count(),
         )
 
-        call_command("seed_e2e")
+        call_command("seed")
         second_counts = (
             User.objects.filter(is_superuser=False).count(),
             Routine.objects.count(),
@@ -324,15 +408,23 @@ class SeedE2ECommandTest(TestCase):
             response_status=200,
         )
 
-        call_command("seed_e2e")
+        call_command("seed")
 
         self.assertFalse(User.objects.filter(username="victim").exists())
         self.assertFalse(Stock.objects.filter(name="Doomed stock").exists())
         self.assertEqual(PushSubscription.objects.count(), 0)
         self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
+    def test_demo_users_password_env_is_honoured(self):
+        """`DEMO_USERS_PASSWORD` controls all three demo users."""
+        with mock.patch.dict(os.environ, {"DEMO_USERS_PASSWORD": "test-pw-xyz"}):
+            call_command("seed")
+        for username in ("cibran", "maria", "laura"):
+            user = User.objects.get(username=username)
+            self.assertTrue(user.check_password("test-pw-xyz"), msg=f"{username} password mismatch")
 
-class SeedE2EGateTest(TestCase):
+
+class SeedGateTest(TestCase):
     """The triple gate keeps the destructive command out of production."""
 
     @override_settings(DEBUG=False)
@@ -340,29 +432,58 @@ class SeedE2EGateTest(TestCase):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("E2E_SEED_ALLOWED", None)
             with self.assertRaises(CommandError):
-                call_command("seed_e2e")
+                call_command("seed")
 
     @override_settings(DEBUG=False)
     def test_runs_with_env_gate(self):
         with mock.patch.dict(os.environ, {"E2E_SEED_ALLOWED": "true"}):
-            call_command("seed_e2e")
-        self.assertTrue(User.objects.filter(username="user1").exists())
+            call_command("seed")
+        self.assertTrue(User.objects.filter(username="cibran").exists())
 
 
-class E2ESeedEndpointTest(APITestCase):
+class SeedEndpointTest(APITestCase):
     @override_settings(DEBUG=True)
     def test_post_triggers_seed(self):
-        response = self.client.post("/api/internal/e2e-seed/")
+        response = self.client.post("/api/internal/seed/")
         self.assertEqual(response.status_code, 204)
-        self.assertTrue(User.objects.filter(username="user1").exists())
+        self.assertTrue(User.objects.filter(username="cibran").exists())
 
     @override_settings(DEBUG=False)
     def test_post_forbidden_without_gate(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("E2E_SEED_ALLOWED", None)
-            response = self.client.post("/api/internal/e2e-seed/")
+            response = self.client.post("/api/internal/seed/")
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(User.objects.filter(username="user1").exists())
+        self.assertFalse(User.objects.filter(username="cibran").exists())
+
+    def test_legacy_endpoint_returns_404(self):
+        """The old `/api/internal/e2e-seed/` path must no longer exist."""
+        response = self.client.post("/api/internal/e2e-seed/")
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(DEBUG=False)
+    def test_post_forbidden_with_explicit_empty_env_var(self):
+        """The production `docker-compose.yml` hard-sets `E2E_SEED_ALLOWED=""`
+        to defend against `.env` drift. The view must still refuse: an
+        empty string is not the literal `"true"`, regardless of how it
+        got into the environment."""
+        with mock.patch.dict(os.environ, {"E2E_SEED_ALLOWED": ""}):
+            response = self.client.post("/api/internal/seed/")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username="cibran").exists())
+
+    @override_settings(DEBUG=False)
+    def test_post_forbidden_with_truthy_but_not_literal_true(self):
+        """`E2E_SEED_ALLOWED` must be the literal string "true"; "1" or
+        "yes" do not unlock the gate. Pins the contract."""
+        for impostor in ("1", "yes", "True ", "TRUE\n"):
+            with mock.patch.dict(os.environ, {"E2E_SEED_ALLOWED": impostor}):
+                response = self.client.post("/api/internal/seed/")
+            self.assertEqual(
+                response.status_code,
+                403,
+                msg=f"Impostor value {impostor!r} should not unlock the gate",
+            )
 
 
 # ── IsOwner permission ──────────────────────────────────────────────────────

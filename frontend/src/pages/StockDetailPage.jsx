@@ -184,7 +184,9 @@ export default function StockDetailPage() {
                         stock.stock_severity === 'out' && shared.stockDepletionDanger,
                       )}
                       data-testid="depletion-date"
+                      title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
                     >
+                      {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" />}
                       {t('inventory.depletionUntil', { date: formatShortDate(stock.estimated_depletion_date) })}
                     </span>
                   )}
@@ -195,12 +197,18 @@ export default function StockDetailPage() {
                     </span>
                   )}
                 </span>
-                {stock.is_owner === false && stock.owner_username && (
-                  <span className={shared.sharedOwner}>{stock.owner_username}</span>
-                )}
               </div>
             </div>
           </div>
+
+          {stock.is_owner === false && stock.owner_username && (
+            <div className={cx(shared.card, tokens.border, s.meta)}>
+              <div className={s.metaRow}>
+                <span className={s.metaLabel}>{t('sharing.owner')}</span>
+                <span className={s.metaValue}>{stock.owner_username}</span>
+              </div>
+            </div>
+          )}
 
           {stock.is_owner !== false && stock.shared_with_details?.length > 0 && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">

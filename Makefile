@@ -3,7 +3,7 @@
 PROD := docker compose
 DEV  := docker compose -f dev/docker-compose.yml --env-file .env
 E2E_PASSWORD ?= $(ADMIN_PASSWORD)
-DEMO_USER_PASSWORD ?= demo-pass
+DEMO_USERS_PASSWORD ?= change-me
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -94,11 +94,12 @@ coverage-backend: ## Run backend tests with coverage and print the report
 	$(DEV) exec backend sh -c 'coverage run manage.py test && coverage report --skip-covered'
 
 test-e2e:         ## Run Playwright e2e tests (reads credentials from .env)
-	$(DEV) exec -T backend python manage.py ensure_e2e_users
+	$(DEV) exec -T backend python manage.py seed
 	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
 	docker run --rm --network host \
 		-e E2E_USERNAME=admin \
 		-e E2E_PASSWORD=$(E2E_PASSWORD) \
+		-e DEMO_USERS_PASSWORD=$(DEMO_USERS_PASSWORD) \
 		-e BASE_URL=http://localhost:15173 \
 		nudge-e2e npx playwright test
 
@@ -116,25 +117,23 @@ format-check: ## Check formatting without applying changes
 	$(DEV) exec backend ruff format --check .
 	$(DEV) exec frontend npm run format:check
 
-# ── Seeds (destructive — dev only, gated by DEBUG / E2E_SEED_ALLOWED) ─────────
-# Both commands WIPE all non-admin business data before reseeding. They
-# refuse to run in production. See `dev/README.md` for the env-var reference.
+# ── Seed (destructive — dev only, gated by DEBUG / E2E_SEED_ALLOWED) ──────────
+# WIPES all non-admin business data before reseeding. Refuses to run in
+# production. See `README.md` (Demo seed section) for what the fixture
+# contains.
 
-seed-demo:  ## Seed the dev DB with the realistic showcase fixture (cibran + maria)
-	$(DEV) exec -T backend python manage.py seed_demo
-
-seed-e2e:   ## Seed the dev DB with the Playwright fixture (user1 + user2 + user3)
-	$(DEV) exec -T backend python manage.py seed_e2e
+seed:       ## Seed the dev DB with the unified demo fixture (cibran + maria + laura)
+	$(DEV) exec -T backend python manage.py seed
 
 # ── Content regeneration ──────────────────────────────────────────────────────
 
 screenshots:  ## Regenerate docs/screenshots/*.png against the running dev stack
-	$(DEV) exec -T backend python manage.py seed_demo
+	$(DEV) exec -T backend python manage.py seed
 	docker build -f e2e/Dockerfile -t nudge-e2e ./e2e
 	docker run --rm --network host \
 		-e DEMO_USERNAME=cibran \
 		-e DEMO_USER2_USERNAME=maria \
-		-e DEMO_PASSWORD=$(DEMO_USER_PASSWORD) \
+		-e DEMO_PASSWORD=$(DEMO_USERS_PASSWORD) \
 		-e BASE_URL=http://localhost:15173 \
 		-v $(CURDIR)/docs/screenshots:/docs-screenshots \
 		nudge-e2e sh -c 'node screenshots.js && cp /e2e/../docs/screenshots/*.png /docs-screenshots/'

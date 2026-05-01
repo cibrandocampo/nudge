@@ -25,11 +25,11 @@ def health_check(request):
     )
 
 
-class E2ESeedView(APIView):
+class SeedView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         if not (settings.DEBUG or os.environ.get("E2E_SEED_ALLOWED", "").lower() == "true"):
             return Response(status=403)
-        call_command("seed_e2e")
+        call_command("seed")
         return Response(status=204)
