@@ -1,7 +1,7 @@
 services:
 
   db:
-    image: postgres:${DOCKER_POSTGRES_VERSION:-16-alpine}
+    image: postgres:${DOCKER_POSTGRES_VERSION:-17-alpine}
     container_name: "${PROJECT_NAME:-nudge}-db"
     init: true
     command: ["postgres", "-c", "log_min_messages=${POSTGRES_LOG_LEVEL:-warning}"]
@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:${DOCKER_REDIS_VERSION:-7-alpine}
+    image: redis:${DOCKER_REDIS_VERSION:-8-alpine}
     container_name: "${PROJECT_NAME:-nudge}-redis"
     init: true
     command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_PASSWORD\" --loglevel \"$${REDIS_LOG_LEVEL:-notice}\""]

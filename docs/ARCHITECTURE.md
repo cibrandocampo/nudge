@@ -54,9 +54,9 @@ Browser / Mobile
 | Backend | Django + Django REST Framework | Django 5, DRF 3.15 |
 | Auth | JWT (simplejwt) | 5.3.x |
 | Database | PostgreSQL | 16 |
-| Task queue | Celery + Redis | Celery 5.3, Redis 7 |
+| Task queue | Celery + Redis | Celery 5.3, Redis 8 |
 | Push | Web Push API / VAPID (pywebpush) | 2.x |
-| Runtime | Python 3.12, Node 20 | — |
+| Runtime | Python 3.12, Node 22 | — |
 | Testing (backend) | unittest + coverage.py | — |
 | Testing (frontend) | Vitest + Testing Library + MSW | Vitest 2.x |
 | Linting (backend) | ruff (check + format) | 0.8+ |
@@ -340,14 +340,14 @@ Five containers on a shared bridge network (`nudge_net`):
 
 | Service | Image | Exposed port |
 |---------|-------|-------------|
-| db | postgres:16-alpine | — (internal only) |
-| redis | redis:7-alpine | — (internal only) |
+| db | postgres:17-alpine | — (internal only) |
+| redis | redis:8-alpine | — (internal only) |
 | backend | `./backend` Dockerfile | — (internal :8000) |
 | celery | `./backend` Dockerfile | — |
 | frontend | `./frontend` Dockerfile (multi-stage) | 80 |
 
 The frontend Dockerfile is multi-stage:
-1. **builder** — Node 20, runs `npm run build`, produces `dist/`
+1. **builder** — Node 22, runs `npm run build`, produces `dist/`
 2. **prod** — nginx:alpine, serves `dist/` and proxies `/api/` to `backend:8000`
 
 The backend Dockerfile uses Python 3.12-slim with a non-root user (`appuser`, uid 1001). `collectstatic` runs at image build time (baked into the image). The entrypoint runs `migrate` and `ensure_admin` before handing off to Gunicorn.
@@ -427,8 +427,8 @@ bash scripts/install-hooks.sh   # one-time setup
 
 ### `ci.yml` — runs on every push to `main`, every PR, and on release
 
-1. **test-backend** — Python 3.12, spins up PostgreSQL 16 + Redis 7 as services, runs ruff (check + format), then `python manage.py test` with coverage. Uploads report to Codecov (flag: `backend`).
-2. **test-frontend** — Node 20, runs ESLint (`--max-warnings 0`), Prettier check, then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
+1. **test-backend** — Python 3.12, spins up PostgreSQL 17 + Redis 8 as services, runs ruff (check + format), then `python manage.py test` with coverage. Uploads report to Codecov (flag: `backend`).
+2. **test-frontend** — Node 22, runs ESLint (`--max-warnings 0`), Prettier check, then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
 3. **build-backend** — Docker multi-arch build (`linux/amd64` + `linux/arm64`), pushed to `cibrandocampo/nudge-backend`. Requires both test jobs to pass.
 4. **build-frontend** — Same, pushed to `cibrandocampo/nudge-frontend`.
 
