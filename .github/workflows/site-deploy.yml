@@ -20,9 +20,6 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,12 +27,13 @@ jobs:
       run:
         working-directory: site
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: site/package-lock.json
+      - run: corepack enable npm && corepack prepare npm@11 --activate
       - run: npm ci
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
