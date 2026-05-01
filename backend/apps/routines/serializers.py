@@ -75,6 +75,7 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
     expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
     estimated_depletion_date = serializers.SerializerMethodField()
+    depletion_is_estimated = serializers.SerializerMethodField()
     daily_consumption_own = serializers.SerializerMethodField()
     daily_consumption_shared = serializers.SerializerMethodField()
     stock_severity = serializers.SerializerMethodField()
@@ -90,6 +91,10 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
 
     WARNING_THRESHOLD_DAYS = 30
     LOW_STOCK_THRESHOLD_UNITS = 3
+    # Window for the "estimate depletion from past direct consumption" branch.
+    # Trigger requires ≥1 unit consumed in EACH half (last 30d AND prev 30d).
+    DIRECT_CONSUMPTION_WINDOW_DAYS = 60
+    DIRECT_CONSUMPTION_HALF_DAYS = 30
 
     class Meta:
         model = Stock
@@ -103,6 +108,7 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
+            "depletion_is_estimated",
             "daily_consumption_own",
             "daily_consumption_shared",
             "stock_severity",
@@ -121,6 +127,7 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
+            "depletion_is_estimated",
             "daily_consumption_own",
             "daily_consumption_shared",
             "stock_severity",
@@ -168,7 +175,23 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         return obj.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
 
     def _consumption_data(self, obj):
-        """Compute and cache consumption data for the stock."""
+        """Compute and cache consumption data for the stock.
+
+        Combines two sources:
+          1. Active routines linked to the stock (24/interval × usage).
+          2. Direct `StockConsumption` rows in the last 60 days, when
+             trigger B is met (≥1 unit in last 30d AND ≥1 in prev 30d).
+
+        The direct branch contribution is split between `_own` and
+        `_shared` based on `consumed_by_id == obj.user_id`. A null
+        `consumed_by` (FK SET_NULL after a user delete) counts as
+        `_own` to keep the orphan datum useful without inflating the
+        shared rate.
+
+        `is_estimated` is True iff the direct branch contributed any
+        non-zero units to the rate. The frontend uses this flag to
+        prepend a subtle `≈` icon to the rendered "Until …" line.
+        """
         cache_attr = "_consumption_data_cache"
         if hasattr(obj, cache_attr):
             return getattr(obj, cache_attr)
@@ -176,15 +199,6 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         active_routines = getattr(obj, "active_routines", None)
         if active_routines is None:
             active_routines = list(obj.routines.filter(is_active=True).select_related("user"))
-
-        if not active_routines:
-            result = {
-                "own": None,
-                "shared": None,
-                "depletion_date": None,
-            }
-            setattr(obj, cache_attr, result)
-            return result
 
         own = 0.0
         shared = 0.0
@@ -195,25 +209,57 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             else:
                 shared += daily_rate
 
+        # Direct-consumption augmentation. Always evaluated — the trigger
+        # decides whether it contributes anything.
+        recent = getattr(obj, "recent_consumptions", None)
+        if recent is None:
+            window_start = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_WINDOW_DAYS)
+            recent = list(obj.consumptions.filter(created_at__gte=window_start))
+
+        half_ago = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_HALF_DAYS)
+        last_month_units = sum(c.quantity for c in recent if c.created_at >= half_ago)
+        prev_month_units = sum(c.quantity for c in recent if c.created_at < half_ago)
+
+        is_estimated = False
+        if last_month_units >= 1 and prev_month_units >= 1:
+            own_direct_units = 0
+            shared_direct_units = 0
+            for c in recent:
+                if c.consumed_by_id is None or c.consumed_by_id == obj.user_id:
+                    own_direct_units += c.quantity
+                else:
+                    shared_direct_units += c.quantity
+
+            window = float(self.DIRECT_CONSUMPTION_WINDOW_DAYS)
+            own += own_direct_units / window
+            shared += shared_direct_units / window
+            is_estimated = (own_direct_units + shared_direct_units) > 0
+
         total = own + shared
         quantity = self.get_quantity(obj)
 
-        if quantity > 0:
+        if total > 0 and quantity > 0:
             days = floor(quantity / total)
             depletion_date = date.today() + timedelta(days=days)
-        else:
+        elif total > 0 and quantity == 0:
             depletion_date = date.today()
+        else:
+            depletion_date = None
 
         result = {
             "own": round(own, 2) if own > 0 else None,
             "shared": round(shared, 2) if shared > 0 else None,
             "depletion_date": depletion_date,
+            "is_estimated": is_estimated,
         }
         setattr(obj, cache_attr, result)
         return result
 
     def get_estimated_depletion_date(self, obj):
         return self._consumption_data(obj)["depletion_date"]
+
+    def get_depletion_is_estimated(self, obj):
+        return self._consumption_data(obj)["is_estimated"]
 
     def get_daily_consumption_own(self, obj):
         return self._consumption_data(obj)["own"]

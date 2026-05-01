@@ -184,7 +184,9 @@ export default function StockDetailPage() {
                         stock.stock_severity === 'out' && shared.stockDepletionDanger,
                       )}
                       data-testid="depletion-date"
+                      title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
                     >
+                      {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" />}
                       {t('inventory.depletionUntil', { date: formatShortDate(stock.estimated_depletion_date) })}
                     </span>
                   )}
