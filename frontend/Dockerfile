@@ -1,7 +1,8 @@
 # ── Dev stage ────────────────────────────────────────────────────────────────
 # Used by docker-compose.override.yml (build.target: dev).
 # Source code is mounted as a volume at runtime — only node_modules are baked in.
-FROM node:20-alpine AS dev
+FROM node:22-alpine AS dev
+RUN corepack enable npm && corepack prepare npm@11 --activate
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
@@ -9,7 +10,8 @@ RUN npm install
 CMD ["npm", "run", "dev", "--", "--host"]
 
 # ── Production build ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
+RUN corepack enable npm && corepack prepare npm@11 --activate
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

@@ -44,14 +44,14 @@ const lifecycleSteps = [
   {
     kind: 'capture',
     title: 'Track your stock',
-    body: "Attach a consumable to a routine. Nudge tracks lots and expiries individually, and warns you 90 days before the first lot goes off.",
+    body: "Attach a consumable to a routine. Nudge tracks lots and expiries individually, and warns you 30 days before the first lot goes off.",
     src: 'screenshots/inventory.png',
     alt: 'Nudge inventory with five stock items, one shared, and lot-level expiry dates',
   },
   {
     kind: 'mock-notification',
     title: 'Get nudged',
-    body: "When a routine comes due, Nudge sends a push — instantly on the due moment, with follow-up reminders every 8 hours until done.",
+    body: "When a routine comes due, Nudge sends a push — instantly on the due moment, with follow-up reminders every 2 hours until done.",
     headline: 'Time for your Vitamin D',
     appName: 'Nudge',
     timestamp: 'now',
@@ -67,9 +67,9 @@ const lifecycleSteps = [
 
 const features = [
   { icon: 'wifi-off', title: 'Offline-first PWA', body: 'Queue in IndexedDB, sync on reconnect, optimistic updates, conflict resolution with visual diff, idempotent retries.' },
-  { icon: 'bell', title: 'Push notifications', body: 'Daily heads-up at your chosen time, a due alert the moment the interval expires, follow-up reminders every 8 hours until done.' },
+  { icon: 'bell', title: 'Push notifications', body: 'Daily heads-up at your chosen time, a due alert the moment the interval expires, follow-up reminders every 2 hours until done.' },
   { icon: 'users', title: 'Household sharing', body: 'Share routines and stock items with contacts. Shared items show up on the recipient dashboard with an owner label.' },
-  { icon: 'package', title: 'Inventory with FEFO', body: 'Attach a consumable; Nudge decrements stock automatically, lot by lot, First Expired First Out. Expiry warnings 90 days out.' },
+  { icon: 'package', title: 'Inventory with FEFO', body: 'Attach a consumable; Nudge decrements stock automatically, lot by lot, First Expired First Out. Expiry warnings 30 days out.' },
   { icon: 'globe', title: 'Timezone-aware', body: 'Notification schedule follows your local time and adjusts automatically for daylight saving.' },
   { icon: 'languages', title: 'Multilingual', body: 'English, Spanish, and Galician. Auto-detected from the browser, overridable per user.' },
   { icon: 'shield', title: 'Private by design', body: 'No public registration. No SaaS. No telemetry. Backend and database never leave the Docker network.' },
