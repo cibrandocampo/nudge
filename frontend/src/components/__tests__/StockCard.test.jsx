@@ -61,12 +61,16 @@ describe('StockCard', () => {
         depletion_is_estimated: true,
       },
     })
+    // The icon sits at the start of the consumption row — the whole line
+    // (rate + depletion) is the estimated block, not just the date. The
+    // parent row carries the `title` so hover and screen readers surface
+    // the rationale; the SVG itself stays aria-hidden per icon convention.
+    const row = screen.getByTestId('consumption-row')
+    expect(row.querySelector('svg use[href="#i-equal-approximately"]')).not.toBeNull()
+    expect(row.getAttribute('title')).toBe('Estimated from past usage')
+    // The depletion-date span must NOT carry the marker any more.
     const span = screen.getByTestId('depletion-date')
-    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).not.toBeNull()
-    // The aria-label travels via the parent span's `title` attribute so screen
-    // readers and hover both surface the rationale; the SVG itself stays
-    // aria-hidden as per the project's icon convention.
-    expect(span.getAttribute('title')).toBe('Estimated from past usage')
+    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).toBeNull()
   })
 
   it('omits the equal-approximately icon when depletion is not estimated', () => {
@@ -78,9 +82,9 @@ describe('StockCard', () => {
         depletion_is_estimated: false,
       },
     })
-    const span = screen.getByTestId('depletion-date')
-    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).toBeNull()
-    expect(span.getAttribute('title')).toBeNull()
+    const row = screen.getByTestId('consumption-row')
+    expect(row.querySelector('svg use[href="#i-equal-approximately"]')).toBeNull()
+    expect(row.getAttribute('title')).toBeNull()
   })
 
   it('hides the consume button when quantity is 0', () => {

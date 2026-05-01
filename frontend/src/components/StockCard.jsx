@@ -129,7 +129,13 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
       )}
 
       {totalRate > 0 && (
-        <div className={shared.consumptionRow} data-testid="consumption-row" onClick={stop}>
+        <div
+          className={shared.consumptionRow}
+          data-testid="consumption-row"
+          title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
+          onClick={stop}
+        >
+          {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" data-testid="estimated-icon" />}
           {ownRate > 0 && (
             <span className={shared.consumptionOwn}>
               {t('inventory.consumptionPerMonth', { rate: toMonthly(ownRate) })}
@@ -151,9 +157,7 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
                   stock.stock_severity === 'out' && shared.stockDepletionDanger,
                 )}
                 data-testid="depletion-date"
-                title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
               >
-                {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" />}
                 {t('inventory.depletionUntil', {
                   date: formatShortDate(stock.estimated_depletion_date),
                 })}
