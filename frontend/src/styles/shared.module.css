@@ -248,6 +248,19 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   background: var(--c-brand);
 }
 
+/* Inline icon tints. <Icon> uses currentColor, so applying these to the
+ * icon (or a wrapping span) recolours just the glyph without touching
+ * sibling text. Used to flag severity on routine cards' stock badges. */
+.iconSuccess {
+  color: var(--c-success);
+}
+.iconWarning {
+  color: var(--c-warning);
+}
+.iconDanger {
+  color: var(--c-danger);
+}
+
 /* ── Card ────────────────────────────────────────────────────── */
 
 .card {
@@ -449,6 +462,13 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   cursor: default;
 }
 
+.btnIconSharedRecipient {
+  color: var(--c-shared);
+  background: transparent;
+  border: 1px solid var(--c-shared-light);
+  cursor: default;
+}
+
 .btnIconDelete {
   color: var(--c-delete);
   background: rgba(239, 68, 68, 0.04);
@@ -529,11 +549,6 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 .depletionEnd {
   margin-left: auto;
   font-weight: 500;
-}
-.sharedOwner {
-  font-size: 0.65rem;
-  color: var(--c-text-3);
-  font-style: italic;
 }
 /* ── Card lot rows ────────────────────────────────────────────
  * Used by StockCard list (read-only) and StockDetailPage detail

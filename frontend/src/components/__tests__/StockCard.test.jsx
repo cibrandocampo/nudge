@@ -52,6 +52,37 @@ describe('StockCard', () => {
     expect(screen.getByTestId('depletion-date')).toBeInTheDocument()
   })
 
+  it('renders the equal-approximately icon when depletion is estimated from past usage', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        estimated_depletion_date: '2027-01-01',
+        daily_consumption_own: 0.05,
+        depletion_is_estimated: true,
+      },
+    })
+    const span = screen.getByTestId('depletion-date')
+    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).not.toBeNull()
+    // The aria-label travels via the parent span's `title` attribute so screen
+    // readers and hover both surface the rationale; the SVG itself stays
+    // aria-hidden as per the project's icon convention.
+    expect(span.getAttribute('title')).toBe('Estimated from past usage')
+  })
+
+  it('omits the equal-approximately icon when depletion is not estimated', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        estimated_depletion_date: '2027-01-01',
+        daily_consumption_own: 1.0,
+        depletion_is_estimated: false,
+      },
+    })
+    const span = screen.getByTestId('depletion-date')
+    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).toBeNull()
+    expect(span.getAttribute('title')).toBeNull()
+  })
+
   it('hides the consume button when quantity is 0', () => {
     renderCard({ stock: { ...baseStock, quantity: 0, stock_severity: 'out' } })
     expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
@@ -64,20 +95,51 @@ describe('StockCard', () => {
     expect(onConsume).toHaveBeenCalledWith(baseStock)
   })
 
-  it('exposes a shared badge (no onClick) when the owner shares with someone', () => {
+  it('renders the owner-variant badge (no onClick) when the owner shares with someone', () => {
     renderCard({ stock: { ...baseStock, shared_with: [2, 3] } })
     const badge = screen.getByTestId('shared-badge')
     expect(badge).toBeInTheDocument()
     // Informational only: it is a <span>, not a <button>.
     expect(badge.tagName).toBe('SPAN')
+    expect(badge.getAttribute('data-variant')).toBe('owner')
+    expect(badge.className).toContain('btnIconShared')
+    expect(badge.className).not.toContain('btnIconSharedRecipient')
   })
 
-  it('does not render the shared badge when the user is not the owner', () => {
+  it('renders the recipient-variant badge when the user is not the owner', () => {
     renderCard({
       stock: { ...baseStock, is_owner: false, shared_with: [], owner_username: 'alice' },
     })
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge).toBeInTheDocument()
+    expect(badge.getAttribute('data-variant')).toBe('recipient')
+    expect(badge.className).toContain('btnIconSharedRecipient')
+  })
+
+  it('omits the badge when the owner has not shared the stock', () => {
+    renderCard({ stock: { ...baseStock, shared_with: [], is_owner: true, owner_username: 'testuser' } })
     expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
-    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
+
+  it('never renders the inline owner-label, regardless of role', () => {
+    for (const overrides of [
+      { shared_with: [], is_owner: true, owner_username: 'testuser' },
+      { shared_with: [2], is_owner: true, owner_username: 'testuser' },
+      { shared_with: [], is_owner: false, owner_username: 'alice' },
+    ]) {
+      const { unmount } = renderCard({ stock: { ...baseStock, ...overrides } })
+      expect(screen.queryByTestId('owner-label')).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('interpolates the owner username into the recipient badge aria-label', () => {
+    renderCard({
+      stock: { ...baseStock, is_owner: false, shared_with: [], owner_username: 'alice' },
+    })
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge.getAttribute('aria-label')).toContain('alice')
+    expect(badge.getAttribute('title')).toContain('alice')
   })
 
   it('renders the chevron with the "Open details" aria-label', () => {

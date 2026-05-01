@@ -33,6 +33,41 @@
   margin-bottom: 1.5rem;
 }
 
+/* Owner meta-row — mirrors RoutineDetailPage's pattern so both detail
+ * pages share the same recipient-side affordance for "Owner: alice".
+ * Kept in sync with frontend/src/pages/RoutineDetailPage.module.css. */
+.meta {
+  margin-bottom: 1.25rem;
+  padding: 0;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--c-border-inner);
+}
+
+.metaRow:last-child {
+  border-bottom: none;
+}
+
+.metaLabel {
+  color: var(--c-text-3);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.metaValue {
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: right;
+  min-width: 0;
+}
+
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
 .lotsCard {

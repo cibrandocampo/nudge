@@ -118,6 +118,16 @@ export default function RoutineDetailPage() {
       ? shared.cardBorderDanger
       : shared.cardBorderWarning
 
+  const stockSeverity = findCachedStock(queryClient, routine?.stock)?.stock_severity
+  const stockDotClass =
+    stockSeverity === 'out'
+      ? shared.dotDanger
+      : stockSeverity === 'low'
+        ? shared.dotWarning
+        : stockSeverity === 'ok'
+          ? shared.dotSuccess
+          : null
+
   return (
     <QueryHandler
       isLoading={routineLoading}
@@ -200,7 +210,10 @@ export default function RoutineDetailPage() {
               <>
                 <div className={s.metaRow}>
                   <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
-                  <span className={s.metaValue}>
+                  <span className={cx(s.metaValue, s.statusValue)}>
+                    {stockDotClass && (
+                      <span className={cx(shared.dot, stockDotClass)} data-testid="stock-severity-dot" />
+                    )}
                     {t('routine.detail.stockValue', {
                       qty: routine.stock_quantity,
                       name: routine.stock_name,

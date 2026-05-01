@@ -116,11 +116,11 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   const sharedCard = page2.locator('[data-testid="product-card"]').filter({ hasText: stockName })
   await expect(sharedCard).toBeVisible({ timeout: 10000 })
 
-  // Owner label should appear on the card
-  await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
-
-  // Shared badge must NOT appear (user2 is not the owner).
-  await expect(sharedCard.getByTestId('shared-badge')).toHaveCount(0)
+  // The recipient sees the outlined badge variant; the owner username is
+  // exposed via the badge's aria-label (the inline label was removed in T134).
+  const recipientBadge = sharedCard.getByTestId('shared-badge')
+  await expect(recipientBadge).toHaveAttribute('data-variant', 'recipient')
+  await expect(recipientBadge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
 
   // ── Screenshot 2: close-up of user2's shared card (with owner label) ──
   await sharedCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '2-user2-shared-card.png') })

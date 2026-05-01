@@ -1,7 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
 import cx from '../utils/cx'
+import { findCachedStock } from '../utils/lotsForSelection'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
 import shared from '../styles/shared.module.css'
@@ -17,25 +19,42 @@ function statusTokens(routine) {
   return { border: shared.cardBorderWarning, dot: shared.dotWarning, text: shared.statusDue }
 }
 
+function stockIconClass(severity) {
+  if (severity === 'out') return shared.iconDanger
+  if (severity === 'low') return shared.iconWarning
+  if (severity === 'ok') return shared.iconSuccess
+  return null
+}
+
 export default function RoutineCard({ routine, onMarkDone, completing }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const timeLabel = routine.next_due_at
     ? formatRelativeTime(routine.next_due_at)
     : `${t('card.since')} ${formatAbsoluteDate(routine.created_at)}`
 
   const resourceKey = `routine:${routine.id}`
   const tokens = statusTokens(routine)
+  const cachedStock = findCachedStock(queryClient, routine.stock)
+  const iconCls = stockIconClass(cachedStock?.stock_severity)
 
   // Passive badge only — sharing is edited from the routine form
   // (ShareWithSection → ShareModal). Mirrors the pattern used on StockCard.
-  const isShared = routine.shared_with?.length > 0 && routine.is_owner !== false
+  // Owner sees the filled variant; recipient sees the outlined one. Both
+  // use the same icon so the visual language is consistent.
+  const isShared = routine.shared_with?.length > 0 || routine.is_owner === false
+  const isOwnerOfShare = routine.is_owner !== false
+  const sharedBadgeAria = isOwnerOfShare
+    ? t('sharing.sharedBadgeOwnerAria')
+    : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_username ?? '' })
   const sharedBadge = isShared && (
     <span
-      className={cx(shared.btnIcon, shared.btnIconShared)}
-      aria-label={t('sharing.sharedWith')}
-      title={t('sharing.sharedWith')}
+      className={cx(shared.btnIcon, isOwnerOfShare ? shared.btnIconShared : shared.btnIconSharedRecipient)}
+      aria-label={sharedBadgeAria}
+      title={sharedBadgeAria}
       data-testid="shared-badge"
+      data-variant={isOwnerOfShare ? 'owner' : 'recipient'}
     >
       <Icon name="users" size="sm" />
     </span>
@@ -88,12 +107,9 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
         </span>
         {routine.stock_name && (
           <span className={shared.cardStockBadge}>
-            <Icon name="package" size="sm" />
+            <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
             {routine.stock_usage ?? 1} × {routine.stock_name}
           </span>
-        )}
-        {routine.is_owner === false && routine.owner_username && (
-          <span className={s.ownerLabel}>{routine.owner_username}</span>
         )}
       </div>
       <div className={shared.cardActions}>

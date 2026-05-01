@@ -32,7 +32,13 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
   const goDetail = () => navigate(`/inventory/${stock.id}`)
   const stop = (e) => e.stopPropagation()
 
-  const isShared = stock.shared_with?.length > 0 && stock.is_owner !== false
+  // Owner sees the filled variant; recipient sees the outlined one — both
+  // share the same `users` icon so the language is consistent across cards.
+  const isShared = stock.shared_with?.length > 0 || stock.is_owner === false
+  const isOwnerOfShare = stock.is_owner !== false
+  const sharedBadgeAria = isOwnerOfShare
+    ? t('sharing.sharedBadgeOwnerAria')
+    : t('sharing.sharedBadgeRecipientAria', { owner: stock.owner_username ?? '' })
   const ownRate = stock.daily_consumption_own || 0
   const sharedRate = stock.daily_consumption_shared || 0
   const totalRate = ownRate + sharedRate
@@ -51,17 +57,19 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
               {stock.quantity} {t('common.unit')}
             </span>
           </span>
-          {stock.is_owner === false && stock.owner_username && (
-            <span className={shared.sharedOwner}>{stock.owner_username}</span>
-          )}
         </div>
         <div className={shared.cardActions} onClick={stop}>
           {isShared && (
             <span
-              className={cx(shared.btnIcon, shared.btnIconShared, s.sharedBadge)}
-              aria-label={t('sharing.sharedWith')}
-              title={t('sharing.sharedWith')}
+              className={cx(
+                shared.btnIcon,
+                isOwnerOfShare ? shared.btnIconShared : shared.btnIconSharedRecipient,
+                s.sharedBadge,
+              )}
+              aria-label={sharedBadgeAria}
+              title={sharedBadgeAria}
               data-testid="shared-badge"
+              data-variant={isOwnerOfShare ? 'owner' : 'recipient'}
             >
               <Icon name="users" size="sm" />
             </span>
@@ -143,7 +151,9 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
                   stock.stock_severity === 'out' && shared.stockDepletionDanger,
                 )}
                 data-testid="depletion-date"
+                title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
               >
+                {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" />}
                 {t('inventory.depletionUntil', {
                   date: formatShortDate(stock.estimated_depletion_date),
                 })}
