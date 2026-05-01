@@ -87,9 +87,9 @@ test.describe('helpers smoke', () => {
   test('SEED exports the full fixture shape', () => {
     expect(H.SEED).toBeDefined()
     expect(H.SEED.admin?.username).toBeTruthy()
-    expect(Object.keys(H.SEED.routines ?? {}).length).toBe(7)
-    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(5)
-    expect(H.SEED.expectedStates?.blocked).toContain('painRelief')
+    expect(Object.keys(H.SEED.routines ?? {}).length).toBe(10)
+    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(11)
+    expect(H.SEED.expectedStates?.blocked).toContain('changePumpCannula')
   })
 
   test('CREDS is exported (backward compat)', () => {

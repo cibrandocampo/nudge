@@ -116,32 +116,32 @@ docker run --rm --network host \
 
 The password is in `.env` as `ADMIN_PASSWORD`.
 
-## E2E seed (auto)
+## Seed (auto)
 
-`npx playwright test` calls `POST /api/internal/e2e-seed/` via
+`npx playwright test` calls `POST /api/internal/seed/` via
 `globalSetup` (`e2e/global-setup.js`). Wipes the DB (except admin) and
-rebuilds a deterministic fixture (T073):
+rebuilds the unified deterministic fixture:
 
-- 3 users: `user1 / user2 / user3` (mutual contacts).
-- 7 routines owned by `user1`, covering the 6 state combinations +
-  one blocked by depleted stock:
-  `Take vitamins`, `Morning stretch`, `Weekly cleaning`,
-  `Water filter`, `Vitamin D supplement`, `Medication`, `Pain relief`.
-- 5 stocks with varied lot distribution (incl. one `Vitamin D` lot
-  without `lot_number` for dedup tests, and `Ibuprofen` with
-  `quantity=0` for the blocked-completion test).
-- ~91 routine entries + 6 stock consumptions over the last 60 days,
-  concentrated in 2–3 routines to stress History pagination.
+- 3 users: `cibran / maria / laura` (mutual contacts).
+- 10 routines (8 owned by cibran, 2 by maria) covering every status
+  the dashboard models — never-started, due, overdue, upcoming,
+  blocked.
+- 11 stocks (9 owned by cibran, 2 by maria) covering every severity
+  combination — qty out / low / ok × expiry reached / soon / ok —
+  plus multi-lot SN/no-SN for dedup tests and a `requires_lot_selection`
+  multi-lot stock (Ebastine) for FEFO modal coverage.
+- 50 routine entries + 3 stock consumptions over the last 14–180 days.
 
 Required env vars:
 - `E2E_SEED_ALLOWED=true` (or `DJANGO_DEBUG=True`)
-- `E2E_USER1_PASSWORD`, `E2E_USER2_PASSWORD`, `E2E_USER3_PASSWORD`
+- `DEMO_USERS_PASSWORD` (default `change-me`) — applied to all 3 demo
+  users.
 - `E2E_USERNAME=admin` + `E2E_PASSWORD=<admin password>` for specs
   that log in as admin.
 
 All test users and canonical names are exported from
-`e2e/tests/helpers.js` as the `SEED` constant. Import from there,
-never hardcode.
+`e2e/tests/helpers/constants.js` as the `SEED` constant. Import from
+there, never hardcode.
 
 ## E2E offline helpers (T068)
 

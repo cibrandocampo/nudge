@@ -25,7 +25,7 @@ test.describe('PendingBadge mobile responsive', () => {
     await goOffline(page, context)
     await page
       .getByTestId('routine-card')
-      .filter({ hasText: SEED.routines.morningStretch })
+      .filter({ hasText: SEED.routines.iplHairRemoval })
       .getByRole('button', { name: 'Done' })
       .click()
     await expectPendingBadge(page, { count: 1 })

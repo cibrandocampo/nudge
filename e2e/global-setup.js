@@ -5,10 +5,10 @@ export default async function globalSetup() {
   // projects target. Dev compose maps backend to host port 18000.
   const base = process.env.BASE_URL ?? 'http://localhost:15173'
   const apiBase = base.replace(/:\d+(?=\b|\/|$)/, ':18000')
-  const res = await fetch(`${apiBase}/api/internal/e2e-seed/`, { method: 'POST' })
+  const res = await fetch(`${apiBase}/api/internal/seed/`, { method: 'POST' })
   if (res.status !== 204) {
     throw new Error(
-      `E2E seed failed: expected 204, got ${res.status}. ` +
+      `Seed failed: expected 204, got ${res.status}. ` +
         `Ensure backend is running and E2E_SEED_ALLOWED=true or DJANGO_DEBUG=True.`,
     )
   }

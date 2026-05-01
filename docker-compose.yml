@@ -60,6 +60,12 @@ services:
     command: gunicorn nudge.wsgi:application --bind 0.0.0.0:${BACKEND_PORT:-8000} --workers ${GUNICORN_WORKERS:-2} --log-level ${GUNICORN_LOG_LEVEL:-info}
     env_file: .env
     environment:
+      # Hard-set production-critical flags so a stray value in `.env`
+      # cannot accidentally enable Django debug mode or the destructive
+      # `seed` endpoint. The `environment:` block overrides `env_file:`
+      # in docker compose's precedence model.
+      DJANGO_DEBUG: "False"
+      E2E_SEED_ALLOWED: ""
       DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
     networks:
@@ -93,6 +99,11 @@ services:
     command: celery -A nudge worker -B --loglevel=${CELERY_LOG_LEVEL:-info} --schedule /tmp/celerybeat-schedule
     env_file: .env
     environment:
+      # Same hardening as the backend service — celery loads the same
+      # Django settings, so any code path it touches must see
+      # production values regardless of `.env` drift.
+      DJANGO_DEBUG: "False"
+      E2E_SEED_ALLOWED: ""
       DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
     networks:
