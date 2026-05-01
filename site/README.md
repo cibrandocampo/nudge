@@ -126,8 +126,8 @@ with the app's brand as long as the Nudge icon
 (`public/icons/nudge-512.png`) is up to date.
 
 **Password**: the fixture users share a single password read from
-the optional `DEMO_USER_PASSWORD` env var. Unset by default (not in
+the optional `DEMO_USERS_PASSWORD` env var. Unset by default (not in
 `.env.example`); both the seed command and the Makefile target fall
-back to `demo-pass` so the pipeline works out of the box. See
+back to `change-me` so the pipeline works out of the box. See
 [`dev/README.md`](../dev/README.md#environment-variables-dev-only) if
 you want a custom value.

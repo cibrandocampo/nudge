@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
@@ -366,5 +367,271 @@ describe('RoutineFormPage', () => {
     expect(await screen.findByDisplayValue('Take vitamins')).toBeInTheDocument()
     // Chip for alice must be visible in the share section.
     await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
+  })
+
+  describe('coupled-share popup', () => {
+    const baseStock = {
+      id: 1,
+      name: 'Filters',
+      quantity: 5,
+      shared_with: [],
+      shared_with_details: [],
+      updated_at: '2026-03-01T10:00:00Z',
+      is_owner: true,
+      owner_username: 'testuser',
+      lots: [],
+      expiring_lots: [],
+      stock_severity: 'ok',
+      expiry_severity: 'ok',
+    }
+    const routineWithStock = {
+      ...editRoutine,
+      stock: 1,
+      stock_usage: 1,
+      shared_with: [],
+      shared_with_details: [],
+      updated_at: '2026-03-01T11:00:00Z',
+    }
+    const contacts = [
+      { id: 7, username: 'alice' },
+      { id: 8, username: 'bob' },
+    ]
+
+    function setupCachedScenario({ stock = baseStock, routine = routineWithStock, contactsList = contacts } = {}) {
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      })
+      qc.setQueryData(['stock'], [stock])
+      qc.setQueryData(['stock', stock.id], stock)
+      server.use(
+        http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json(contactsList)),
+        http.get(`${BASE}/stock/`, () => HttpResponse.json([stock])),
+        http.get(`${BASE}/stock/${stock.id}/`, () => HttpResponse.json(stock)),
+        http.get(`${BASE}/routines/${routine.id}/`, () => HttpResponse.json(routine)),
+      )
+      return renderWithProviders(
+        <Routes>
+          <Route path="/routines/:id/edit" element={<RoutineFormPage />} />
+          <Route path="/routines/:id" element={<div>Detail</div>} />
+        </Routes>,
+        { initialEntries: [`/routines/${routine.id}/edit`], queryClient: qc },
+      )
+    }
+
+    async function addContactToShare(user, username) {
+      await user.click(screen.getByRole('button', { name: /^share with/i }))
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByText(username))
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    }
+
+    it('shows the popup when stock is linked and the new recipient is not in stock.shared_with', async () => {
+      const { user } = setupCachedScenario()
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      // The interpolated message includes the stock name and username.
+      expect(await screen.findByText(/Filters.*alice/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Share both' })).toBeInTheDocument()
+    })
+
+    it('does not show the popup when every new recipient already has stock access', async () => {
+      let routineCalled = false
+      server.use(
+        http.patch(`${BASE}/routines/1/`, async ({ request }) => {
+          routineCalled = true
+          const body = await request.json()
+          return HttpResponse.json({ ...routineWithStock, ...body })
+        }),
+      )
+      const stock = { ...baseStock, shared_with: [7] }
+      const { user } = setupCachedScenario({ stock })
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
+      expect(routineCalled).toBe(true)
+      expect(screen.queryByRole('button', { name: 'Share both' })).not.toBeInTheDocument()
+    })
+
+    it('does not show the popup when the routine has no linked stock', async () => {
+      const routine = { ...routineWithStock, stock: null, stock_usage: 1 }
+      let routineCalled = false
+      server.use(
+        http.patch(`${BASE}/routines/1/`, async ({ request }) => {
+          routineCalled = true
+          const body = await request.json()
+          return HttpResponse.json({ ...routine, ...body })
+        }),
+      )
+      const { user } = setupCachedScenario({ routine })
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
+      expect(routineCalled).toBe(true)
+      expect(screen.queryByRole('button', { name: 'Share both' })).not.toBeInTheDocument()
+    })
+
+    it('does not show the popup when only existing recipients are removed', async () => {
+      const routine = {
+        ...routineWithStock,
+        shared_with: [7],
+        shared_with_details: [{ id: 7, username: 'alice' }],
+      }
+      let routineCalled = false
+      let capturedBody
+      server.use(
+        http.patch(`${BASE}/routines/1/`, async ({ request }) => {
+          routineCalled = true
+          capturedBody = await request.json()
+          return HttpResponse.json({ ...routine, ...capturedBody })
+        }),
+      )
+      const { user } = setupCachedScenario({ routine })
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+      // Wait for the prefilled chip.
+      await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
+
+      // Remove alice via the chip's labelled X button.
+      await user.click(screen.getByRole('button', { name: 'Unshare with alice' }))
+      await user.click(screen.getByText('Save'))
+
+      await waitFor(() => expect(routineCalled).toBe(true))
+      expect(capturedBody?.shared_with).toEqual([])
+      expect(screen.queryByRole('button', { name: 'Share both' })).not.toBeInTheDocument()
+    })
+
+    it('Cancel closes the popup and calls neither mutation', async () => {
+      let stockCalled = false
+      let routineCalled = false
+      server.use(
+        http.patch(`${BASE}/stock/1/`, () => {
+          stockCalled = true
+          return HttpResponse.json(baseStock)
+        }),
+        http.patch(`${BASE}/routines/1/`, () => {
+          routineCalled = true
+          return HttpResponse.json(routineWithStock)
+        }),
+      )
+      const { user } = setupCachedScenario()
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(stockCalled).toBe(false)
+      expect(routineCalled).toBe(false)
+      // The form is still open.
+      expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument()
+    })
+
+    it('Confirm calls stock first then routine, with the merged shared_with payload', async () => {
+      const callOrder = []
+      let stockBody, routineBody, stockHeaders, routineHeaders
+      server.use(
+        http.patch(`${BASE}/stock/1/`, async ({ request }) => {
+          stockBody = await request.json()
+          stockHeaders = Object.fromEntries(request.headers.entries())
+          callOrder.push('stock')
+          return HttpResponse.json({ ...baseStock, ...stockBody })
+        }),
+        http.patch(`${BASE}/routines/1/`, async ({ request }) => {
+          routineBody = await request.json()
+          routineHeaders = Object.fromEntries(request.headers.entries())
+          callOrder.push('routine')
+          return HttpResponse.json({ ...routineWithStock, ...routineBody })
+        }),
+      )
+      const stockWithExisting = { ...baseStock, shared_with: [8] } // bob already has access
+      const { user } = setupCachedScenario({ stock: stockWithExisting })
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Share both' }))
+
+      await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
+
+      expect(callOrder).toEqual(['stock', 'routine'])
+      // Existing recipient (bob=8) preserved, new recipient (alice=7) appended.
+      expect(new Set(stockBody?.shared_with)).toEqual(new Set([8, 7]))
+      expect(routineBody?.shared_with).toEqual([7])
+      // If-Unmodified-Since carries the cached timestamps (converted to UTC string by the api client).
+      expect(stockHeaders?.['if-unmodified-since']).toBe(new Date(stockWithExisting.updated_at).toUTCString())
+      expect(routineHeaders?.['if-unmodified-since']).toBe(new Date(routineWithStock.updated_at).toUTCString())
+    })
+
+    it('shows stockShareFailed and skips the routine call when stock PATCH errors', async () => {
+      let routineCalled = false
+      server.use(
+        http.patch(`${BASE}/stock/1/`, () => new HttpResponse(null, { status: 500 })),
+        http.patch(`${BASE}/routines/1/`, () => {
+          routineCalled = true
+          return HttpResponse.json(routineWithStock)
+        }),
+      )
+      const { user } = setupCachedScenario()
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Share both' }))
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Couldn't share the linked stock\. The routine wasn't saved either/),
+        ).toBeInTheDocument(),
+      )
+      expect(routineCalled).toBe(false)
+      // Form stays open, no nav.
+      expect(screen.queryByText('Detail')).not.toBeInTheDocument()
+    })
+
+    it('shows routineSavedAfterStockShared when routine fails after stock succeeds', async () => {
+      const callOrder = []
+      server.use(
+        http.patch(`${BASE}/stock/1/`, async ({ request }) => {
+          callOrder.push('stock')
+          const body = await request.json()
+          return HttpResponse.json({ ...baseStock, ...body })
+        }),
+        http.patch(`${BASE}/routines/1/`, () => {
+          callOrder.push('routine')
+          return new HttpResponse(null, { status: 500 })
+        }),
+      )
+      const { user } = setupCachedScenario()
+      await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+
+      await addContactToShare(user, 'alice')
+      await user.click(screen.getByText('Save'))
+
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Share both' }))
+
+      await waitFor(() =>
+        expect(screen.getByText(/The stock was shared, but the routine couldn't be saved/)).toBeInTheDocument(),
+      )
+      expect(callOrder).toEqual(['stock', 'routine'])
+      // Form stays open, no nav.
+      expect(screen.queryByText('Detail')).not.toBeInTheDocument()
+    })
   })
 })

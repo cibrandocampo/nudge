@@ -33,9 +33,15 @@ test.describe('History', () => {
   })
 
   test('initial load shows seed routine entries', async ({ page }) => {
-    await expect(historyEntry(page, { routineKey: 'takeVitamins' }).first()).toBeVisible()
-    await expect(historyEntry(page, { routineKey: 'medication' }).first()).toBeVisible()
-    // Medication entries every 3rd have `notes="morning dose"` (seed).
+    // Two routines whose entries fall inside the default 15-day filter:
+    // `takeAntihistamine` (daily, 14 entries) and `changePumpCannula`
+    // (every 3 days, 8 entries). `takeVitaminD` is seeded as overdue
+    // with a 28-day interval, so its newest entry sits 35 days ago and
+    // would be hidden by the default filter — tested separately in the
+    // Routine-filter case below.
+    await expect(historyEntry(page, { routineKey: 'takeAntihistamine' }).first()).toBeVisible()
+    await expect(historyEntry(page, { routineKey: 'changePumpCannula' }).first()).toBeVisible()
+    // Antihistamine entries every 3rd carry `notes="morning dose"` (seed).
     await expect(historyEntry(page, { text: 'morning dose' }).first()).toBeVisible()
   })
 
@@ -52,37 +58,40 @@ test.describe('History', () => {
 
     await expect(historyEntry(page, { type: 'routine' })).toHaveCount(0)
     await expect(historyEntry(page, { type: 'consumption' }).first()).toBeVisible()
-    // Specific sanity: Vitamin D consumption (seed) is visible.
-    await expect(historyEntry(page, { stockKey: 'vitaminD' }).first()).toBeVisible()
+    // Specific sanity: Hidroferol consumption (seed) is visible.
+    await expect(historyEntry(page, { stockKey: 'hidroferol' }).first()).toBeVisible()
   })
 
   test('Routine filter restricts list to selected routine', async ({ page }) => {
-    await page.getByLabel('Routine', { exact: true }).selectOption({ label: SEED.routines.takeVitamins })
+    // Selects `Take antihistamine` (14 daily entries, all within the
+    // default 15-day filter). `takeVitaminD` is overdue with a 28-day
+    // interval, so its newest entry is 35d ago — outside the filter.
+    await page.getByLabel('Routine', { exact: true }).selectOption({ label: SEED.routines.takeAntihistamine })
 
     // Retry-able settling assertion first — the filter change triggers a
     // TanStack refetch that replaces the list; a raw `.count()` below
     // needs the DOM to have settled.
     await expect(historyEntry(page, { type: 'routine' }).first()).toBeVisible()
-    await expect(historyEntry(page, { routineKey: 'medication', type: 'routine' })).toHaveCount(0)
+    await expect(historyEntry(page, { routineKey: 'changePumpCannula', type: 'routine' })).toHaveCount(0)
 
     const routineEntries = historyEntry(page, { type: 'routine' })
     const count = await routineEntries.count()
     for (let i = 0; i < count; i += 1) {
-      await expect(routineEntries.nth(i)).toContainText(SEED.routines.takeVitamins)
+      await expect(routineEntries.nth(i)).toContainText(SEED.routines.takeAntihistamine)
     }
   })
 
   test('Stock filter restricts consumptions to selected stock', async ({ page }) => {
     await page.getByLabel('Type', { exact: true }).selectOption({ label: 'Stock' })
-    await page.getByLabel('Item', { exact: true }).selectOption({ label: SEED.stocks.vitaminD })
+    await page.getByLabel('Item', { exact: true }).selectOption({ label: SEED.stocks.hidroferol })
 
-    await expect(historyEntry(page, { stockKey: 'vitaminD', type: 'consumption' }).first()).toBeVisible()
-    await expect(historyEntry(page, { stockKey: 'pills', type: 'consumption' })).toHaveCount(0)
+    await expect(historyEntry(page, { stockKey: 'hidroferol', type: 'consumption' }).first()).toBeVisible()
+    await expect(historyEntry(page, { stockKey: 'pumpCannulas', type: 'consumption' })).toHaveCount(0)
 
     const consumptions = historyEntry(page, { type: 'consumption' })
     const count = await consumptions.count()
     for (let i = 0; i < count; i += 1) {
-      await expect(consumptions.nth(i)).toContainText(SEED.stocks.vitaminD)
+      await expect(consumptions.nth(i)).toContainText(SEED.stocks.hidroferol)
     }
   })
 

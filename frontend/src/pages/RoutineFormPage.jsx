@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
+import ConfirmModal from '../components/ConfirmModal'
 import FormField from '../components/FormField'
 import IntervalPicker from '../components/IntervalPicker'
 import QueryHandler from '../components/QueryHandler'
@@ -11,8 +13,10 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockList } from '../hooks/useStock'
 import { useCreateRoutine } from '../hooks/mutations/useCreateRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
+import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
+import { findCachedStock } from '../utils/lotsForSelection'
 import { parseIntSafe } from '../utils/number'
 import shared from '../styles/shared.module.css'
 import s from './RoutineFormPage.module.css'
@@ -28,11 +32,17 @@ function toLocalDateTimeString(date) {
 
 const EMPTY = { name: '', description: '', interval_hours: 24, stock: '', stock_usage: 1 }
 
+function computeUsersNeedingStockShare(addedRecipients, cachedStock) {
+  const stockShared = new Set((cachedStock?.shared_with ?? []).map(Number))
+  return addedRecipients.filter((id) => !stockShared.has(Number(id)))
+}
+
 export default function RoutineFormPage() {
   const { id } = useParams()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
 
   const { data: stocks = [] } = useStockList()
   const { data: contacts = [] } = useContacts()
@@ -44,6 +54,7 @@ export default function RoutineFormPage() {
   } = useRoutine(isEditing ? id : null)
   const createRoutine = useCreateRoutine()
   const updateRoutine = useUpdateRoutine()
+  const updateStock = useUpdateStock()
   const reachable = useServerReachable()
 
   const [form, setForm] = useState(EMPTY)
@@ -52,6 +63,7 @@ export default function RoutineFormPage() {
   const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
   const [lastDoneAt, setLastDoneAt] = useState('')
   const [errors, setErrors] = useState({})
+  const [coupledShareConfirm, setCoupledShareConfirm] = useState(null)
 
   // Prefill once the edit routine is loaded.
   useEffect(() => {
@@ -87,6 +99,46 @@ export default function RoutineFormPage() {
     return err
   }
 
+  const runSave = async (payload) => {
+    if (isEditing) {
+      await updateRoutine.mutateAsync({
+        routineId: Number(id),
+        routineName: payload.name ?? routine?.name,
+        patch: payload,
+        updatedAt: routine?.updated_at,
+      })
+      navigate(`/routines/${id}`)
+    } else {
+      // `useCreateRoutine` is online-only (T060), so it always resolves
+      // with the server payload here — no `__queued` branch to handle.
+      const result = await createRoutine.mutateAsync({ payload })
+      navigate(`/routines/${result.id}`)
+    }
+  }
+
+  const runCoupledSave = async (payload, cachedStock, newRecipientIds) => {
+    setCoupledShareConfirm(null)
+    const nextStockShared = Array.from(
+      new Set([...(cachedStock?.shared_with ?? []).map(Number), ...newRecipientIds.map(Number)]),
+    )
+    try {
+      await updateStock.mutateAsync({
+        stockId: cachedStock.id,
+        stockName: cachedStock.name,
+        patch: { shared_with: nextStockShared },
+        updatedAt: cachedStock.updated_at,
+      })
+    } catch {
+      setErrors({ submit: t('errors.stockShareFailed') })
+      return
+    }
+    try {
+      await runSave(payload)
+    } catch {
+      setErrors({ submit: t('errors.routineSavedAfterStockShared') })
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const err = validate()
@@ -108,21 +160,25 @@ export default function RoutineFormPage() {
       payload.last_done_at = new Date(lastDoneAt).toISOString()
     }
 
+    const original = isEditing ? new Set((routine?.shared_with ?? []).map(Number)) : new Set()
+    const addedRecipients = sharedWith.map(Number).filter((rid) => !original.has(rid))
+    const stockId = payload.stock
+    const cachedStock = stockId != null ? findCachedStock(queryClient, stockId) : null
+    const usersNeedingStockShare = computeUsersNeedingStockShare(addedRecipients, cachedStock)
+
+    if (stockId != null && cachedStock && usersNeedingStockShare.length > 0) {
+      const userIdToName = (uid) => contacts.find((c) => c.id === Number(uid))?.username ?? String(uid)
+      const userLabels = usersNeedingStockShare.map(userIdToName)
+      setCoupledShareConfirm({
+        stockName: cachedStock.name ?? '',
+        users: userLabels,
+        onConfirm: () => runCoupledSave(payload, cachedStock, usersNeedingStockShare),
+      })
+      return
+    }
+
     try {
-      if (isEditing) {
-        await updateRoutine.mutateAsync({
-          routineId: Number(id),
-          routineName: payload.name ?? routine?.name,
-          patch: payload,
-          updatedAt: routine?.updated_at,
-        })
-        navigate(`/routines/${id}`)
-      } else {
-        // `useCreateRoutine` is online-only (T060), so it always resolves
-        // with the server payload here — no `__queued` branch to handle.
-        const result = await createRoutine.mutateAsync({ payload })
-        navigate(`/routines/${result.id}`)
-      }
+      await runSave(payload)
     } catch (err) {
       setErrors({ submit: errorToastMessage(err, t) })
     }
@@ -275,6 +331,17 @@ export default function RoutineFormPage() {
             </button>
           </div>
         </form>
+        {coupledShareConfirm && (
+          <ConfirmModal
+            message={t('sharing.coupledShareMessage', {
+              stockName: coupledShareConfirm.stockName,
+              users: coupledShareConfirm.users.join(', '),
+            })}
+            confirmLabel={t('sharing.coupledShareConfirm')}
+            onConfirm={coupledShareConfirm.onConfirm}
+            onCancel={() => setCoupledShareConfirm(null)}
+          />
+        )}
       </div>
     </QueryHandler>
   )

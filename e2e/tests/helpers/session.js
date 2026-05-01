@@ -73,7 +73,7 @@ export async function logout(page) {
 export async function resetSeed(context) {
   const base = process.env.BASE_URL ?? 'http://localhost:15173'
   const apiBase = base.replace(/:\d+(?=\b|\/|$)/, ':18000')
-  const res = await context.request.post(`${apiBase}/api/internal/e2e-seed/`)
+  const res = await context.request.post(`${apiBase}/api/internal/seed/`)
   if (res.status() !== 204) {
     throw new Error(`resetSeed failed: expected 204, got ${res.status()}`)
   }

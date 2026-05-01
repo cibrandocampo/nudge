@@ -127,8 +127,12 @@ test.describe('Sharing — Routines', () => {
     // The shared routine should appear on user2's dashboard
     await expect(page2.getByText(routineName)).toBeVisible({ timeout: 10000 })
 
-    // It should show the owner label (admin username)
-    await expect(page2.getByText(SEED.admin.username).first()).toBeVisible()
+    // The recipient sees the outlined badge variant; the owner username
+    // lives inside its aria-label (the inline label was removed in T134).
+    const sharedCard = page2.locator('[data-testid="routine-card"]').filter({ hasText: routineName })
+    const badge = sharedCard.getByTestId('shared-badge')
+    await expect(badge).toHaveAttribute('data-variant', 'recipient')
+    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
 
     await ctx2.close()
   })
@@ -216,9 +220,11 @@ test.describe('Sharing — Inventory', () => {
     const sharedCard = page2.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(sharedCard).toBeVisible({ timeout: 10_000 })
 
-    // The recipient sees the admin username as the owner label, no shared badge.
-    await expect(sharedCard.getByText(SEED.admin.username)).toBeVisible()
-    await expect(sharedCard.getByTestId('shared-badge')).toHaveCount(0)
+    // The recipient now sees the outlined badge variant; the admin username
+    // lives inside the badge's aria-label (the inline label was dropped in T134).
+    const badge = sharedCard.getByTestId('shared-badge')
+    await expect(badge).toHaveAttribute('data-variant', 'recipient')
+    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
 
     await ctx2.close()
   })

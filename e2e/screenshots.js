@@ -2,10 +2,10 @@
 /*
  * Regenerate docs/screenshots/*.png for the README and the landing.
  *
- * Thirteen scenes captured in a single run from the `seed_demo`
- * fixture (cibran + maria, 10 stocks, 5 routines, 6 entries). Seeding
- * is the Makefile target's responsibility — this script only logs in
- * and captures.
+ * Thirteen scenes captured in a single run from the unified seed
+ * fixture (`manage.py seed` — cibran + maria + laura, 11 stocks,
+ * 10 routines, 50 entries). Seeding is the Makefile target's
+ * responsibility — this script only logs in and captures.
  *
  * Env:
  *   BASE_URL              Frontend dev server (default http://localhost:5173)
@@ -123,7 +123,7 @@ async function main() {
     const brita = routines.find((r) => r.name === 'Change Brita filter')
     if (!vitaminD || !vitaminDStock || !brita) {
       throw new Error(
-        'Fixture missing "Take Vitamin D" routine, "Hidroferol drops" stock or "Change Brita filter" routine — is seed_demo seeded?',
+        'Fixture missing "Take Vitamin D" routine, "Hidroferol drops" stock or "Change Brita filter" routine — is the unified seed seeded? (`manage.py seed`)',
       )
     }
 
@@ -184,7 +184,7 @@ async function main() {
 
     // 12. Offline banner — force reachability=false, abort the
     //     mark-done call so useOfflineMutation enqueues, surface the
-    //     pending badge. Target "Water the cactus" (stock-less → no
+    //     pending badge. Target "Water cactus" (stock-less → no
     //     lot modal → click Done fires useLogRoutine straight away).
     await page.goto(`${BASE}/`)
     await page.waitForLoadState('networkidle')
@@ -198,7 +198,7 @@ async function main() {
     })
     const markDoneRoute = (route) => route.abort('connectionrefused')
     await context.route('**/api/routines/*/log/', markDoneRoute)
-    const cactusTitle = page.getByText('Water the cactus', { exact: true }).first()
+    const cactusTitle = page.getByText('Water cactus', { exact: true }).first()
     await cactusTitle.waitFor({ state: 'visible', timeout: 10_000 })
     const cactusCard = cactusTitle.locator(
       'xpath=ancestor::*[.//button[@aria-label="Done"]][1]',

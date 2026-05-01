@@ -33,7 +33,7 @@ test.describe('offline-sync', () => {
     await resetSeed(context)
     await freshSession(page, context, { loginAs: 'user1' })
     await waitForServiceWorkerReady(page)
-    await expect(routineCard(page, 'morningStretch')).toBeVisible()
+    await expect(routineCard(page, 'iplHairRemoval')).toBeVisible()
   })
 
   test('429 transitorio reintenta y sincroniza', async ({ page, context }) => {
@@ -45,7 +45,7 @@ test.describe('offline-sync', () => {
     })
 
     await goOffline(page, context)
-    await routineCard(page, 'morningStretch').getByRole('button', { name: 'Done' }).click()
+    await routineCard(page, 'iplHairRemoval').getByRole('button', { name: 'Done' }).click()
     await expectPendingBadge(page, { count: 1 })
 
     // Respond 429 exactly once; subsequent requests pass through to the
@@ -72,7 +72,7 @@ test.describe('offline-sync', () => {
     })
 
     await goOffline(page, context)
-    await routineCard(page, 'morningStretch').getByRole('button', { name: 'Done' }).click()
+    await routineCard(page, 'iplHairRemoval').getByRole('button', { name: 'Done' }).click()
     await expectPendingBadge(page, { count: 1 })
 
     const cleanup = mockApiRoute(page, {
@@ -94,7 +94,7 @@ test.describe('offline-sync', () => {
 
   test('ConflictModal diff + overwrite replay llega al backend', async ({ page, context }) => {
     await page.goto('/')
-    await routineCard(page, 'takeVitamins').first().click()
+    await routineCard(page, 'takeVitaminD').first().click()
     await expect(page).toHaveURL(/\/routines\/\d+$/)
     const routineId = page.url().match(/routines\/(\d+)/)?.[1]
     expect(routineId).toBeDefined()
@@ -116,7 +116,7 @@ test.describe('offline-sync', () => {
 
   test('ConflictModal discard descarta la mutación y rehidrata', async ({ page, context }) => {
     await page.goto('/')
-    await routineCard(page, 'takeVitamins').first().click()
+    await routineCard(page, 'takeVitaminD').first().click()
     const routineId = page.url().match(/routines\/(\d+)/)?.[1]
 
     const cleanupMock = await openConflictOnRoutineRename(page, context, routineId, { newName: 'discard-me' })
@@ -130,7 +130,7 @@ test.describe('offline-sync', () => {
     // binds its input to the refetched `routine.name` via useEffect.
     await cleanupMock()
     await page.goto(`/routines/${routineId}/edit`)
-    await expect(page.getByPlaceholder(/change water filter/i)).toHaveValue(SEED.routines.takeVitamins)
+    await expect(page.getByPlaceholder(/change water filter/i)).toHaveValue(SEED.routines.takeVitaminD)
   })
 
   test('discard en vuelo aborta la entry activa; resto drena', async ({ page, context }) => {
@@ -138,8 +138,8 @@ test.describe('offline-sync', () => {
     // sequentially: the first hangs on the mock, the second passes
     // through untouched once the first is discarded.
     await goOffline(page, context)
-    await routineCard(page, 'morningStretch').getByRole('button', { name: 'Done' }).click()
-    await routineCard(page, 'waterFilter').getByRole('button', { name: 'Done' }).click()
+    await routineCard(page, 'iplHairRemoval').getByRole('button', { name: 'Done' }).click()
+    await routineCard(page, 'changeBritaFilter').getByRole('button', { name: 'Done' }).click()
     await expectPendingBadge(page, { count: 2 })
 
     // Delay only the first POST; further POSTs pass straight to the
