@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12"/>
+  <img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13"/>
   <img src="https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white" alt="Django 5.2"/>
   <img src="https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white" alt="React 18.3"/>
   <img src="https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white" alt="Vite 5.4"/>
@@ -148,10 +148,10 @@ Android's battery optimisation (Doze mode) can delay push notifications until th
 
 Every change goes through GitHub Actions with no shortcuts:
 
-- **Backend** — `ruff check`, `ruff format --check`, and the full Django test suite (480 tests) with coverage.
-- **Frontend** — ESLint, Prettier, and Vitest (754 tests) with coverage thresholds at 95 % on statements, branches, functions and lines.
+- **Backend** — `ruff check`, `ruff format --check`, and the full Django test suite (505 tests) with coverage.
+- **Frontend** — ESLint, Prettier, and Vitest (981 tests) with coverage thresholds at 95 % on statements, branches, functions and lines.
 - **Coverage reporting** — [Codecov](https://codecov.io/gh/cibrandocampo/nudge) tracks project and patch coverage. The patch gate is 95 % — a pull request that leaves touched lines uncovered is flagged before merge.
-- **End-to-end** — 84 Playwright specs covering online and offline flows (dashboard, inventory, history, sharing, i18n, push, plus dedicated offline read / mutations / sync suites). Not wired into CI today; run locally via `make test-e2e`. See `.claude/skills/test-discipline/SKILL.md` for how we handle failing tests.
+- **End-to-end** — 91 Playwright specs covering online and offline flows (dashboard, inventory, history, sharing, i18n, push, plus dedicated offline read / mutations / sync suites). Not wired into CI today; run locally via `make test-e2e`. See `.claude/skills/test-discipline/SKILL.md` for how we handle failing tests.
 
 ### Development
 
