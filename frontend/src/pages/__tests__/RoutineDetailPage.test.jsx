@@ -105,6 +105,28 @@ describe('RoutineDetailPage', () => {
     expect(dot.className).toContain('dotDanger')
   })
 
+  it('paints the stock dot warning when severity is "low"', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json([{ ...stockForLotSelection, quantity: 2, stock_severity: 'low' }]),
+      ),
+    )
+    renderDetail()
+    const dot = await screen.findByTestId('stock-severity-dot')
+    expect(dot.className).toContain('dotWarning')
+  })
+
+  it('paints the stock dot success when severity is "ok"', async () => {
+    server.use(
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json([{ ...stockForLotSelection, quantity: 10, stock_severity: 'ok' }]),
+      ),
+    )
+    renderDetail()
+    const dot = await screen.findByTestId('stock-severity-dot')
+    expect(dot.className).toContain('dotSuccess')
+  })
+
   it('omits the severity dot until the stock cache resolves', async () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText(/Vitamin D/)).toBeInTheDocument())
