@@ -1,7 +1,7 @@
 services:
 
   db:
-    image: postgres:16-alpine
+    image: postgres:${DOCKER_POSTGRES_VERSION:-17-alpine}
     entrypoint: ["sh", "-c"]
     command: ["docker-entrypoint.sh postgres -c log_min_messages=$${POSTGRES_LOG_LEVEL:-warning}"]
     env_file: ../.env
@@ -22,7 +22,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:${DOCKER_REDIS_VERSION:-8-alpine}
     command: sh -c 'redis-server --requirepass "$$REDIS_PASSWORD" --loglevel "$${REDIS_LOG_LEVEL:-debug}"'
     env_file: ../.env
     ports:

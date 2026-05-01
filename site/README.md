@@ -21,7 +21,7 @@ Not a docs site — documentation lives under `docs/` and in the main
 
 ## Run locally
 
-Requirements: Node.js 20+ (match CI). From the repo root:
+Requirements: Node.js 22+ (match CI). From the repo root:
 
 ```bash
 cd site
@@ -55,7 +55,7 @@ Automated via `.github/workflows/site-deploy.yml`. Triggers:
 - manual `workflow_dispatch` when you want to force a rebuild.
 
 The workflow runs `npm ci` + `npm run build` inside `site/`, uploads
-`site/dist/` as the Pages artifact, and `actions/deploy-pages@v4`
+`site/dist/` as the Pages artifact, and `actions/deploy-pages@v5`
 publishes it.
 
 ### One-time setup
