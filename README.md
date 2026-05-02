@@ -38,6 +38,17 @@
 
 ---
 
+> [!CAUTION]
+> **v2.0.0 — Breaking change: Postgres 16 → 17**
+>
+> Upgrading from any version prior to v2.0.0 requires a **manual database
+> migration**. A direct `docker compose pull && docker compose up -d` will
+> leave the database crash-looping. Run the migration script first.
+>
+> → **[Upgrade guide: v1.x → v2.0.0](docs/upgrade.md)**
+
+---
+
 ## Self-hosting and technical details
 
 What follows is the reference for running your own instance. For what Nudge does and how it looks in use, see the [project site](https://cibrandocampo.github.io/nudge/).
@@ -186,6 +197,7 @@ After seeding, cibran's dashboard shows nine routines (five private, three he sh
 - [Development setup](https://github.com/cibrandocampo/nudge/blob/main/dev/README.md)
 - [Development — Claude Code workflow](https://github.com/cibrandocampo/nudge/blob/main/docs/development.md)
 - [Backup & restore](https://github.com/cibrandocampo/nudge/blob/main/docs/backup.md)
+- [Upgrade guide](https://github.com/cibrandocampo/nudge/blob/main/docs/upgrade.md)
 - [Troubleshooting](https://github.com/cibrandocampo/nudge/blob/main/docs/troubleshooting.md)
 
 ### Docker images
