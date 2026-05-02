@@ -102,25 +102,21 @@ git push -u origin <branch>
 
 ### Create PR
 
+Follow the **`pr-create` command** format to build the PR body:
+- Summary bullets ordered from most to least functional impact.
+- Issues section (`Closes #n`) only if a tracked issue is resolved.
+- Notes section only if a critical design decision was made.
+- Test plan with `[x]` for already-run tests and `[ ]` for reviewer checks.
+
 ```bash
 gh pr create --title "<concise title>" --body "$(cat <<'EOF'
-## Summary
-
-- Bullet 1
-- Bullet 2
-
-## Test plan
-
-- [ ] Backend tests pass
-- [ ] Frontend tests pass
-- [ ] Lint/format clean
-- [ ] (other specific checks)
+<body following pr-create format>
 EOF
 )"
 ```
 
-- Title: <70 characters, in English
-- Body: clear summary + test plan with checklist
+- Title: <70 characters, in English, imperative mood
+- Body: structured per `pr-create` (no authorship attribution, English only)
 
 ---
 
