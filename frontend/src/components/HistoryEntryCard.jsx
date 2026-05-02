@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
 import { formatEntryTime } from '../utils/historyGroups'
 import Icon from './Icon'
+import { useAuth } from '../contexts/AuthContext'
 import shared from '../styles/shared.module.css'
 import s from './HistoryEntryCard.module.css'
 
@@ -33,11 +34,16 @@ export default function HistoryEntryCard({
   isEditing,
 }) {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const isRoutine = entry._type === 'routine'
   const title = isRoutine ? entry.routine_name : entry.stock_name
-  const authorLabel = isRoutine
-    ? entry.completed_by_username && t('sharing.completedBy', { username: entry.completed_by_username })
-    : entry.consumed_by_username && t('sharing.consumedBy', { username: entry.consumed_by_username })
+  const authorUsername = isRoutine ? entry.completed_by_username : entry.consumed_by_username
+  const showAuthor = Boolean(authorUsername && authorUsername !== user?.username)
+  const authorLabel = showAuthor
+    ? isRoutine
+      ? t('sharing.completedBy', { username: authorUsername })
+      : t('sharing.consumedBy', { username: authorUsername })
+    : null
 
   const totalQty = entry.consumed_lots?.reduce((sum, l) => sum + l.quantity, 0) ?? 0
   const lotNumbers = (entry.consumed_lots || [])
@@ -51,11 +57,22 @@ export default function HistoryEntryCard({
     return (
       <div className={cx(shared.card, s.compactCard)} data-testid="history-entry" data-entry-type={entry._type}>
         <div className={s.compactRow}>
-          <span className={s.compactTime}>{formatEntryTime(entry.created_at)}</span>
-          {authorLabel && <span className={s.compactAuthor}>{authorLabel}</span>}
-          {lotNumbers && <span className={s.compactLot}>({lotNumbers})</span>}
-          {entry.notes && <span className={s.compactNotes}>{entry.notes}</span>}
-          {!isRoutine && <span className={s.compactQty}>−{entry.quantity}</span>}
+          <span className={s.compactLeft}>
+            <span className={s.compactTime}>{formatEntryTime(entry.created_at)}</span>
+            {lotNumbers && <span className={s.compactLot}>({lotNumbers})</span>}
+            {entry.notes && <span className={s.compactNotes}>{entry.notes}</span>}
+          </span>
+          {!isRoutine && (
+            <span className={s.compactRight}>
+              <span className={s.compactQty}>−{entry.quantity}</span>
+              {showAuthor && <span className={s.compactAuthor}>{authorLabel}</span>}
+            </span>
+          )}
+          {isRoutine && showAuthor && (
+            <span className={s.compactRight}>
+              <span className={s.compactAuthor}>{authorLabel}</span>
+            </span>
+          )}
         </div>
       </div>
     )
@@ -71,10 +88,6 @@ export default function HistoryEntryCard({
               <span>{title}</span>
             </span>
           )}
-          <span className={shared.cardSubtitle}>
-            <span>{formatEntryTime(entry.created_at)}</span>
-            {authorLabel && <span>{authorLabel}</span>}
-          </span>
           {entry.consumed_lots?.length > 0 && (
             <span className={shared.cardStockBadge}>
               <Icon name="package" size="sm" />
@@ -85,45 +98,49 @@ export default function HistoryEntryCard({
             </span>
           )}
         </div>
-        {(editable || entry.notes) && (
-          <div className={s.notesSide}>
-            {isEditing ? (
-              <input
-                className={cx(shared.input, s.notesInput)}
-                autoFocus
-                defaultValue={entry.notes || ''}
-                placeholder={t('history.notesPlaceholder')}
-                onBlur={(ev) => onSave(ev.target.value)}
-                onKeyDown={(ev) => {
-                  if (ev.key === 'Enter') onSave(ev.target.value)
-                  if (ev.key === 'Escape') onCancelEdit()
-                }}
-              />
-            ) : (
-              <>
-                {entry.notes &&
-                  (editable ? (
-                    <button type="button" className={cx(s.notesView, s.notesViewEditable)} onClick={onStartEdit}>
-                      {entry.notes}
+        <div className={s.rightCol}>
+          <span className={s.entryTime}>{formatEntryTime(entry.created_at)}</span>
+          {showAuthor && <span className={s.entryAuthor}>{authorLabel}</span>}
+          {(editable || entry.notes) && (
+            <div className={s.notesSide}>
+              {isEditing ? (
+                <input
+                  className={cx(shared.input, s.notesInput)}
+                  autoFocus
+                  defaultValue={entry.notes || ''}
+                  placeholder={t('history.notesPlaceholder')}
+                  onBlur={(ev) => onSave(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter') onSave(ev.target.value)
+                    if (ev.key === 'Escape') onCancelEdit()
+                  }}
+                />
+              ) : (
+                <>
+                  {entry.notes &&
+                    (editable ? (
+                      <button type="button" className={cx(s.notesView, s.notesViewEditable)} onClick={onStartEdit}>
+                        {entry.notes}
+                      </button>
+                    ) : (
+                      <span className={s.notesView}>{entry.notes}</span>
+                    ))}
+                  {editable && (
+                    <button
+                      type="button"
+                      className={shared.btnIcon}
+                      onClick={onStartEdit}
+                      aria-label={entry.notes ? t('history.editNotes') : t('history.addNote')}
+                      title={entry.notes ? t('history.editNotes') : t('history.addNote')}
+                    >
+                      <Icon name="notebook-pen" size="sm" />
                     </button>
-                  ) : (
-                    <span className={s.notesView}>{entry.notes}</span>
-                  ))}
-                {editable && (
-                  <button
-                    type="button"
-                    className={shared.btnIcon}
-                    onClick={onStartEdit}
-                    aria-label={entry.notes ? t('history.editNotes') : t('history.addNote')}
-                    title={entry.notes ? t('history.editNotes') : t('history.addNote')}
-                  >
-                    <Icon name="notebook-pen" size="sm" />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
