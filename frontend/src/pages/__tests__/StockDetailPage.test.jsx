@@ -238,18 +238,16 @@ describe('StockDetailPage', () => {
     expect(depletion.className).toMatch(/stockDepletionDanger/)
   })
 
-  it('shows an "Owner: <username>" meta-row when the stock is shared with the current user', async () => {
+  it('shows an owner chip when the stock is shared with the current user', async () => {
     const sharedStock = { ...stock, is_owner: false, owner_username: 'alice' }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
-    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
-    // Mirrors RoutineDetailPage: a structured label-value pair, not the
-    // dropped italic span. The label is `t('sharing.owner')` → "Owner".
-    const label = screen.getByText('Owner')
-    expect(label).toBeInTheDocument()
-    const value = screen.getByText('alice')
-    // Label and value share the same `metaRow` parent.
-    expect(label.parentElement).toBe(value.parentElement)
+    const section = await screen.findByTestId('owner-info')
+    expect(section).toBeInTheDocument()
+    expect(section).toHaveTextContent('Owner')
+    expect(section).toHaveTextContent('alice')
+    // Avatar initial rendered inside the chip
+    expect(section).toHaveTextContent('A')
   })
 
   it('renders the danger border when stock_severity is "out"', async () => {

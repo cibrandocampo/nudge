@@ -16,6 +16,7 @@ import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
 import cx from '../utils/cx'
+import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { parseIntSafe } from '../utils/number'
@@ -202,12 +203,19 @@ export default function StockDetailPage() {
           </div>
 
           {stock.is_owner === false && stock.owner_username && (
-            <div className={cx(shared.card, tokens.border, s.meta)}>
-              <div className={s.metaRow}>
-                <span className={s.metaLabel}>{t('sharing.owner')}</span>
-                <span className={s.metaValue}>{stock.owner_username}</span>
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="owner-info">
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
               </div>
-            </div>
+              <div className={shared.formChipsRow}>
+                <span className={shared.formChip}>
+                  <span className={shared.formChipAvatar} aria-hidden="true">
+                    {avatarInitial({ username: stock.owner_username })}
+                  </span>
+                  <span>{stock.owner_username}</span>
+                </span>
+              </div>
+            </section>
           )}
 
           {stock.is_owner !== false && stock.shared_with_details?.length > 0 && (
