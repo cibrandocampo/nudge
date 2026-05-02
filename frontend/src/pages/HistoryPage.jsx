@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import Combobox from '../components/Combobox'
 import DateRangePicker from '../components/DateRangePicker'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Spinner from '../components/Spinner'
@@ -55,6 +56,17 @@ export default function HistoryPage() {
 
   const { data: routines = [] } = useRoutines()
   const { data: stocks = [] } = useStockList()
+
+  const routineOptions = useMemo(
+    () => [{ id: '', name: t('history.allRoutines') }, ...routines],
+    [routines, t],
+  )
+  const stockOptions = useMemo(
+    () => [{ id: '', name: t('history.allStocks') }, ...stocks],
+    [stocks, t],
+  )
+  const selectedRoutine = routineOptions.find((r) => String(r.id) === String(routineFilter)) ?? routineOptions[0]
+  const selectedStock = stockOptions.find((s) => String(s.id) === String(stockFilter)) ?? stockOptions[0]
 
   const entriesFilters = useMemo(
     () => ({
@@ -120,8 +132,8 @@ export default function HistoryPage() {
 
   const handleTypeFilterChange = (value) => {
     setTypeFilter(value)
-    if (value === 'consumptions') setRoutineFilter('')
-    if (value === 'routines') setStockFilter('')
+    if (value !== 'routines') setRoutineFilter('')
+    if (value !== 'consumptions') setStockFilter('')
   }
 
   const loadMore = () => {
@@ -159,45 +171,39 @@ export default function HistoryPage() {
           </select>
         </div>
 
-        {typeFilter !== 'consumptions' && (
+        {typeFilter === 'routines' && (
           <div className={s.filterField}>
             <label className={s.filterLabel} htmlFor="history-filter-routine">
               {t('history.filterRoutine')}
             </label>
-            <select
+            <Combobox
               id="history-filter-routine"
-              className={shared.input}
-              value={routineFilter}
-              onChange={(e) => setRoutineFilter(e.target.value)}
-            >
-              <option value="">{t('history.allRoutines')}</option>
-              {routines.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
+              options={routineOptions}
+              value={selectedRoutine}
+              onChange={(r) => setRoutineFilter(String(r.id))}
+              getLabel={(r) => r.name}
+              getKey={(r) => String(r.id)}
+              placeholder={t('history.searchRoutine')}
+              emptyMessage={t('history.noRoutines')}
+            />
           </div>
         )}
 
-        {typeFilter !== 'routines' && (
+        {typeFilter === 'consumptions' && (
           <div className={s.filterField}>
             <label className={s.filterLabel} htmlFor="history-filter-stock">
               {t('history.filterStock')}
             </label>
-            <select
+            <Combobox
               id="history-filter-stock"
-              className={shared.input}
-              value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value)}
-            >
-              <option value="">{t('history.allStocks')}</option>
-              {stocks.map((st) => (
-                <option key={st.id} value={st.id}>
-                  {st.name}
-                </option>
-              ))}
-            </select>
+              options={stockOptions}
+              value={selectedStock}
+              onChange={(s) => setStockFilter(String(s.id))}
+              getLabel={(s) => s.name}
+              getKey={(s) => String(s.id)}
+              placeholder={t('history.searchStock')}
+              emptyMessage={t('history.noStocks')}
+            />
           </div>
         )}
       </div>

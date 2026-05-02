@@ -95,10 +95,12 @@ describe('HistoryPage', () => {
     expect(getEntryNames(container)).toContain('Water filter')
   })
 
-  it('renders routine filter dropdown', async () => {
+  it('renders routine filter dropdown when routines type is selected', async () => {
     setupHandlers()
-    renderWithProviders(<HistoryPage />)
-    await waitFor(() => expect(screen.getByText('All routines')).toBeInTheDocument())
+    const { user } = renderWithProviders(<HistoryPage />)
+    const typeSelect = await screen.findByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'routines')
+    await waitFor(() => expect(screen.getByDisplayValue('All routines')).toBeInTheDocument())
   })
 
   it('shows load more button when there is a next page', async () => {
@@ -239,10 +241,13 @@ describe('HistoryPage — type filter', () => {
     })
   })
 
-  it('stock filter appears when consumptions or all selected', async () => {
+  it('stock filter appears only when consumptions type is selected', async () => {
     setupHandlers()
-    renderWithProviders(<HistoryPage />)
-    await waitFor(() => expect(screen.getByText('All items')).toBeInTheDocument())
+    const { user } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(screen.queryByDisplayValue('All items')).not.toBeInTheDocument())
+    const typeSelect = screen.getByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'consumptions')
+    await waitFor(() => expect(screen.getByDisplayValue('All items')).toBeInTheDocument())
   })
 
   it('stock filter hidden when routines only selected', async () => {
@@ -483,14 +488,14 @@ describe('HistoryPage — note editing edge cases', () => {
   it('filters stock consumptions by stock', async () => {
     setupHandlers()
     const { user } = renderWithProviders(<HistoryPage />)
-    // Wait for the stock dropdown option to be populated from the query before
-    // attempting to select it.
+    const typeSelect = await screen.findByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'consumptions')
+
+    const stockCombobox = await screen.findByDisplayValue('All items')
+    await user.click(stockCombobox)
     await waitFor(() => expect(screen.getByRole('option', { name: 'Insulin pens' })).toBeInTheDocument())
+    await user.click(screen.getByRole('option', { name: 'Insulin pens' }))
 
-    const stockSelect = screen.getByDisplayValue('All items')
-    await user.selectOptions(stockSelect, '1')
-
-    // Should still show the page (API re-fetches)
     await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument())
   })
 
@@ -499,8 +504,13 @@ describe('HistoryPage — note editing edge cases', () => {
     const { user, container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
 
-    const routineSelect = screen.getByDisplayValue('All routines')
-    await user.selectOptions(routineSelect, '1')
+    const typeSelect = screen.getByDisplayValue('All')
+    await user.selectOptions(typeSelect, 'routines')
+
+    const routineCombobox = await screen.findByDisplayValue('All routines')
+    await user.click(routineCombobox)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Take vitamins' })).toBeInTheDocument())
+    await user.click(screen.getByRole('option', { name: 'Take vitamins' }))
 
     await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument())
   })
@@ -581,9 +591,11 @@ describe('HistoryPage — API format variants', () => {
       http.get(`${BASE}/stock/`, () => HttpResponse.json([])),
       http.get(`${BASE}/routines/`, () => HttpResponse.json({ results: [{ id: 1, name: 'Take vitamins' }], count: 1 })),
     )
-    renderWithProviders(<HistoryPage />)
-    // Wait for the routine filter to appear (populated from API response)
-    await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+    const { user } = renderWithProviders(<HistoryPage />, { initialEntries: ['/?type=routines'] })
+    // Open the combobox to confirm the paginated routines response is parsed correctly
+    const routineCombobox = await screen.findByDisplayValue('All routines')
+    await user.click(routineCombobox)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Take vitamins' })).toBeInTheDocument())
   })
 
   it('handles stocks plain array response format', async () => {
@@ -593,8 +605,10 @@ describe('HistoryPage — API format variants', () => {
       http.get(`${BASE}/stock/`, () => HttpResponse.json([{ id: 1, name: 'Filters', quantity: 5 }])),
       http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
     )
-    renderWithProviders(<HistoryPage />)
-    // Wait for the stock filter to appear (populated from API response)
-    await waitFor(() => expect(screen.getByText('Filters')).toBeInTheDocument())
+    const { user } = renderWithProviders(<HistoryPage />, { initialEntries: ['/?type=consumptions'] })
+    // Open the combobox to confirm the plain array stocks response is parsed correctly
+    const stockCombobox = await screen.findByDisplayValue('All items')
+    await user.click(stockCombobox)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Filters' })).toBeInTheDocument())
   })
 })
