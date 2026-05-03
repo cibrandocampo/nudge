@@ -314,6 +314,20 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             return "soon"
         return "ok"
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request and instance.user != request.user:
+            overrides = getattr(instance, "_my_group_override", None) or []
+            if overrides:
+                override = overrides[0]
+                data["group"] = override.group_id
+                data["group_name"] = override.group.name if override.group else None
+            else:
+                data["group"] = None
+                data["group_name"] = None
+        return data
+
 
 class StockConsumptionSerializer(serializers.ModelSerializer):
     stock_name = serializers.CharField(source="stock.name", read_only=True)

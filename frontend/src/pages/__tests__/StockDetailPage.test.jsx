@@ -250,6 +250,38 @@ describe('StockDetailPage', () => {
     expect(section).toHaveTextContent('A')
   })
 
+  it('shows other recipients alongside the owner chip, excluding the current user', async () => {
+    const sharedStock = {
+      ...stock,
+      is_owner: false,
+      owner_username: 'alice',
+      shared_with_details: [
+        { id: 3, username: 'testuser', first_name: '', last_name: '' },
+        { id: 4, username: 'bob', first_name: 'Bob', last_name: '' },
+      ],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
+    renderDetail()
+    const section = await screen.findByTestId('owner-info')
+    expect(section).toHaveTextContent('alice')
+    expect(section).toHaveTextContent('bob')
+    expect(section).not.toHaveTextContent('testuser')
+  })
+
+  it('shows only the owner chip when the current user is the sole recipient', async () => {
+    const sharedStock = {
+      ...stock,
+      is_owner: false,
+      owner_username: 'alice',
+      shared_with_details: [{ id: 3, username: 'testuser', first_name: '', last_name: '' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
+    renderDetail()
+    const section = await screen.findByTestId('owner-info')
+    expect(section).toHaveTextContent('alice')
+    expect(section).not.toHaveTextContent('testuser')
+  })
+
   it('renders the danger border when stock_severity is "out"', async () => {
     const empty = { ...stock, quantity: 0, stock_severity: 'out', lots: [] }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
@@ -387,5 +419,39 @@ describe('StockDetailPage', () => {
     expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
     await user.click(screen.getByTestId('add-lot-toggle'))
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
+  })
+
+  describe('my-group picker (recipient)', () => {
+    const sharedStock = { ...stock, is_owner: false, owner_username: 'alice', group: null, group_name: null }
+
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
+        http.get(`${BASE}/stock-groups/`, () =>
+          HttpResponse.json({ results: [{ id: 10, name: 'Test Group', display_order: 0 }] }),
+        ),
+      )
+    })
+
+    it('renders the group picker when the user is not the owner', async () => {
+      renderDetail()
+      expect(await screen.findByTestId('my-group-section')).toBeInTheDocument()
+    })
+
+    it('does not render the group picker when the user is the owner', async () => {
+      server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
+      renderDetail()
+      await screen.findByText('Water filter')
+      expect(screen.queryByTestId('my-group-section')).not.toBeInTheDocument()
+    })
+
+    it('calls my-group mutation when the select changes', async () => {
+      const { user } = renderDetail()
+      const select = await screen.findByTestId('my-group-section').then(
+        (s) => within(s).getByRole('combobox'),
+      )
+      await user.selectOptions(select, '10')
+      await waitFor(() => expect(select.value).toBe('10'))
+    })
   })
 })

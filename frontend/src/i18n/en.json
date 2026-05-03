@@ -231,6 +231,7 @@
   "stockDetail.edit": "Edit",
   "stockDetail.viewAll": "View history",
   "stockDetail.notFound": "Stock not found.",
+  "stockDetail.myGroup": "My group",
   "stockForm.newTitle": "New product",
   "stockForm.editTitle": "Edit product",
   "stockForm.nameLabel": "Name",

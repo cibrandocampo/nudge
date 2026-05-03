@@ -231,6 +231,7 @@
   "stockDetail.edit": "Editar",
   "stockDetail.viewAll": "Ver historial",
   "stockDetail.notFound": "Stock non atopado.",
+  "stockDetail.myGroup": "O meu grupo",
   "stockForm.newTitle": "Novo produto",
   "stockForm.editTitle": "Editar produto",
   "stockForm.nameLabel": "Nome",
