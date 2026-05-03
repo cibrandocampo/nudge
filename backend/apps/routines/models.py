@@ -144,6 +144,36 @@ def _lot_consumed_dict(lot, qty):
     }
 
 
+class UserStockGroup(models.Model):
+    """Per-user group assignment for a stock.
+
+    The owner's group lives in Stock.group. For every other user who has
+    access to a shared stock, their personal category is stored here.
+    One record per (user, stock) pair; group may be null (= uncategorised).
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stock_group_overrides",
+    )
+    stock = models.ForeignKey(
+        "Stock",
+        on_delete=models.CASCADE,
+        related_name="group_overrides",
+    )
+    group = models.ForeignKey(
+        "StockGroup",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stock_overrides",
+    )
+
+    class Meta:
+        unique_together = [("user", "stock")]
+
+
 class StockLot(models.Model):
     """
     A single batch/lot of a Stock item with its own quantity and optional expiry.
@@ -184,8 +214,10 @@ def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
     """When users are removed from a stock's shared_with, unlink their routines."""
     if action == "post_remove" and pk_set:
         Routine.objects.filter(stock=instance, user_id__in=pk_set).update(stock=None)
+        UserStockGroup.objects.filter(user_id__in=pk_set, stock=instance).delete()
     elif action == "post_clear":
         Routine.objects.filter(stock=instance).exclude(user=instance.user).update(stock=None)
+        UserStockGroup.objects.filter(stock=instance).delete()
 
 
 class StockConsumption(models.Model):

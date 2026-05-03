@@ -319,6 +319,7 @@ export default function SettingsPage() {
         />
       )}
       {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} />}
+      <p className={s.appVersion}>{import.meta.env.VITE_APP_VERSION ?? 'dev'}</p>
     </div>
   )
 }

@@ -16,7 +16,7 @@ from apps.core.permissions import IsOwner
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup
 from .serializers import (
     ClientTimestampInputSerializer,
     RoutineEntrySerializer,
@@ -61,7 +61,17 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             Stock.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
             .distinct()
             .select_related("group", "user")
-            .prefetch_related("lots", "shared_with", active_routines, recent_consumptions)
+            .prefetch_related(
+                "lots",
+                "shared_with",
+                active_routines,
+                recent_consumptions,
+                Prefetch(
+                    "group_overrides",
+                    queryset=UserStockGroup.objects.select_related("group").filter(user=self.request.user),
+                    to_attr="_my_group_override",
+                ),
+            )
             .order_by("name")
         )
 
@@ -90,6 +100,37 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         instance = self.get_object()
         logger.info("Stock %r deleted (user %s).", instance.name, request.user.username)
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["patch"], url_path="my-group")
+    def my_group(self, request, pk=None):
+        """Set the requesting user's personal group for this stock."""
+        stock = self.get_object()
+        group_id = request.data.get("group")
+
+        if group_id is not None:
+            try:
+                group = StockGroup.objects.get(id=group_id, user=request.user)
+            except StockGroup.DoesNotExist:
+                return Response(
+                    {"group": ["Invalid group."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            group = None
+
+        if stock.user == request.user:
+            stock.group = group
+            stock.save(update_fields=["group"])
+        else:
+            usg, _ = UserStockGroup.objects.update_or_create(
+                user=request.user,
+                stock=stock,
+                defaults={"group": group},
+            )
+            stock._my_group_override = [usg]
+
+        serializer = self.get_serializer(stock)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="consume")
     def consume(self, request, pk=None):

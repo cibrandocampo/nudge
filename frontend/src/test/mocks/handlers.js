@@ -223,6 +223,26 @@ export const handlers = [
 
   http.delete(`${BASE}/stock/:stockId/lots/:lotId/`, () => new HttpResponse(null, { status: 204 })),
 
+  http.patch(`${BASE}/stock/:id/my-group/`, async ({ params, request }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: Number(params.id),
+      name: 'Water filter',
+      quantity: 10,
+      group: body.group ?? null,
+      group_name: body.group ? 'Test Group' : null,
+      lots: [],
+      expiring_lots: [],
+      stock_severity: 'ok',
+      expiry_severity: 'ok',
+      shared_with: [],
+      shared_with_details: [],
+      is_owner: false,
+      owner_username: 'alice',
+      updated_at: '2026-04-17T10:00:00Z',
+    })
+  }),
+
   http.post(`${BASE}/stock/:id/consume/`, ({ params }) =>
     HttpResponse.json({
       id: Number(params.id),
