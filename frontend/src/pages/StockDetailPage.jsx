@@ -13,9 +13,12 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
+import { useSetMyStockGroup } from '../hooks/mutations/useSetMyStockGroup'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
+import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
+import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { parseIntSafe } from '../utils/number'
@@ -58,6 +61,7 @@ export default function StockDetailPage() {
   const { data: consumptions = [] } = useStockConsumptions({ stock: String(stockId), enabled: !isNaN(stockId) })
   const deleteStock = useDeleteStock()
   const createLot = useCreateStockLot()
+  const setMyGroup = useSetMyStockGroup()
   const deleteLot = useDeleteStockLot()
   const reachable = useServerReachable()
 
@@ -114,6 +118,7 @@ export default function StockDetailPage() {
   }
 
   const isOwner = stock?.is_owner !== false
+  const { user } = useAuth()
 
   return (
     <QueryHandler
@@ -202,12 +207,29 @@ export default function StockDetailPage() {
           </div>
 
           {stock.is_owner === false && stock.owner_username && (
-            <div className={cx(shared.card, tokens.border, s.meta)}>
-              <div className={s.metaRow}>
-                <span className={s.metaLabel}>{t('sharing.owner')}</span>
-                <span className={s.metaValue}>{stock.owner_username}</span>
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="owner-info">
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
               </div>
-            </div>
+              <div className={shared.formChipsRow}>
+                <span className={shared.formChip}>
+                  <span className={shared.formChipAvatar} aria-hidden="true">
+                    {avatarInitial({ username: stock.owner_username })}
+                  </span>
+                  <span>{stock.owner_username}</span>
+                </span>
+                {stock.shared_with_details
+                  ?.filter((c) => c.username !== user?.username)
+                  .map((c) => (
+                    <span key={c.id} className={shared.formChip}>
+                      <span className={shared.formChipAvatar} aria-hidden="true">
+                        {avatarInitial(c)}
+                      </span>
+                      <span>{c.username}</span>
+                    </span>
+                  ))}
+              </div>
+            </section>
           )}
 
           {stock.is_owner !== false && stock.shared_with_details?.length > 0 && (
@@ -216,6 +238,29 @@ export default function StockDetailPage() {
                 <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
               <SharedWithChips contacts={stock.shared_with_details} />
+            </section>
+          )}
+
+          {!isOwner && (
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="my-group-section">
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('stockDetail.myGroup')}</span>
+              </div>
+              <select
+                className={shared.input}
+                value={stock.group ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setMyGroup.mutate({ stockId: stock.id, group: val === '' ? null : Number(val) })
+                }}
+              >
+                <option value="">{t('stockForm.groupNone')}</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
             </section>
           )}
 

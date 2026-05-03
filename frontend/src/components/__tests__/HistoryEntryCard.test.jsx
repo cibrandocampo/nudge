@@ -43,13 +43,28 @@ describe('HistoryEntryCard — compact', () => {
     expect(screen.getByText('−1')).toBeInTheDocument()
   })
 
-  it('shows an author line when completed_by_username is set on a routine', () => {
+  it('shows the author when the entry was logged by a different user', () => {
     renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'alice' })} compact />)
     expect(screen.getByText(/alice/)).toBeInTheDocument()
+  })
+
+  it('hides the author when the entry was logged by the current user', () => {
+    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'testuser' })} compact />)
+    expect(screen.queryByText(/testuser/)).not.toBeInTheDocument()
   })
 })
 
 describe('HistoryEntryCard — full card', () => {
+  it('shows the author when the entry was logged by a different user', () => {
+    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'alice' })} />)
+    expect(screen.getByText(/alice/)).toBeInTheDocument()
+  })
+
+  it('hides the author when the entry was logged by the current user', () => {
+    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'testuser' })} />)
+    expect(screen.queryByText(/testuser/)).not.toBeInTheDocument()
+  })
+
   it('renders a read-only notes view when editable callbacks are not wired', () => {
     renderWithProviders(<HistoryEntryCard entry={routineEntry({ notes: 'After breakfast' })} />)
     expect(screen.getByText('After breakfast')).toBeInTheDocument()

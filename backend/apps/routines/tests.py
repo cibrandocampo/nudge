@@ -11,7 +11,7 @@ from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
 User = get_user_model()
@@ -1964,6 +1964,141 @@ class SharedStockTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         stock_ids = [c["stock"] for c in response.json()["results"]]
         self.assertIn(self.stock.id, stock_ids)
+
+
+# ── UserStockGroup ───────────────────────────────────────────────────────────
+
+
+class UserStockGroupTest(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user("usg_owner", password="pw")
+        self.recipient = User.objects.create_user("usg_recipient", password="pw")
+        self.owner.contacts.add(self.recipient)
+        self.group = StockGroup.objects.create(user=self.recipient, name="My Group")
+        self.stock = Stock.objects.create(user=self.owner, name="Aspirin")
+        self.stock.shared_with.add(self.recipient)
+
+    def test_override_created_on_save(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.group)
+        self.assertEqual(UserStockGroup.objects.filter(stock=self.stock).count(), 1)
+
+    def test_override_deleted_on_unshare(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.group)
+        self.stock.shared_with.remove(self.recipient)
+        self.assertFalse(UserStockGroup.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+    def test_override_deleted_on_clear(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.group)
+        self.stock.shared_with.clear()
+        self.assertFalse(UserStockGroup.objects.filter(stock=self.stock).exists())
+
+    def test_owner_unshare_does_not_affect_other_overrides(self):
+        other = User.objects.create_user("usg_other", password="pw")
+        self.owner.contacts.add(other)
+        self.stock.shared_with.add(other)
+        other_group = StockGroup.objects.create(user=other, name="Other Group")
+        UserStockGroup.objects.create(user=other, stock=self.stock, group=other_group)
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.group)
+
+        # Remove only the recipient — other's override must survive.
+        self.stock.shared_with.remove(self.recipient)
+        self.assertTrue(UserStockGroup.objects.filter(user=other, stock=self.stock).exists())
+        self.assertFalse(UserStockGroup.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+
+# ── UserStockGroup serializer / my-group action ──────────────────────────────
+
+
+class UserStockGroupSerializerTest(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user("owner2", password="pw")
+        self.recipient = User.objects.create_user("recip2", password="pw")
+        self.owner.contacts.add(self.recipient)
+        self.owner_group = StockGroup.objects.create(user=self.owner, name="Owner Group")
+        self.recip_group = StockGroup.objects.create(user=self.recipient, name="Recip Group")
+        self.stock = Stock.objects.create(user=self.owner, name="Ibuprofen", group=self.owner_group)
+        self.stock.shared_with.add(self.recipient)
+
+    # ── GET: effective group in serialization ─────────────────────
+
+    def test_owner_sees_own_stock_group(self):
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["group"], self.owner_group.id)
+        self.assertEqual(res.data["group_name"], "Owner Group")
+
+    def test_recipient_sees_null_group_before_override(self):
+        self.client.force_authenticate(user=self.recipient)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNone(res.data["group"])
+        self.assertIsNone(res.data["group_name"])
+
+    def test_recipient_sees_own_group_after_override(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
+        self.client.force_authenticate(user=self.recipient)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["group"], self.recip_group.id)
+        self.assertEqual(res.data["group_name"], "Recip Group")
+
+    def test_owner_group_unaffected_by_recipient_override(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["group"], self.owner_group.id)
+
+    # ── PATCH my-group ─────────────────────────────────────────────
+
+    def test_recipient_can_set_group(self):
+        self.client.force_authenticate(user=self.recipient)
+        res = self.client.patch(
+            f"/api/stock/{self.stock.id}/my-group/",
+            {"group": self.recip_group.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["group"], self.recip_group.id)
+        self.assertTrue(
+            UserStockGroup.objects.filter(user=self.recipient, stock=self.stock, group=self.recip_group).exists()
+        )
+
+    def test_recipient_can_clear_group(self):
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
+        self.client.force_authenticate(user=self.recipient)
+        res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNone(res.data["group"])
+
+    def test_recipient_cannot_use_other_users_group(self):
+        other_group = StockGroup.objects.create(user=self.owner, name="Owner Private")
+        self.client.force_authenticate(user=self.recipient)
+        res = self.client.patch(
+            f"/api/stock/{self.stock.id}/my-group/",
+            {"group": other_group.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_owner_my_group_updates_stock_group(self):
+        new_group = StockGroup.objects.create(user=self.owner, name="New Owner Group")
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.patch(
+            f"/api/stock/{self.stock.id}/my-group/",
+            {"group": new_group.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.group, new_group)
+
+    def test_my_group_not_accessible_to_non_shared_user(self):
+        stranger = User.objects.create_user("stranger2", password="pw")
+        self.client.force_authenticate(user=stranger)
+        res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
+        self.assertEqual(res.status_code, 404)
 
 
 # ── Contact Removal Cascade ─────────────────────────────────────────────────
