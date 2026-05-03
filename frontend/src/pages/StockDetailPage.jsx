@@ -13,7 +13,6 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
-import { useSetMyStockGroup } from '../hooks/mutations/useSetMyStockGroup'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
 import { useAuth } from '../contexts/AuthContext'
@@ -61,7 +60,6 @@ export default function StockDetailPage() {
   const { data: consumptions = [] } = useStockConsumptions({ stock: String(stockId), enabled: !isNaN(stockId) })
   const deleteStock = useDeleteStock()
   const createLot = useCreateStockLot()
-  const setMyGroup = useSetMyStockGroup()
   const deleteLot = useDeleteStockLot()
   const reachable = useServerReachable()
 
@@ -144,28 +142,26 @@ export default function StockDetailPage() {
                 <Icon name="history" />
               </Link>
               {isOwner && (
-                <>
-                  <button
-                    type="button"
-                    className={cx(shared.btnAdd, shared.btnAddDanger)}
-                    onClick={() => setConfirmDelete(true)}
-                    aria-label={t('stockDetail.deleteStock')}
-                    title={t('stockDetail.deleteStock')}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                  <button
-                    type="button"
-                    className={cx(shared.btnAdd, !reachable && shared.disabled)}
-                    onClick={() => navigate(`/inventory/${stockId}/edit`)}
-                    disabled={!reachable}
-                    aria-label={t('stockDetail.edit')}
-                    title={!reachable ? t('offline.requiresConnection') : t('stockDetail.edit')}
-                  >
-                    <Icon name="pencil" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className={cx(shared.btnAdd, shared.btnAddDanger)}
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label={t('stockDetail.deleteStock')}
+                  title={t('stockDetail.deleteStock')}
+                >
+                  <Icon name="trash" />
+                </button>
               )}
+              <button
+                type="button"
+                className={cx(shared.btnAdd, !reachable && shared.disabled)}
+                onClick={() => navigate(`/inventory/${stockId}/edit`)}
+                disabled={!reachable}
+                aria-label={t('stockDetail.edit')}
+                title={!reachable ? t('offline.requiresConnection') : t('stockDetail.edit')}
+              >
+                <Icon name="pencil" />
+              </button>
             </div>
           </div>
 
@@ -238,29 +234,6 @@ export default function StockDetailPage() {
                 <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
               <SharedWithChips contacts={stock.shared_with_details} />
-            </section>
-          )}
-
-          {!isOwner && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="my-group-section">
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('stockDetail.myGroup')}</span>
-              </div>
-              <select
-                className={shared.input}
-                value={stock.group ?? ''}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setMyGroup.mutate({ stockId: stock.id, group: val === '' ? null : Number(val) })
-                }}
-              >
-                <option value="">{t('stockForm.groupNone')}</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
             </section>
           )}
 

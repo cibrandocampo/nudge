@@ -100,13 +100,14 @@ describe('StockDetailPage', () => {
     expect(btn).toHaveAttribute('title', 'Requires connection')
   })
 
-  it('hides the Edit button when the current user is not the owner', async () => {
+  it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_username: 'alice' })),
     )
     renderDetail()
     await screen.findByText('Water filter')
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete stock' })).not.toBeInTheDocument()
   })
 
   it('ignores add-lot submission with an invalid quantity', async () => {
@@ -419,39 +420,5 @@ describe('StockDetailPage', () => {
     expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
     await user.click(screen.getByTestId('add-lot-toggle'))
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
-  })
-
-  describe('my-group picker (recipient)', () => {
-    const sharedStock = { ...stock, is_owner: false, owner_username: 'alice', group: null, group_name: null }
-
-    beforeEach(() => {
-      server.use(
-        http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
-        http.get(`${BASE}/stock-groups/`, () =>
-          HttpResponse.json({ results: [{ id: 10, name: 'Test Group', display_order: 0 }] }),
-        ),
-      )
-    })
-
-    it('renders the group picker when the user is not the owner', async () => {
-      renderDetail()
-      expect(await screen.findByTestId('my-group-section')).toBeInTheDocument()
-    })
-
-    it('does not render the group picker when the user is the owner', async () => {
-      server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
-      renderDetail()
-      await screen.findByText('Water filter')
-      expect(screen.queryByTestId('my-group-section')).not.toBeInTheDocument()
-    })
-
-    it('calls my-group mutation when the select changes', async () => {
-      const { user } = renderDetail()
-      const select = await screen.findByTestId('my-group-section').then(
-        (s) => within(s).getByRole('combobox'),
-      )
-      await user.selectOptions(select, '10')
-      await waitFor(() => expect(select.value).toBe('10'))
-    })
   })
 })

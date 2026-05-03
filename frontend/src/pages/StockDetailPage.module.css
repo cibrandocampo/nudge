@@ -33,7 +33,6 @@
   margin-bottom: 1.5rem;
 }
 
-
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
 .lotsCard {

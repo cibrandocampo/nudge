@@ -391,3 +391,56 @@ describe('StockFormPage — edit', () => {
     expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
   })
 })
+
+describe('StockFormPage — edit as recipient (shared stock)', () => {
+  const sharedStock = {
+    id: 1,
+    name: 'Brita filter',
+    group: null,
+    shared_with: [],
+    is_owner: false,
+    owner_username: 'alice',
+    updated_at: '2026-04-22T10:00:00Z',
+  }
+
+  it('disables the name input, hides share, and exposes the category picker', async () => {
+    mockStock(sharedStock)
+    mockGroups([{ id: 7, name: 'Household', display_order: 0 }])
+    mockContacts()
+
+    renderEdit()
+    const nameInput = await screen.findByDisplayValue('Brita filter')
+    expect(nameInput).toBeDisabled()
+    const select = screen.getByRole('combobox')
+    expect(within(select).getByRole('option', { name: 'Household' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /share with/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add batch' })).not.toBeInTheDocument()
+  })
+
+  it('submits via PATCH /stock/:id/my-group/ instead of the generic update', async () => {
+    mockStock(sharedStock)
+    mockGroups([{ id: 7, name: 'Household', display_order: 0 }])
+    mockContacts()
+    let myGroupBody = null
+    let genericPatchCalled = false
+    server.use(
+      http.patch(`${BASE}/stock/1/my-group/`, async ({ request }) => {
+        myGroupBody = await request.json()
+        return HttpResponse.json({ ...sharedStock, group: myGroupBody.group })
+      }),
+      http.patch(`${BASE}/stock/1/`, () => {
+        genericPatchCalled = true
+        return HttpResponse.json({}, { status: 200 })
+      }),
+    )
+
+    const { user } = renderEdit()
+    const select = await screen.findByRole('combobox')
+    await user.selectOptions(select, '7')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(myGroupBody).toEqual({ group: 7 })
+    expect(genericPatchCalled).toBe(false)
+  })
+})

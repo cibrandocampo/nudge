@@ -92,3 +92,21 @@
 .submitBtn {
   flex: 1;
 }
+
+/* Disabled-name field with a lock badge on the right (recipient editing
+   a shared stock — the name is read-only context, not a form field). */
+.lockedInput {
+  position: relative;
+}
+.lockedInput input {
+  padding-right: 2rem;
+}
+.lockBadge {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}
