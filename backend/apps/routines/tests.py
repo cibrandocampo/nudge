@@ -2036,9 +2036,7 @@ class UserStockGroupSerializerTest(APITestCase):
         self.assertIsNone(res.data["group_name"])
 
     def test_recipient_sees_own_group_after_override(self):
-        UserStockGroup.objects.create(
-            user=self.recipient, stock=self.stock, group=self.recip_group
-        )
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
         self.client.force_authenticate(user=self.recipient)
         res = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertEqual(res.status_code, 200)
@@ -2046,9 +2044,7 @@ class UserStockGroupSerializerTest(APITestCase):
         self.assertEqual(res.data["group_name"], "Recip Group")
 
     def test_owner_group_unaffected_by_recipient_override(self):
-        UserStockGroup.objects.create(
-            user=self.recipient, stock=self.stock, group=self.recip_group
-        )
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
         self.client.force_authenticate(user=self.owner)
         res = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertEqual(res.status_code, 200)
@@ -2066,19 +2062,13 @@ class UserStockGroupSerializerTest(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["group"], self.recip_group.id)
         self.assertTrue(
-            UserStockGroup.objects.filter(
-                user=self.recipient, stock=self.stock, group=self.recip_group
-            ).exists()
+            UserStockGroup.objects.filter(user=self.recipient, stock=self.stock, group=self.recip_group).exists()
         )
 
     def test_recipient_can_clear_group(self):
-        UserStockGroup.objects.create(
-            user=self.recipient, stock=self.stock, group=self.recip_group
-        )
+        UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
         self.client.force_authenticate(user=self.recipient)
-        res = self.client.patch(
-            f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json"
-        )
+        res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
         self.assertEqual(res.status_code, 200)
         self.assertIsNone(res.data["group"])
 
@@ -2107,9 +2097,7 @@ class UserStockGroupSerializerTest(APITestCase):
     def test_my_group_not_accessible_to_non_shared_user(self):
         stranger = User.objects.create_user("stranger2", password="pw")
         self.client.force_authenticate(user=stranger)
-        res = self.client.patch(
-            f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json"
-        )
+        res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
         self.assertEqual(res.status_code, 404)
 
 

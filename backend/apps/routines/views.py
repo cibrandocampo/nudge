@@ -68,9 +68,7 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
                 recent_consumptions,
                 Prefetch(
                     "group_overrides",
-                    queryset=UserStockGroup.objects.select_related("group").filter(
-                        user=self.request.user
-                    ),
+                    queryset=UserStockGroup.objects.select_related("group").filter(user=self.request.user),
                     to_attr="_my_group_override",
                 ),
             )
