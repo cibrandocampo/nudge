@@ -10,6 +10,7 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useCreateStock } from '../hooks/mutations/useCreateStock'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
+import { useSetMyStockGroup } from '../hooks/mutations/useSetMyStockGroup'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
@@ -47,7 +48,9 @@ export default function StockFormPage() {
   const createStock = useCreateStock()
   const updateStock = useUpdateStock()
   const createStockLot = useCreateStockLot()
+  const setMyGroup = useSetMyStockGroup()
   const reachable = useServerReachable()
+  const isOwner = !isEditing || stock?.is_owner !== false
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [sharedWith, setSharedWith] = useState([])
@@ -70,7 +73,7 @@ export default function StockFormPage() {
 
   const validate = () => {
     const err = {}
-    if (!form.name.trim()) err.name = t('stockForm.errorNameRequired')
+    if (isOwner && !form.name.trim()) err.name = t('stockForm.errorNameRequired')
     if (!isEditing && batches.length > 0) {
       const badIndex = batches.findIndex((b) => parseIntSafe(b.quantity, -1) <= 0)
       if (badIndex !== -1) err.batches = t('stockForm.errorLotQuantity')
@@ -92,12 +95,16 @@ export default function StockFormPage() {
 
     try {
       if (isEditing) {
-        await updateStock.mutateAsync({
-          stockId,
-          stockName: form.name.trim() || stock?.name,
-          patch: { name: form.name.trim(), group: groupValue, shared_with: sharedWith },
-          updatedAt: stock?.updated_at,
-        })
+        if (!isOwner) {
+          await setMyGroup.mutateAsync({ stockId, group: groupValue })
+        } else {
+          await updateStock.mutateAsync({
+            stockId,
+            stockName: form.name.trim() || stock?.name,
+            patch: { name: form.name.trim(), group: groupValue, shared_with: sharedWith },
+            updatedAt: stock?.updated_at,
+          })
+        }
         navigate(`/inventory/${stockId}`)
         return
       }
@@ -176,13 +183,21 @@ export default function StockFormPage() {
         <form onSubmit={handleSubmit} className={s.form} noValidate>
           <section className={shared.formSection}>
             <FormField label={t('stockForm.nameLabel')} error={errors.name}>
-              <input
-                className={shared.input}
-                value={form.name}
-                onChange={field('name')}
-                placeholder={t('stockForm.namePlaceholder')}
-                autoFocus
-              />
+              <div className={isOwner ? undefined : s.lockedInput}>
+                <input
+                  className={shared.input}
+                  value={form.name}
+                  onChange={field('name')}
+                  placeholder={t('stockForm.namePlaceholder')}
+                  autoFocus={isOwner}
+                  disabled={!isOwner}
+                />
+                {!isOwner && (
+                  <span className={s.lockBadge} aria-hidden="true">
+                    <Icon name="lock" size="sm" />
+                  </span>
+                )}
+              </div>
             </FormField>
 
             <FormField label={t('stockForm.groupLabel')}>
@@ -197,12 +212,14 @@ export default function StockFormPage() {
             </FormField>
           </section>
 
-          <ShareWithSection
-            value={sharedWith}
-            onChange={setSharedWith}
-            contacts={contacts}
-            label={t('stockForm.sharedLabel')}
-          />
+          {isOwner && (
+            <ShareWithSection
+              value={sharedWith}
+              onChange={setSharedWith}
+              contacts={contacts}
+              label={t('stockForm.sharedLabel')}
+            />
+          )}
 
           {!isEditing && (
             <section className={shared.formSection}>
