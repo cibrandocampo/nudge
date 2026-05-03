@@ -57,14 +57,8 @@ export default function HistoryPage() {
   const { data: routines = [] } = useRoutines()
   const { data: stocks = [] } = useStockList()
 
-  const routineOptions = useMemo(
-    () => [{ id: '', name: t('history.allRoutines') }, ...routines],
-    [routines, t],
-  )
-  const stockOptions = useMemo(
-    () => [{ id: '', name: t('history.allStocks') }, ...stocks],
-    [stocks, t],
-  )
+  const routineOptions = useMemo(() => [{ id: '', name: t('history.allRoutines') }, ...routines], [routines, t])
+  const stockOptions = useMemo(() => [{ id: '', name: t('history.allStocks') }, ...stocks], [stocks, t])
   const selectedRoutine = routineOptions.find((r) => String(r.id) === String(routineFilter)) ?? routineOptions[0]
   const selectedStock = stockOptions.find((s) => String(s.id) === String(stockFilter)) ?? stockOptions[0]
 
