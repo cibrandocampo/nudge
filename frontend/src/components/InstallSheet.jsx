@@ -75,12 +75,7 @@ export default function InstallSheet({ platform, onClose }) {
           <h2 id={titleId} className={s.title}>
             {t(variant.titleKey)}
           </h2>
-          <button
-            type="button"
-            className={s.closeBtn}
-            onClick={onClose}
-            aria-label={t('pwa.install.sheetClose')}
-          >
+          <button type="button" className={s.closeBtn} onClick={onClose} aria-label={t('pwa.install.sheetClose')}>
             <Icon name="x" size="sm" />
           </button>
         </div>

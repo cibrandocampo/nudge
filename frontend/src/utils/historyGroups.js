@@ -1,5 +1,9 @@
 import { getLocale } from './time'
 
+export function effectiveDate(entry) {
+  return entry.client_created_at ?? entry.created_at
+}
+
 /**
  * Group history items (routine entries + stock consumptions) by day.
  * Returns a list of `{ dateLabel, items }` ready to render as sections.
@@ -10,7 +14,7 @@ import { getLocale } from './time'
 export function groupEntriesByDate(entries) {
   const map = new Map()
   for (const e of entries) {
-    const label = new Date(e.created_at).toLocaleDateString(getLocale(), {
+    const label = new Date(effectiveDate(e)).toLocaleDateString(getLocale(), {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -25,8 +29,8 @@ export function groupEntriesByDate(entries) {
   }))
 }
 
-export function formatEntryTime(isoString) {
-  return new Date(isoString).toLocaleTimeString(getLocale(), {
+export function formatEntryTime(entry) {
+  return new Date(effectiveDate(entry)).toLocaleTimeString(getLocale(), {
     hour: '2-digit',
     minute: '2-digit',
   })

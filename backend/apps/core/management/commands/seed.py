@@ -521,10 +521,12 @@ class Command(BaseCommand):
             note_text, note_every = notes_pattern.get(routine, ("", 1))
             for i in range(count):
                 offset = latest + timedelta(hours=routine.interval_hours * i)
+                timestamp = now - offset
                 RoutineEntry.objects.create(
                     routine=routine,
                     completed_by=completed_by,
-                    created_at=now - offset,
+                    created_at=timestamp,
+                    client_created_at=timestamp,
                     notes=note_text if (note_text and i % note_every == 0) else "",
                 )
 
@@ -533,18 +535,22 @@ class Command(BaseCommand):
         # - Pump cannulas: the consumption that drove the stock to qty=0.
         # - Hidroferol: a couple of standalone consumptions so the stock
         #   filter for `Hidroferol drops` has something to show.
+        cannula_consumed_at = now - timedelta(days=1, hours=2)
         StockConsumption.objects.create(
             stock=stocks["pump_cannulas"],
             consumed_by=cibran,
             quantity=1,
-            created_at=now - timedelta(days=1, hours=2),
+            created_at=cannula_consumed_at,
+            client_created_at=cannula_consumed_at,
         )
         for days_ago in (4, 9):
+            consumed_at = now - timedelta(days=days_ago, hours=2)
             StockConsumption.objects.create(
                 stock=stocks["hidroferol"],
                 consumed_by=cibran,
                 quantity=1,
-                created_at=now - timedelta(days=days_ago, hours=2),
+                created_at=consumed_at,
+                client_created_at=consumed_at,
             )
 
         # Ibuprofen — 3 direct consumptions (no linked routine) so the demo
@@ -554,11 +560,13 @@ class Command(BaseCommand):
         # The Ibuprofen card then shows `≈ Until <date>` with the lucide
         # `equal-approximately` glyph rendered by the frontend.
         for days_ago, hours_ago in ((5, 2), (18, 4), (40, 1)):
+            consumed_at = now - timedelta(days=days_ago, hours=hours_ago)
             StockConsumption.objects.create(
                 stock=stocks["ibuprofen"],
                 consumed_by=cibran,
                 quantity=1,
-                created_at=now - timedelta(days=days_ago, hours=hours_ago),
+                created_at=consumed_at,
+                client_created_at=consumed_at,
             )
 
     @staticmethod

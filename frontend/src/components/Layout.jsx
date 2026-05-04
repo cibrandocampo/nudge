@@ -38,11 +38,7 @@ export default function Layout() {
       <InstallBanner />
       <OfflineBanner />
       {!canInstall && !active && (
-        <AlertBanner
-          variant="warning"
-          icon="alert-triangle"
-          onClick={() => navigate('/settings#push')}
-        >
+        <AlertBanner variant="warning" icon="alert-triangle" onClick={() => navigate('/settings#push')}>
           {t('settings.pushAlert')}
         </AlertBanner>
       )}

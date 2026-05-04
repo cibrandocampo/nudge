@@ -12,7 +12,7 @@ import { useUpdateConsumption } from '../hooks/mutations/useUpdateConsumption'
 import { useUpdateEntry } from '../hooks/mutations/useUpdateEntry'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
-import { groupEntriesByDate } from '../utils/historyGroups'
+import { groupEntriesByDate, effectiveDate } from '../utils/historyGroups'
 import shared from '../styles/shared.module.css'
 import s from './HistoryPage.module.css'
 
@@ -247,5 +247,5 @@ function mergedItems(typeFilter, entries, consumptions) {
   const consumptionItems = consumptions.map((c) => ({ ...c, _type: 'consumption' }))
   if (typeFilter === 'routines') return routineItems
   if (typeFilter === 'consumptions') return consumptionItems
-  return [...routineItems, ...consumptionItems].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  return [...routineItems, ...consumptionItems].sort((a, b) => new Date(effectiveDate(b)) - new Date(effectiveDate(a)))
 }
