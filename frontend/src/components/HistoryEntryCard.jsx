@@ -58,7 +58,7 @@ export default function HistoryEntryCard({
       <div className={cx(shared.card, s.compactCard)} data-testid="history-entry" data-entry-type={entry._type}>
         <div className={s.compactRow}>
           <span className={s.compactLeft}>
-            <span className={s.compactTime}>{formatEntryTime(entry.created_at)}</span>
+            <span className={s.compactTime}>{formatEntryTime(entry)}</span>
             {lotNumbers && <span className={s.compactLot}>({lotNumbers})</span>}
             {entry.notes && <span className={s.compactNotes}>{entry.notes}</span>}
           </span>
@@ -99,7 +99,7 @@ export default function HistoryEntryCard({
           )}
         </div>
         <div className={s.rightCol}>
-          <span className={s.entryTime}>{formatEntryTime(entry.created_at)}</span>
+          <span className={s.entryTime}>{formatEntryTime(entry)}</span>
           {showAuthor && <span className={s.entryAuthor}>{authorLabel}</span>}
           {(editable || entry.notes) && (
             <div className={s.notesSide}>

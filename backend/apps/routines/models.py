@@ -246,10 +246,11 @@ class StockConsumption(models.Model):
     notes = models.CharField(max_length=1000, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    # Wall-clock time the client reports as the real moment of the action.
-    # Set for consumptions queued offline; stays NULL for server-initiated
-    # ones. Read back as `effective_created_at` (fallback to `created_at`).
-    client_created_at = models.DateTimeField(null=True, blank=True)
+    # Functional time: the moment the user actually performed the consumption,
+    # captured by the client (works offline). Defaults to `now()` server-side
+    # for admin / direct-API writes that don't send the field. `created_at`
+    # remains audit-only — see docs/plans/client-time-as-source-of-truth.md.
+    client_created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ["-created_at"]
@@ -312,7 +313,7 @@ class Routine(models.Model):
             if hasattr(self, "_prefetched_entries"):
                 self._last_entry_cache = self._prefetched_entries[0] if self._prefetched_entries else None
             else:
-                self._last_entry_cache = self.entries.order_by("-created_at").first()
+                self._last_entry_cache = self.entries.order_by("-client_created_at").first()
         return self._last_entry_cache
 
     def next_due_at(self):
@@ -363,12 +364,11 @@ class RoutineEntry(models.Model):
     )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    # Wall-clock time the client reports as the real moment the routine was
-    # performed. Set for entries queued offline and synced later, NULL for
-    # entries created server-side (legacy, admin, tests). Read back as
-    # `effective_created_at` so `next_due_at()` computes from the action time
-    # rather than the sync time.
-    client_created_at = models.DateTimeField(null=True, blank=True)
+    # Functional time: the moment the user actually marked the routine done,
+    # captured by the client (works offline). Defaults to `now()` server-side
+    # for admin / direct-API writes that don't send the field. `created_at`
+    # remains audit-only — see docs/plans/client-time-as-source-of-truth.md.
+    client_created_at = models.DateTimeField(default=timezone.now)
     notes = models.CharField(max_length=1000, blank=True)
     consumed_lots = models.JSONField(
         default=list,

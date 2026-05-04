@@ -54,7 +54,7 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         consumptions_window_start = timezone.now() - timedelta(days=60)
         recent_consumptions = Prefetch(
             "consumptions",
-            queryset=StockConsumption.objects.filter(created_at__gte=consumptions_window_start),
+            queryset=StockConsumption.objects.filter(client_created_at__gte=consumptions_window_start),
             to_attr="recent_consumptions",
         )
         return (
@@ -154,13 +154,15 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
 
         with transaction.atomic():
             consumed_lots = stock.consume_lots(quantity, lot_selections)
-            StockConsumption.objects.create(
-                stock=stock,
-                consumed_by=request.user,
-                quantity=quantity,
-                consumed_lots=consumed_lots,
-                client_created_at=client_created_at,
-            )
+            consumption_kwargs = {
+                "stock": stock,
+                "consumed_by": request.user,
+                "quantity": quantity,
+                "consumed_lots": consumed_lots,
+            }
+            if client_created_at is not None:
+                consumption_kwargs["client_created_at"] = client_created_at
+            StockConsumption.objects.create(**consumption_kwargs)
             stock.save(update_fields=["updated_at"])
 
         logger.info("Stock %r consumed %d unit(s) (user %s).", stock.name, quantity, request.user.username)
@@ -215,7 +217,7 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         latest_entry = Prefetch(
             "entries",
-            queryset=RoutineEntry.objects.order_by("-created_at"),
+            queryset=RoutineEntry.objects.order_by("-client_created_at"),
             to_attr="_prefetched_entries",
         )
         return (
@@ -284,12 +286,14 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
-            entry = RoutineEntry.objects.create(
-                routine=routine,
-                completed_by=request.user,
-                notes=request.data.get("notes", ""),
-                client_created_at=client_created_at,
-            )
+            entry_kwargs = {
+                "routine": routine,
+                "completed_by": request.user,
+                "notes": request.data.get("notes", ""),
+            }
+            if client_created_at is not None:
+                entry_kwargs["client_created_at"] = client_created_at
+            entry = RoutineEntry.objects.create(**entry_kwargs)
             # Invalidate cached last_entry so subsequent calls see the new entry
             routine._last_entry_cache = entry
 
@@ -343,9 +347,9 @@ class StockConsumptionViewSet(
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
         if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
+            qs = qs.filter(client_created_at__date__gte=date_from)
         if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+            qs = qs.filter(client_created_at__date__lte=date_to)
         return qs
 
 
@@ -375,9 +379,9 @@ class RoutineEntryViewSet(
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
         if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
+            qs = qs.filter(client_created_at__date__gte=date_from)
         if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+            qs = qs.filter(client_created_at__date__lte=date_to)
         return qs
 
     def destroy(self, request, *args, **kwargs):
@@ -439,7 +443,7 @@ def dashboard(request):
     """
     latest_entry = Prefetch(
         "entries",
-        queryset=RoutineEntry.objects.order_by("-created_at"),
+        queryset=RoutineEntry.objects.order_by("-client_created_at"),
         to_attr="_prefetched_entries",
     )
     routines = (
