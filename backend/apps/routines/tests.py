@@ -3125,3 +3125,26 @@ class ClientCreatedAtQueryRefactorTest(APITestCase):
         data = response.json()
         ids = [row["id"] for row in data.get("results", data)]
         self.assertIn(entry.id, ids, msg="date_from/date_to must filter by client_created_at")
+
+    def test_consumption_date_range_filter_uses_client_created_at(self):
+        """Same as the entries case for the stock-consumptions list endpoint:
+        the `date_from / date_to` query params must filter by the user's
+        action date (`client_created_at`), not the server-arrival date."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5)
+        now = timezone.now()
+        consumption = StockConsumption.objects.create(stock=stock, consumed_by=self.user, quantity=1)
+        yesterday = (now - timedelta(days=1)).date()
+        StockConsumption.objects.filter(pk=consumption.pk).update(
+            created_at=now,
+            client_created_at=now - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            "/api/stock-consumptions/",
+            {"date_from": yesterday.isoformat(), "date_to": yesterday.isoformat()},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        ids = [row["id"] for row in data.get("results", data)]
+        self.assertIn(consumption.id, ids, msg="date_from/date_to must filter by client_created_at")
