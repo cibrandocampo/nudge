@@ -584,9 +584,7 @@ class Command(BaseCommand):
         if status == "due":
             user_tz = ZoneInfo(routine.user.timezone)
             now_local = now.astimezone(user_tz)
-            end_of_today_local = now_local.replace(
-                hour=23, minute=59, second=0, microsecond=0
-            ) - timedelta(minutes=10)
+            end_of_today_local = now_local.replace(hour=23, minute=59, second=0, microsecond=0) - timedelta(minutes=10)
             target_next_due = min(now + timedelta(hours=2), end_of_today_local)
             # Guarantee the target is in the future so is_overdue=False holds.
             target_next_due = max(target_next_due, now + timedelta(minutes=1))
