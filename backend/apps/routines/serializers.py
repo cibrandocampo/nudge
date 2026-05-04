@@ -214,11 +214,11 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         recent = getattr(obj, "recent_consumptions", None)
         if recent is None:
             window_start = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_WINDOW_DAYS)
-            recent = list(obj.consumptions.filter(created_at__gte=window_start))
+            recent = list(obj.consumptions.filter(client_created_at__gte=window_start))
 
         half_ago = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_HALF_DAYS)
-        last_month_units = sum(c.quantity for c in recent if c.created_at >= half_ago)
-        prev_month_units = sum(c.quantity for c in recent if c.created_at < half_ago)
+        last_month_units = sum(c.quantity for c in recent if c.client_created_at >= half_ago)
+        prev_month_units = sum(c.quantity for c in recent if c.client_created_at < half_ago)
 
         is_estimated = False
         if last_month_units >= 1 and prev_month_units >= 1:

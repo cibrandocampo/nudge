@@ -63,9 +63,19 @@ def make_routine(user, name="Test routine", interval_hours=24, is_active=True):
 
 
 def make_entry(routine, offset_hours=0):
+    """Create a RoutineEntry at now + offset_hours.
+
+    Both `created_at` and `client_created_at` are anchored to the same
+    relative offset — post-T151 the functional time is never NULL and
+    must track the user's action time, not the wall-clock at creation.
+    """
     entry = RoutineEntry.objects.create(routine=routine)
     if offset_hours:
-        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=timezone.now() + timedelta(hours=offset_hours))
+        target = timezone.now() + timedelta(hours=offset_hours)
+        RoutineEntry.objects.filter(pk=entry.pk).update(
+            created_at=target,
+            client_created_at=target,
+        )
         entry.refresh_from_db()
     return entry
 
@@ -548,7 +558,7 @@ class IsDueTodayTest(TestCase):
         # Entry at Jan 14 10:00 UTC → next_due = Jan 15 10:00 UTC
         entry = make_entry(routine)
         entry_time = datetime(2025, 1, 14, 10, 0, tzinfo=ZoneInfo("UTC"))
-        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time, client_created_at=entry_time)
         # Re-fetch routine to clear any cached last_entry
         routine = Routine.objects.get(pk=routine.pk)
 
@@ -567,7 +577,7 @@ class IsDueTodayTest(TestCase):
         routine = make_routine(owner, interval_hours=24)
         entry = make_entry(routine)
         entry_time = datetime(2025, 1, 14, 10, 0, tzinfo=ZoneInfo("UTC"))
-        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time, client_created_at=entry_time)
         routine = Routine.objects.get(pk=routine.pk)
 
         now_utc = datetime(2025, 1, 14, 23, 0, tzinfo=ZoneInfo("UTC"))
@@ -1219,7 +1229,7 @@ class DSTDailyHeadsUpTest(TestCase):
         # Create entry at Jan 13 22:30 UTC → next_due = Jan 14 22:30 UTC
         entry = make_entry(routine)
         entry_time = datetime(2025, 1, 13, 22, 30, tzinfo=ZoneInfo("UTC"))
-        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time)
+        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=entry_time, client_created_at=entry_time)
         routine = Routine.objects.get(pk=routine.pk)  # clear last_entry cache
 
         # Jan 14 at 23:30 UTC = Jan 15 at 00:30 CET

@@ -42,7 +42,7 @@ def check_notifications():
 
     entry_prefetch = Prefetch(
         "entries",
-        queryset=RoutineEntry.objects.order_by("-created_at"),
+        queryset=RoutineEntry.objects.order_by("-client_created_at"),
         to_attr="_prefetched_entries",
     )
     active_routines_qs = (

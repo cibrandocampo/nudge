@@ -14,6 +14,7 @@ const mockEntries = [
     routine_name: 'Take vitamins',
     stock_name: 'Vitamin D',
     created_at: '2026-03-01T09:00:00Z',
+    client_created_at: null,
     notes: 'morning dose',
     consumed_lots: [{ lot_number: 'LOT-V1', expiry_date: '2027-01-01', quantity: 1 }],
   },
@@ -23,6 +24,7 @@ const mockEntries = [
     routine_name: 'Water filter',
     stock_name: null,
     created_at: '2026-03-01T15:00:00Z',
+    client_created_at: null,
     notes: '',
     consumed_lots: [],
   },
@@ -37,6 +39,7 @@ const mockConsumptions = [
     consumed_lots: [{ lot_number: null, expiry_date: '2026-06-01', quantity: 1 }],
     notes: '',
     created_at: '2026-03-01T10:00:00Z',
+    client_created_at: null,
   },
 ]
 
@@ -296,6 +299,32 @@ describe('HistoryPage — consumption entries display', () => {
     const names = getEntryNames(container)
     expect(names.indexOf('Water filter')).toBeLessThan(names.indexOf('Insulin pens'))
     expect(names.indexOf('Insulin pens')).toBeLessThan(names.indexOf('Take vitamins'))
+  })
+
+  it('merged list uses client_created_at over created_at when present', async () => {
+    // Take vitamins: created_at 09:00 but client_created_at 16:00 → should rank first
+    // Insulin pens:  created_at 10:00, client_created_at null  → uses 10:00
+    // Water filter:  created_at 15:00, client_created_at null  → uses 15:00
+    // Expected order: Take vitamins (16:00) > Water filter (15:00) > Insulin pens (10:00)
+    server.use(
+      http.get(`${BASE}/entries/`, () =>
+        HttpResponse.json({
+          results: [
+            { ...mockEntries[0], client_created_at: '2026-03-01T16:00:00Z' },
+            { ...mockEntries[1], client_created_at: null },
+          ],
+          next: null,
+        }),
+      ),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: mockConsumptions, next: null })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: mockStocks })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+    const { container } = renderWithProviders(<HistoryPage />)
+    await waitFor(() => expect(getEntryNames(container).length).toBe(3))
+    const names = getEntryNames(container)
+    expect(names.indexOf('Take vitamins')).toBeLessThan(names.indexOf('Water filter'))
+    expect(names.indexOf('Water filter')).toBeLessThan(names.indexOf('Insulin pens'))
   })
 })
 

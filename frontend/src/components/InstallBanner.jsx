@@ -31,12 +31,7 @@ export default function InstallBanner() {
 
   return (
     <>
-      <button
-        type="button"
-        className={s.banner}
-        onClick={handleClick}
-        data-testid="install-banner"
-      >
+      <button type="button" className={s.banner} onClick={handleClick} data-testid="install-banner">
         <img src="/icons/source.svg" alt="" className={s.logo} aria-hidden="true" />
         <span>{t('pwa.install.banner')}</span>
         <Icon name="chevron-right" size="sm" />

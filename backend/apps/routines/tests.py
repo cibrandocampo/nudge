@@ -50,11 +50,21 @@ def make_routine(user, name="Oil change", interval_hours=24, stock=None, is_acti
 
 
 def make_entry(routine, offset_hours=0, notes=""):
-    """Create a RoutineEntry at now + offset_hours."""
+    """Create a RoutineEntry at now + offset_hours.
+
+    Both `created_at` and `client_created_at` are anchored to the same
+    relative offset — the entry pretends to have been performed AND
+    received by the server `offset_hours` ago. This matches the post-T151
+    invariant that `client_created_at` is never NULL and tracks the
+    user's action time.
+    """
     entry = RoutineEntry.objects.create(routine=routine, notes=notes)
     if offset_hours:
-        # Adjust created_at retroactively
-        RoutineEntry.objects.filter(pk=entry.pk).update(created_at=timezone.now() + timedelta(hours=offset_hours))
+        target = timezone.now() + timedelta(hours=offset_hours)
+        RoutineEntry.objects.filter(pk=entry.pk).update(
+            created_at=target,
+            client_created_at=target,
+        )
         entry.refresh_from_db()
     return entry
 
@@ -1584,7 +1594,8 @@ class StockConsumptionModelTest(TestCase):
         c1 = make_stock_consumption(self.stock, quantity=1)
         c2 = make_stock_consumption(self.stock, quantity=2)
         # Force c1 to be older
-        StockConsumption.objects.filter(pk=c1.pk).update(created_at=timezone.now() - timedelta(hours=1))
+        older = timezone.now() - timedelta(hours=1)
+        StockConsumption.objects.filter(pk=c1.pk).update(created_at=older, client_created_at=older)
         qs = list(StockConsumption.objects.filter(stock=self.stock))
         self.assertEqual(qs[0], c2)
         self.assertEqual(qs[1], c1)
@@ -1601,15 +1612,22 @@ class StockConsumptionModelTest(TestCase):
             dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
         )
 
-    def test_effective_created_at_falls_back_to_created_at(self):
-        # Server-initiated consumption with no client timestamp → falls back.
+    def test_effective_created_at_defaults_to_server_now_when_client_omits(self):
+        # Server-initiated consumption with no client timestamp now defaults
+        # to `now()` (post-T151). The functional field is never NULL; the
+        # `effective_created_at` property still returns it directly.
         consumption = StockConsumption.objects.create(
             stock=self.stock,
             consumed_by=self.user,
             quantity=1,
         )
-        self.assertIsNone(consumption.client_created_at)
-        self.assertEqual(consumption.effective_created_at, consumption.created_at)
+        self.assertIsNotNone(consumption.client_created_at)
+        self.assertEqual(consumption.effective_created_at, consumption.client_created_at)
+        self.assertAlmostEqual(
+            consumption.client_created_at.timestamp(),
+            consumption.created_at.timestamp(),
+            delta=1,
+        )
 
 
 # ── Stock consume audit trail ──────────────────────────────────────────────
@@ -2342,12 +2360,19 @@ class StockDepletionSerializerTest(TestCase):
     # ── Direct-consumption estimate (T141) ────────────────────────────────
 
     def _make_consumption(self, stock, days_ago, hours_ago=0, consumed_by=None, quantity=1):
-        """Create a StockConsumption with an explicit `created_at` offset."""
+        """Create a StockConsumption with an explicit timestamp offset.
+
+        Both `created_at` and `client_created_at` are anchored to the same
+        point — post-T152 the depletion window queries by `client_created_at`,
+        so the functional time must reflect the test scenario.
+        """
+        timestamp = timezone.now() - timedelta(days=days_ago, hours=hours_ago)
         return StockConsumption.objects.create(
             stock=stock,
             consumed_by=consumed_by,
             quantity=quantity,
-            created_at=timezone.now() - timedelta(days=days_ago, hours=hours_ago),
+            created_at=timestamp,
+            client_created_at=timestamp,
         )
 
     def test_no_routine_no_direct_consumption_returns_null(self):
@@ -2738,12 +2763,16 @@ class ClientCreatedAtTest(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     # ── /log/ endpoint ──────────────────────────────────────────────────────
-    def test_log_without_client_created_at_leaves_field_null(self):
+    def test_log_without_client_created_at_defaults_to_server_now(self):
+        """When the client doesn't send `client_created_at` the server fills
+        it with `now()` (admin / direct-API path). The field is never NULL —
+        see docs/plans/client-time-as-source-of-truth.md."""
         routine = make_routine(self.user)
         response = self.client.post(f"/api/routines/{routine.id}/log/", {})
         self.assertEqual(response.status_code, 201)
         entry = routine.entries.get()
-        self.assertIsNone(entry.client_created_at)
+        self.assertIsNotNone(entry.client_created_at)
+        self.assertAlmostEqual(entry.client_created_at.timestamp(), timezone.now().timestamp(), delta=5)
         self.assertAlmostEqual(entry.created_at.timestamp(), timezone.now().timestamp(), delta=5)
 
     def test_log_with_client_created_at_stores_it(self):
@@ -2812,7 +2841,9 @@ class ClientCreatedAtTest(APITestCase):
             delta=5,
         )
 
-    def test_next_due_at_falls_back_to_created_at(self):
+    def test_next_due_at_uses_server_default_when_client_omits_timestamp(self):
+        """When the client omits client_created_at the server fills both
+        timestamps with `now()`, so `next_due_at` is `now + interval`."""
         routine = make_routine(self.user, interval_hours=8)
         response = self.client.post(f"/api/routines/{routine.id}/log/", {})
         self.assertEqual(response.status_code, 201)
@@ -2820,18 +2851,21 @@ class ClientCreatedAtTest(APITestCase):
         entry = routine.entries.get()
         self.assertAlmostEqual(
             routine.next_due_at().timestamp(),
-            (entry.created_at + timedelta(hours=8)).timestamp(),
+            (entry.client_created_at + timedelta(hours=8)).timestamp(),
             delta=1,
         )
 
     # ── /consume/ endpoint ──────────────────────────────────────────────────
-    def test_consume_without_client_created_at_leaves_field_null(self):
+    def test_consume_without_client_created_at_defaults_to_server_now(self):
+        """When the client doesn't send `client_created_at` the server fills
+        it with `now()` (admin / direct-API path). The field is never NULL."""
         stock = make_stock(self.user)
         make_lot(stock, quantity=5)
         response = self.client.post(f"/api/stock/{stock.id}/consume/", {"quantity": 1}, format="json")
         self.assertEqual(response.status_code, 200)
         consumption = stock.consumptions.get()
-        self.assertIsNone(consumption.client_created_at)
+        self.assertIsNotNone(consumption.client_created_at)
+        self.assertAlmostEqual(consumption.client_created_at.timestamp(), timezone.now().timestamp(), delta=5)
 
     def test_consume_with_client_created_at_stores_it(self):
         stock = make_stock(self.user)
@@ -3004,3 +3038,90 @@ class StockConsumeLotsMethodTests(TestCase):
         self.lot2.refresh_from_db()
         self.assertEqual(self.lot1.quantity, 3)
         self.assertEqual(self.lot2.quantity, 2)
+
+
+class ClientCreatedAtQueryRefactorTest(APITestCase):
+    """Regression coverage for T152.
+
+    After the seed-time backfill in T151, business-logic queries read the
+    user's functional time (`client_created_at`), not the server-arrival
+    time (`created_at`). These tests exercise the divergent-timestamp
+    case — i.e. a row that synced after the user really performed the
+    action — to prove every refactored site picks the right answer.
+    """
+
+    def setUp(self):
+        self.user = make_user("alice")
+        self.client.force_authenticate(user=self.user)
+
+    def test_last_entry_uses_client_created_at_not_server_arrival(self):
+        """A late-night offline log synced after midnight UTC must still be
+        reported as the most recent entry, even though its `created_at`
+        is the smallest of the bunch."""
+        routine = make_routine(self.user, interval_hours=8)
+        now = timezone.now()
+
+        # entry_old: action 5 minutes ago, server arrival 10 seconds ago.
+        # entry_new: action 2 hours in the FUTURE (user logged it now and
+        #            the user's wall clock is ahead of the server), server
+        #            arrival 30 seconds ago — landed BEFORE entry_old in
+        #            server time.
+        old = RoutineEntry.objects.create(routine=routine, completed_by=self.user)
+        new = RoutineEntry.objects.create(routine=routine, completed_by=self.user)
+        RoutineEntry.objects.filter(pk=old.pk).update(
+            created_at=now - timedelta(seconds=10),
+            client_created_at=now - timedelta(minutes=5),
+        )
+        RoutineEntry.objects.filter(pk=new.pk).update(
+            created_at=now - timedelta(seconds=30),
+            client_created_at=now + timedelta(hours=2),
+        )
+        # Re-fetch so the cached _last_entry is invalidated.
+        routine = Routine.objects.get(pk=routine.pk)
+
+        last = routine.last_entry()
+        self.assertEqual(last.pk, new.pk, msg="last_entry() must follow client_created_at, not created_at")
+
+    def test_consumption_window_excludes_entries_whose_action_predates_window(self):
+        """A consumption synced today but whose user-time is older than the
+        depletion window must NOT count toward depletion math."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=99)
+        now = timezone.now()
+        # Window is 60 days (DIRECT_CONSUMPTION_WINDOW_DAYS in serializers).
+        cutoff = now - timedelta(days=60)
+
+        # Recently-arrived row, but the user did it 70 days ago (offline-then-
+        # eventually-synced). Should be filtered out.
+        old_action = StockConsumption.objects.create(stock=stock, consumed_by=self.user, quantity=1)
+        StockConsumption.objects.filter(pk=old_action.pk).update(
+            created_at=now - timedelta(hours=1),
+            client_created_at=cutoff - timedelta(days=10),
+        )
+
+        recent = list(stock.consumptions.filter(client_created_at__gte=cutoff))
+        self.assertNotIn(old_action, recent, msg="consumption window must filter by client_created_at")
+
+    def test_entry_date_range_filter_uses_client_created_at(self):
+        """Filtering entries by `?date_from / ?date_to` must match the user's
+        local action date, not the server-arrival date."""
+        routine = make_routine(self.user)
+        now = timezone.now()
+        # The entry: arrived "today" on the server, but the user did it
+        # "yesterday". A query that asks for "yesterday only" must include
+        # this entry.
+        entry = RoutineEntry.objects.create(routine=routine, completed_by=self.user)
+        yesterday = (now - timedelta(days=1)).date()
+        RoutineEntry.objects.filter(pk=entry.pk).update(
+            created_at=now,
+            client_created_at=now - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            "/api/entries/",
+            {"date_from": yesterday.isoformat(), "date_to": yesterday.isoformat()},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        ids = [row["id"] for row in data.get("results", data)]
+        self.assertIn(entry.id, ids, msg="date_from/date_to must filter by client_created_at")
