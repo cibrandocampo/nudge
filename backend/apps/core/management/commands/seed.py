@@ -30,6 +30,7 @@ Applied to all three users.
 
 import os
 from datetime import time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -516,7 +517,7 @@ class Command(BaseCommand):
         }
 
         for routine, completed_by, status, count in schedules:
-            latest = self._latest_offset(routine.interval_hours, status)
+            latest = self._latest_offset(routine, status, now)
             note_text, note_every = notes_pattern.get(routine, ("", 1))
             for i in range(count):
                 offset = latest + timedelta(hours=routine.interval_hours * i)
@@ -561,22 +562,35 @@ class Command(BaseCommand):
             )
 
     @staticmethod
-    def _latest_offset(interval_hours, status):
+    def _latest_offset(routine, status, now):
         """How long ago the most recent entry should land for a given status.
 
         - `overdue`: last entry placed past one full interval, comfortably
           beyond — 7 days past the cycle end so it reads as overdue regardless
           of seed-run time-of-day.
-        - `due`: last entry placed 2h short of the interval → due lands +2h
-          from now (today's date >= due_date, but `now < due` so
-          is_overdue=False).
+        - `due`: last entry placed so the next due time is in the future but
+          still on today's local date in the routine owner's timezone.
+          `is_due()` rounds to local date, so a naive "+2h from now" offset
+          flakes when seed runs late in the local day and the +2h crosses
+          midnight (next_due_at lands on tomorrow's date → is_due=False).
+          Aim for now+2h, but cap the target so it never crosses midnight
+          in the user's TZ — leaves a 10-min buffer before end of day.
         - `upcoming`: last entry placed at one third of the interval ago — a
           comfortable mid-cycle anchor that never reads as due.
         """
+        interval_hours = routine.interval_hours
         if status == "overdue":
             return timedelta(hours=interval_hours + 24 * 7)
         if status == "due":
-            return timedelta(hours=interval_hours - 2)
+            user_tz = ZoneInfo(routine.user.timezone)
+            now_local = now.astimezone(user_tz)
+            end_of_today_local = now_local.replace(
+                hour=23, minute=59, second=0, microsecond=0
+            ) - timedelta(minutes=10)
+            target_next_due = min(now + timedelta(hours=2), end_of_today_local)
+            # Guarantee the target is in the future so is_overdue=False holds.
+            target_next_due = max(target_next_due, now + timedelta(minutes=1))
+            return timedelta(hours=interval_hours) - (target_next_due - now)
         if status == "upcoming":
             return timedelta(hours=interval_hours // 3)
         raise ValueError(f"unknown status: {status}")
