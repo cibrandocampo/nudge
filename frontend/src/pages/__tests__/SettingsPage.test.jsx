@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { vi } from 'vitest'
 import { server } from '../../test/mocks/server'
@@ -16,6 +16,54 @@ describe('SettingsPage', () => {
   it('renders page title', async () => {
     renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('Settings')).toBeInTheDocument()
+  })
+
+  describe('hash deep-link to push section', () => {
+    let scrollMock
+    let originalScrollIntoView
+    beforeEach(() => {
+      // jsdom doesn't implement scrollIntoView; install a mock so the
+      // deep-link effect runs without throwing and we can assert calls.
+      originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView
+      scrollMock = vi.fn()
+      window.HTMLElement.prototype.scrollIntoView = scrollMock
+    })
+    afterEach(() => {
+      window.HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+      vi.useRealTimers()
+    })
+
+    it('scrolls the push section and applies a one-shot flash when the hash is #push', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const { container } = renderWithProviders(<SettingsPage />, {
+        initialEntries: ['/settings#push'],
+      })
+      // Wait for the section to mount before the effect runs.
+      await screen.findByText('Push notifications')
+
+      // The effect calls scrollIntoView on the matching section element.
+      expect(scrollMock).toHaveBeenCalled()
+
+      // The flash class is present mid-animation. Module CSS hashes the
+      // class name; match on suffix.
+      const pushSection = container.querySelector('#push')
+      expect(pushSection).not.toBeNull()
+      expect(pushSection.className).toMatch(/flash/)
+
+      // After 1.2s the flash class is removed.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1300)
+      })
+      expect(pushSection.className).not.toMatch(/flash/)
+    })
+
+    it('does nothing when the hash points to a non-existent section', async () => {
+      renderWithProviders(<SettingsPage />, {
+        initialEntries: ['/settings#does-not-exist'],
+      })
+      await screen.findByText('Settings')
+      expect(scrollMock).not.toHaveBeenCalled()
+    })
   })
 
   it('shows username in profile section', async () => {

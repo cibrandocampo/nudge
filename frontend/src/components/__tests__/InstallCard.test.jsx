@@ -81,4 +81,15 @@ describe('InstallCard', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('Add Nudge to your home screen')).toBeInTheDocument()
   })
+
+  it('falls back to the sheet when triggerNativePrompt throws', async () => {
+    const trigger = vi.fn().mockRejectedValue(new Error('event already consumed'))
+    mockHook({ hasNativePrompt: true, platform: 'android-chromium', triggerNativePrompt: trigger })
+
+    const { user } = renderWithProviders(<InstallCard />)
+    await user.click(screen.getByRole('button', { name: 'Install app' }))
+
+    expect(trigger).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
 })
