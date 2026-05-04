@@ -371,6 +371,34 @@ class SeedCommandTest(TestCase):
             self.assertTrue(routine.is_due(), msg=f"{name} should be due")
             self.assertFalse(routine.is_overdue(), msg=f"{name} should not be overdue")
 
+    def test_due_routine_seeded_near_local_midnight_does_not_flake(self):
+        """Regression: a +2h "due" offset must not push next_due_at into the
+        next local day when seed runs late in the user's TZ.
+
+        cibran's timezone is Europe/Madrid. We freeze `now()` at 23:55 CEST
+        (= 21:55 UTC summer) — naive +2h would land at 01:55 next day local
+        and `is_due()` would return False. The fix caps the target so it
+        always sits inside today's local date.
+        """
+        # 2026-07-15 21:55 UTC = 2026-07-15 23:55 CEST (summer offset +02:00).
+        frozen_now = datetime(2026, 7, 15, 21, 55, 0, tzinfo=timezone.utc)
+        with mock.patch(
+            "apps.core.management.commands.seed.timezone.now",
+            return_value=frozen_now,
+        ):
+            call_command("seed")
+        with mock.patch("django.utils.timezone.now", return_value=frozen_now):
+            for name in ("Take antihistamine", "Take birth control pill", "Water cactus"):
+                routine = Routine.objects.get(name=name)
+                self.assertTrue(
+                    routine.is_due(),
+                    msg=f"{name} should be due even when seeded close to local midnight",
+                )
+                self.assertFalse(
+                    routine.is_overdue(),
+                    msg=f"{name} should not be overdue right after seed",
+                )
+
     def test_idempotent(self):
         call_command("seed")
         first_counts = (

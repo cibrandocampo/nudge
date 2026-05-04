@@ -38,4 +38,7 @@
   <symbol id="i-user-key" viewBox="0 0 24 24"><path d="M2 21a8 8 0 0 1 10.821-7.487"/><path d="m15.5 15.5 4 4"/><path d="M21.378 16.626a1 1 0 1 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><circle cx="10" cy="8" r="5"/></symbol>
   <symbol id="i-log-out" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
   <symbol id="i-equal-approximately" viewBox="0 0 24 24"><path d="M5 9c.64.64 1.521 1 2.5 1s1.86-.36 2.5-1 1.521-1 2.5-1 1.86.36 2.5 1 1.521 1 2.5 1 1.86-.36 2.5-1"/><path d="M5 15c.64.64 1.521 1 2.5 1s1.86-.36 2.5-1 1.521-1 2.5-1 1.86.36 2.5 1 1.521 1 2.5 1 1.86-.36 2.5-1"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-more-vertical" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></symbol>
 </svg>
