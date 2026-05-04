@@ -16,6 +16,24 @@
   padding: 1rem;
 }
 
+/* One-shot attention flash when navigated via the global push-alert
+ * banner (`/settings#push`). Fades from brand yellow back to surface so
+ * the user's eye lands on the right card after scroll-into-view. */
+.flash {
+  animation: sectionFlash 1.2s ease-out;
+}
+
+@keyframes sectionFlash {
+  0% {
+    background: var(--c-brand);
+    border-color: var(--c-brand);
+  }
+  100% {
+    background: var(--c-surface);
+    border-color: var(--c-border);
+  }
+}
+
 .username {
   color: var(--c-text);
   font-weight: 600;

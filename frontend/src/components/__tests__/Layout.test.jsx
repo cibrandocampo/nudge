@@ -1,7 +1,18 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+
+vi.mock('../../hooks/useInstallPrompt', () => ({
+  useInstallPrompt: vi.fn(() => ({
+    canInstall: false,
+    hasNativePrompt: false,
+    platform: 'other',
+    triggerNativePrompt: vi.fn(),
+  })),
+}))
+
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
+import { useInstallPrompt } from '../../hooks/useInstallPrompt'
 import Layout from '../Layout'
 
 const BASE = 'http://localhost/api'
@@ -126,5 +137,33 @@ describe('Layout', () => {
     const main = container.querySelector('main')
     expect(main).not.toBeNull()
     expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // ── Install banner priority over notif AlertBanner (T149) ──────────────────
+
+  it('suppresses the push alert banner when the install banner is visible', async () => {
+    useInstallPrompt.mockReturnValueOnce({
+      canInstall: true,
+      hasNativePrompt: false,
+      platform: 'ios',
+      triggerNativePrompt: vi.fn(),
+    })
+    setNotification('default')
+    await stubSubscription(null)
+    renderWithProviders(<Layout />)
+    expect(screen.queryByText(/Notifications are off/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the bottom-nav push badge even when the install banner suppresses the alert', async () => {
+    useInstallPrompt.mockReturnValueOnce({
+      canInstall: true,
+      hasNativePrompt: false,
+      platform: 'ios',
+      triggerNativePrompt: vi.fn(),
+    })
+    setNotification('default')
+    await stubSubscription(null)
+    const { container } = renderWithProviders(<Layout />)
+    await waitFor(() => expect(container.querySelector('.badge')).toBeInTheDocument())
   })
 })
