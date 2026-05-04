@@ -27,3 +27,17 @@
   text-align: center;
   line-height: 1.3;
 }
+
+button.banner {
+  width: 100%;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button.banner:hover {
+  filter: brightness(0.97);
+}
+button.banner:active {
+  filter: brightness(0.93);
+}

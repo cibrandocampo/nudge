@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { OfflineError } from '../api/errors'
@@ -14,6 +15,7 @@ import ChangePasswordModal from '../components/ChangePasswordModal'
 import Combobox from '../components/Combobox'
 import ConfirmModal from '../components/ConfirmModal'
 import Icon from '../components/Icon'
+import InstallCard from '../components/InstallCard'
 import { useToast } from '../components/useToast'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
@@ -34,6 +36,22 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuth()
   const { showToast } = useToast()
+  const { hash } = useLocation()
+  const [flashId, setFlashId] = useState(null)
+
+  // Scroll to a specific section when the URL has a hash (e.g. #push from
+  // the global notifications-off banner) and trigger a one-shot flash so
+  // the user sees where attention should land.
+  useEffect(() => {
+    if (!hash) return
+    const id = hash.slice(1)
+    const el = document.getElementById(id)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setFlashId(id)
+    const timer = setTimeout(() => setFlashId(null), 1200)
+    return () => clearTimeout(timer)
+  }, [hash])
 
   const [form, setForm] = useState(() => ({
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -250,7 +268,7 @@ export default function SettingsPage() {
         {contactError && <p className={cx(shared.helpText, s.error)}>{contactError}</p>}
       </Section>
 
-      <Section title={t('settings.push')}>
+      <Section id="push" title={t('settings.push')} flash={flashId === 'push'}>
         <PushStatus
           permission={pushPermission}
           subscribed={pushSubscribed}
@@ -309,6 +327,8 @@ export default function SettingsPage() {
           disabled={!reachable}
         />
       </Section>
+
+      <InstallCard />
 
       {contactToRemove && (
         <ConfirmModal
@@ -460,9 +480,9 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
   )
 }
 
-function Section({ title, children }) {
+function Section({ id, title, children, flash = false }) {
   return (
-    <div className={s.section}>
+    <div id={id} className={cx(s.section, flash && s.flash)}>
       <p className={shared.sectionTitle}>{title}</p>
       {children}
     </div>

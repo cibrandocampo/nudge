@@ -5,7 +5,6 @@ import { AuthProvider } from './contexts/AuthContext'
 import ConflictOrchestrator from './components/ConflictOrchestrator'
 import IconsSprite from './components/IconsSprite'
 import Layout from './components/Layout'
-import OfflineBanner from './components/OfflineBanner'
 import ProtectedRoute from './components/ProtectedRoute'
 import { ToastProvider } from './components/Toast'
 import { useSyncToasts } from './hooks/useSyncToasts'
@@ -44,7 +43,6 @@ export default function App() {
         <AppRuntime />
         <AuthProvider>
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <OfflineBanner />
             <ConflictOrchestrator />
             <Routes>
               <Route path="/login" element={<LoginPage />} />

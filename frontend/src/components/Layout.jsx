@@ -1,17 +1,22 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { useRoutines } from '../hooks/useRoutines'
 import AlertBanner from './AlertBanner'
 import Header from './Header'
 import Icon from './Icon'
+import InstallBanner from './InstallBanner'
+import OfflineBanner from './OfflineBanner'
 import shared from '../styles/shared.module.css'
 import s from './Layout.module.css'
 
 export default function Layout() {
   const { active } = usePushStatus()
+  const { canInstall } = useInstallPrompt()
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { data: routines = [] } = useRoutines()
   const hasPendingRoutines = routines.some((r) => r.is_due)
 
@@ -30,8 +35,14 @@ export default function Layout() {
   return (
     <div className={s.root}>
       <Header />
-      {!active && (
-        <AlertBanner variant="warning" icon="alert-triangle">
+      <InstallBanner />
+      <OfflineBanner />
+      {!canInstall && !active && (
+        <AlertBanner
+          variant="warning"
+          icon="alert-triangle"
+          onClick={() => navigate('/settings#push')}
+        >
           {t('settings.pushAlert')}
         </AlertBanner>
       )}
