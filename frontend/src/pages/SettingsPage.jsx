@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
@@ -74,6 +74,11 @@ export default function SettingsPage() {
   const [showPwModal, setShowPwModal] = useState(false)
 
   const updateMe = useUpdateMe()
+  // Native time pickers on iOS / Android don't reliably blur the input
+  // when dismissed, so we save on change with a small debounce instead.
+  // The debounce also coalesces desktop spinner steps into one PATCH.
+  const timeSaveTimer = useRef(null)
+  useEffect(() => () => clearTimeout(timeSaveTimer.current), [])
   const { data: contacts = [] } = useContacts()
   const createContact = useCreateContact()
   const deleteContact = useDeleteContact()
@@ -284,12 +289,15 @@ export default function SettingsPage() {
           className={shared.input}
           type="time"
           value={form.daily_notification_time}
-          onChange={(e) => setForm((f) => ({ ...f, daily_notification_time: e.target.value }))}
-          onBlur={(e) => {
+          onChange={(e) => {
             const next = e.target.value
-            if (next && next !== (user?.daily_notification_time || '').slice(0, 5)) {
-              autosave({ daily_notification_time: next })
-            }
+            setForm((f) => ({ ...f, daily_notification_time: next }))
+            clearTimeout(timeSaveTimer.current)
+            timeSaveTimer.current = setTimeout(() => {
+              if (next && next !== (user?.daily_notification_time || '').slice(0, 5)) {
+                autosave({ daily_notification_time: next })
+              }
+            }, 500)
           }}
           disabled={!reachable}
         />

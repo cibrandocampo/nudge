@@ -173,7 +173,7 @@
   "settings.saved": "¡Guardado!",
   "settings.errorSave": "Error — inténtalo de nuevo",
   "settings.push": "Notificaciones push",
-  "settings.pushAlert": "Las notificaciones están apagadas — actívalas abajo para recibir recordatorios.",
+  "settings.pushAlert": "Las notificaciones están apagadas — actívalas en ajustes.",
   "settings.pushActive": "Activas",
   "settings.pushBlocked": "Bloqueadas por el navegador",
   "settings.pushGranted": "Permiso concedido — toca para suscribirte",

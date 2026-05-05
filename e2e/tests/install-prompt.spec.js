@@ -22,7 +22,7 @@ const FIREFOX_ANDROID_UA =
 // Banner + sheet copy come straight from `frontend/src/i18n/en.json`. cibran
 // (user1) is seeded with language='en', so the locale assertions are stable.
 const BANNER_TEXT = 'Install the app for a better experience'
-const PUSH_ALERT = 'Notifications are off — enable them below to get reminders.'
+const PUSH_ALERT = 'Notifications are off — enable them in settings.'
 
 // `devices[...]` from Playwright bundles a `defaultBrowserType` key that, if
 // passed to `test.use()` inside a describe block, forces a new worker and
