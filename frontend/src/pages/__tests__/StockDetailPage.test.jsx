@@ -149,6 +149,18 @@ describe('StockDetailPage', () => {
     expect(postBody.lot_number).toBe('FILT-Z')
   })
 
+  it('suggests existing lot numbers and fills the input on selection', async () => {
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    const lotInput = screen.getByPlaceholderText('Batch ID (optional)')
+    await user.click(lotInput)
+    const suggestion = await screen.findByRole('option', { name: 'LOT-A' })
+    await user.click(suggestion)
+    expect(lotInput).toHaveValue('LOT-A')
+    expect(screen.queryByRole('option', { name: 'LOT-A' })).not.toBeInTheDocument()
+  })
+
   it('deletes a lot through the confirm modal', async () => {
     let deleteCalled = false
     server.use(
