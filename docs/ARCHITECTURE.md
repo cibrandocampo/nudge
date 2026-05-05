@@ -457,12 +457,52 @@ The weekly rebuild picks up whatever patch versions are available at build time.
 | Decision | Rationale |
 |----------|-----------|
 | JWT in localStorage | Acceptable risk for a private, personal instance with no sensitive financial data |
+| Celery + Redis over APScheduler | See [Celery vs APScheduler](#celery-vs-apscheduler) below. |
 | Celery beat (5 min) over cron | Simpler deployment (single container), sub-minute precision not needed. See note below on scaling. |
 | NotificationState model | Prevents duplicate pushes without requiring atomic distributed locks |
 | FEFO for stock | Reduces waste by consuming soonest-to-expire lots first; `NULL` expiry treated as ∞ |
 | No external UI framework | Minimal bundle size for a PWA; the app is content-light |
 | Django Admin for user management | No need to build admin UI; scope is small (~10 users) |
 | Monorepo | Simplifies Docker build context passing and keeps CI straightforward |
+
+### Celery vs APScheduler
+
+APScheduler was considered as a lighter-weight alternative — it would remove
+Redis from the periodic-task path and run the scheduler in-process. We picked
+Celery anyway. Reasons, in order of weight:
+
+1. **We need a task queue, not just a scheduler.** Push delivery via
+   `pywebpush` is slow, network-bound I/O that fails in interesting ways
+   (410 Gone, 429, transient 5xx). Celery gives us per-task retries with
+   backoff, acks-late semantics, and configurable worker concurrency out of
+   the box. APScheduler only fires jobs — retry, concurrency control and
+   dead-lettering would have to be built on top.
+
+2. **Periodic and ad-hoc tasks share one runtime.** Beyond the 5-minute
+   `check_notifications` sweep, we already enqueue ad-hoc jobs:
+   `send_scheduled_test` (countdown=5min, triggered from `POST
+   /api/push/test/scheduled/`) and `cleanup_idempotency_records`. With
+   Celery both live in the same worker pool. With APScheduler we'd either
+   run scheduled + ad-hoc through two different mechanisms or build our
+   own job-submission API.
+
+3. **Process isolation from the web tier.** Celery runs in its own
+   container, so a slow push batch can't block gunicorn request handlers.
+   APScheduler's `BackgroundScheduler` typically lives inside the Django
+   process; running it standalone means writing process management
+   ourselves.
+
+4. **Crash recovery via Redis.** Queued tasks survive a worker restart
+   because they're held in Redis until acked. APScheduler can persist jobs
+   to a SQLAlchemy/Redis jobstore, but it's extra configuration and the
+   semantics (especially around missed runs and `coalesce`) are subtler
+   than Celery's "the broker holds it until someone acks".
+
+5. **Marginal operational cost.** Redis is a single extra container in the
+   compose stack. Given (1)–(4), the tradeoff favours Celery even at our
+   small scale. If we ever needed to drop Redis to save resources on the
+   NAS, APScheduler would be a reasonable fallback for the periodic side
+   — but we'd still need *something* queue-shaped for push retries.
 
 ---
 
