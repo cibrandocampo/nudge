@@ -130,7 +130,7 @@ describe('SettingsPage', () => {
     expect(await screen.findByDisplayValue('08:00')).toBeInTheDocument()
   })
 
-  it('autosaves the daily-notification-time on blur', async () => {
+  it('autosaves the daily-notification-time on change with debounce', async () => {
     let patchedBody = null
     server.use(
       http.patch(`${BASE}/auth/me/`, async ({ request }) => {
@@ -142,8 +142,7 @@ describe('SettingsPage', () => {
     const input = await screen.findByDisplayValue('08:00')
     await user.clear(input)
     await user.type(input, '09:15')
-    input.blur()
-    await waitFor(() => expect(patchedBody).not.toBeNull())
+    await waitFor(() => expect(patchedBody).not.toBeNull(), { timeout: 2000 })
     expect(patchedBody).toEqual({ daily_notification_time: '09:15' })
   })
 
@@ -153,8 +152,7 @@ describe('SettingsPage', () => {
     const input = await screen.findByDisplayValue('08:00')
     await user.clear(input)
     await user.type(input, '09:15')
-    input.blur()
-    await waitFor(() => expect(screen.getByText('Error — try again')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Error — try again')).toBeInTheDocument(), { timeout: 2000 })
   })
 
   it('renders push notification section with enable button by default', async () => {

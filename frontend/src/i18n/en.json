@@ -173,7 +173,7 @@
   "settings.saved": "Saved!",
   "settings.errorSave": "Error — try again",
   "settings.push": "Push notifications",
-  "settings.pushAlert": "Notifications are off — enable them below to get reminders.",
+  "settings.pushAlert": "Notifications are off — enable them in settings.",
   "settings.pushActive": "Active",
   "settings.pushBlocked": "Blocked by browser",
   "settings.pushGranted": "Permission granted — tap to subscribe",
