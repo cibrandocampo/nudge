@@ -21,6 +21,12 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS") if h]
 
+# ── App version (read at process start; baked into the image by CI) ──────────
+
+APP_VERSION = env("APP_VERSION", default="dev")
+APP_COMMIT = env("COMMIT_SHA", default="dev")
+APP_BUILT_AT = env("BUILT_AT", default="dev")
+
 # ── Applications ──────────────────────────────────────────────────────────────
 
 INSTALLED_APPS = [
@@ -58,6 +64,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.idempotency.middleware.IdempotencyMiddleware",
+    "apps.core.middleware.AppVersionHeaderMiddleware",
 ]
 
 ROOT_URLCONF = "nudge.urls"

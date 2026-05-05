@@ -6,7 +6,14 @@ import { vi } from 'vitest'
 // IDB access), so mock sync before importing client to keep the suite
 // hermetic.
 vi.mock('../../offline/sync', () => ({ forceSync: vi.fn() }))
+// Spy on the imperative bridge so we can assert the X-App-Version
+// interceptor publishes (or skips) without rendering the React tree.
+vi.mock('../../contexts/appVersionBridge', () => ({
+  publishRemoteVersion: vi.fn(),
+  registerAppVersionPublisher: vi.fn(() => () => {}),
+}))
 
+import { publishRemoteVersion } from '../../contexts/appVersionBridge'
 import { __resetForTests, getReachable } from '../../offline/reachability'
 import { mockConflict, mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
@@ -361,5 +368,45 @@ describe('api client', () => {
     const res = await api.get('/dashboard/')
     expect(res.status).toBe(503)
     expect(getReachable()).toBe(true)
+  })
+
+  // ── X-App-Version interceptor (T158) ─────────────────────────────────────
+  describe('X-App-Version header', () => {
+    beforeEach(() => {
+      publishRemoteVersion.mockClear()
+    })
+
+    it('publishes the remote version when the header is present on a 200', async () => {
+      server.use(
+        http.get(`${BASE}/dashboard/`, () =>
+          HttpResponse.json({ due: [], upcoming: [] }, { headers: { 'X-App-Version': '9.9.9' } }),
+        ),
+      )
+      await api.get('/dashboard/')
+      expect(publishRemoteVersion).toHaveBeenCalledWith('9.9.9')
+    })
+
+    it('does not publish when the response carries no X-App-Version header', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [] })))
+      await api.get('/dashboard/')
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
+
+    it('publishes also on 4xx error responses that carry the header', async () => {
+      server.use(
+        http.get(`${BASE}/dashboard/`, () =>
+          HttpResponse.json({ detail: 'Not found' }, { status: 404, headers: { 'X-App-Version': '9.9.9' } }),
+        ),
+      )
+      const res = await api.get('/dashboard/')
+      expect(res.status).toBe(404)
+      expect(publishRemoteVersion).toHaveBeenCalledWith('9.9.9')
+    })
+
+    it('does not publish when the request fails as a network error (OfflineError)', async () => {
+      server.use(mockNetworkError('get', '/dashboard/'))
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
   })
 })

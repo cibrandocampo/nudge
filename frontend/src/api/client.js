@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { publishRemoteVersion } from '../contexts/appVersionBridge'
 import { setReachable } from '../offline/reachability'
 import { ConflictError, OfflineError } from './errors'
 
@@ -64,6 +65,15 @@ async function request(path, options = {}, retry = true) {
   }
   // Any HTTP response — even 4xx/5xx — proves the backend is reachable.
   setReachable(true)
+
+  // Surface the backend's version (X-App-Version, set by the
+  // AppVersionHeaderMiddleware) to the AppVersionProvider via the
+  // imperative bridge. The provider compares it to VITE_APP_VERSION
+  // and the AutoUpdater triggers a silent reload on the next safe
+  // navigation when they diverge. Header is absent in tests that
+  // don't emit it — silently skip in that case.
+  const remoteVersion = res.headers?.get?.('X-App-Version')
+  if (remoteVersion) publishRemoteVersion(remoteVersion)
 
   if (res.status === 401 && retry) {
     const refreshed = await tryRefreshToken()

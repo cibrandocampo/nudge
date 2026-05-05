@@ -63,6 +63,68 @@ class HealthCheckTestCase(APITestCase):
         self.assertEqual(len(ctx.captured_queries), 0)
 
 
+# ── App version: middleware + /api/version/ endpoint ───────────────────────
+
+
+@override_settings(APP_VERSION="test-1.2.3", APP_COMMIT="abc1234", APP_BUILT_AT="2026-05-05T12:00:00Z")
+class AppVersionHeaderMiddlewareTest(APITestCase):
+    """Every response — success, error, unauth — must carry X-App-Version."""
+
+    def test_header_present_on_200(self):
+        response = self.client.get("/api/health/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-App-Version"], "test-1.2.3")
+
+    def test_header_present_on_404(self):
+        response = self.client.get("/api/this-route-does-not-exist/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["X-App-Version"], "test-1.2.3")
+
+    def test_header_present_on_401_drf_route(self):
+        # Hitting an authenticated DRF route without a token returns 401;
+        # the middleware must still attach the header to that response.
+        response = self.client.get("/api/routines/")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["X-App-Version"], "test-1.2.3")
+
+    def test_header_reflects_current_settings(self):
+        # Changing APP_VERSION via override_settings must take effect on
+        # the next request — i.e. the middleware doesn't cache the value
+        # at __init__ time.
+        with override_settings(APP_VERSION="other-9.9.9"):
+            response = self.client.get("/api/health/")
+        self.assertEqual(response["X-App-Version"], "other-9.9.9")
+
+
+@override_settings(APP_VERSION="test-1.2.3", APP_COMMIT="abc1234", APP_BUILT_AT="2026-05-05T12:00:00Z")
+class VersionEndpointTest(APITestCase):
+    """`GET /api/version/` exposes the build identifiers — public, no DB."""
+
+    def test_returns_200(self):
+        response = self.client.get("/api/version/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_payload_shape(self):
+        response = self.client.get("/api/version/")
+        body = response.json()
+        self.assertEqual(body, {"version": "test-1.2.3", "commit": "abc1234", "built_at": "2026-05-05T12:00:00Z"})
+
+    def test_no_authentication_required(self):
+        # No Authorization header sent — endpoint must remain public.
+        response = self.client.get("/api/version/")
+        self.assertNotEqual(response.status_code, 401)
+        self.assertNotEqual(response.status_code, 403)
+
+    def test_does_not_hit_database(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get("/api/version/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(ctx.captured_queries), 0)
+
+
 # ── parse_http_date helper ──────────────────────────────────────────────────
 
 
