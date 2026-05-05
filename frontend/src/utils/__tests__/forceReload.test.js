@@ -29,14 +29,12 @@ describe('forceReload', () => {
     vi.restoreAllMocks()
   })
 
-  it('deletes every Cache Storage entry then unregisters the SW and reloads', async () => {
+  it('deletes every Cache Storage entry then reloads', async () => {
     const deleteSpy = vi.fn().mockResolvedValue(true)
     window.caches = {
       keys: vi.fn().mockResolvedValue(['cache-a', 'cache-b']),
       delete: deleteSpy,
     }
-    const unregisterSpy = vi.fn().mockResolvedValue(true)
-    navigator.serviceWorker = { getRegistration: vi.fn().mockResolvedValue({ unregister: unregisterSpy }) }
 
     await forceReload()
 
@@ -44,13 +42,24 @@ describe('forceReload', () => {
     expect(deleteSpy).toHaveBeenCalledTimes(2)
     expect(deleteSpy).toHaveBeenCalledWith('cache-a')
     expect(deleteSpy).toHaveBeenCalledWith('cache-b')
-    expect(unregisterSpy).toHaveBeenCalledTimes(1)
+    expect(reloadSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not unregister the Service Worker (preserves push subscription)', async () => {
+    window.caches = { keys: vi.fn().mockResolvedValue([]), delete: vi.fn() }
+    const unregisterSpy = vi.fn().mockResolvedValue(true)
+    const getRegistrationSpy = vi.fn().mockResolvedValue({ unregister: unregisterSpy })
+    navigator.serviceWorker = { getRegistration: getRegistrationSpy }
+
+    await forceReload()
+
+    expect(getRegistrationSpy).not.toHaveBeenCalled()
+    expect(unregisterSpy).not.toHaveBeenCalled()
     expect(reloadSpy).toHaveBeenCalledTimes(1)
   })
 
   it('still reloads when the Cache API is missing', async () => {
     delete window.caches
-    navigator.serviceWorker = { getRegistration: vi.fn().mockResolvedValue(undefined) }
 
     await forceReload()
 
@@ -62,25 +71,6 @@ describe('forceReload', () => {
       keys: vi.fn().mockRejectedValue(new Error('denied')),
       delete: vi.fn(),
     }
-    navigator.serviceWorker = { getRegistration: vi.fn().mockResolvedValue(undefined) }
-
-    await forceReload()
-
-    expect(reloadSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('still reloads when there is no Service Worker', async () => {
-    window.caches = { keys: vi.fn().mockResolvedValue([]), delete: vi.fn() }
-    navigator.serviceWorker = undefined
-
-    await forceReload()
-
-    expect(reloadSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('still reloads when getRegistration rejects', async () => {
-    window.caches = { keys: vi.fn().mockResolvedValue([]), delete: vi.fn() }
-    navigator.serviceWorker = { getRegistration: vi.fn().mockRejectedValue(new Error('boom')) }
 
     await forceReload()
 
