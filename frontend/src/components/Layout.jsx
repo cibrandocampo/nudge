@@ -5,6 +5,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { useRoutines } from '../hooks/useRoutines'
 import AlertBanner from './AlertBanner'
+import AutoUpdater from './AutoUpdater'
 import Header from './Header'
 import Icon from './Icon'
 import InstallBanner from './InstallBanner'
@@ -34,6 +35,7 @@ export default function Layout() {
 
   return (
     <div className={s.root}>
+      <AutoUpdater />
       <Header />
       <InstallBanner />
       <OfflineBanner />

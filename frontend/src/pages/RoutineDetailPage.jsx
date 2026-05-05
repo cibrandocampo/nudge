@@ -133,6 +133,7 @@ export default function RoutineDetailPage() {
       isLoading={routineLoading}
       isError={routineError}
       error={routineErr}
+      data={routine}
       notFound={!routineLoading && !routineError && !routine}
       notFoundKey="routine.detail.notFound"
     >

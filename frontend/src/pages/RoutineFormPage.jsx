@@ -192,6 +192,7 @@ export default function RoutineFormPage() {
       isLoading={isEditing && routineLoading}
       isError={isEditing && routineError}
       error={routineErrorObj}
+      data={isEditing ? routine : undefined}
       notFound={isEditing && !routineLoading && !routineError && !routine}
       notFoundKey="routine.detail.notFound"
     >

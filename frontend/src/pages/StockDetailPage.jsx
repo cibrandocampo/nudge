@@ -123,6 +123,7 @@ export default function StockDetailPage() {
       isLoading={isLoading}
       isError={isError}
       error={error}
+      data={stock}
       notFound={!isLoading && !isError && !stock}
       notFoundKey="stockDetail.notFound"
     >

@@ -62,4 +62,49 @@ describe('QueryHandler', () => {
     // no notFoundKey provided → 404 falls through to errorKey
     expect(screen.getByText('Could not load data. Try refreshing the page.')).toBeInTheDocument()
   })
+
+  // ── Degraded mode (T155): render persisted data even when isError ────────
+  it('renders children when isError but data is present (degraded mode)', () => {
+    render(
+      <QueryHandler isError error={{ status: 500 }} data={{ id: 1, name: 'foo' }}>
+        <div>content</div>
+      </QueryHandler>,
+    )
+    expect(screen.getByText('content')).toBeInTheDocument()
+    expect(screen.queryByText('Could not load data. Try refreshing the page.')).not.toBeInTheDocument()
+  })
+
+  it('renders the errorKey message when isError and data is undefined', () => {
+    render(
+      <QueryHandler isError error={{ status: 500 }} data={undefined}>
+        <div>content</div>
+      </QueryHandler>,
+    )
+    expect(screen.getByText('Could not load data. Try refreshing the page.')).toBeInTheDocument()
+    expect(screen.queryByText('content')).not.toBeInTheDocument()
+  })
+
+  it('404 wins over data presence (resource is definitively gone)', () => {
+    render(
+      <QueryHandler
+        isError
+        error={{ status: 404 }}
+        data={{ id: 1, name: 'foo' }}
+        notFoundKey="stockDetail.notFound"
+      >
+        <div>content</div>
+      </QueryHandler>,
+    )
+    expect(screen.getByText('Stock not found.')).toBeInTheDocument()
+    expect(screen.queryByText('content')).not.toBeInTheDocument()
+  })
+
+  it('treats an empty array data as valid (renders children in degraded mode)', () => {
+    render(
+      <QueryHandler isError error={{ status: 500 }} data={[]}>
+        <div>content</div>
+      </QueryHandler>,
+    )
+    expect(screen.getByText('content')).toBeInTheDocument()
+  })
 })

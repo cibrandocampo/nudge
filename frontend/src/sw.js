@@ -32,12 +32,46 @@ registerRoute(
 // history, etc. render offline after they've been visited at least once.
 // POST/PATCH/DELETE are explicitly excluded — those go through the offline
 // mutation queue in offline/sync.js.
+
+// Gateway-error fallback (T154): NetworkFirst returns network responses
+// regardless of status, so a fast 502/503/504 from the reverse proxy bypasses
+// the cache by default. This plugin intercepts those responses and serves
+// the previously cached 200 if one exists, marking it with `X-From-Cache: 1`
+// so api/client.js can skip publishRemoteVersion (the cached X-App-Version
+// header may belong to an older deploy and would otherwise trigger a
+// spurious AutoUpdater forceReload during a backend outage).
+const gatewayErrorFallbackPlugin = {
+  fetchDidSucceed: async ({ request, response }) => {
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const cache = await caches.open('nudge-api-cache')
+      const cached = await cache.match(request)
+      if (cached) {
+        // Headers from a cache hit are immutable; clone the response to
+        // attach the marker.
+        const headers = new Headers(cached.headers)
+        headers.set('X-From-Cache', '1')
+        const body = await cached.blob()
+        return new Response(body, {
+          status: cached.status,
+          statusText: cached.statusText,
+          headers,
+        })
+      }
+    }
+    return response
+  },
+}
+
 registerRoute(
   ({ url, request }) => url.pathname.startsWith('/api/') && request.method === 'GET',
   new NetworkFirst({
     cacheName: 'nudge-api-cache',
     networkTimeoutSeconds: 4,
+    // Order matters: the fallback runs BEFORE CacheableResponsePlugin so
+    // a 5xx is never bookkept as fresh, and BEFORE ExpirationPlugin so the
+    // cache hit returned in its place is treated like any other cache read.
     plugins: [
+      gatewayErrorFallbackPlugin,
       new CacheableResponsePlugin({ statuses: [200] }),
       new ExpirationPlugin({
         maxEntries: 200,
