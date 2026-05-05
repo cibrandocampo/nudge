@@ -2,6 +2,15 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# Build-time identification injected by CI (mirror of frontend Dockerfile).
+# Defaults keep local builds (without --build-arg) functional as "dev".
+ARG APP_VERSION=dev
+ARG COMMIT_SHA=dev
+ARG BUILT_AT=dev
+ENV APP_VERSION=$APP_VERSION
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV BUILT_AT=$BUILT_AT
+
 # libpq-dev is needed at runtime by psycopg2-binary
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \

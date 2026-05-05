@@ -92,7 +92,9 @@ export default function HistoryPage() {
 
   const loading =
     (entriesFilters.enabled && entriesQuery.isLoading) || (consumptionFilters.enabled && consumptionsQuery.isLoading)
-  const error = entriesFilters.enabled && entriesQuery.isError
+  // Suppress the error surface while the persisted cache still has
+  // entries to render — the global OfflineBanner handles staleness.
+  const error = entriesFilters.enabled && entriesQuery.isError && !entriesQuery.data
 
   const items = mergedItems(typeFilter, entries, consumptions)
   const grouped = groupEntriesByDate(items)

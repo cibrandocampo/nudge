@@ -169,6 +169,7 @@ export default function StockFormPage() {
       isLoading={isEditing && stockLoading}
       isError={isEditing && stockError}
       error={stockErrorObj}
+      data={isEditing ? stock : undefined}
       notFound={isEditing && !stockLoading && !stockError && !stock}
       notFoundKey="stockDetail.notFound"
     >

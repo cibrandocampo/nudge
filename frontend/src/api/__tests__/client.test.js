@@ -6,7 +6,14 @@ import { vi } from 'vitest'
 // IDB access), so mock sync before importing client to keep the suite
 // hermetic.
 vi.mock('../../offline/sync', () => ({ forceSync: vi.fn() }))
+// Spy on the imperative bridge so we can assert the X-App-Version
+// interceptor publishes (or skips) without rendering the React tree.
+vi.mock('../../contexts/appVersionBridge', () => ({
+  publishRemoteVersion: vi.fn(),
+  registerAppVersionPublisher: vi.fn(() => () => {}),
+}))
 
+import { publishRemoteVersion } from '../../contexts/appVersionBridge'
 import { __resetForTests, getReachable } from '../../offline/reachability'
 import { mockConflict, mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
@@ -356,10 +363,138 @@ describe('api client', () => {
     expect(getReachable()).toBe(true)
   })
 
-  it('counts even 4xx and 5xx responses as reachable (server is alive)', async () => {
-    server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 503 })))
+  it('counts non-gateway 4xx/5xx responses as reachable (server is alive)', async () => {
+    // 500 is intentionally treated as a regular response (likely an
+    // endpoint bug, not a backend outage). Gateway statuses (502/503/504)
+    // are tested separately under "gateway errors → OfflineError".
+    server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 500 })))
     const res = await api.get('/dashboard/')
-    expect(res.status).toBe(503)
+    expect(res.status).toBe(500)
     expect(getReachable()).toBe(true)
+  })
+
+  // ── X-App-Version interceptor (T158) ─────────────────────────────────────
+  describe('X-App-Version header', () => {
+    beforeEach(() => {
+      publishRemoteVersion.mockClear()
+    })
+
+    it('publishes the remote version when the header is present on a 200', async () => {
+      server.use(
+        http.get(`${BASE}/dashboard/`, () =>
+          HttpResponse.json({ due: [], upcoming: [] }, { headers: { 'X-App-Version': '9.9.9' } }),
+        ),
+      )
+      await api.get('/dashboard/')
+      expect(publishRemoteVersion).toHaveBeenCalledWith('9.9.9')
+    })
+
+    it('does not publish when the response carries no X-App-Version header', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [] })))
+      await api.get('/dashboard/')
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
+
+    it('publishes also on 4xx error responses that carry the header', async () => {
+      server.use(
+        http.get(`${BASE}/dashboard/`, () =>
+          HttpResponse.json({ detail: 'Not found' }, { status: 404, headers: { 'X-App-Version': '9.9.9' } }),
+        ),
+      )
+      const res = await api.get('/dashboard/')
+      expect(res.status).toBe(404)
+      expect(publishRemoteVersion).toHaveBeenCalledWith('9.9.9')
+    })
+
+    it('does not publish when the request fails as a network error (OfflineError)', async () => {
+      server.use(mockNetworkError('get', '/dashboard/'))
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
+
+    it('skips publishing when the response carries X-From-Cache (SW fallback)', async () => {
+      // The SW's gatewayErrorFallbackPlugin attaches X-From-Cache: 1 to
+      // a cached response served in lieu of a 502/503/504. The cached
+      // X-App-Version may belong to a previous deploy, so the api client
+      // must NOT publish it — otherwise AutoUpdater would trigger a
+      // spurious forceReload() during a backend outage.
+      server.use(
+        http.get(`${BASE}/dashboard/`, () =>
+          HttpResponse.json(
+            { due: [], upcoming: [] },
+            { headers: { 'X-App-Version': '9.9.9', 'X-From-Cache': '1' } },
+          ),
+        ),
+      )
+      const res = await api.get('/dashboard/')
+      expect(res.ok).toBe(true)
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Gateway errors → OfflineError (T154) ─────────────────────────────────
+  // 502/503/504 are reverse-proxy signals that the upstream Django
+  // container is not responding. The api client reclassifies them as
+  // OfflineError so the offline infrastructure (banner, queue, SW cache
+  // fallback) kicks in. 500 is intentionally NOT included.
+  describe('gateway errors → OfflineError', () => {
+    it.each([502, 503, 504])('throws OfflineError on %i', async (status) => {
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status })))
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+    })
+
+    it('does NOT throw OfflineError on 500 (treated as regular error)', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 500 })))
+      const res = await api.get('/dashboard/')
+      expect(res.status).toBe(500)
+    })
+
+    it('does NOT throw OfflineError on 4xx (regular client errors stay visible)', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 400 })))
+      const res = await api.get('/dashboard/')
+      expect(res.status).toBe(400)
+    })
+
+    it('two consecutive gateway errors flip reachability to false (threshold)', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 502 })))
+      // First hit: throws OfflineError but does NOT flip reachability yet.
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(getReachable()).toBe(true)
+      // Second consecutive hit: now the threshold is reached.
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(getReachable()).toBe(false)
+    })
+
+    it('a successful response between gateway errors resets the counter', async () => {
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 502 })))
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(getReachable()).toBe(true)
+
+      // A successful 2xx in the middle resets the streak.
+      server.use(http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [] })))
+      const ok = await api.get('/dashboard/')
+      expect(ok.ok).toBe(true)
+      expect(getReachable()).toBe(true)
+
+      // A single 502 after the reset must NOT flip — counter is fresh.
+      server.use(http.get(`${BASE}/dashboard/`, () => new HttpResponse(null, { status: 502 })))
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(getReachable()).toBe(true)
+    })
+
+    it('does not publish X-App-Version when a gateway error throws', async () => {
+      // The interceptor for X-App-Version lives below the gateway-error
+      // throw, so a 502/503/504 should never reach the publish step.
+      // Even if the proxy somehow includes the header, it must be ignored.
+      publishRemoteVersion.mockClear()
+      server.use(
+        http.get(
+          `${BASE}/dashboard/`,
+          () => new HttpResponse(null, { status: 502, headers: { 'X-App-Version': '9.9.9' } }),
+        ),
+      )
+      await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+      expect(publishRemoteVersion).not.toHaveBeenCalled()
+    })
   })
 })

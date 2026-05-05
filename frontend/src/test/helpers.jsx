@@ -3,6 +3,7 @@ import { render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../components/Toast'
+import { AppVersionProvider } from '../contexts/AppVersionContext'
 import { AuthContext } from '../contexts/AuthContext'
 
 const defaultAuth = {
@@ -34,16 +35,18 @@ export function renderWithProviders(ui, options = {}) {
   function Wrapper({ children }) {
     return (
       <QueryClientProvider client={qc}>
-        <ToastProvider>
-          <AuthContext.Provider value={authValue}>
-            <MemoryRouter
-              initialEntries={initialEntries}
-              future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-            >
-              {children}
-            </MemoryRouter>
-          </AuthContext.Provider>
-        </ToastProvider>
+        <AppVersionProvider>
+          <ToastProvider>
+            <AuthContext.Provider value={authValue}>
+              <MemoryRouter
+                initialEntries={initialEntries}
+                future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+              >
+                {children}
+              </MemoryRouter>
+            </AuthContext.Provider>
+          </ToastProvider>
+        </AppVersionProvider>
       </QueryClientProvider>
     )
   }

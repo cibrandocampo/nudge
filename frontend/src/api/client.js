@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
-import { setReachable } from '../offline/reachability'
+import { publishRemoteVersion } from '../contexts/appVersionBridge'
+import { noteServerError, setReachable } from '../offline/reachability'
 import { ConflictError, OfflineError } from './errors'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -62,8 +63,37 @@ async function request(path, options = {}, retry = true) {
     setReachable(false)
     throw new OfflineError(err)
   }
-  // Any HTTP response — even 4xx/5xx — proves the backend is reachable.
+  // Gateway-level errors mean the proxy reached us but the upstream
+  // (Django container) is not responding. Treat this as offline so the
+  // existing infrastructure (banner, queue, SW cache fallback) kicks in.
+  // `noteServerError()` only flips reachability after SERVER_ERROR_THRESHOLD
+  // consecutive hits without a 2xx — prevents banner flicker during fast
+  // upstream restarts. 500 is intentionally NOT in this set: it usually
+  // signals a bug on a single endpoint, not "everything is down".
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    noteServerError()
+    throw new OfflineError(new Error(`Gateway ${res.status}`))
+  }
+  // Any other HTTP response (2xx, 3xx, 4xx, 500) proves the backend
+  // itself is reachable and answering.
   setReachable(true)
+
+  // Surface the backend's version (X-App-Version, set by the
+  // AppVersionHeaderMiddleware) to the AppVersionProvider via the
+  // imperative bridge. The provider compares it to VITE_APP_VERSION
+  // and the AutoUpdater triggers a silent reload on the next safe
+  // navigation when they diverge. Header is absent in tests that
+  // don't emit it — silently skip in that case.
+  //
+  // Skip when the response was served from the SW's gateway-error
+  // fallback (X-From-Cache: 1): the cached X-App-Version may belong
+  // to a previous deploy, and feeding it to the AppVersionProvider
+  // would trigger a spurious forceReload() during a backend outage.
+  const fromCache = res.headers?.get?.('X-From-Cache')
+  if (!fromCache) {
+    const remoteVersion = res.headers?.get?.('X-App-Version')
+    if (remoteVersion) publishRemoteVersion(remoteVersion)
+  }
 
   if (res.status === 401 && retry) {
     const refreshed = await tryRefreshToken()

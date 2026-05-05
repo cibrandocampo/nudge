@@ -25,6 +25,23 @@ def health_check(request):
     )
 
 
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def version_info(request):
+    # Public, no auth, no DB. Read-only snapshot of env vars baked into
+    # the image at build time. Surfaced for ops/debug — the frontend
+    # never polls this; it reads X-App-Version from response headers
+    # added by AppVersionHeaderMiddleware.
+    return Response(
+        {
+            "version": settings.APP_VERSION,
+            "commit": settings.APP_COMMIT,
+            "built_at": settings.APP_BUILT_AT,
+        }
+    )
+
+
 class SeedView(APIView):
     permission_classes = [AllowAny]
 
