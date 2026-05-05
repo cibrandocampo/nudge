@@ -18,7 +18,7 @@ import {
  *
  * Covers the sync machinery (offline/sync.js) under adverse conditions:
  *   · transient 429 with backoff → recovers.
- *   · persistent 503 exhausts retries → entry enters `error` state.
+ *   · persistent 500 exhausts retries → entry enters `error` state.
  *   · 412 → ConflictModal diff → overwrite replays against real backend.
  *   · 412 → discard drops the entry and rehydrates server data.
  *   · discard while in-flight aborts the fetch; remaining entries drain.
@@ -64,7 +64,13 @@ test.describe('offline-sync', () => {
     await cleanup()
   })
 
-  test('503 persistente agota retries y marca entry como error', async ({ page, context }) => {
+  test('500 persistente agota retries y marca entry como error', async ({ page, context }) => {
+    // Use 500 (not 502/503/504): T154 reclassifies the gateway statuses
+    // as OfflineError so they take the "offline" path (entry stays at
+    // pending forever) instead of the HTTP-backoff ladder. 500 still
+    // surfaces as a real HTTP response and exercises the
+    // "exhaust retries → error" semantic this test validates.
+    //
     // Three short delays compress the full retry ladder (attempts 0..3)
     // into ~600 ms total, well below the per-test timeout.
     await page.evaluate(() => {
@@ -78,8 +84,8 @@ test.describe('offline-sync', () => {
     const cleanup = mockApiRoute(page, {
       method: 'POST',
       urlPattern: '**/api/routines/*/log/',
-      status: 503,
-      body: { detail: 'service unavailable' },
+      status: 500,
+      body: { detail: 'internal server error' },
     })
 
     await goOnline(page, context)

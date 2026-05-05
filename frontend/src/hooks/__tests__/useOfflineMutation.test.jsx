@@ -84,6 +84,57 @@ describe('useOfflineMutation', () => {
     expect(queued[0].status).toBe('pending')
   })
 
+  // T154 reclassifies 502/503/504 from the api client as OfflineError
+  // before the wrapper sees a status. The enqueue path must reach the
+  // same outcome as a real network failure: the optimistic state stays
+  // and the entry lands in the queue.
+  it.each([502, 503, 504])(
+    '%i from API client is reclassified as OfflineError and queued',
+    async (status) => {
+      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status })))
+
+      const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+      qc.setQueryData(['routine', 1], { id: 1, name: 'original' })
+      const wrapper = ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+
+      const { result } = renderHook(
+        () =>
+          useOfflineMutation({
+            request: ({ routineId, notes }) => ({
+              method: 'POST',
+              path: `/routines/${routineId}/log/`,
+              body: { notes },
+            }),
+            resourceKey: ({ routineId }) => `routine:${routineId}`,
+            optimistic: (client, { routineId }) => {
+              const prev = client.getQueryData(['routine', routineId])
+              client.setQueryData(['routine', routineId], { ...prev, name: 'optimistic' })
+              return () => client.setQueryData(['routine', routineId], prev)
+            },
+          }),
+        { wrapper },
+      )
+
+      let returned
+      await act(async () => {
+        returned = await result.current.mutateAsync({ routineId: 1, notes: 'bye' })
+      })
+
+      // 1. Hook resolves with __queued: true.
+      expect(returned).toEqual({ __queued: true })
+      // 2. Queue holds the entry with the right shape.
+      const queued = await list()
+      expect(queued).toHaveLength(1)
+      expect(queued[0].method).toBe('POST')
+      expect(queued[0].endpoint).toBe('/routines/1/log/')
+      expect(queued[0].body).toEqual({ notes: 'bye' })
+      expect(queued[0].resourceKey).toBe('routine:1')
+      expect(queued[0].status).toBe('pending')
+      // 3. Optimistic update is NOT rolled back (queueable: true).
+      expect(qc.getQueryData(['routine', 1])).toEqual({ id: 1, name: 'optimistic' })
+    },
+  )
+
   it('propagates ConflictError to the caller (does not enqueue)', async () => {
     server.use(mockConflict('patch', '/routines/1/', { id: 1, name: 'server' }))
 

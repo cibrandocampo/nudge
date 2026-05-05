@@ -8,7 +8,15 @@ vi.mock('../sync', () => ({
   forceSync: (...args) => forceSyncMock(...args),
 }))
 
-import { HEALTH_POLL_INTERVAL_MS, __resetForTests, getReachable, setReachable, subscribe } from '../reachability'
+import {
+  HEALTH_POLL_INTERVAL_MS,
+  SERVER_ERROR_THRESHOLD,
+  __resetForTests,
+  getReachable,
+  noteServerError,
+  setReachable,
+  subscribe,
+} from '../reachability'
 
 describe('offline/reachability', () => {
   let fetchSpy
@@ -136,5 +144,51 @@ describe('offline/reachability', () => {
     } finally {
       onLineSpy.mockRestore()
     }
+  })
+
+  // ── noteServerError (T154): gateway-error threshold ──────────────────────
+  describe('noteServerError', () => {
+    it('SERVER_ERROR_THRESHOLD is exported as 2 (anti-flicker)', () => {
+      expect(SERVER_ERROR_THRESHOLD).toBe(2)
+    })
+
+    it('does not flip on the first hit', () => {
+      const listener = vi.fn()
+      subscribe(listener)
+      noteServerError()
+      expect(getReachable()).toBe(true)
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('flips to false on the second consecutive hit and notifies subscribers', () => {
+      const listener = vi.fn()
+      subscribe(listener)
+      noteServerError()
+      noteServerError()
+      expect(getReachable()).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it('a successful setReachable(true) between hits resets the counter', () => {
+      noteServerError()
+      // Simulate a 2xx response in between — flip is idempotent on the
+      // observable state but resets the counter regardless.
+      setReachable(true)
+      noteServerError()
+      // Still on the first hit of a fresh streak.
+      expect(getReachable()).toBe(true)
+    })
+
+    it('setReachable(true) after a flip resets the counter so it does not carry over', () => {
+      noteServerError()
+      noteServerError()
+      expect(getReachable()).toBe(false)
+      // Recovery (e.g. the health poll's 2xx).
+      setReachable(true)
+      expect(getReachable()).toBe(true)
+      // A single new 5xx must not immediately flip again.
+      noteServerError()
+      expect(getReachable()).toBe(true)
+    })
   })
 })

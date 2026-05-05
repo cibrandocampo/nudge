@@ -455,9 +455,15 @@ describe('offline sync worker', () => {
   // ── T064: backoff retries + bootstrap cleanup ─────────────────────────────
 
   describe('retry backoff', () => {
-    it('reschedules with the first backoff delay on 5xx (retryCount 0 → 1)', async () => {
+    // After T154, the api client reclassifies 502/503/504 as OfflineError
+    // before the sync worker sees a status — those entries take the
+    // "offline" path (markPending without retryCount increment) and rely
+    // on reachability recovery + health poll instead of HTTP-level
+    // backoff. The retry-backoff path here is exercised by 408, 429 and
+    // 500 (the 5xx that still bubbles up as a real HTTP response).
+    it('reschedules with the first backoff delay on transient HTTP errors (retryCount 0 → 1)', async () => {
       initSyncWorker(fakeQueryClient())
-      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 503 })))
+      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 429 })))
       await enqueue(pendingEntry())
       await processQueue()
 
@@ -470,7 +476,7 @@ describe('offline sync worker', () => {
       expect(scheduled - Date.now()).toBeLessThanOrEqual(RETRY_DELAYS_MS[0] + 1_000)
     })
 
-    it('retries 408, 429 and 5xx but NOT 400/403/404/409', async () => {
+    it('retries 408, 429 and 500 with backoff but NOT 400/403/404/409', async () => {
       initSyncWorker(fakeQueryClient())
       const notRetryable = [400, 403, 404, 409]
       for (const status of notRetryable) {
@@ -483,8 +489,10 @@ describe('offline sync worker', () => {
         expect(entry.retryCount).toBe(0)
       }
 
-      const retryable = [408, 429, 500, 502, 503, 504]
-      for (const status of retryable) {
+      // Statuses that still surface as a real HTTP response take the
+      // sync worker's RETRYABLE_STATUSES backoff path.
+      const retryableViaBackoff = [408, 429, 500]
+      for (const status of retryableViaBackoff) {
         await clear()
         server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status })))
         await enqueue(pendingEntry())
@@ -495,9 +503,30 @@ describe('offline sync worker', () => {
       }
     })
 
+    it('502/503/504 take the offline path (status pending, retryCount unchanged)', async () => {
+      // T154: gateway errors are reclassified as OfflineError by the api
+      // client. The sync worker's catch branch for OfflineError calls
+      // markPending without touching retryCount — recovery is driven by
+      // the reachability health poll, not HTTP backoff.
+      initSyncWorker(fakeQueryClient())
+      const gatewayStatuses = [502, 503, 504]
+      for (const status of gatewayStatuses) {
+        await clear()
+        server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status })))
+        await enqueue(pendingEntry())
+        await processQueue()
+        const [entry] = await list()
+        expect(entry.status).toBe('pending')
+        expect(entry.retryCount).toBe(0)
+        expect(entry.nextAttemptAt).toBeNull()
+      }
+    })
+
     it('transitions to error after MAX_RETRIES consecutive failures', async () => {
       initSyncWorker(fakeQueryClient())
-      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 503 })))
+      // Use 500 — still goes through the HTTP-backoff path after T154
+      // (502/503/504 now bypass it via OfflineError).
+      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 500 })))
 
       // Seed the entry already at MAX_RETRIES so the next failure tips it
       // over the edge without waiting for real backoff timers.
@@ -506,7 +535,7 @@ describe('offline sync worker', () => {
 
       const [entry] = await list()
       expect(entry.status).toBe('error')
-      expect(entry.errorMessage).toMatch(/HTTP 503 after \d+ retries/)
+      expect(entry.errorMessage).toMatch(/HTTP 500 after \d+ retries/)
     })
 
     it('re-runs automatically after the scheduled backoff fires', async () => {
@@ -517,8 +546,9 @@ describe('offline sync worker', () => {
         server.use(
           http.post(`${BASE}/routines/1/log/`, () => {
             attempts++
-            // Fail the first two times, succeed the third.
-            if (attempts < 3) return new HttpResponse(null, { status: 503 })
+            // Fail the first two times, succeed the third. Use 500 so
+            // the failures stay on the HTTP-backoff path post-T154.
+            if (attempts < 3) return new HttpResponse(null, { status: 500 })
             return HttpResponse.json({}, { status: 201 })
           }),
         )

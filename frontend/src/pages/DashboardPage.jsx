@@ -99,8 +99,12 @@ export default function DashboardPage() {
     await runLog(routineId, lotSelections)
   }
 
-  if (isLoading) return <Spinner />
-  if (isError) return <p className={shared.muted}>{t('common.error')}</p>
+  // Render the persisted snapshot even when a refetch fails or while a
+  // background refetch is in flight — the global OfflineBanner conveys
+  // staleness, and an empty error / loading state is worse UX than
+  // last-known-good data the user can still act on.
+  if (isLoading && !data) return <Spinner />
+  if (isError && !data) return <p className={shared.muted}>{t('common.error')}</p>
 
   return (
     <div>

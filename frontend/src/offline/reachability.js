@@ -6,7 +6,11 @@
  * being unable to reach the API. Instead:
  *
  * - Every real `api.*` call updates this state: OfflineError -> false,
- *   any HTTP response -> true. See `api/client.js`.
+ *   any HTTP response (other than gateway errors) -> true. See `api/client.js`.
+ * - Gateway-level errors (502/503/504) call `noteServerError()` from
+ *   `api/client.js`. A threshold of `SERVER_ERROR_THRESHOLD` consecutive
+ *   hits without a 2xx in between is required to flip to `false`, which
+ *   prevents banner flicker during fast upstream restarts.
  * - While the state is `false`, a poll to `/api/health/` runs every
  *   `HEALTH_POLL_INTERVAL_MS`. As soon as it returns 2xx, we flip back to
  *   `true` and fire `forceSync()` so the queue drains without waiting for
@@ -19,6 +23,7 @@
 import { forceSync } from './sync'
 
 export const HEALTH_POLL_INTERVAL_MS = 20_000
+export const SERVER_ERROR_THRESHOLD = 2
 
 const HEALTH_PATH = '/api/health/'
 // Matches the fallback used in api/client.js.
@@ -43,6 +48,10 @@ function getPollIntervalMs() {
 let reachable = typeof navigator !== 'undefined' ? navigator.onLine : true
 const listeners = new Set()
 let pollTimer = null
+// Counter of consecutive gateway-level errors (502/503/504) observed by
+// the api client. Reset on any successful flip to `true`. The flip to
+// `false` only happens after `SERVER_ERROR_THRESHOLD` hits.
+let consecutiveServerErrors = 0
 
 // The native `offline` event is a lower-bound signal: when it fires the
 // browser knows there is no network at all, which is strictly worse than
@@ -118,6 +127,13 @@ export function setReachable(value) {
     return
   }
   const next = Boolean(value)
+  // Always reset the gateway-error counter on a "reachable" signal so a
+  // single 2xx between two 5xx hits prevents a spurious flip later.
+  // Doing it before the idempotency guard keeps the reset working even
+  // when the state is already `true`.
+  if (next === true) {
+    consecutiveServerErrors = 0
+  }
   if (next === reachable) return
   reachable = next
   if (reachable) {
@@ -128,10 +144,25 @@ export function setReachable(value) {
   notify()
 }
 
+/**
+ * Called by `api/client.js` when a fetch resolves with 502/503/504
+ * (proxy reached us but the upstream is not responding). Increments a
+ * counter; only flips to unreachable after `SERVER_ERROR_THRESHOLD`
+ * consecutive hits without a 2xx in between. The threshold prevents the
+ * offline banner from flickering during fast upstream restarts.
+ */
+export function noteServerError() {
+  consecutiveServerErrors += 1
+  if (consecutiveServerErrors >= SERVER_ERROR_THRESHOLD) {
+    setReachable(false)
+  }
+}
+
 export function __resetForTests() {
   stopPoll()
   listeners.clear()
   reachable = true
+  consecutiveServerErrors = 0
 }
 
 // Expose a setter on `window` in dev or when a preview build was made for
