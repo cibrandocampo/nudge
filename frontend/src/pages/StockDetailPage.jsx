@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ConfirmModal from '../components/ConfirmModal'
@@ -9,6 +9,8 @@ import QueryHandler from '../components/QueryHandler'
 import SharedWithChips from '../components/SharedWithChips'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
+import { useClickOutside } from '../hooks/useClickOutside'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
@@ -67,6 +69,21 @@ export default function StockDetailPage() {
   const [confirmRemoveLot, setConfirmRemoveLot] = useState(null)
   const [addForm, setAddForm] = useState({ qty: '', expiry: '', lotNumber: '', adding: false })
   const [showAddLot, setShowAddLot] = useState(false)
+  // Custom suggestion dropdown for the lot-number input. Replaces the
+  // native `<datalist>`, whose popup placement is unreliable on mobile
+  // (Android Chrome routes it into the keyboard autofill strip instead
+  // of anchoring it below the input).
+  const [lotSuggestOpen, setLotSuggestOpen] = useState(false)
+  const lotSuggestRef = useRef(null)
+  useClickOutside(lotSuggestRef, () => setLotSuggestOpen(false), lotSuggestOpen)
+  useEscapeKey(() => setLotSuggestOpen(false), lotSuggestOpen)
+  const lotSuggestions = Array.from(
+    new Set((stock?.lots || []).map((l) => l.lot_number).filter((n) => n && n.trim().length > 0)),
+  )
+  const lotSuggestQuery = addForm.lotNumber.trim().toLowerCase()
+  const filteredLotSuggestions = lotSuggestQuery
+    ? lotSuggestions.filter((n) => n.toLowerCase().includes(lotSuggestQuery))
+    : lotSuggestions
 
   const tokens = borderTokens(stock)
   const groupName = stock ? groups.find((g) => g.id === stock.group)?.name : undefined
@@ -306,21 +323,41 @@ export default function StockDetailPage() {
                       />
                     </FormField>
                     <FormField label={t('inventory.lotNumber')}>
-                      <input
-                        className={cx(shared.input, s.addLotInput)}
-                        type="text"
-                        list={`lot-suggestions-${stockId}`}
-                        placeholder={t('inventory.lotNumber')}
-                        value={addForm.lotNumber}
-                        onChange={(e) => setAddForm((f) => ({ ...f, lotNumber: e.target.value }))}
-                      />
-                      <datalist id={`lot-suggestions-${stockId}`}>
-                        {Array.from(
-                          new Set((stock.lots || []).map((l) => l.lot_number).filter((n) => n && n.trim().length > 0)),
-                        ).map((n) => (
-                          <option key={n} value={n} />
-                        ))}
-                      </datalist>
+                      <div className={s.lotSuggestWrap} ref={lotSuggestRef}>
+                        <input
+                          className={cx(shared.input, s.addLotInput)}
+                          type="text"
+                          autoComplete="off"
+                          placeholder={t('inventory.lotNumber')}
+                          value={addForm.lotNumber}
+                          onChange={(e) => {
+                            setAddForm((f) => ({ ...f, lotNumber: e.target.value }))
+                            setLotSuggestOpen(true)
+                          }}
+                          onFocus={() => setLotSuggestOpen(true)}
+                        />
+                        {lotSuggestOpen && filteredLotSuggestions.length > 0 && (
+                          <ul className={s.lotSuggestList} role="listbox">
+                            {filteredLotSuggestions.map((n) => (
+                              <li
+                                key={n}
+                                role="option"
+                                aria-selected={n === addForm.lotNumber}
+                                className={s.lotSuggestItem}
+                                onMouseDown={(e) => {
+                                  // mousedown fires before the input loses focus,
+                                  // so the click registers before any blur logic.
+                                  e.preventDefault()
+                                  setAddForm((f) => ({ ...f, lotNumber: n }))
+                                  setLotSuggestOpen(false)
+                                }}
+                              >
+                                {n}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </FormField>
                   </div>
                   <div className={s.addLotActions}>
