@@ -85,9 +85,7 @@ class Stock(models.Model):
         the user-facing "X ud." figure.
         """
         today = date.today()
-        agg = self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=today)).aggregate(
-            total=Sum("quantity")
-        )
+        agg = self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=today)).aggregate(total=Sum("quantity"))
         return agg["total"] or 0
 
     @transaction.atomic
