@@ -1,10 +1,10 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -72,6 +72,23 @@ class Stock(models.Model):
     @property
     def quantity(self):
         return self.lots.aggregate(total=Sum("quantity"))["total"] or 0
+
+    @property
+    def quantity_available(self):
+        """Sum of qty across lots that are NOT expired today.
+
+        A lot counts as consumable when it has no expiry_date or its
+        expiry_date is strictly after today. Mirrors `Stock.quantity`'s
+        aggregate pattern so callers without prefetched lots stay
+        efficient. Used by `StockSerializer` and `RoutineSerializer` as
+        the basis for severity calculation, depletion estimation, and
+        the user-facing "X ud." figure.
+        """
+        today = date.today()
+        agg = self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=today)).aggregate(
+            total=Sum("quantity")
+        )
+        return agg["total"] or 0
 
     @transaction.atomic
     def consume_lots(self, quantity, lot_selections=None):

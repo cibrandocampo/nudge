@@ -380,7 +380,6 @@ describe('RoutineFormPage', () => {
       is_owner: true,
       owner_username: 'testuser',
       lots: [],
-      expiring_lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
     }

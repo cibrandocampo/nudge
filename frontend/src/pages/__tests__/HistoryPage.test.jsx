@@ -49,7 +49,6 @@ const mockStocks = [
     name: 'Insulin pens',
     quantity: 5,
     lots: [],
-    expiring_lots: [],
     stock_severity: 'ok',
     expiry_severity: 'ok',
   },

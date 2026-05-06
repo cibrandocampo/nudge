@@ -62,6 +62,40 @@ describe('formatRelativeTime', () => {
     const inThreeDays = new Date(Date.now() + 72 * 3600000).toISOString()
     expect(formatRelativeTime(inThreeDays)).toMatch(/In 3 days/)
   })
+
+  // Bucketing past hours → days when overdue exceeds 48h. Without this, raw
+  // hour counts like "Overdue by 174h" become unreadable. 1-decimal precision
+  // (e.g. 1.5 days) keeps the signal accurate.
+  it('returns hours for overdue between 1h and 48h', () => {
+    const overdue40h = new Date(Date.now() - 40 * 3600000).toISOString()
+    expect(formatRelativeTime(overdue40h)).toMatch(/Overdue by 40h/)
+  })
+
+  it('returns "Overdue by 2 days" for overdue exactly at 48h boundary', () => {
+    // 48h is the bucket cutoff (inclusive — still hours), 49h flips to days.
+    const overdue49h = new Date(Date.now() - 49 * 3600000).toISOString()
+    expect(formatRelativeTime(overdue49h)).toMatch(/Overdue by 2 days/)
+  })
+
+  it('rounds to integer days for overdue beyond 48h', () => {
+    // 174h / 24 = 7.25 → 7. Days are always integer; decimals stop being
+    // useful once the user is more than two days off.
+    const overdue174h = new Date(Date.now() - 174 * 3600000).toISOString()
+    expect(formatRelativeTime(overdue174h)).toMatch(/Overdue by 7 days/)
+  })
+
+  it('rounds the half-day case up — 60h overdue → "Overdue by 3 days"', () => {
+    // 60h / 24 = 2.5. Math.round(2.5) === 3 in JS — the rounding rule is
+    // explicit: nearest integer, ties round up.
+    const overdue60h = new Date(Date.now() - 60 * 3600000).toISOString()
+    expect(formatRelativeTime(overdue60h)).toMatch(/Overdue by 3 days/)
+  })
+
+  it('rounds non-integer days to integer in the future direction too', () => {
+    // 36h / 24 = 1.5 → Math.round = 2 → "In 2 days".
+    const inOneAndAHalfDays = new Date(Date.now() + 36 * 3600000).toISOString()
+    expect(formatRelativeTime(inOneAndAHalfDays)).toMatch(/In 2 days/)
+  })
 })
 
 describe('formatShortDate', () => {

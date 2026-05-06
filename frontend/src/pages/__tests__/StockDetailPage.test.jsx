@@ -20,7 +20,6 @@ const stock = {
   name: 'Water filter',
   quantity: 10,
   group: null,
-  expiring_lots: [],
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
@@ -236,11 +235,12 @@ describe('StockDetailPage', () => {
     expect(depletion.className).toMatch(/stockDepletionWarn/)
   })
 
-  it('paints the depletion date red when stock_severity is "out"', async () => {
+  it('paints the depletion date red when stock_severity is "critical"', async () => {
     const empty = {
       ...stock,
       quantity: 0,
-      stock_severity: 'out',
+      quantity_available: 0,
+      stock_severity: 'critical',
       estimated_depletion_date: '2026-04-27',
       lots: [],
     }
@@ -295,8 +295,8 @@ describe('StockDetailPage', () => {
     expect(section).not.toHaveTextContent('testuser')
   })
 
-  it('renders the danger border when stock_severity is "out"', async () => {
-    const empty = { ...stock, quantity: 0, stock_severity: 'out', lots: [] }
+  it('renders the danger border when stock_severity is "critical"', async () => {
+    const empty = { ...stock, quantity: 0, quantity_available: 0, stock_severity: 'critical', lots: [] }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
@@ -360,9 +360,9 @@ describe('StockDetailPage', () => {
     expect(screen.getByText('by alice')).toBeInTheDocument()
   })
 
-  // Lot highlight tri-state — derived in-page from each lot.expiry_date so
-  // it does not depend on the stock-level expiring_lots array. Today's
-  // clock is 2026-04-27 in the test environment.
+  // Lot highlight tri-state — derived in-page from each lot.expiry_date
+  // via `lotExpirySeverity`. Today's clock is 2026-04-27 in the test
+  // environment (matched by the hardcoded fixture dates below).
   it('marks a lot expired in the past as data-expiring="reached"', async () => {
     const past = {
       ...stock,
@@ -405,6 +405,122 @@ describe('StockDetailPage', () => {
     renderDetail()
     const row = await screen.findByTestId('lot-row')
     expect(row).toHaveAttribute('data-expiring', 'none')
+  })
+
+  // T167: stock-only border (no worst-of-two). The expiry signal lives on
+  // per-lot indicators only — see iconClassForLot tests below.
+  it('paints the header card border warning when stock_severity is "low"', async () => {
+    const lowStock = { ...stock, stock_severity: 'low' }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(lowStock)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    const card = container.querySelector('.card')
+    expect(card.getAttribute('class') ?? '').toContain('cardBorderWarning')
+  })
+
+  it('paints the header card border success when stock_severity is "ok"', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    const card = container.querySelector('.card')
+    expect(card.getAttribute('class') ?? '').toContain('cardBorderSuccess')
+  })
+
+  // T167: header rendering — quantity_available + (N expired) suffix.
+  it('header shows quantity_available with (N expired) suffix when there are expired lots', async () => {
+    const withExpired = {
+      ...stock,
+      quantity: 18,
+      quantity_available: 13,
+      quantity_expired: 5,
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(withExpired)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    // The qty span renders quantity_available (13), not the total (18).
+    const qty = container.querySelector('[class*="stockQty"]:not([class*="stockQtyExpired"])')
+    expect(qty.textContent).toMatch(/13/)
+    expect(qty.textContent).not.toMatch(/18/)
+    // The expired suffix span renders "(5 expired)".
+    const expiredSuffix = container.querySelector('[class*="stockQtyExpired"]')
+    expect(expiredSuffix).not.toBeNull()
+    expect(expiredSuffix.textContent).toMatch(/5 expired/)
+  })
+
+  it('header omits the expired suffix when quantity_expired is 0', async () => {
+    const noExpired = { ...stock, quantity_available: 10, quantity_expired: 0 }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(noExpired)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    expect(container.querySelector('[class*="stockQtyExpired"]')).toBeNull()
+  })
+
+  // T167: per-lot expiry date tint + line-through on expired lot qty.
+  it('tints the lot expiry date span for a soon-expiring lot', async () => {
+    const soonLot = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const dateSpan = row.querySelector('[class*="cardLotExpiry"]')
+    expect(dateSpan).not.toBeNull()
+    expect(dateSpan.getAttribute('class')).toContain('iconWarning')
+  })
+
+  it('applies line-through to the qty span of an expired (reached) lot', async () => {
+    const past = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-04-20', lot_number: 'OLD' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(past)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const qtySpan = row.querySelector('[class*="cardLotQty"]')
+    expect(qtySpan).not.toBeNull()
+    expect(qtySpan.getAttribute('class')).toContain('cardLotQtyExpired')
+  })
+
+  // Per-lot icon tint — derived from each lot.expiry_date (mirrors the
+  // data-expiring attribute). The package icon is the first <svg> inside
+  // the lot row; we walk via its <use href="#i-package"> to be unambiguous.
+  it('tints the package icon iconDanger for a lot in the past', async () => {
+    const past = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-04-20', lot_number: 'OLD' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(past)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    expect(svg.getAttribute('class') ?? '').toContain('iconDanger')
+  })
+
+  it('tints the package icon iconWarning for a lot expiring within 30 days', async () => {
+    const soonLot = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    expect(svg.getAttribute('class') ?? '').toContain('iconWarning')
+  })
+
+  it('leaves the package icon untinted for a far-future lot', async () => {
+    const far = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2027-01-01', lot_number: 'FAR' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(far)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    const cls = svg.getAttribute('class') ?? ''
+    expect(cls).not.toContain('iconDanger')
+    expect(cls).not.toContain('iconWarning')
   })
 
   it('renders the shared-with chips when the owner has shared the stock', async () => {

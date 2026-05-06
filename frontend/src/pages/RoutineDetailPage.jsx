@@ -15,7 +15,9 @@ import { useStockList } from '../hooks/useStock'
 import { useDeleteRoutine } from '../hooks/mutations/useDeleteRoutine'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
+import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
+import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
@@ -29,6 +31,7 @@ export default function RoutineDetailPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { showToast } = useToast()
+  const { user } = useAuth()
 
   const { data: routine, isLoading: routineLoading, isError: routineError, error: routineErr } = useRoutine(id)
   const { data: entries = [] } = useRoutineEntries(id)
@@ -229,13 +232,33 @@ export default function RoutineDetailPage() {
                 </div>
               </>
             )}
-            {routine.is_owner === false && routine.owner_username && (
-              <div className={s.metaRow}>
-                <span className={s.metaLabel}>{t('sharing.owner')}</span>
-                <span className={s.metaValue}>{routine.owner_username}</span>
-              </div>
-            )}
           </div>
+
+          {routine.is_owner === false && routine.owner_username && (
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="owner-info">
+              <div className={shared.formSectionHeader}>
+                <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
+              </div>
+              <div className={shared.formChipsRow}>
+                <span className={shared.formChip}>
+                  <span className={shared.formChipAvatar} aria-hidden="true">
+                    {avatarInitial({ username: routine.owner_username })}
+                  </span>
+                  <span>{routine.owner_username}</span>
+                </span>
+                {routine.shared_with_details
+                  ?.filter((c) => c.username !== user?.username)
+                  .map((c) => (
+                    <span key={c.id} className={shared.formChip}>
+                      <span className={shared.formChipAvatar} aria-hidden="true">
+                        {avatarInitial(c)}
+                      </span>
+                      <span>{c.username}</span>
+                    </span>
+                  ))}
+              </div>
+            </section>
+          )}
 
           {routine.is_owner !== false && routine.shared_with_details?.length > 0 && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">

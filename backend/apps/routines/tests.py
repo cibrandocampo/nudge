@@ -372,22 +372,6 @@ class StockSerializerTest(TestCase):
         self.assertEqual(len(data["lots"]), 1)
         self.assertEqual(data["lots"][0]["lot_number"], "L1")
 
-    def test_expiring_lots_contains_correct_lots(self):
-        stock = make_stock(self.user)
-        # T104: threshold dropped from 90 to 30 days. Was +60 (in window
-        # under the old rule); now must be <= 30.
-        expiring = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=20))
-        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=200))
-        data = StockSerializer(stock).data
-        self.assertEqual(len(data["expiring_lots"]), 1)
-        self.assertEqual(data["expiring_lots"][0]["id"], expiring.id)
-
-    def test_expiring_lots_excludes_zero_quantity(self):
-        stock = make_stock(self.user)
-        make_lot(stock, quantity=0, expiry_date=date.today() + timedelta(days=30))
-        data = StockSerializer(stock).data
-        self.assertEqual(len(data["expiring_lots"]), 0)
-
     # ── expiry_severity (T104) ─────────────────────────────────────────────
 
     def test_expiry_severity_ok_when_no_lots(self):
@@ -458,6 +442,162 @@ class StockSerializerTest(TestCase):
         self.assertEqual(data["expiry_severity"], "ok")
 
 
+# ── StockSerializer — quantity partition fields (T163) ──────────────────────
+
+
+class StockQuantityFieldsTest(TestCase):
+    """5 quantity-related fields published by StockSerializer.
+
+    Buckets per the revised plan:
+        expired:  expiry_date <= today
+        soon:     today < expiry_date < today + 30d
+        healthy:  expiry_date IS NULL or expiry_date >= today + 30d
+
+    Invariants (always):
+        quantity           == quantity_soon + quantity_healthy + quantity_expired
+        quantity_available == quantity_soon + quantity_healthy
+        quantity_available == quantity - quantity_expired
+    """
+
+    def setUp(self):
+        self.user = make_user()
+
+    def _backdate(self, lot, days_in_past):
+        """Bypass StockLotSerializer.validate_expiry_date to set a past date."""
+        StockLot.objects.filter(pk=lot.pk).update(expiry_date=date.today() - timedelta(days=days_in_past))
+
+    # ── Empty / single-bucket cases ──────────────────────────────────────────
+
+    def test_no_lots_all_zero(self):
+        stock = make_stock(self.user)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity"], 0)
+        self.assertEqual(data["quantity_available"], 0)
+        self.assertEqual(data["quantity_soon"], 0)
+        self.assertEqual(data["quantity_healthy"], 0)
+        self.assertEqual(data["quantity_expired"], 0)
+
+    def test_single_lot_no_expiry_is_healthy(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=7)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity"], 7)
+        self.assertEqual(data["quantity_available"], 7)
+        self.assertEqual(data["quantity_healthy"], 7)
+        self.assertEqual(data["quantity_soon"], 0)
+        self.assertEqual(data["quantity_expired"], 0)
+
+    def test_single_lot_far_future_is_healthy(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=4, expiry_date=date.today() + timedelta(days=365))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_healthy"], 4)
+        self.assertEqual(data["quantity_soon"], 0)
+        self.assertEqual(data["quantity_expired"], 0)
+
+    def test_single_lot_within_30_days_is_soon(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=15))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_soon"], 5)
+        self.assertEqual(data["quantity_healthy"], 0)
+        self.assertEqual(data["quantity_expired"], 0)
+        self.assertEqual(data["quantity_available"], 5)
+
+    def test_single_expired_lot(self):
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=7, expiry_date=date.today() + timedelta(days=10))
+        self._backdate(lot, days_in_past=1)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_expired"], 7)
+        self.assertEqual(data["quantity_available"], 0)
+        self.assertEqual(data["quantity"], 7)
+
+    # ── Boundaries ──────────────────────────────────────────────────────────
+
+    def test_boundary_30_days_is_healthy(self):
+        # `< cutoff` is strict, so day +30 lands in healthy.
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=30))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_healthy"], 5)
+        self.assertEqual(data["quantity_soon"], 0)
+
+    def test_boundary_29_days_is_soon(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=29))
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_soon"], 5)
+        self.assertEqual(data["quantity_healthy"], 0)
+
+    def test_boundary_today_is_expired(self):
+        # `expiry_date <= today` is inclusive; a lot expiring today counts as expired.
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        StockLot.objects.filter(pk=lot.pk).update(expiry_date=date.today())
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_expired"], 5)
+        self.assertEqual(data["quantity_available"], 0)
+
+    # ── Mixed + invariants ───────────────────────────────────────────────────
+
+    def test_mixed_partition(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=200))  # healthy
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))  # soon
+        expired = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=10))
+        self._backdate(expired, days_in_past=2)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_healthy"], 3)
+        self.assertEqual(data["quantity_soon"], 5)
+        self.assertEqual(data["quantity_expired"], 2)
+        self.assertEqual(data["quantity_available"], 8)
+        self.assertEqual(data["quantity"], 10)
+
+    def test_invariants_on_mixed_partition(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=200))
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        expired = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=10))
+        self._backdate(expired, days_in_past=2)
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity"], data["quantity_soon"] + data["quantity_healthy"] + data["quantity_expired"])
+        self.assertEqual(data["quantity_available"], data["quantity_soon"] + data["quantity_healthy"])
+        self.assertEqual(data["quantity_available"], data["quantity"] - data["quantity_expired"])
+
+    def test_mixed_with_no_expiry_lot_counts_as_healthy(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=4)  # no expiry_date → healthy
+        make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=10))  # soon
+        data = StockSerializer(stock).data
+        self.assertEqual(data["quantity_healthy"], 4)
+        self.assertEqual(data["quantity_soon"], 2)
+        self.assertEqual(data["quantity_expired"], 0)
+        self.assertEqual(data["quantity_available"], 6)
+
+    # ── Stock model @property (independent of serializer) ───────────────────
+
+    def test_model_quantity_available_property_excludes_expired(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=4, expiry_date=date.today() + timedelta(days=200))
+        expired = make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=10))
+        self._backdate(expired, days_in_past=5)
+        # Refresh from DB to make sure the @property reads the persisted state
+        # (the queryset.update() above doesn't update the in-memory instance).
+        stock.refresh_from_db()
+        self.assertEqual(stock.quantity, 7)
+        self.assertEqual(stock.quantity_available, 4)
+
+    def test_model_quantity_available_property_with_no_expiry(self):
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=10)  # no expiry
+        self.assertEqual(stock.quantity_available, 10)
+
+    def test_model_quantity_available_property_no_lots(self):
+        stock = make_stock(self.user)
+        self.assertEqual(stock.quantity_available, 0)
+
+
 # ── RoutineSerializer ────────────────────────────────────────────────────────
 
 
@@ -490,6 +630,28 @@ class RoutineSerializerTest(TestCase):
         data = RoutineSerializer(r).data
         self.assertEqual(data["stock_name"], "Filters")
         self.assertEqual(data["stock_quantity"], 5)
+
+    def test_stock_quantity_available_excludes_expired(self):
+        """stock_quantity stays the total; stock_quantity_available drops expired."""
+        stock = make_stock(self.user, name="Mixed")
+        make_lot(stock, quantity=4, expiry_date=date.today() + timedelta(days=200))
+        expired = make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=10))
+        StockLot.objects.filter(pk=expired.pk).update(expiry_date=date.today() - timedelta(days=2))
+        r = make_routine(self.user, stock=stock)
+        data = RoutineSerializer(r).data
+        self.assertEqual(data["stock_quantity"], 7)
+        self.assertEqual(data["stock_quantity_available"], 4)
+
+    def test_stock_quantity_available_null_when_no_linked_stock(self):
+        # `allow_null=True` on the new field surfaces `None` instead of
+        # being omitted (the inconsistent legacy behaviour of the
+        # `stock_quantity` field, kept for backwards compat). Frontend
+        # consumers can rely on the key being present.
+        r = make_routine(self.user, stock=None)
+        data = RoutineSerializer(r).data
+        self.assertNotIn("stock_quantity", data)  # legacy: omitted
+        self.assertIn("stock_quantity_available", data)
+        self.assertIsNone(data["stock_quantity_available"])
 
     def test_last_done_at_creates_backdated_entry(self):
         """When last_done_at is provided, a RoutineEntry is created with that timestamp."""
@@ -614,7 +776,6 @@ class StockViewSetTest(APITestCase):
         self.assertEqual(response.status_code, 201)
         data = response.json()
         self.assertIn("lots", data)
-        self.assertIn("expiring_lots", data)
         self.assertIn("stock_severity", data)
         self.assertIn("expiry_severity", data)
 
@@ -2328,12 +2489,12 @@ class StockDepletionSerializerTest(TestCase):
 
     def test_quantity_zero_with_consumption(self):
         stock = make_stock(self.alice)
-        # No lots → quantity = 0
+        # No lots → quantity_available = 0
         make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
         data = self._get_stock_data(stock)
         self.assertEqual(data["estimated_depletion_date"], date.today())
-        # qty == 0 → severity 'out' regardless of consumption rate.
-        self.assertEqual(data["stock_severity"], "out")
+        # qty_available == 0 → severity 'critical' regardless of consumption rate (T164).
+        self.assertEqual(data["stock_severity"], "critical")
 
     def test_inactive_routine_not_counted(self):
         stock = make_stock(self.alice)
@@ -2484,11 +2645,11 @@ class StockDepletionSerializerTest(TestCase):
 
     # ── stock_severity (T104) ────────────────────────────────────────────────
 
-    def test_stock_severity_out_when_quantity_zero(self):
-        """qty == 0 → 'out'."""
+    def test_stock_severity_critical_when_quantity_zero(self):
+        """qty_available == 0 → 'critical' (T164: replaces the old 'out')."""
         stock = make_stock(self.alice)
         data = self._get_stock_data(stock)
-        self.assertEqual(data["stock_severity"], "out")
+        self.assertEqual(data["stock_severity"], "critical")
 
     def test_stock_severity_low_when_quantity_one(self):
         """qty == 1 → 'low'."""
@@ -2556,6 +2717,140 @@ class StockDepletionSerializerTest(TestCase):
         make_routine(self.alice, name="Disabled", interval_hours=24, stock=stock, is_active=False)
         data = self._get_stock_data(stock)
         self.assertEqual(data["stock_severity"], "ok")
+
+    # ── stock_severity rewrite (T164) ───────────────────────────────────────
+    # New 3-tier model: 'ok' / 'low' / 'critical'. Tipo 1 = no consumption
+    # estimate (depletion_date is None); Tipo 2 = with estimate.
+
+    def _backdate_lot(self, lot, days_in_past):
+        """Bypass `StockLotSerializer.validate_expiry_date` to set a past date."""
+        StockLot.objects.filter(pk=lot.pk).update(expiry_date=date.today() - timedelta(days=days_in_past))
+
+    # — Tipo 1: no consumption estimate —
+
+    def test_severity_critical_when_only_lot_is_expired(self):
+        """1 lot of 5 ud, all expired → quantity_available == 0 → critical."""
+        stock = make_stock(self.alice)
+        lot = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        self._backdate_lot(lot, days_in_past=1)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "critical")
+
+    def test_severity_low_tipo1_when_only_soon_lots_no_healthy(self):
+        """5 ud all expiring in 10 days, no estimation → qty_healthy=0 < 3 → low."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_severity_ok_tipo1_when_three_healthy(self):
+        """3 ud healthy, no estimation → qty_healthy=3 ≥ 3 → ok."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=200))
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_severity_low_tipo1_two_healthy_plus_five_soon(self):
+        """qty_healthy=2 < 3 even though qty_available=7 → low."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=200))
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_severity_ok_tipo1_three_healthy_plus_two_expired(self):
+        """qty_healthy=3 (≥ 3) wins → ok despite expired sibling lot."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=3, expiry_date=date.today() + timedelta(days=200))
+        expired = make_lot(stock, quantity=2, expiry_date=date.today() + timedelta(days=10))
+        self._backdate_lot(expired, days_in_past=2)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    # — Tipo 2: depletion present —
+
+    def test_severity_critical_tipo2_depletion_six_days(self):
+        """qty=6 + 1/day → depletion_date in 6d → days_left < 7 → critical."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=6)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "critical")
+
+    def test_severity_low_tipo2_depletion_seven_days_boundary(self):
+        """qty=7 + 1/day → days_left=7 → low (boundary `< 7` is strict)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=7)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_severity_low_tipo2_depletion_twentynine_days_boundary(self):
+        """qty=29 + 1/day → days_left=29 → low (boundary `< 30` is strict)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=29)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_severity_ok_tipo2_depletion_thirty_days_boundary(self):
+        """qty=30 + 1/day → days_left=30 → ok (`< 30` is strict; 30 falls into ok)."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=30)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_severity_ok_tipo2_depletion_far_future(self):
+        """qty=100 + 1/day → days_left=100 → ok."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=100)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["stock_severity"], "ok")
+
+    def test_severity_tipo2_uses_quantity_available_not_total(self):
+        """10 ud non-expired + 5 ud expired + 1/day → depletion=today+10d → low.
+
+        This test is the regression that motivated T164: with the old
+        contract, depletion would have been 15d → ok, masking the fact
+        that 5 ud are physically there but unusable.
+        """
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=10, expiry_date=date.today() + timedelta(days=200))
+        expired = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        self._backdate_lot(expired, days_in_past=2)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        # quantity_total=15, quantity_available=10. Depletion is computed on 10 → 10 days.
+        self.assertEqual(data["estimated_depletion_date"], date.today() + timedelta(days=10))
+        self.assertEqual(data["stock_severity"], "low")
+
+    def test_severity_tipo2_expiry_does_not_bubble_into_stock_severity(self):
+        """30 ud all expiring in 5 days, 1/day → depletion=today+30d → ok.
+
+        Documents the no-worst-of-two contract: stock-level severity is
+        derived purely from quantity_available + depletion. The fact
+        that lots will expire before they are consumed surfaces ONLY in
+        the per-lot icon tint (frontend), never in `stock_severity`.
+        """
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=30, expiry_date=date.today() + timedelta(days=5))
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        # quantity_available=30 (the lot is soon, not expired) → 30 days → ok.
+        self.assertEqual(data["stock_severity"], "ok")
+        self.assertEqual(data["expiry_severity"], "soon")  # legacy field still flips
+
+    def test_consumption_data_uses_quantity_available_for_depletion(self):
+        """Regression: 15 total (10 healthy + 5 expired) + 1/day → depletion at +10d, NOT +15d."""
+        stock = make_stock(self.alice)
+        make_lot(stock, quantity=10, expiry_date=date.today() + timedelta(days=200))
+        expired = make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=10))
+        self._backdate_lot(expired, days_in_past=2)
+        make_routine(self.alice, name="Daily", interval_hours=24, stock=stock)
+        data = self._get_stock_data(stock)
+        self.assertEqual(data["estimated_depletion_date"], date.today() + timedelta(days=10))
 
 
 # ── updated_at on mutable child models ─────────────────────────────────────
