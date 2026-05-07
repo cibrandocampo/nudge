@@ -653,15 +653,15 @@ class RoutineSerializerTest(TestCase):
         self.assertIn("stock_quantity_available", data)
         self.assertIsNone(data["stock_quantity_available"])
 
-    def test_last_done_at_creates_backdated_entry(self):
-        """When last_done_at is provided, a RoutineEntry is created with that timestamp."""
+    def test_backdated_first_entry_at_creates_backdated_entry(self):
+        """When backdated_first_entry_at is provided, a RoutineEntry is created with that timestamp."""
         backdated = timezone.now() - timedelta(hours=48)
         s = RoutineSerializer(
             data={
                 "name": "Water cactus",
                 "interval_hours": 336,
                 "is_active": True,
-                "last_done_at": backdated.isoformat(),
+                "backdated_first_entry_at": backdated.isoformat(),
             }
         )
         self.assertTrue(s.is_valid(), s.errors)
@@ -670,45 +670,58 @@ class RoutineSerializerTest(TestCase):
         entry = routine.entries.first()
         self.assertAlmostEqual(entry.created_at.timestamp(), backdated.timestamp(), delta=1)
 
-    def test_last_done_at_omitted_creates_no_entry(self):
-        """Without last_done_at, no RoutineEntry is created on routine creation."""
+    def test_backdated_first_entry_at_omitted_creates_no_entry(self):
+        """Without backdated_first_entry_at, no RoutineEntry is created on routine creation."""
         s = RoutineSerializer(data={"name": "Oil change", "interval_hours": 24, "is_active": True})
         self.assertTrue(s.is_valid(), s.errors)
         routine = s.save(user=self.user)
         self.assertEqual(routine.entries.count(), 0)
 
-    def test_last_done_at_null_creates_no_entry(self):
-        """Explicit null last_done_at also creates no entry."""
+    def test_backdated_first_entry_at_null_creates_no_entry(self):
+        """Explicit null backdated_first_entry_at also creates no entry."""
         s = RoutineSerializer(
-            data={"name": "Oil change", "interval_hours": 24, "is_active": True, "last_done_at": None}
+            data={"name": "Oil change", "interval_hours": 24, "is_active": True, "backdated_first_entry_at": None}
         )
         self.assertTrue(s.is_valid(), s.errors)
         routine = s.save(user=self.user)
         self.assertEqual(routine.entries.count(), 0)
 
-    def test_last_done_at_future_is_invalid(self):
-        """A future last_done_at is rejected with a validation error."""
+    def test_backdated_first_entry_at_future_is_invalid(self):
+        """A future backdated_first_entry_at is rejected with a validation error."""
         future = timezone.now() + timedelta(hours=1)
         s = RoutineSerializer(
-            data={"name": "Test", "interval_hours": 24, "is_active": True, "last_done_at": future.isoformat()}
+            data={
+                "name": "Test",
+                "interval_hours": 24,
+                "is_active": True,
+                "backdated_first_entry_at": future.isoformat(),
+            }
         )
         self.assertFalse(s.is_valid())
-        self.assertIn("last_done_at", s.errors)
+        self.assertIn("backdated_first_entry_at", s.errors)
 
-    def test_last_done_at_not_in_read_response(self):
-        """last_done_at is write-only and does not appear in serialized output."""
+    def test_backdated_first_entry_at_not_in_read_response(self):
+        """backdated_first_entry_at is write-only and does not appear in serialized output."""
         r = make_routine(self.user)
         data = RoutineSerializer(r).data
+        self.assertNotIn("backdated_first_entry_at", data)
+        # The legacy name is also absent — confirms the hard cutover (T177).
         self.assertNotIn("last_done_at", data)
 
     def test_stock_validation_rejects_other_users_stock(self):
         other_user = make_user(username="other")
         other_stock = make_stock(other_user)
 
-        from django.test import RequestFactory
+        # FlexFieldsModelSerializer reads `.query_params` from the request
+        # in __init__. Django's RequestFactory and DRF's APIRequestFactory
+        # both return WSGIRequest objects — only DRF's `Request` wrapper
+        # exposes `.query_params`. Build the wrapped request explicitly so
+        # the serializer constructor can introspect query params (none here).
+        from rest_framework.request import Request
+        from rest_framework.test import APIRequestFactory
 
-        factory = RequestFactory()
-        request = factory.post("/")
+        factory = APIRequestFactory()
+        request = Request(factory.post("/"))
         request.user = self.user
 
         s = RoutineSerializer(
@@ -1165,12 +1178,17 @@ class RoutineViewSetTest(APITestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Routine.objects.filter(pk=r.id).exists())
 
-    def test_create_with_last_done_at_creates_backdated_entry(self):
-        """POST /routines/ with last_done_at creates a RoutineEntry with that timestamp."""
+    def test_create_with_backdated_first_entry_at_creates_backdated_entry(self):
+        """POST /routines/ with backdated_first_entry_at creates a RoutineEntry with that timestamp."""
         backdated = timezone.now() - timedelta(hours=48)
         response = self.client.post(
             "/api/routines/",
-            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": backdated.isoformat()},
+            {
+                "name": "Water cactus",
+                "interval_hours": 336,
+                "is_active": True,
+                "backdated_first_entry_at": backdated.isoformat(),
+            },
         )
         self.assertEqual(response.status_code, 201)
         routine = Routine.objects.get(pk=response.json()["id"])
@@ -1181,18 +1199,23 @@ class RoutineViewSetTest(APITestCase):
             delta=1,
         )
 
-    def test_create_with_recent_last_done_at_not_due(self):
-        """A new routine with a recent last_done_at should not be immediately due."""
+    def test_create_with_recent_backdated_first_entry_at_not_due(self):
+        """A new routine with a recent backdated_first_entry_at should not be immediately due."""
         recent = timezone.now() - timedelta(hours=2)
         response = self.client.post(
             "/api/routines/",
-            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": recent.isoformat()},
+            {
+                "name": "Water cactus",
+                "interval_hours": 336,
+                "is_active": True,
+                "backdated_first_entry_at": recent.isoformat(),
+            },
         )
         self.assertEqual(response.status_code, 201)
         self.assertFalse(response.json()["is_due"])
 
-    def test_create_without_last_done_at_is_due_immediately(self):
-        """A new routine without last_done_at is due immediately."""
+    def test_create_without_backdated_first_entry_at_is_due_immediately(self):
+        """A new routine without backdated_first_entry_at is due immediately."""
         response = self.client.post(
             "/api/routines/",
             {"name": "Water cactus", "interval_hours": 336, "is_active": True},
@@ -1200,15 +1223,42 @@ class RoutineViewSetTest(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.json()["is_due"])
 
-    def test_create_with_future_last_done_at_returns_400(self):
-        """A future last_done_at is rejected."""
+    def test_create_with_future_backdated_first_entry_at_returns_400(self):
+        """A future backdated_first_entry_at is rejected."""
         future = timezone.now() + timedelta(hours=1)
         response = self.client.post(
             "/api/routines/",
-            {"name": "Water cactus", "interval_hours": 336, "is_active": True, "last_done_at": future.isoformat()},
+            {
+                "name": "Water cactus",
+                "interval_hours": 336,
+                "is_active": True,
+                "backdated_first_entry_at": future.isoformat(),
+            },
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("last_done_at", response.json())
+        self.assertIn("backdated_first_entry_at", response.json())
+
+    def test_create_with_old_field_name_last_done_at_is_silently_ignored(self):
+        """Hard cutover (T177): the legacy field name is now an unknown key.
+
+        DRF discards unknown keys silently rather than 400-ing, so the routine
+        is still created successfully — but no backdated entry is materialised.
+        Pinned here so a future re-introduction of `last_done_at` (e.g. an
+        accidental backwards-compat alias) would fail this assertion.
+        """
+        backdated = timezone.now() - timedelta(hours=48)
+        response = self.client.post(
+            "/api/routines/",
+            {
+                "name": "Legacy payload",
+                "interval_hours": 24,
+                "is_active": True,
+                "last_done_at": backdated.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        routine = Routine.objects.get(pk=response.json()["id"])
+        self.assertEqual(routine.entries.count(), 0)
 
     def test_log_other_users_routine_returns_404(self):
         r = make_routine(self.other)
@@ -2198,7 +2248,14 @@ class UserStockGroupSerializerTest(APITestCase):
         self.stock = Stock.objects.create(user=self.owner, name="Ibuprofen", group=self.owner_group)
         self.stock.shared_with.add(self.recipient)
 
-    # ── GET: effective group in serialization ─────────────────────
+    # ── GET: group/my_group separation (T176) ─────────────────────
+    #
+    # Post-T176 invariant: the ``group`` / ``group_name`` fields ALWAYS
+    # reflect the owner's stock.group, regardless of who's reading. The
+    # ``my_group`` / ``my_group_name`` fields carry the viewer's personal
+    # override (or null when the viewer is the owner or has no override).
+    # Frontends render ``stock.my_group ?? stock.group`` to keep the
+    # legacy "override pisa al grupo del owner cuando existe" behaviour.
 
     def test_owner_sees_own_stock_group(self):
         self.client.force_authenticate(user=self.owner)
@@ -2206,21 +2263,32 @@ class UserStockGroupSerializerTest(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["group"], self.owner_group.id)
         self.assertEqual(res.data["group_name"], "Owner Group")
+        # Owner has no override concept — both my_group fields are null.
+        self.assertIsNone(res.data["my_group"])
+        self.assertIsNone(res.data["my_group_name"])
 
-    def test_recipient_sees_null_group_before_override(self):
+    def test_recipient_sees_owner_group_and_null_my_group_before_override(self):
         self.client.force_authenticate(user=self.recipient)
         res = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertEqual(res.status_code, 200)
-        self.assertIsNone(res.data["group"])
-        self.assertIsNone(res.data["group_name"])
+        # ``group`` reports the owner's group, NOT null (T176 change of shape).
+        self.assertEqual(res.data["group"], self.owner_group.id)
+        self.assertEqual(res.data["group_name"], "Owner Group")
+        # No personal override yet → my_group fields are null.
+        self.assertIsNone(res.data["my_group"])
+        self.assertIsNone(res.data["my_group_name"])
 
-    def test_recipient_sees_own_group_after_override(self):
+    def test_recipient_sees_owner_group_and_own_my_group_after_override(self):
         UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
         self.client.force_authenticate(user=self.recipient)
         res = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["group"], self.recip_group.id)
-        self.assertEqual(res.data["group_name"], "Recip Group")
+        # owner's group is unchanged by the recipient's override.
+        self.assertEqual(res.data["group"], self.owner_group.id)
+        self.assertEqual(res.data["group_name"], "Owner Group")
+        # The personal override surfaces in my_group / my_group_name.
+        self.assertEqual(res.data["my_group"], self.recip_group.id)
+        self.assertEqual(res.data["my_group_name"], "Recip Group")
 
     def test_owner_group_unaffected_by_recipient_override(self):
         UserStockGroup.objects.create(user=self.recipient, stock=self.stock, group=self.recip_group)
@@ -2228,6 +2296,8 @@ class UserStockGroupSerializerTest(APITestCase):
         res = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["group"], self.owner_group.id)
+        # Owner never sees a recipient's override.
+        self.assertIsNone(res.data["my_group"])
 
     # ── PATCH my-group ─────────────────────────────────────────────
 
@@ -2239,7 +2309,9 @@ class UserStockGroupSerializerTest(APITestCase):
             format="json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data["group"], self.recip_group.id)
+        # ``group`` still reflects the owner's; ``my_group`` carries the new override.
+        self.assertEqual(res.data["group"], self.owner_group.id)
+        self.assertEqual(res.data["my_group"], self.recip_group.id)
         self.assertTrue(
             UserStockGroup.objects.filter(user=self.recipient, stock=self.stock, group=self.recip_group).exists()
         )
@@ -2249,7 +2321,9 @@ class UserStockGroupSerializerTest(APITestCase):
         self.client.force_authenticate(user=self.recipient)
         res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
         self.assertEqual(res.status_code, 200)
-        self.assertIsNone(res.data["group"])
+        # ``group`` (owner's) is unaffected; only ``my_group`` is cleared.
+        self.assertEqual(res.data["group"], self.owner_group.id)
+        self.assertIsNone(res.data["my_group"])
 
     def test_recipient_cannot_use_other_users_group(self):
         other_group = StockGroup.objects.create(user=self.owner, name="Owner Private")
@@ -3443,3 +3517,271 @@ class ClientCreatedAtQueryRefactorTest(APITestCase):
         data = response.json()
         ids = [row["id"] for row in data.get("results", data)]
         self.assertIn(consumption.id, ids, msg="date_from/date_to must filter by client_created_at")
+
+
+class QueryBudgetTests(APITestCase):
+    """Regression tests against N+1 in list endpoints.
+
+    Each test asserts that the number of queries served by a list endpoint
+    is bounded by a small constant — independent of the number of items.
+    The budget reflects a single SELECT for the listing plus one query per
+    declared `prefetch_related` / `select_related` join, plus the paginator
+    count and any auth lookups DRF performs.
+
+    `test_routines_list_budget_holds_when_dataset_doubles` is the constancy
+    safety net: the same budget must apply with 5 routines and with 10
+    routines. If the budget grows with N, an N+1 has slipped in.
+
+    Numbers below were captured on Django 5 + DRF 3.15 against the dev
+    PostgreSQL container after T173 introduced the `stock__lots` prefetch
+    and made `Stock.quantity*` prefetch-aware. If a future Django/DRF
+    upgrade shifts a constant overhead, the budgets can be retuned — but
+    a delta proportional to the dataset size must be diagnosed, not papered
+    over.
+    """
+
+    BUDGET_ROUTINES_LIST = 5
+    BUDGET_STOCK_LIST = 7
+    BUDGET_DASHBOARD = 4
+    BUDGET_ENTRIES_LIST = 2
+    BUDGET_STOCK_CONSUMPTIONS_LIST = 2
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = make_user(username="qb")
+        cls._seed_routines(cls.user, count=5, offset=0)
+
+    @classmethod
+    def _seed_routines(cls, user, count, offset):
+        """Create `count` routines, each with a distinct stock (3 lots) and 5 entries.
+
+        Also creates a StockConsumption per stock so the consumptions list
+        endpoint has data. Used both in setUpTestData and in the constancy
+        test (which doubles the dataset at runtime).
+        """
+        for i in range(count):
+            idx = offset + i
+            stock = Stock.objects.create(user=user, name=f"qb-stock-{idx}")
+            # Mix of lots: with lot_number, with expiry, plain.
+            StockLot.objects.create(stock=stock, quantity=10, lot_number=f"L{idx}A")
+            StockLot.objects.create(
+                stock=stock,
+                quantity=5,
+                lot_number=f"L{idx}B",
+                expiry_date=date.today() + timedelta(days=90),
+            )
+            StockLot.objects.create(stock=stock, quantity=2)
+            routine = Routine.objects.create(
+                user=user,
+                name=f"qb-r-{idx}",
+                interval_hours=24,
+                stock=stock,
+            )
+            for j in range(5):
+                entry = RoutineEntry.objects.create(routine=routine)
+                ts = timezone.now() - timedelta(hours=j + 1)
+                RoutineEntry.objects.filter(pk=entry.pk).update(
+                    created_at=ts,
+                    client_created_at=ts,
+                )
+            StockConsumption.objects.create(stock=stock, consumed_by=user, quantity=1)
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.user)
+
+    def test_routines_list_query_count_is_constant(self):
+        """GET /api/routines/ stays under BUDGET_ROUTINES_LIST.
+
+        Budget breakdown (~5):
+        - 1 SELECT count for the paginator
+        - 1 SELECT routines (with select_related stock+user)
+        - 1 prefetch entries (latest, _prefetched_entries)
+        - 1 prefetch shared_with
+        - 1 prefetch stock__lots
+        """
+        with self.assertNumQueries(self.BUDGET_ROUTINES_LIST):
+            response = self.client.get("/api/routines/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_stock_list_query_count_is_constant(self):
+        """GET /api/stock/ stays under BUDGET_STOCK_LIST.
+
+        StockViewSet.get_queryset already prefetches lots, shared_with,
+        active_routines, recent_consumptions, and group_overrides — the
+        budget reflects that pre-existing optimisation.
+        """
+        with self.assertNumQueries(self.BUDGET_STOCK_LIST):
+            response = self.client.get("/api/stock/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_dashboard_query_count_is_constant(self):
+        """GET /api/dashboard/ stays under BUDGET_DASHBOARD.
+
+        dashboard() is unpaginated, so no count query — fewer total than
+        the routines list endpoint despite serializing the same shape.
+        """
+        with self.assertNumQueries(self.BUDGET_DASHBOARD):
+            response = self.client.get("/api/dashboard/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_entries_list_query_count_is_constant(self):
+        """GET /api/entries/ stays under BUDGET_ENTRIES_LIST."""
+        with self.assertNumQueries(self.BUDGET_ENTRIES_LIST):
+            response = self.client.get("/api/entries/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_stock_consumptions_list_query_count_is_constant(self):
+        """GET /api/stock-consumptions/ stays under BUDGET_STOCK_CONSUMPTIONS_LIST."""
+        with self.assertNumQueries(self.BUDGET_STOCK_CONSUMPTIONS_LIST):
+            response = self.client.get("/api/stock-consumptions/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_routines_list_budget_holds_when_dataset_doubles(self):
+        """The N+1 canary: doubling the dataset must not change the budget.
+
+        If this test ever fails with a higher number of queries, a new
+        SerializerMethodField has been introduced that does not consume
+        the existing prefetches. Trace the offender via
+        `CaptureQueriesContext` and either add a prefetch or rewrite the
+        method to consume an existing one.
+        """
+        self._seed_routines(self.user, count=5, offset=5)
+        with self.assertNumQueries(self.BUDGET_ROUTINES_LIST):
+            response = self.client.get("/api/routines/")
+        self.assertEqual(response.status_code, 200)
+        # Sanity: response must include the new routines, otherwise we'd be
+        # measuring an empty page that trivially fits any budget.
+        body = response.json()
+        results = body.get("results", body)
+        self.assertGreaterEqual(len(results), 10)
+
+
+class SparseFieldsTests(APITestCase):
+    """drf-flex-fields ``?fields=`` and ``?omit=`` behaviour (T175).
+
+    Verifies that the migration to ``FlexFieldsModelSerializer`` does NOT
+    change the default response shape, and that the new query-string
+    parameters work as expected for both detail and list endpoints.
+    Also pins the ``OptimisticLockingMixin`` 412 carve-out: a conflict
+    payload must always carry the full resource even when the original
+    request asked for sparse fields.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = make_user(username="sf")
+        cls.stock = make_stock(cls.user, name="sf-stock")
+        make_lot(cls.stock, quantity=5)
+        cls.routine = make_routine(cls.user, name="sf-routine", stock=cls.stock)
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.user)
+
+    def test_default_routine_response_unchanged(self):
+        """No `?fields` / `?omit` → shape identical to pre-T175 (sanity)."""
+        response = self.client.get(f"/api/routines/{self.routine.pk}/")
+        self.assertEqual(response.status_code, 200)
+        keys = set(response.json().keys())
+        self.assertIn("name", keys)
+        self.assertIn("user_timezone", keys)
+        self.assertIn("is_due", keys)
+        self.assertIn("stock_quantity_available", keys)
+
+    def test_fields_param_filters_response(self):
+        response = self.client.get(f"/api/routines/{self.routine.pk}/?fields=id,name")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.json().keys()), {"id", "name"})
+
+    def test_omit_param_excludes_fields(self):
+        response = self.client.get(f"/api/routines/{self.routine.pk}/?omit=is_due,is_overdue")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("is_due", body)
+        self.assertNotIn("is_overdue", body)
+        self.assertIn("name", body)
+        # Other "convenience" siblings still ride along — only the named
+        # fields are dropped, not the entire convenience family.
+        self.assertIn("hours_until_due", body)
+
+    def test_fields_with_unknown_field_silently_ignored(self):
+        """drf-flex-fields silently drops names that don't match a field."""
+        response = self.client.get(f"/api/routines/{self.routine.pk}/?fields=id,name,does_not_exist")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.json().keys()), {"id", "name"})
+
+    def test_stock_list_with_omit(self):
+        response = self.client.get(
+            "/api/stock/?omit=lots,quantity_soon,quantity_healthy,quantity_expired",
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        results = body["results"] if "results" in body else body
+        self.assertGreaterEqual(len(results), 1)
+        sample = results[0]
+        self.assertNotIn("lots", sample)
+        self.assertNotIn("quantity_soon", sample)
+        self.assertNotIn("quantity_healthy", sample)
+        self.assertNotIn("quantity_expired", sample)
+        # quantity_available is NOT in the omit list, so it stays.
+        self.assertIn("quantity_available", sample)
+
+    def test_412_conflict_payload_ignores_sparse_fields(self):
+        """Optimistic-locking conflict must always return the full resource.
+
+        The client's ConflictModal renders a per-field diff — handing it a
+        partial ``current`` would force a follow-up GET to reconstruct the
+        missing fields. So the mixin neutralises any ``?fields=``/``?omit=``
+        from the URL when building the 412 payload. Pinned here against
+        regression in either ``OptimisticLockingMixin`` or drf-flex-fields.
+        """
+        # Build a stale If-Unmodified-Since header (1970) that always conflicts
+        # against the freshly-saved stock's updated_at.
+        response = self.client.patch(
+            f"/api/stock/{self.stock.pk}/?fields=id,name",
+            {"name": "renamed"},
+            format="json",
+            HTTP_IF_UNMODIFIED_SINCE="Thu, 01 Jan 1970 00:00:00 GMT",
+        )
+        self.assertEqual(response.status_code, 412)
+        body = response.json()
+        self.assertEqual(body["error"], "conflict")
+        current = body["current"]
+        # Even though the request URL asked for ?fields=id,name, the conflict
+        # payload includes every field of the StockSerializer. Pick a few
+        # fields that are unrelated to id/name and assert presence.
+        self.assertIn("user_timezone", current)
+        self.assertIn("quantity_available", current)
+        self.assertIn("stock_severity", current)
+        self.assertIn("shared_with", current)
+
+
+class UserTimezoneFieldTest(APITestCase):
+    """`user_timezone` exposes the owner's IANA timezone (T174).
+
+    The field is the canonical "raw" datum a generic API consumer needs to
+    interpret `next_due_at` and `last_entry_at` in local time. It must be
+    present on both Routine and Stock detail responses and reflect the
+    owner's current `User.timezone` value.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+
+    def test_routine_response_includes_user_timezone(self):
+        self.user.timezone = "Europe/Madrid"
+        self.user.save(update_fields=["timezone"])
+        routine = make_routine(self.user, name="r")
+        response = self.client.get(f"/api/routines/{routine.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user_timezone"], "Europe/Madrid")
+
+    def test_stock_response_includes_user_timezone(self):
+        self.user.timezone = "Atlantic/Azores"
+        self.user.save(update_fields=["timezone"])
+        stock = make_stock(self.user, name="s")
+        response = self.client.get(f"/api/stock/{stock.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user_timezone"], "Atlantic/Azores")

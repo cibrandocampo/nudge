@@ -71,6 +71,8 @@ class Stock(models.Model):
 
     @property
     def quantity(self):
+        if "lots" in self.__dict__.get("_prefetched_objects_cache", {}):
+            return sum(lot.quantity for lot in self.lots.all())
         return self.lots.aggregate(total=Sum("quantity"))["total"] or 0
 
     @property
@@ -78,13 +80,19 @@ class Stock(models.Model):
         """Sum of qty across lots that are NOT expired today.
 
         A lot counts as consumable when it has no expiry_date or its
-        expiry_date is strictly after today. Mirrors `Stock.quantity`'s
-        aggregate pattern so callers without prefetched lots stay
-        efficient. Used by `StockSerializer` and `RoutineSerializer` as
-        the basis for severity calculation, depletion estimation, and
-        the user-facing "X ud." figure.
+        expiry_date is strictly after today. Used by `StockSerializer` and
+        `RoutineSerializer` as the basis for severity calculation, depletion
+        estimation, and the user-facing "X ud." figure.
+
+        Prefetch-aware: when the caller has prefetched `lots`, the partition
+        is computed in Python from the cached list. Otherwise it falls back
+        to a single aggregate query. This keeps `RoutineSerializer.stock_quantity_available`
+        (which reaches through `source="stock.quantity_available"`) free of
+        per-routine queries when the viewset prefetches `stock__lots`.
         """
         today = date.today()
+        if "lots" in self.__dict__.get("_prefetched_objects_cache", {}):
+            return sum(lot.quantity for lot in self.lots.all() if lot.expiry_date is None or lot.expiry_date > today)
         agg = self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=today)).aggregate(total=Sum("quantity"))
         return agg["total"] or 0
 

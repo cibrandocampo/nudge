@@ -1,6 +1,7 @@
 import logging
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import F, Prefetch, Q
@@ -49,9 +50,9 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             queryset=Routine.objects.filter(is_active=True).select_related("user"),
             to_attr="active_routines",
         )
-        # Mirrors `StockSerializer.DIRECT_CONSUMPTION_WINDOW_DAYS` — kept
-        # locally to avoid a circular import at module load time.
-        consumptions_window_start = timezone.now() - timedelta(days=60)
+        consumptions_window_start = timezone.now() - timedelta(
+            days=settings.STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS,
+        )
         recent_consumptions = Prefetch(
             "consumptions",
             queryset=StockConsumption.objects.filter(client_created_at__gte=consumptions_window_start),
@@ -215,6 +216,17 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
     serializer_class = RoutineSerializer
 
     def get_queryset(self):
+        """Routine list/detail queryset.
+
+        Prefetch budget for the serializer fields:
+        - ``entries`` (latest, exposed as ``_prefetched_entries``) — used by
+          ``Routine.last_entry`` (and therefore ``next_due_at``, ``is_due``,
+          ``is_overdue``, ``hours_until_due``).
+        - ``shared_with`` — used by ``SharedWithMixin``.
+        - ``stock__lots`` — used by ``stock_quantity``,
+          ``stock_quantity_available`` and ``get_requires_lot_selection``.
+          Without it each routine triggers three extra queries.
+        """
         latest_entry = Prefetch(
             "entries",
             queryset=RoutineEntry.objects.order_by("-client_created_at"),
@@ -224,7 +236,7 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             Routine.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
             .distinct()
             .select_related("stock", "user")
-            .prefetch_related(latest_entry, "shared_with")
+            .prefetch_related(latest_entry, "shared_with", "stock__lots")
         )
 
     def get_permissions(self):
@@ -446,6 +458,9 @@ def dashboard(request):
         queryset=RoutineEntry.objects.order_by("-client_created_at"),
         to_attr="_prefetched_entries",
     )
+    # Mirrors RoutineViewSet.get_queryset's prefetch budget: stock__lots is
+    # required to keep the serializer's stock_quantity / stock_quantity_available /
+    # requires_lot_selection fields query-free.
     routines = (
         Routine.objects.filter(
             Q(user=request.user) | Q(shared_with=request.user),
@@ -453,7 +468,7 @@ def dashboard(request):
         )
         .distinct()
         .select_related("stock", "user")
-        .prefetch_related(latest_entry, "shared_with")
+        .prefetch_related(latest_entry, "shared_with", "stock__lots")
     )
 
     due = []

@@ -117,6 +117,21 @@ pip install py-vapid && vapid --gen
 |----------|---------|-------------|
 | `OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS` | _unset_ (no limit) | Maximum allowed skew between a client-reported action timestamp (`client_created_at` on routine logs and stock consumptions) and the server's current time. When unset, arbitrary offline ages are accepted — correct for real-world offline trips of several days. Set to `86400` (24h) or similar if clients ever start drifting or misusing the field. |
 
+## Stock severity thresholds
+
+Thresholds used by the API to classify stock severity (`stock_severity`,
+`expiry_severity`) and to estimate depletion from past consumption. Defaults
+match the values used in production. A generic API consumer can override these
+to match its own policy without touching the code.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STOCK_SEVERITY_WARNING_DAYS` | `30` | Days-left threshold below which `stock_severity` returns `low` (when depletion is estimated). Also defines the boundary between `soon` and `healthy` lots in `expiry_severity`. |
+| `STOCK_SEVERITY_CRITICAL_DAYS` | `7` | Days-left threshold below which `stock_severity` returns `critical`. |
+| `STOCK_LOW_THRESHOLD_UNITS` | `3` | Healthy-quantity threshold below which `stock_severity` returns `low` when no depletion estimate is available (Tipo 1). |
+| `STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS` | `60` | Window (days) considered when estimating depletion from past direct consumption. |
+| `STOCK_DIRECT_CONSUMPTION_HALF_DAYS` | `30` | Half-window used to validate that consumption is recent enough in both halves before estimating. |
+
 ## Docker / Infrastructure
 
 | Variable | Default | Description |
