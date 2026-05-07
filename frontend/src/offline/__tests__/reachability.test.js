@@ -235,4 +235,39 @@ describe('offline/reachability', () => {
       expect(getLastReachableAt()).toBeNull()
     })
   })
+
+  describe('poll interval override', () => {
+    it('uses `window.__NUDGE_REACHABILITY_POLL_MS__` when set as a number', () => {
+      // T068 escape hatch — e2e specs lower the poll interval so the
+      // banner reacts within a single test step instead of the default
+      // 20 s. Without this branch, going offline in a test would never
+      // observe the recovery flip.
+      window.__NUDGE_REACHABILITY_POLL_MS__ = 50
+      try {
+        setReachable(false)
+        // Advance to just past the override; the health poll fires.
+        vi.advanceTimersByTime(60)
+        expect(fetchSpy).toHaveBeenCalled()
+      } finally {
+        delete window.__NUDGE_REACHABILITY_POLL_MS__
+      }
+    })
+  })
+
+  describe('listener safety', () => {
+    it('keeps notifying remaining listeners when one throws', () => {
+      // The notify loop wraps each listener in try/catch so a broken
+      // subscriber cannot starve the rest. Without this branch the
+      // visible-banner state could drift if any consumer had a bug.
+      const good = vi.fn()
+      const bad = vi.fn(() => {
+        throw new Error('boom')
+      })
+      subscribe(bad)
+      subscribe(good)
+      setReachable(false)
+      expect(bad).toHaveBeenCalled()
+      expect(good).toHaveBeenCalled()
+    })
+  })
 })

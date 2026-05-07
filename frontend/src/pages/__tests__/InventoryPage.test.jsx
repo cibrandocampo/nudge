@@ -102,6 +102,19 @@ describe('InventoryPage — top-bar navigation', () => {
     // Not `disabled` — the click handler fires the offline toast.
     expect(btn).toHaveAttribute('aria-disabled', 'true')
   })
+
+  it('clicking the + button offline surfaces the offline toast and does not navigate', async () => {
+    reachableRef.current = false
+    mockStocks([])
+    mockGroups([])
+    const { user } = renderPage()
+    const btn = await screen.findByRole('button', { name: '+ New' })
+    await user.click(btn)
+    // Toast text from `offline.pageUnavailable`.
+    expect(await screen.findByText(/not available offline/i)).toBeInTheDocument()
+    // The form route stub would render this text; absent ⇒ no navigation.
+    expect(screen.queryByText('New product form')).not.toBeInTheDocument()
+  })
 })
 
 describe('InventoryPage — stock cards', () => {

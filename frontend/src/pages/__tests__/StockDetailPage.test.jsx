@@ -101,6 +101,40 @@ describe('StockDetailPage', () => {
     expect(btn).toHaveAttribute('title', 'This section is not available offline.')
   })
 
+  it('offline: clicking Edit / Delete stock / Add lot / Delete lot surfaces the offline toast', async () => {
+    // Single integration-style test that exercises the four offline
+    // click-handler branches in one render. Keeping them together lets
+    // us assert the toast text once per branch without spinning four
+    // separate provider trees.
+    reachableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    let priorToastCount = 0
+    const expectNewToast = async () => {
+      // Toasts stack until auto-dismiss, so each click adds one. Assert
+      // the count grew by at least one (`findAllByText` retries) rather
+      // than fishing for a single element.
+      const toasts = await screen.findAllByText(/not available offline/i)
+      expect(toasts.length).toBeGreaterThan(priorToastCount)
+      priorToastCount = toasts.length
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await expectNewToast()
+
+    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await expectNewToast()
+
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    await expectNewToast()
+
+    // The first "Delete"-named button is the topbar "Delete stock"; the
+    // last one is the per-lot trash. Pick the last to avoid ambiguity.
+    const lotDeletes = screen.getAllByRole('button', { name: /Delete/, exact: false })
+    await user.click(lotDeletes[lotDeletes.length - 1])
+    await expectNewToast()
+  })
+
   it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_username: 'alice' })),

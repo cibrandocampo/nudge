@@ -709,6 +709,61 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     expect(button.getAttribute('title')).toMatch(/no stock/i)
   })
 
+  it('clicking "Mark as done" with no stock fires the no-stock toast and does not log', async () => {
+    // The stock-depleted branch on the click handler is the visible
+    // counterpart of `aria-disabled`: instead of silently swallowing
+    // the click, we surface the localised explainer. Defends against
+    // the user wondering "why doesn't the button work?".
+    const logCalls = []
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalls.push(true)
+        return new HttpResponse(null, { status: 201 })
+      }),
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({
+          ...routine,
+          is_due: true,
+          is_overdue: true,
+          stock: 9,
+          stock_name: 'Descaler tablets',
+          stock_quantity: 0,
+          stock_quantity_available: 0,
+          stock_usage: 1,
+        }),
+      ),
+    )
+    const { user } = renderDetail()
+    const button = await screen.findByRole('button', { name: /Mark as done/i })
+    await user.click(button)
+    expect(await screen.findByText(/no stock available/i)).toBeInTheDocument()
+    expect(logCalls).toHaveLength(0)
+  })
+
+  it('clicking "Do it now" with no stock fires the no-stock toast and does not advance', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({
+          ...routine,
+          is_due: false,
+          is_overdue: false,
+          is_active: true,
+          stock: 9,
+          stock_name: 'Descaler tablets',
+          stock_quantity: 0,
+          stock_quantity_available: 0,
+          stock_usage: 1,
+        }),
+      ),
+    )
+    const { user } = renderDetail()
+    const button = await screen.findByRole('button', { name: /Do it now/i })
+    await user.click(button)
+    expect(await screen.findByText(/no stock available/i)).toBeInTheDocument()
+    // The advance confirmation modal would render this header on success.
+    expect(screen.queryByText(/Log this routine ahead of schedule/i)).not.toBeInTheDocument()
+  })
+
   it('paints the detail card with the danger border when stock is depleted (T173 follow-up)', async () => {
     const depletedRoutine = {
       ...routine,

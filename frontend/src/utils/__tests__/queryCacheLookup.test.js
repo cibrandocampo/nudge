@@ -56,6 +56,17 @@ describe('findRoutineInCaches', () => {
     const qc = makeClient()
     expect(findRoutineInCaches(qc, 1)).toBeUndefined()
   })
+
+  it('handles a dashboard payload missing due / upcoming buckets', () => {
+    // The fallback `?? []` branch on each bucket fires when the dashboard
+    // serialiser returns a partial shape (e.g. an old persisted snapshot
+    // pre-T112 that only had ``due`` populated).
+    const qc = makeClient()
+    qc.setQueryData(['dashboard'], { upcoming: [{ id: 5, name: 'Only in upcoming' }] })
+    expect(findRoutineInCaches(qc, 5)).toEqual({ id: 5, name: 'Only in upcoming' })
+    qc.setQueryData(['dashboard'], { due: [{ id: 6, name: 'Only in due' }] })
+    expect(findRoutineInCaches(qc, 6)).toEqual({ id: 6, name: 'Only in due' })
+  })
 })
 
 describe('routineSeedUpdatedAt', () => {
