@@ -95,9 +95,11 @@ describe('RoutineDetailPage', () => {
   })
 
   it('paints the stock row with the severity dot derived from the cached stock', async () => {
+    // Severity contract is the post-T164 3-tier ('critical' | 'low' | 'ok').
+    // The legacy 'out' literal was removed; passing it would yield no dot.
     server.use(
       http.get(`${BASE}/stock/`, () =>
-        HttpResponse.json([{ ...stockForLotSelection, quantity: 0, stock_severity: 'out' }]),
+        HttpResponse.json([{ ...stockForLotSelection, quantity: 0, stock_severity: 'critical' }]),
       ),
     )
     renderDetail()
@@ -419,10 +421,11 @@ describe('RoutineDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Activate' })).toBeInTheDocument()
   })
 
-  it('renders back and edit links', async () => {
+  it('renders back link and edit button', async () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: 'Edit' })).toBeInTheDocument()
+    // T182: pencil is a `<button>` so it can show the offline toast.
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('shows next due with both relative and absolute datetime', async () => {
@@ -572,6 +575,36 @@ describe('RoutineDetailPage — advance button', () => {
     expect(screen.getByText('alice')).toBeInTheDocument()
   })
 
+  it('hides Edit/Delete/toggle-active for shared users (owner-only writes)', async () => {
+    // Backend ``IsOwner`` permission rejects update/destroy from non-owners
+    // with 403 "Only the owner can modify this resource." We avoid letting
+    // the user click into a guaranteed failure: the three owner-only
+    // actions disappear when ``is_owner === false``.
+    const sharedRoutine = { ...routine, is_owner: false, owner_username: 'alice' }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderDetail()
+    await screen.findByText('Take vitamins')
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^deactivate$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^activate$/i })).not.toBeInTheDocument()
+    // The history link survives — read access is allowed for shared users.
+    expect(screen.getByRole('link', { name: /view all/i })).toBeInTheDocument()
+  })
+
+  it('keeps Edit/Delete/toggle-active visible for owners', async () => {
+    // Pinned alongside the previous test: dropping the wrapping condition
+    // would make the previous one pass while breaking this one.
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, is_owner: true })))
+    renderDetail()
+    await screen.findByText('Take vitamins')
+    // T182: pencil is a `<button>` (not a `<Link>`).
+    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
+    // ``is_active: true`` so the button reads "Deactivate".
+    expect(screen.getByRole('button', { name: /^deactivate$/i })).toBeInTheDocument()
+  })
+
   it('renders the shared-with chips when the owner has shared the routine', async () => {
     const ownedShared = {
       ...routine,
@@ -584,5 +617,142 @@ describe('RoutineDetailPage — advance button', () => {
     expect(within(block).getByText('Shared with')).toBeInTheDocument()
     // Read-only chips render the username (not the full display label).
     expect(within(block).getByText('bob')).toBeInTheDocument()
+  })
+
+  it('shared user sees owner alone in "Owner" section and other recipients in "Shared with"', async () => {
+    // Owner is singular — the "Propietario" section must contain ONLY
+    // the owner chip. Other recipients (excluding the viewer) move to a
+    // sibling "Shared with" section, matching the symmetric experience
+    // an owner already gets when they share with people.
+    const sharedRoutine = {
+      ...routine,
+      is_owner: false,
+      owner_username: 'alice',
+      shared_with_details: [
+        { id: 30, username: 'testuser', first_name: '', last_name: '' },
+        { id: 31, username: 'carol', first_name: 'Carol', last_name: '' },
+      ],
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderDetail()
+    const ownerSection = await screen.findByTestId('owner-info')
+    expect(ownerSection).toHaveTextContent('Owner')
+    expect(ownerSection).toHaveTextContent('alice')
+    expect(ownerSection).not.toHaveTextContent('carol')
+    expect(ownerSection).not.toHaveTextContent('testuser')
+    const sharedSection = screen.getByTestId('shared-with-info')
+    expect(sharedSection).toHaveTextContent('Shared with')
+    expect(sharedSection).toHaveTextContent('carol')
+    expect(sharedSection).not.toHaveTextContent('testuser')
+    expect(sharedSection).not.toHaveTextContent('alice')
+  })
+
+  it('shared user sees no "Shared with" section when they are the only recipient', async () => {
+    const sharedRoutine = {
+      ...routine,
+      is_owner: false,
+      owner_username: 'alice',
+      shared_with_details: [{ id: 30, username: 'testuser', first_name: '', last_name: '' }],
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderDetail()
+    await screen.findByTestId('owner-info')
+    expect(screen.queryByTestId('shared-with-info')).not.toBeInTheDocument()
+  })
+})
+
+describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
+  // The backend rejects POST /api/routines/{id}/log/ with 422
+  // `insufficient_stock` when the linked stock can't satisfy `stock_usage`.
+  // The UI must not let the user click into a guaranteed failure: both the
+  // "Mark as done" (when due) and "Do it now" (advance, when not due)
+  // buttons stay rendered (so the user understands the routine has an
+  // action) but disabled and tooltipped, matching the dashboard card.
+
+  it('marks the "Mark as done" button as aria-disabled when the linked stock is depleted', async () => {
+    const depletedRoutine = {
+      ...routine,
+      is_due: true,
+      is_overdue: true,
+      stock: 9,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(depletedRoutine)))
+    renderDetail()
+    // The button is *not* `disabled` (so click can fire and surface the
+    // toast); the no-stock state is communicated via `aria-disabled` and
+    // the title attribute. Matches the dashboard card pattern.
+    const button = await screen.findByRole('button', { name: /Mark as done/i })
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button.getAttribute('title')).toMatch(/no stock/i)
+  })
+
+  it('marks the "Do it now" button as aria-disabled when not due and stock is depleted', async () => {
+    const depletedRoutine = {
+      ...routine,
+      is_due: false,
+      is_overdue: false,
+      is_active: true,
+      stock: 9,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(depletedRoutine)))
+    renderDetail()
+    const button = await screen.findByRole('button', { name: /Do it now/i })
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button.getAttribute('title')).toMatch(/no stock/i)
+  })
+
+  it('paints the detail card with the danger border when stock is depleted (T173 follow-up)', async () => {
+    const depletedRoutine = {
+      ...routine,
+      is_due: false,
+      is_overdue: false,
+      stock: 9,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(depletedRoutine)))
+    const { container } = renderDetail()
+    await screen.findByText(/Take vitamins/)
+    expect(container.querySelector('[class*="cardBorderDanger"]')).toBeInTheDocument()
+    expect(container.querySelector('[class*="cardBorderSuccess"]')).not.toBeInTheDocument()
+  })
+
+  it('forces the stock dot to danger when the routine query says depleted, even if cached stock still reports "low"', async () => {
+    // Reproduces the post Mark-done lag: the routine query refetched fast
+    // (its `stock_quantity_available` dropped to 0) but the `['stock']`
+    // cache hasn't been refreshed yet so it still carries the previous
+    // severity. Without the routine-driven escalation the dot would stay
+    // orange ("low") next to a "0 × <stock>" row.
+    const depletedRoutine = {
+      ...routine,
+      is_due: true,
+      is_overdue: true,
+      stock: 9,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json(depletedRoutine)),
+      // Stale stock list still carries severity='low' (orange).
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json([{ ...stockForLotSelection, id: 9, quantity: 1, stock_severity: 'low' }]),
+      ),
+    )
+    renderDetail()
+    const dot = await screen.findByTestId('stock-severity-dot')
+    expect(dot.className).toContain('dotDanger')
+    expect(dot.className).not.toContain('dotWarning')
   })
 })

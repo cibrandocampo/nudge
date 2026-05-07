@@ -10,6 +10,15 @@ vi.mock('../../hooks/useInstallPrompt', () => ({
   })),
 }))
 
+// Toggleable reachability mock for the offline-locked nav tests at the
+// end of the file. Defaults to ``true`` so every existing case keeps
+// behaving exactly as before. The locked-nav tests flip it to ``false``
+// in their setup and reset to ``true`` in afterEach.
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
+
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import { useInstallPrompt } from '../../hooks/useInstallPrompt'
@@ -165,5 +174,53 @@ describe('Layout', () => {
     await stubSubscription(null)
     const { container } = renderWithProviders(<Layout />)
     await waitFor(() => expect(container.querySelector('.badge')).toBeInTheDocument())
+  })
+})
+
+// ── Bottom-nav: lock /history and /settings while offline (T182) ────────────
+
+describe('Layout — bottom nav offline lock', () => {
+  afterEach(() => {
+    reachableRef.current = true
+  })
+
+  // Use exact aria-labels so the locator doesn't collide with other
+  // elements that mention the route name (e.g. the push-alert banner
+  // links to "/settings" with a longer label). The bottom-nav items
+  // expose the bare ``nav.*`` translation as their aria-label.
+  it('renders /history and /settings as enabled NavLinks while reachable', () => {
+    reachableRef.current = true
+    renderWithProviders(<Layout />)
+    const history = screen.getByRole('link', { name: 'History' })
+    const settings = screen.getByRole('link', { name: 'Settings' })
+    expect(history).not.toHaveAttribute('aria-disabled')
+    expect(settings).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('renders /history and /settings as aria-disabled buttons when offline', () => {
+    reachableRef.current = false
+    renderWithProviders(<Layout />)
+    const history = screen.getByRole('button', { name: 'History' })
+    const settings = screen.getByRole('button', { name: 'Settings' })
+    expect(history).toHaveAttribute('aria-disabled', 'true')
+    expect(settings).toHaveAttribute('aria-disabled', 'true')
+    // Same role lookup must NOT find a link with that label.
+    expect(screen.queryByRole('link', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+  })
+
+  it('keeps Routines and Inventory navigable when offline (lock is scoped)', () => {
+    reachableRef.current = false
+    renderWithProviders(<Layout />)
+    expect(screen.getByRole('link', { name: 'Routines' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Inventory' })).toBeInTheDocument()
+  })
+
+  it('clicking a locked nav item does not navigate and surfaces the offline toast', async () => {
+    reachableRef.current = false
+    renderWithProviders(<Layout />)
+    const history = screen.getByRole('button', { name: 'History' })
+    fireEvent.click(history)
+    await waitFor(() => expect(screen.getByText(/not available offline/i)).toBeInTheDocument())
   })
 })

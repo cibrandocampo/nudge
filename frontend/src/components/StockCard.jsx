@@ -103,19 +103,11 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
        * To revert to "always show when there's at least one lot", replace
        * the next line with `stock.lots && stock.lots.length > 0 && (`. */}
       {(stock.lots?.length > 1 || Boolean(stock.lots?.[0]?.expiry_date) || Boolean(stock.lots?.[0]?.lot_number)) && (
-        <div
-          className={shared.cardLotsBlock}
-          data-with-pills={stock.lots.some((l) => l.lot_number) || undefined}
-        >
+        <div className={shared.cardLotsBlock} data-with-pills={stock.lots.some((l) => l.lot_number) || undefined}>
           {stock.lots.map((lot) => {
             const sev = lotExpirySeverity(lot, today)
             return (
-              <div
-                key={lot.id}
-                className={shared.cardLotRow}
-                data-testid="card-lot-row"
-                data-expiring={sev}
-              >
+              <div key={lot.id} className={shared.cardLotRow} data-testid="card-lot-row" data-expiring={sev}>
                 <div className={shared.cardLotMain}>
                   <Icon name="package" size="sm" className={cx(shared.cardLotIcon, iconClassForLot(lot, today))} />
                   <span className={cx(shared.cardLotQty, sev === 'reached' && shared.cardLotQtyExpired)}>

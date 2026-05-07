@@ -215,7 +215,7 @@ describe('RoutineFormPage', () => {
     expect(datetimeInput.value).toBe('2026-02-27T10:00')
   })
 
-  it('submits with last_done_at when checkbox is checked', async () => {
+  it('submits with backdated_first_entry_at when checkbox is checked', async () => {
     let capturedBody
     server.use(
       http.post(`${BASE}/routines/`, async ({ request }) => {
@@ -230,8 +230,10 @@ describe('RoutineFormPage', () => {
     await user.click(screen.getByRole('switch', { name: 'Already completed' }))
     await user.click(screen.getByText('Save'))
 
-    await waitFor(() => expect(capturedBody?.last_done_at).toBeDefined())
-    expect(new Date(capturedBody.last_done_at).getTime()).not.toBeNaN()
+    await waitFor(() => expect(capturedBody?.backdated_first_entry_at).toBeDefined())
+    expect(new Date(capturedBody.backdated_first_entry_at).getTime()).not.toBeNaN()
+    // Hard cutover (T177): the legacy key must not be sent.
+    expect(capturedBody.last_done_at).toBeUndefined()
   })
 
   it('shows saving state on submit', async () => {
@@ -632,5 +634,21 @@ describe('RoutineFormPage', () => {
       // Form stays open, no nav.
       expect(screen.queryByText('Detail')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('RoutineFormPage — non-owner deep-link', () => {
+  it('redirects to the detail page when a shared user opens /routines/:id/edit', async () => {
+    // The detail page already hides the Edit button for non-owners. The
+    // form is reachable only via deep-link / direct URL — without a guard
+    // the user fills the form, hits Save, and gets a 403 from `IsOwner`.
+    // Redirect on load instead.
+    const sharedRoutine = { ...editRoutine, is_owner: false, owner_username: 'alice' }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
+    renderEdit()
+    // The redirect lands on the detail stub. Pinning the absence of any
+    // form input is the strongest signal that the form never rendered.
+    await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
+    expect(screen.queryByDisplayValue('Take vitamins')).not.toBeInTheDocument()
   })
 })

@@ -461,3 +461,38 @@ describe('stock mutation hooks — optimistic updates (T062)', () => {
     expect(qc.getQueryData(['stock', 1])).toEqual({ id: 1, name: 'Soap' })
   })
 })
+
+// ── useStock: seeded from list cache (T179) ───────────────────────────────
+
+describe('useStock — initialData from the list cache', () => {
+  it('renders immediately with data when the stock is in the list cache', async () => {
+    const qc = makeClient()
+    qc.setQueryData(['stock'], [{ id: 5, name: 'Filters', quantity: 10 }])
+    server.use(http.get(`${BASE}/stock/5/`, () => HttpResponse.json({ id: 5, name: 'Filters (fresh)' })))
+    const { result } = renderWith(() => useStock(5), qc)
+    // Frame 1: seed visible, no loading state.
+    expect(result.current.data?.name).toBe('Filters')
+    expect(result.current.isLoading).toBe(false)
+    // Background refetch replaces the seed with the canonical detail.
+    await waitFor(() => expect(result.current.data?.name).toBe('Filters (fresh)'))
+  })
+
+  it('starts in pending state when no list cache contains the id', () => {
+    const qc = makeClient()
+    server.use(http.get(`${BASE}/stock/99/`, () => HttpResponse.json({ id: 99, name: 'Cold' })))
+    const { result } = renderWith(() => useStock(99), qc)
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(true)
+  })
+
+  it('keeps the seed when the network request fails (offline simulation)', async () => {
+    const qc = makeClient()
+    qc.setQueryData(['stock'], [{ id: 11, name: 'Cached stock' }])
+    // queryFn rejects → initialData remains in `data`.
+    server.use(http.get(`${BASE}/stock/11/`, () => HttpResponse.error()))
+    const { result } = renderWith(() => useStock(11), qc)
+    expect(result.current.data?.name).toBe('Cached stock')
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.data?.name).toBe('Cached stock')
+  })
+})

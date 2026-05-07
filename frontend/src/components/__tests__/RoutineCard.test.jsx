@@ -87,6 +87,43 @@ describe('RoutineCard', () => {
     expect(card.className).toContain('cardBorderSuccess')
   })
 
+  it('escalates to danger when stock is depleted, even for a not-yet-due routine', () => {
+    // The card-level signal must communicate that the routine cannot be
+    // logged because the linked stock is empty — independent of `is_due`.
+    // Without this, a routine with `next_due_at` 60 days ahead and 0 units
+    // looks identical to one in perfect shape.
+    const routine = {
+      ...baseRoutine,
+      is_due: false,
+      is_overdue: false,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderDanger')
+    expect(card.className).not.toContain('cardBorderSuccess')
+  })
+
+  it('keeps the success border when the linked stock has enough quantity', () => {
+    // Pinned alongside the previous test: dropping the stock check would
+    // make every linked-stock routine red regardless of available units.
+    const routine = {
+      ...baseRoutine,
+      is_due: false,
+      is_overdue: false,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 5,
+      stock_quantity_available: 5,
+      stock_usage: 1,
+    }
+    const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderSuccess')
+  })
+
   // ── Sharing ────────────────────────────────────────────────────────────────
   // Sharing is edited from the routine form (ShareWithSection). The card
   // surfaces a passive `shared-badge` for both owner (filled variant) and

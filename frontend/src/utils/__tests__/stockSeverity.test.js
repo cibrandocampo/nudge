@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import shared from '../../styles/shared.module.css'
-import {
-  borderTokensFromStock,
-  iconClassForLot,
-  iconClassForStock,
-  lotExpirySeverity,
-} from '../stockSeverity'
+import { borderTokensFromStock, iconClassForLot, iconClassForStock, lotExpirySeverity } from '../stockSeverity'
 
 const TODAY = new Date('2026-05-06T00:00:00')
 

@@ -90,13 +90,15 @@ describe('StockDetailPage', () => {
     expect(await screen.findByText('Edit form stub')).toBeInTheDocument()
   })
 
-  it('disables the Edit button when offline', async () => {
+  it('marks the Edit button as aria-disabled when offline', async () => {
     reachableRef.current = false
     renderDetail()
     await screen.findByText('Water filter')
     const btn = screen.getByRole('button', { name: 'Edit' })
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveAttribute('title', 'Requires connection')
+    // Not `disabled`: the click handler still fires, surfacing a toast
+    // ``offline.pageUnavailable`` instead of silently swallowing the click.
+    expect(btn).toHaveAttribute('aria-disabled', 'true')
+    expect(btn).toHaveAttribute('title', 'This section is not available offline.')
   })
 
   it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
@@ -263,7 +265,11 @@ describe('StockDetailPage', () => {
     expect(section).toHaveTextContent('A')
   })
 
-  it('shows other recipients alongside the owner chip, excluding the current user', async () => {
+  it('keeps the owner chip in its own section, separate from other recipients', async () => {
+    // Owner is singular by definition. The "Propietario" section must
+    // contain ONLY the owner; other recipients move to the sibling
+    // "Shared with" section. Pre-fix the recipient case mashed both
+    // under the same misleading title.
     const sharedStock = {
       ...stock,
       is_owner: false,
@@ -275,13 +281,19 @@ describe('StockDetailPage', () => {
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
-    const section = await screen.findByTestId('owner-info')
-    expect(section).toHaveTextContent('alice')
-    expect(section).toHaveTextContent('bob')
-    expect(section).not.toHaveTextContent('testuser')
+    const ownerSection = await screen.findByTestId('owner-info')
+    expect(ownerSection).toHaveTextContent('alice')
+    expect(ownerSection).not.toHaveTextContent('bob')
+    expect(ownerSection).not.toHaveTextContent('testuser')
+    const sharedSection = screen.getByTestId('shared-with-info')
+    expect(sharedSection).toHaveTextContent('bob')
+    expect(sharedSection).not.toHaveTextContent('testuser')
+    expect(sharedSection).not.toHaveTextContent('alice')
   })
 
-  it('shows only the owner chip when the current user is the sole recipient', async () => {
+  it('hides the "Shared with" section when the current user is the sole recipient', async () => {
+    // No "other" recipients besides the viewer → the Shared-with section
+    // would be empty, so it does not render at all. The owner chip stays.
     const sharedStock = {
       ...stock,
       is_owner: false,
@@ -290,9 +302,9 @@ describe('StockDetailPage', () => {
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
-    const section = await screen.findByTestId('owner-info')
-    expect(section).toHaveTextContent('alice')
-    expect(section).not.toHaveTextContent('testuser')
+    const ownerSection = await screen.findByTestId('owner-info')
+    expect(ownerSection).toHaveTextContent('alice')
+    expect(screen.queryByTestId('shared-with-info')).not.toBeInTheDocument()
   })
 
   it('renders the danger border when stock_severity is "critical"', async () => {
@@ -313,6 +325,48 @@ describe('StockDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText('Household')).toBeInTheDocument())
+  })
+
+  it('falls back to the owner group when no personal override exists (T176)', async () => {
+    // ``my_group`` is null → frontend reads ``group`` (the owner's). The
+    // group label rendered must match the owner's group name. Pins the
+    // T176 fallback behaviour against regressions in `effectiveGroupId`.
+    const sharedStock = { ...stock, group: 1, my_group: null, my_group_name: null, is_owner: false }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
+      http.get(`${BASE}/stock-groups/`, () =>
+        HttpResponse.json({ results: [{ id: 1, name: 'Owner Group', display_order: 0 }] }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Owner Group')).toBeInTheDocument())
+  })
+
+  it('shows the personal override over the owner group when present (T176)', async () => {
+    // ``my_group`` is set → frontend prefers it over ``group``. The label
+    // shown is the override's name, not the owner's. Pairs with the
+    // fallback test above to lock in the ``my_group ?? group`` rule.
+    const sharedStock = {
+      ...stock,
+      group: 1,
+      my_group: 2,
+      my_group_name: 'My Override',
+      is_owner: false,
+    }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
+      http.get(`${BASE}/stock-groups/`, () =>
+        HttpResponse.json({
+          results: [
+            { id: 1, name: 'Owner Group', display_order: 0 },
+            { id: 2, name: 'My Override', display_order: 1 },
+          ],
+        }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('My Override')).toBeInTheDocument())
+    expect(screen.queryByText('Owner Group')).not.toBeInTheDocument()
   })
 
   it('shows generic error state when the API fails with a non-404 status', async () => {
@@ -355,9 +409,10 @@ describe('StockDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText(/Recent consumption/)).toBeInTheDocument())
-    // HistoryEntryCard renders consumed_by_username via the sharing.consumedBy
-    // i18n key → "by alice".
-    expect(screen.getByText('by alice')).toBeInTheDocument()
+    // The chip renders an icon + the bare username; the localised
+    // "by …" string lives on the aria-label / title for accessibility.
+    expect(screen.getByLabelText(/by alice/)).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
   })
 
   // Lot highlight tri-state — derived in-page from each lot.expiry_date

@@ -93,13 +93,14 @@ describe('InventoryPage — top-bar navigation', () => {
     expect(await screen.findByText('Groups page')).toBeInTheDocument()
   })
 
-  it('disables the + button offline', async () => {
+  it('marks the + button as aria-disabled offline', async () => {
     reachableRef.current = false
     mockStocks([])
     mockGroups([])
     renderPage()
     const btn = await screen.findByRole('button', { name: '+ New' })
-    expect(btn).toBeDisabled()
+    // Not `disabled` — the click handler fires the offline toast.
+    expect(btn).toHaveAttribute('aria-disabled', 'true')
   })
 })
 

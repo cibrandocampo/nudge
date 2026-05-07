@@ -79,6 +79,16 @@ export default function RoutineFormPage() {
     setSharedWith(Array.isArray(routine.shared_with) ? routine.shared_with : [])
   }, [isEditing, routine])
 
+  // Defensive: shared users who deep-link to /routines/:id/edit hit a backend
+  // 403 on save (`IsOwner` permission). The detail page already hides the
+  // Edit button for them; this redirect catches the deep-link path so they
+  // never see a form they can't submit.
+  useEffect(() => {
+    if (isEditing && routine && routine.is_owner === false) {
+      navigate(`/routines/${id}`, { replace: true })
+    }
+  }, [isEditing, routine, id, navigate])
+
   const field = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const handleToggleStock = (next) => {
@@ -157,7 +167,7 @@ export default function RoutineFormPage() {
       is_active: true,
     }
     if (!isEditing && lastDoneEnabled && lastDoneAt) {
-      payload.last_done_at = new Date(lastDoneAt).toISOString()
+      payload.backdated_first_entry_at = new Date(lastDoneAt).toISOString()
     }
 
     const original = isEditing ? new Set((routine?.shared_with ?? []).map(Number)) : new Set()

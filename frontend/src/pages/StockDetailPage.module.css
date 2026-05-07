@@ -33,6 +33,25 @@
   margin-bottom: 1.5rem;
 }
 
+/* Two-column layout for the people block of a non-owner viewer:
+ * Owner on the left, "Shared with" on the right. Wraps to a stack on
+ * narrow screens so chips never overflow the card.
+ */
+.peopleSplit {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.peopleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
 .lotsCard {

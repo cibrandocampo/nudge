@@ -10,7 +10,15 @@ import SyncStatusBadge from './SyncStatusBadge'
 import shared from '../styles/shared.module.css'
 import s from './RoutineCard.module.css'
 
-function statusTokens(routine) {
+function statusTokens(routine, { stockDepleted } = {}) {
+  // Stock depletion overrides the time-based status: even a not-yet-due routine
+  // surfaces in red when the linked stock cannot satisfy a `Mark done`. Without
+  // this, a routine with `next_due_at` 60 days ahead and 0 units in stock looks
+  // identical to one in perfect shape — the user only finds out when they try
+  // to log and the backend 422s with `insufficient_stock`.
+  if (stockDepleted) {
+    return { border: shared.cardBorderDanger, dot: shared.dotDanger, text: shared.statusOverdue }
+  }
   if (!routine.is_due) {
     return { border: shared.cardBorderSuccess, dot: shared.dotSuccess, text: shared.statusOk }
   }
@@ -29,7 +37,6 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     : `${t('card.since')} ${formatAbsoluteDate(routine.created_at)}`
 
   const resourceKey = `routine:${routine.id}`
-  const tokens = statusTokens(routine)
   const cachedStock = findCachedStock(queryClient, routine.stock)
   const iconCls = iconClassForStock(cachedStock)
 
@@ -63,8 +70,8 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   // to `stock_quantity` for cached snapshots from the pre-T163 API contract;
   // the fallback becomes dead code once caches refresh.
   const stockAvailable = routine.stock_quantity_available ?? routine.stock_quantity ?? 0
-  const stockDepleted =
-    Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage ?? 1)
+  const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage ?? 1)
+  const tokens = statusTokens(routine, { stockDepleted })
   const doneDisabled = completing || stockDepleted
   const doneTitle = stockDepleted ? t('card.noStockAvailable') : undefined
 

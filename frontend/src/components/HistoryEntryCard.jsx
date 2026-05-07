@@ -39,6 +39,9 @@ export default function HistoryEntryCard({
   const title = isRoutine ? entry.routine_name : entry.stock_name
   const authorUsername = isRoutine ? entry.completed_by_username : entry.consumed_by_username
   const showAuthor = Boolean(authorUsername && authorUsername !== user?.username)
+  // Tooltip / aria fallback in the active language. The chip itself shows
+  // an icon + username instead of the localised "by …" prefix to keep the
+  // metadata line short.
   const authorLabel = showAuthor
     ? isRoutine
       ? t('sharing.completedBy', { username: authorUsername })
@@ -65,12 +68,20 @@ export default function HistoryEntryCard({
           {!isRoutine && (
             <span className={s.compactRight}>
               <span className={s.compactQty}>−{entry.quantity}</span>
-              {showAuthor && <span className={s.compactAuthor}>{authorLabel}</span>}
+              {showAuthor && (
+                <span className={s.compactAuthor} aria-label={authorLabel} title={authorLabel}>
+                  <Icon name="users" size="sm" />
+                  <span>{authorUsername}</span>
+                </span>
+              )}
             </span>
           )}
           {isRoutine && showAuthor && (
             <span className={s.compactRight}>
-              <span className={s.compactAuthor}>{authorLabel}</span>
+              <span className={s.compactAuthor} aria-label={authorLabel} title={authorLabel}>
+                <Icon name="users" size="sm" />
+                <span>{authorUsername}</span>
+              </span>
             </span>
           )}
         </div>
@@ -80,7 +91,10 @@ export default function HistoryEntryCard({
 
   return (
     <div className={cx(shared.card, s.entryCard)} data-testid="history-entry" data-entry-type={entry._type}>
-      <div className={shared.cardHeader}>
+      {/* Header row: identity (left) + metadata + edit affordance (right).
+          Always the same height regardless of notes — keeps the list rhythm
+          consistent. Long notes flow into the dedicated full-width row below. */}
+      <div className={cx(shared.cardHeader, s.entryHeader)}>
         <div className={shared.cardMeta}>
           {showTitle && (
             <span className={cx(shared.cardTitle, shared.cardTitleFlex, s.entryName)}>
@@ -99,49 +113,54 @@ export default function HistoryEntryCard({
           )}
         </div>
         <div className={s.rightCol}>
-          <span className={s.entryTime}>{formatEntryTime(entry)}</span>
-          {showAuthor && <span className={s.entryAuthor}>{authorLabel}</span>}
-          {(editable || entry.notes) && (
-            <div className={s.notesSide}>
-              {isEditing ? (
-                <input
-                  className={cx(shared.input, s.notesInput)}
-                  autoFocus
-                  defaultValue={entry.notes || ''}
-                  placeholder={t('history.notesPlaceholder')}
-                  onBlur={(ev) => onSave(ev.target.value)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === 'Enter') onSave(ev.target.value)
-                    if (ev.key === 'Escape') onCancelEdit()
-                  }}
-                />
-              ) : (
-                <>
-                  {entry.notes &&
-                    (editable ? (
-                      <button type="button" className={cx(s.notesView, s.notesViewEditable)} onClick={onStartEdit}>
-                        {entry.notes}
-                      </button>
-                    ) : (
-                      <span className={s.notesView}>{entry.notes}</span>
-                    ))}
-                  {editable && (
-                    <button
-                      type="button"
-                      className={shared.btnIcon}
-                      onClick={onStartEdit}
-                      aria-label={entry.notes ? t('history.editNotes') : t('history.addNote')}
-                      title={entry.notes ? t('history.editNotes') : t('history.addNote')}
-                    >
-                      <Icon name="notebook-pen" size="sm" />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+          <div className={s.metaLine}>
+            {showAuthor && (
+              <span className={s.entryAuthor} aria-label={authorLabel} title={authorLabel}>
+                <Icon name="users" size="sm" />
+                <span>{authorUsername}</span>
+              </span>
+            )}
+            <span className={s.entryTime}>{formatEntryTime(entry)}</span>
+          </div>
+          {editable && (
+            <button
+              type="button"
+              className={shared.btnIcon}
+              onClick={onStartEdit}
+              aria-label={entry.notes ? t('history.editNotes') : t('history.addNote')}
+              title={entry.notes ? t('history.editNotes') : t('history.addNote')}
+            >
+              <Icon name="notebook-pen" size="sm" />
+            </button>
           )}
         </div>
       </div>
+      {/* Notes row spans the full width so wrapped paragraphs use the
+          horizontal space efficiently. Hidden when there's nothing to show
+          and we're not actively editing. */}
+      {(isEditing || entry.notes) && (
+        <div className={s.notesRow}>
+          {isEditing ? (
+            <input
+              className={cx(shared.input, s.notesInput)}
+              autoFocus
+              defaultValue={entry.notes || ''}
+              placeholder={t('history.notesPlaceholder')}
+              onBlur={(ev) => onSave(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter') onSave(ev.target.value)
+                if (ev.key === 'Escape') onCancelEdit()
+              }}
+            />
+          ) : editable ? (
+            <button type="button" className={cx(s.notesView, s.notesViewEditable)} onClick={onStartEdit}>
+              {entry.notes}
+            </button>
+          ) : (
+            <span className={s.notesView}>{entry.notes}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

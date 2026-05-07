@@ -12,6 +12,7 @@ import {
   HEALTH_POLL_INTERVAL_MS,
   SERVER_ERROR_THRESHOLD,
   __resetForTests,
+  getLastReachableAt,
   getReachable,
   noteServerError,
   setReachable,
@@ -189,6 +190,49 @@ describe('offline/reachability', () => {
       // A single new 5xx must not immediately flip again.
       noteServerError()
       expect(getReachable()).toBe(true)
+    })
+  })
+
+  // ── lastReachableAt timestamp (T180) ───────────────────────────────────────
+
+  describe('getLastReachableAt', () => {
+    beforeEach(() => {
+      // Use a deterministic clock so we can assert exact timestamps.
+      vi.setSystemTime(new Date('2026-05-07T12:00:00Z'))
+    })
+
+    it('returns null on a fresh module state', () => {
+      expect(getLastReachableAt()).toBeNull()
+    })
+
+    it('records the timestamp on every setReachable(true) — including idempotent ones', () => {
+      // Module starts reachable → first call is idempotent but should still
+      // bump the timestamp so consumers can render "last sync now" right
+      // after a successful API observation.
+      setReachable(true)
+      const first = getLastReachableAt()
+      expect(first).toBe(Date.parse('2026-05-07T12:00:00Z'))
+
+      vi.setSystemTime(new Date('2026-05-07T12:05:00Z'))
+      setReachable(true)
+      expect(getLastReachableAt()).toBe(Date.parse('2026-05-07T12:05:00Z'))
+    })
+
+    it('does NOT clear the timestamp when flipping to unreachable', () => {
+      setReachable(true)
+      const stamped = getLastReachableAt()
+      expect(stamped).not.toBeNull()
+      setReachable(false)
+      // The timestamp survives — that's exactly what the OfflineBanner needs
+      // to render "last sync hace X" once the user is offline.
+      expect(getLastReachableAt()).toBe(stamped)
+    })
+
+    it('__resetForTests resets the timestamp to null', () => {
+      setReachable(true)
+      expect(getLastReachableAt()).not.toBeNull()
+      __resetForTests()
+      expect(getLastReachableAt()).toBeNull()
     })
   })
 })

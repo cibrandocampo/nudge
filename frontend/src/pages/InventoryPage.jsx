@@ -10,6 +10,7 @@ import { useToast } from '../components/useToast'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockGroups, useStockList } from '../hooks/useStock'
 import cx from '../utils/cx'
+import { effectiveGroupId } from '../utils/stockGroup'
 import { lotExpirySeverity } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import shared from '../styles/shared.module.css'
@@ -89,9 +90,12 @@ export default function InventoryPage() {
   const groupedSections = groups.map((group) => ({
     key: group.id,
     label: group.name,
-    stocks: stocks.filter((st) => st.group === group.id),
+    stocks: stocks.filter((st) => effectiveGroupId(st) === group.id),
   }))
-  const ungroupedStocks = stocks.filter((st) => !st.group || !knownGroupIds.has(st.group))
+  const ungroupedStocks = stocks.filter((st) => {
+    const gid = effectiveGroupId(st)
+    return !gid || !knownGroupIds.has(gid)
+  })
 
   const renderStockCard = (stock) => (
     <StockCard
@@ -120,10 +124,16 @@ export default function InventoryPage() {
           <button
             type="button"
             className={cx(shared.btnAdd, !reachable && shared.disabled)}
-            onClick={() => navigate('/inventory/new')}
+            onClick={() => {
+              if (!reachable) {
+                showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                return
+              }
+              navigate('/inventory/new')
+            }}
+            aria-disabled={!reachable}
             aria-label={t('inventory.newButton')}
-            disabled={!reachable}
-            title={!reachable ? t('offline.requiresConnection') : t('inventory.newButton')}
+            title={!reachable ? t('offline.pageUnavailable') : t('inventory.newButton')}
           >
             <Icon name="plus" />
           </button>

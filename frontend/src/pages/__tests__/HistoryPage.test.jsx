@@ -560,7 +560,10 @@ describe('HistoryPage — sharing', () => {
     )
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    expect(screen.getByText(/by alice/)).toBeInTheDocument()
+    // The visible chip renders the icon + username; the localised "by …"
+    // string lives on the aria-label / title for accessibility.
+    expect(screen.getByLabelText(/by alice/)).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
   })
 
   it('shows consumed_by username on stock consumptions', async () => {
@@ -578,7 +581,8 @@ describe('HistoryPage — sharing', () => {
     )
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Insulin pens')).toBeInTheDocument())
-    expect(screen.getByText(/by bob/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/by bob/)).toBeInTheDocument()
+    expect(screen.getByText('bob')).toBeInTheDocument()
   })
 })
 
