@@ -10,11 +10,15 @@ import { defineConfig } from '@playwright/test'
 // targeting a remote URL keep working.
 const envBase = process.env.BASE_URL
 
-// When the e2e container targets `host.docker.internal` (non-secure,
-// non-localhost origin), Chromium disables Service Workers / Push / crypto
-// subtle. Treat the dev and preview hosts as secure so the PWA stack works
-// end-to-end. Only applied when BASE_URL is set and points at
-// `host.docker.internal`, so running against a real remote URL is unaffected.
+// Historical note: pre-Chromium-145, an e2e container reaching the
+// frontend via `http://host.docker.internal:port` could opt into a
+// secure context with `--unsafely-treat-insecure-origin-as-secure`.
+// That flag stopped working for SW registration around Chromium 145
+// even when listed verbatim. The reliable replacement is to launch
+// the container with `--network=host` so the app is reached at
+// `http://localhost:port`, which Chromium auto-treats as secure.
+// Kept the flag for any leftover non-localhost runs but the supported
+// invocation now is BASE_URL=http://localhost:<port> + --network=host.
 const insecureOriginFlags = envBase && envBase.includes('host.docker.internal')
   ? [`--unsafely-treat-insecure-origin-as-secure=${envBase}`]
   : []

@@ -71,7 +71,8 @@ export async function renameRoutine(page, routineKeyOrName, newName) {
   await page.goto('/')
   await page.getByRole('link', { name: current }).first().click()
   await page.waitForURL(/\/routines\/\d+$/)
-  await page.getByRole('link', { name: 'Edit' }).click()
+  // T182: routine-detail "Edit" pencil is a `<button>`, not a `<Link>`.
+  await page.getByRole('button', { name: 'Edit' }).click()
   const nameInput = page.getByPlaceholder(/change water filter/i)
   await nameInput.clear()
   await nameInput.fill(newName)
@@ -102,7 +103,8 @@ export async function deleteRoutine(page, routineKeyOrName) {
  */
 export async function shareRoutineWith(page, routineKey, username) {
   await goToRoutineDetail(page, routineKey)
-  await page.getByRole('link', { name: 'Edit' }).click()
+  // T182: routine-detail "Edit" pencil is a `<button>`, not a `<Link>`.
+  await page.getByRole('button', { name: 'Edit' }).click()
   await page.waitForURL(/\/routines\/\d+\/edit$/)
   // The ShareWithSection header button label is "Share with…" (with the
   // ellipsis). `exact: true` excludes the per-chip "Unshare with <name>"
