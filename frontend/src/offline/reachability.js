@@ -52,6 +52,12 @@ let pollTimer = null
 // the api client. Reset on any successful flip to `true`. The flip to
 // `false` only happens after `SERVER_ERROR_THRESHOLD` hits.
 let consecutiveServerErrors = 0
+// Timestamp (ms epoch) of the last `setReachable(true)` observation —
+// the freshest moment we know the backend was reachable. Surfaced by
+// `OfflineBanner` as a "Last sync hace X" hint when offline. Stays
+// non-null after the flip to false on purpose: we want to show "the
+// last time we were online" precisely when we are not online any more.
+let lastReachableAt = null
 
 // The native `offline` event is a lower-bound signal: when it fires the
 // browser knows there is no network at all, which is strictly worse than
@@ -130,9 +136,12 @@ export function setReachable(value) {
   // Always reset the gateway-error counter on a "reachable" signal so a
   // single 2xx between two 5xx hits prevents a spurious flip later.
   // Doing it before the idempotency guard keeps the reset working even
-  // when the state is already `true`.
+  // when the state is already `true`. Same for ``lastReachableAt`` — we
+  // want every successful observation to bump the timestamp, not only
+  // the false→true transition.
   if (next === true) {
     consecutiveServerErrors = 0
+    lastReachableAt = Date.now()
   }
   if (next === reachable) return
   reachable = next
@@ -151,6 +160,16 @@ export function setReachable(value) {
  * consecutive hits without a 2xx in between. The threshold prevents the
  * offline banner from flickering during fast upstream restarts.
  */
+/**
+ * Returns the ms-epoch of the last `setReachable(true)` observation, or
+ * `null` when the page hasn't seen a successful API response yet (cold
+ * start offline). Used by `OfflineBanner` to render the "last sync hace X"
+ * hint without each consumer needing its own subscription.
+ */
+export function getLastReachableAt() {
+  return lastReachableAt
+}
+
 export function noteServerError() {
   consecutiveServerErrors += 1
   if (consecutiveServerErrors >= SERVER_ERROR_THRESHOLD) {
@@ -163,6 +182,7 @@ export function __resetForTests() {
   listeners.clear()
   reachable = true
   consecutiveServerErrors = 0
+  lastReachableAt = null
 }
 
 // Expose a setter on `window` in dev or when a preview build was made for

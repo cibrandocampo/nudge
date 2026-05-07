@@ -10,12 +10,16 @@ import QueryHandler from '../components/QueryHandler'
 import SharedWithChips from '../components/SharedWithChips'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
+import { useQueueEntries } from '../hooks/useQueueEntries'
 import { useRoutine, useRoutineEntries } from '../hooks/useRoutines'
+import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockList } from '../hooks/useStock'
 import { useDeleteRoutine } from '../hooks/mutations/useDeleteRoutine'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
+import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
+import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
@@ -29,6 +33,7 @@ export default function RoutineDetailPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { showToast } = useToast()
+  const { user } = useAuth()
 
   const { data: routine, isLoading: routineLoading, isError: routineError, error: routineErr } = useRoutine(id)
   const { data: entries = [] } = useRoutineEntries(id)
@@ -36,6 +41,14 @@ export default function RoutineDetailPage() {
   const updateMutation = useUpdateRoutine()
   const deleteMutation = useDeleteRoutine()
   const queryClient = useQueryClient()
+  const reachable = useServerReachable()
+  const queueEntries = useQueueEntries()
+  // A queued ``logRoutine`` for THIS routine means the stock decrement is
+  // still pending on the server. Detect via endpoint suffix because
+  // resourceKey alone (``routine:N``) also matches rename/delete entries.
+  const hasPendingLog = queueEntries.some(
+    (e) => e.resourceKey === `routine:${Number(id)}` && typeof e.endpoint === 'string' && e.endpoint.endsWith('/log/'),
+  )
   // Keep the stock cache warm so the lot selection modal derives its list
   // offline from `['stock', id].lots` without hitting the network.
   useStockList()
@@ -112,15 +125,39 @@ export default function RoutineDetailPage() {
     }
   }
 
-  const borderClass = !routine?.is_due
-    ? shared.cardBorderSuccess
-    : routine.is_overdue
-      ? shared.cardBorderDanger
-      : shared.cardBorderWarning
+  // Stock-depleted escalation: a routine that can't be logged because the
+  // linked stock is empty surfaces in red even when not due yet. Mirrors
+  // RoutineCard.statusTokens so dashboard and detail page stay aligned.
+  const stockAvailable = routine?.stock_quantity_available ?? routine?.stock_quantity ?? 0
+  const routineStockDepleted =
+    Boolean(routine?.stock_name) && Number(stockAvailable) < Number(routine?.stock_usage ?? 1)
 
+  // Recipients besides the current viewer. The owner sees every recipient;
+  // a non-owner recipient sees every other recipient. Used by the
+  // "Shared with" section so the label means the same thing on both sides.
+  const otherRecipients = (routine?.shared_with_details ?? []).filter(
+    (c) => routine?.is_owner !== false || c.username !== user?.username,
+  )
+  const borderClass = routineStockDepleted
+    ? shared.cardBorderDanger
+    : !routine?.is_due
+      ? shared.cardBorderSuccess
+      : routine.is_overdue
+        ? shared.cardBorderDanger
+        : shared.cardBorderWarning
+
+  // Severity contract is the post-T164 3-tier ('critical' | 'low' | 'ok').
+  // Anything else (null when stock isn't cached yet) renders no dot.
+  // Routine-driven escalation: if `routineStockDepleted` is true the dot is
+  // red regardless of the stock-list cache. Without this, after a Mark-done
+  // that empties the stock the routine query refreshes immediately
+  // (`stock_quantity_available` drops to 0) but the `['stock']` cache may
+  // still hold the previous severity ('low') for a few hundred ms — leaving
+  // the dot orange while the rest of the row reads "0 × <stock>".
   const stockSeverity = findCachedStock(queryClient, routine?.stock)?.stock_severity
-  const stockDotClass =
-    stockSeverity === 'out'
+  const stockDotClass = routineStockDepleted
+    ? shared.dotDanger
+    : stockSeverity === 'critical'
       ? shared.dotDanger
       : stockSeverity === 'low'
         ? shared.dotWarning
@@ -152,32 +189,44 @@ export default function RoutineDetailPage() {
               >
                 <Icon name="history" />
               </Link>
-              <button
-                type="button"
-                className={cx(shared.btnAdd, routine.is_active ? shared.btnAddDanger : shared.btnAddSuccess)}
-                onClick={toggleActive}
-                aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-                title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-              >
-                <Icon name={routine.is_active ? 'pause' : 'play'} />
-              </button>
-              <button
-                type="button"
-                className={cx(shared.btnAdd, shared.btnAddDanger)}
-                onClick={() => setShowDeleteConfirm(true)}
-                aria-label={t('routine.detail.delete')}
-                title={t('routine.detail.delete')}
-              >
-                <Icon name="trash" />
-              </button>
-              <Link
-                to={`/routines/${id}/edit`}
-                className={shared.btnAdd}
-                aria-label={t('routine.detail.edit')}
-                title={t('routine.detail.edit')}
-              >
-                <Icon name="pencil" />
-              </Link>
+              {routine.is_owner !== false && (
+                <>
+                  <button
+                    type="button"
+                    className={cx(shared.btnAdd, routine.is_active ? shared.btnAddDanger : shared.btnAddSuccess)}
+                    onClick={toggleActive}
+                    aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+                    title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
+                  >
+                    <Icon name={routine.is_active ? 'pause' : 'play'} />
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(shared.btnAdd, shared.btnAddDanger)}
+                    onClick={() => setShowDeleteConfirm(true)}
+                    aria-label={t('routine.detail.delete')}
+                    title={t('routine.detail.delete')}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(shared.btnAdd, !reachable && shared.disabled)}
+                    onClick={() => {
+                      if (!reachable) {
+                        showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                        return
+                      }
+                      navigate(`/routines/${id}/edit`)
+                    }}
+                    aria-disabled={!reachable}
+                    aria-label={t('routine.detail.edit')}
+                    title={!reachable ? t('offline.pageUnavailable') : t('routine.detail.edit')}
+                  >
+                    <Icon name="pencil" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -211,16 +260,26 @@ export default function RoutineDetailPage() {
               <>
                 <div className={s.metaRow}>
                   <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
-                  <span className={cx(s.metaValue, s.statusValue)}>
-                    {stockDotClass && (
+                  <span
+                    className={cx(s.metaValue, s.statusValue, hasPendingLog && s.metaValuePending)}
+                    data-testid="stock-row-value"
+                  >
+                    {stockDotClass && !hasPendingLog && (
                       <span className={cx(shared.dot, stockDotClass)} data-testid="stock-severity-dot" />
                     )}
+                    {hasPendingLog && <Icon name="clock" size="sm" />}
                     {t('routine.detail.stockValue', {
                       qty: routine.stock_quantity,
                       name: routine.stock_name,
                     })}
                   </span>
                 </div>
+                {hasPendingLog && (
+                  <div className={cx(s.metaRow, s.metaRowPending)}>
+                    <span className={s.metaLabel} aria-hidden="true" />
+                    <span className={cx(s.metaValue, s.metaPendingNote)}>{t('routine.detail.stockPendingSync')}</span>
+                  </div>
+                )}
                 <div className={s.metaRow}>
                   <span className={s.metaLabel}>{t('routine.detail.perLog')}</span>
                   <span className={s.metaValue}>
@@ -229,28 +288,65 @@ export default function RoutineDetailPage() {
                 </div>
               </>
             )}
-            {routine.is_owner === false && routine.owner_username && (
-              <div className={s.metaRow}>
-                <span className={s.metaLabel}>{t('sharing.owner')}</span>
-                <span className={s.metaValue}>{routine.owner_username}</span>
-              </div>
-            )}
           </div>
 
-          {routine.is_owner !== false && routine.shared_with_details?.length > 0 && (
+          {/* Non-owner viewer: single card with the owner chip on the left
+              and (if any) the other recipients on the right. Two distinct
+              labels under one frame keeps the relationship clear without
+              the visual noise of two stacked cards. */}
+          {routine.is_owner === false && routine.owner_username && (
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
+              <div className={s.peopleSplit}>
+                <div className={s.peopleColumn} data-testid="owner-info">
+                  <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
+                  <div className={shared.formChipsRow}>
+                    <span className={shared.formChip}>
+                      <span className={shared.formChipAvatar} aria-hidden="true">
+                        {avatarInitial({ username: routine.owner_username })}
+                      </span>
+                      <span>{routine.owner_username}</span>
+                    </span>
+                  </div>
+                </div>
+                {otherRecipients.length > 0 && (
+                  <div className={s.peopleColumn} data-testid="shared-with-info">
+                    <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+                    <SharedWithChips contacts={otherRecipients} />
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Owner viewer keeps the standalone "Shared with" card — they
+              don't need to see themselves chipped under "Propietario". */}
+          {routine.is_owner !== false && otherRecipients.length > 0 && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">
               <div className={shared.formSectionHeader}>
                 <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
-              <SharedWithChips contacts={routine.shared_with_details} />
+              <SharedWithChips contacts={otherRecipients} />
             </section>
           )}
 
           {routine.is_due && (
             <button
-              className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
-              onClick={markDone}
+              className={cx(
+                shared.btn,
+                shared.btnPrimary,
+                s.primaryAction,
+                (completing || routineStockDepleted) && shared.disabled,
+              )}
+              onClick={() => {
+                if (routineStockDepleted) {
+                  showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                  return
+                }
+                markDone()
+              }}
               disabled={completing}
+              aria-disabled={routineStockDepleted ? 'true' : undefined}
+              title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
             >
               {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
             </button>
@@ -258,9 +354,22 @@ export default function RoutineDetailPage() {
 
           {!routine.is_due && routine.is_active && (
             <button
-              className={cx(shared.btn, shared.btnPrimary, s.primaryAction, completing && shared.disabled)}
-              onClick={() => setShowAdvanceConfirm(true)}
+              className={cx(
+                shared.btn,
+                shared.btnPrimary,
+                s.primaryAction,
+                (completing || routineStockDepleted) && shared.disabled,
+              )}
+              onClick={() => {
+                if (routineStockDepleted) {
+                  showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                  return
+                }
+                setShowAdvanceConfirm(true)
+              }}
               disabled={completing}
+              aria-disabled={routineStockDepleted ? 'true' : undefined}
+              title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
             >
               {t('routine.detail.advance')}
             </button>

@@ -12,6 +12,7 @@ import {
   HEALTH_POLL_INTERVAL_MS,
   SERVER_ERROR_THRESHOLD,
   __resetForTests,
+  getLastReachableAt,
   getReachable,
   noteServerError,
   setReachable,
@@ -189,6 +190,84 @@ describe('offline/reachability', () => {
       // A single new 5xx must not immediately flip again.
       noteServerError()
       expect(getReachable()).toBe(true)
+    })
+  })
+
+  // ── lastReachableAt timestamp (T180) ───────────────────────────────────────
+
+  describe('getLastReachableAt', () => {
+    beforeEach(() => {
+      // Use a deterministic clock so we can assert exact timestamps.
+      vi.setSystemTime(new Date('2026-05-07T12:00:00Z'))
+    })
+
+    it('returns null on a fresh module state', () => {
+      expect(getLastReachableAt()).toBeNull()
+    })
+
+    it('records the timestamp on every setReachable(true) — including idempotent ones', () => {
+      // Module starts reachable → first call is idempotent but should still
+      // bump the timestamp so consumers can render "last sync now" right
+      // after a successful API observation.
+      setReachable(true)
+      const first = getLastReachableAt()
+      expect(first).toBe(Date.parse('2026-05-07T12:00:00Z'))
+
+      vi.setSystemTime(new Date('2026-05-07T12:05:00Z'))
+      setReachable(true)
+      expect(getLastReachableAt()).toBe(Date.parse('2026-05-07T12:05:00Z'))
+    })
+
+    it('does NOT clear the timestamp when flipping to unreachable', () => {
+      setReachable(true)
+      const stamped = getLastReachableAt()
+      expect(stamped).not.toBeNull()
+      setReachable(false)
+      // The timestamp survives — that's exactly what the OfflineBanner needs
+      // to render "last sync hace X" once the user is offline.
+      expect(getLastReachableAt()).toBe(stamped)
+    })
+
+    it('__resetForTests resets the timestamp to null', () => {
+      setReachable(true)
+      expect(getLastReachableAt()).not.toBeNull()
+      __resetForTests()
+      expect(getLastReachableAt()).toBeNull()
+    })
+  })
+
+  describe('poll interval override', () => {
+    it('uses `window.__NUDGE_REACHABILITY_POLL_MS__` when set as a number', () => {
+      // T068 escape hatch — e2e specs lower the poll interval so the
+      // banner reacts within a single test step instead of the default
+      // 20 s. Without this branch, going offline in a test would never
+      // observe the recovery flip.
+      window.__NUDGE_REACHABILITY_POLL_MS__ = 50
+      try {
+        setReachable(false)
+        // Advance to just past the override; the health poll fires.
+        vi.advanceTimersByTime(60)
+        expect(fetchSpy).toHaveBeenCalled()
+      } finally {
+        delete window.__NUDGE_REACHABILITY_POLL_MS__
+      }
+    })
+  })
+
+  describe('listener safety', () => {
+    it('keeps notifying remaining listeners when one throws', () => {
+      // The notify loop wraps each listener in try/catch so a broken
+      // subscriber cannot starve the rest. Without this branch the
+      // visible-banner state could drift if any consumer had a bug.
+      const good = vi.fn()
+      const bad = vi.fn(() => {
+        throw new Error('boom')
+      })
+      subscribe(bad)
+      subscribe(good)
+      setReachable(false)
+      expect(bad).toHaveBeenCalled()
+      expect(good).toHaveBeenCalled()
     })
   })
 })

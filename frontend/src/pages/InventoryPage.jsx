@@ -10,9 +10,27 @@ import { useToast } from '../components/useToast'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockGroups, useStockList } from '../hooks/useStock'
 import cx from '../utils/cx'
+import { effectiveGroupId } from '../utils/stockGroup'
+import { lotExpirySeverity } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import shared from '../styles/shared.module.css'
 import s from './InventoryPage.module.css'
+
+// Partition a stock's lots into reached / soon buckets in a single pass.
+// Replaces the dropped `expiring_lots` server-side field (T170): the alert
+// blocks now derive their content from `stock.lots` directly so we don't
+// duplicate per-lot data in the API response.
+function lotsByExpirySeverity(stock, today) {
+  const reached = []
+  const soon = []
+  for (const lot of stock.lots ?? []) {
+    if (lot.quantity <= 0) continue
+    const sev = lotExpirySeverity(lot, today)
+    if (sev === 'reached') reached.push(lot)
+    else if (sev === 'soon') soon.push(lot)
+  }
+  return { reached, soon }
+}
 
 export default function InventoryPage() {
   const { t } = useTranslation()
@@ -52,13 +70,18 @@ export default function InventoryPage() {
 
   if (isLoading) return <Spinner />
 
-  const todayISO = new Date().toISOString().slice(0, 10)
-  const outOfStockItems = stocks.filter((st) => st.stock_severity === 'out')
+  // UTC midnight of today for the `lotExpirySeverity` helper. Mirrors the
+  // pattern used by StockCard / StockDetailPage so all three call sites use
+  // the same `today` semantics.
+  const today = new Date(new Date().toISOString().slice(0, 10))
+  // T168: 'critical' replaces 'out' and absorbs every red case
+  // (qty_available=0, all-expired, depletion < 7d). One alert block per A2.
+  const criticalStockItems = stocks.filter((st) => st.stock_severity === 'critical')
   const expiryReachedItems = stocks.filter((st) => st.expiry_severity === 'reached')
   const lowStockItems = stocks.filter((st) => st.stock_severity === 'low')
   const expiringSoonItems = stocks.filter((st) => st.expiry_severity === 'soon')
   const hasAlerts =
-    outOfStockItems.length > 0 ||
+    criticalStockItems.length > 0 ||
     expiryReachedItems.length > 0 ||
     lowStockItems.length > 0 ||
     expiringSoonItems.length > 0
@@ -67,9 +90,12 @@ export default function InventoryPage() {
   const groupedSections = groups.map((group) => ({
     key: group.id,
     label: group.name,
-    stocks: stocks.filter((st) => st.group === group.id),
+    stocks: stocks.filter((st) => effectiveGroupId(st) === group.id),
   }))
-  const ungroupedStocks = stocks.filter((st) => !st.group || !knownGroupIds.has(st.group))
+  const ungroupedStocks = stocks.filter((st) => {
+    const gid = effectiveGroupId(st)
+    return !gid || !knownGroupIds.has(gid)
+  })
 
   const renderStockCard = (stock) => (
     <StockCard
@@ -98,10 +124,16 @@ export default function InventoryPage() {
           <button
             type="button"
             className={cx(shared.btnAdd, !reachable && shared.disabled)}
-            onClick={() => navigate('/inventory/new')}
+            onClick={() => {
+              if (!reachable) {
+                showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                return
+              }
+              navigate('/inventory/new')
+            }}
+            aria-disabled={!reachable}
             aria-label={t('inventory.newButton')}
-            disabled={!reachable}
-            title={!reachable ? t('offline.requiresConnection') : t('inventory.newButton')}
+            title={!reachable ? t('offline.pageUnavailable') : t('inventory.newButton')}
           >
             <Icon name="plus" />
           </button>
@@ -110,19 +142,24 @@ export default function InventoryPage() {
 
       {hasAlerts && (
         <div className={shared.alertsSection} data-testid="alert-box">
-          {/* Red — out of stock */}
-          {outOfStockItems.length > 0 && (
-            <div className={cx(shared.card, shared.cardBorderDanger)} data-testid="out-of-stock-alert">
+          {/* Red — critical stock (qty_available=0, all expired, or depletion < 7d) */}
+          {criticalStockItems.length > 0 && (
+            <div className={cx(shared.card, shared.cardBorderDanger)} data-testid="critical-stock-alert">
               <div className={shared.cardHeader}>
                 <div className={shared.cardMeta}>
                   <div className={cx(shared.cardTitle, shared.cardTitleFlex)}>
                     <span className={cx(shared.dot, shared.dotDanger)} />
-                    {t('inventory.outOfStockAlert')}
+                    {t('inventory.criticalStockAlert')}
                   </div>
-                  {outOfStockItems.map((st) => (
+                  {criticalStockItems.map((st) => (
                     <span key={st.id} className={shared.cardStockBadge}>
                       <Icon name="package" size="sm" />
-                      <span>{t('inventory.outOfStockItem', { name: st.name })}</span>
+                      <span>
+                        {t('inventory.criticalStockItem', {
+                          name: st.name,
+                          qty: st.quantity_available ?? st.quantity ?? 0,
+                        })}
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -140,20 +177,18 @@ export default function InventoryPage() {
                     {t('inventory.expiryReachedAlert')}
                   </div>
                   {expiryReachedItems.flatMap((st) =>
-                    (st.expiring_lots ?? [])
-                      .filter((lot) => lot.expiry_date && lot.expiry_date <= todayISO)
-                      .map((lot) => (
-                        <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
-                          <Icon name="package" size="sm" />
-                          <span>{t('inventory.expiryReachedItem', { name: st.name, qty: lot.quantity })}</span>
-                          <span className={shared.stockDepletionDanger}>
-                            {' '}
-                            {t('inventory.expiryReachedSince', {
-                              date: formatShortDate(lot.expiry_date, { withDay: false }),
-                            })}
-                          </span>
+                    lotsByExpirySeverity(st, today).reached.map((lot) => (
+                      <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
+                        <Icon name="package" size="sm" />
+                        <span>{t('inventory.expiryReachedItem', { name: st.name, qty: lot.quantity })}</span>
+                        <span className={shared.stockDepletionDanger}>
+                          {' '}
+                          {t('inventory.expiryReachedSince', {
+                            date: formatShortDate(lot.expiry_date),
+                          })}
                         </span>
-                      )),
+                      </span>
+                    )),
                   )}
                 </div>
               </div>
@@ -198,20 +233,18 @@ export default function InventoryPage() {
                     {t('inventory.expiringSoonAlert')}
                   </div>
                   {expiringSoonItems.flatMap((st) =>
-                    (st.expiring_lots ?? [])
-                      .filter((lot) => lot.expiry_date && lot.expiry_date > todayISO)
-                      .map((lot) => (
-                        <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
-                          <Icon name="package" size="sm" />
-                          <span>{t('inventory.expiringSoonItem', { name: st.name, qty: lot.quantity })}</span>
-                          <span className={shared.stockDepletionWarn}>
-                            {' '}
-                            {t('inventory.expiringSoonItemUntil', {
-                              date: formatShortDate(lot.expiry_date, { withDay: false }),
-                            })}
-                          </span>
+                    lotsByExpirySeverity(st, today).soon.map((lot) => (
+                      <span key={`${st.id}-${lot.id}`} className={shared.cardStockBadge}>
+                        <Icon name="package" size="sm" />
+                        <span>{t('inventory.expiringSoonItem', { name: st.name, qty: lot.quantity })}</span>
+                        <span className={shared.stockDepletionWarn}>
+                          {' '}
+                          {t('inventory.expiringSoonItemUntil', {
+                            date: formatShortDate(lot.expiry_date),
+                          })}
                         </span>
-                      )),
+                      </span>
+                    )),
                   )}
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
 import StockCard from '../StockCard'
 
@@ -9,7 +9,6 @@ const baseStock = {
   name: 'Water filter',
   quantity: 5,
   group: null,
-  expiring_lots: [],
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
@@ -87,8 +86,10 @@ describe('StockCard', () => {
     expect(row.getAttribute('title')).toBeNull()
   })
 
-  it('hides the consume button when quantity is 0', () => {
-    renderCard({ stock: { ...baseStock, quantity: 0, stock_severity: 'out' } })
+  it('hides the consume button when quantity_available is 0', () => {
+    renderCard({
+      stock: { ...baseStock, quantity: 0, quantity_available: 0, stock_severity: 'critical' },
+    })
     expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
   })
 
@@ -166,8 +167,10 @@ describe('StockCard', () => {
     expect(screen.getByLabelText('Consume 1 unit')).toBeDisabled()
   })
 
-  it('applies cardBorderDanger when stock_severity is "out"', () => {
-    const { container } = renderCard({ stock: { ...baseStock, quantity: 0, stock_severity: 'out' } })
+  it('applies cardBorderDanger when stock_severity is "critical"', () => {
+    const { container } = renderCard({
+      stock: { ...baseStock, quantity: 0, quantity_available: 0, stock_severity: 'critical' },
+    })
     expect(container.querySelector('[data-testid="product-card"]').className).toMatch(/cardBorderDanger/)
   })
 
@@ -248,12 +251,13 @@ describe('StockCard', () => {
     expect(screen.queryByTestId('card-lot-row')).not.toBeInTheDocument()
   })
 
-  it('shows the out-of-stock literal in the footer when qty=0 with consumption', () => {
+  it('shows the out-of-stock literal in the footer when quantity_available=0 with consumption', () => {
     renderCard({
       stock: {
         ...baseStock,
         quantity: 0,
-        stock_severity: 'out',
+        quantity_available: 0,
+        stock_severity: 'critical',
         daily_consumption_own: 1,
         estimated_depletion_date: '2026-04-27',
       },
@@ -295,5 +299,141 @@ describe('StockCard', () => {
     )
     await user.click(screen.getByText('Water filter'))
     expect(await screen.findByText('Stock detail')).toBeInTheDocument()
+  })
+})
+
+describe('StockCard — combined severity and per-lot indicators', () => {
+  // Frozen UTC midnight so lot dates are deterministic regardless of CI tz.
+  beforeEach(() => {
+    vi.useFakeTimers().setSystemTime(new Date('2026-05-06T00:00:00Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // Dates relative to the frozen "today" = 2026-05-06.
+  const PAST = '2026-05-05' // 1 day ago → reached
+  const SOON = '2026-05-21' // 15 days ahead → soon
+  const FAR = '2026-07-05' // 60 days ahead → none
+
+  const multiLotStock = {
+    ...baseStock,
+    lots: [
+      { id: 10, quantity: 1, expiry_date: PAST, lot_number: 'PAST', updated_at: '2026-04-17T10:00:00Z' },
+      { id: 11, quantity: 1, expiry_date: SOON, lot_number: 'SOON', updated_at: '2026-04-17T10:00:00Z' },
+      { id: 12, quantity: 1, expiry_date: FAR, lot_number: 'FAR', updated_at: '2026-04-17T10:00:00Z' },
+      { id: 13, quantity: 1, expiry_date: null, lot_number: 'NO_EXP', updated_at: '2026-04-17T10:00:00Z' },
+    ],
+  }
+
+  // T166: header rendering — quantity_available + (N expired) suffix.
+
+  it('header shows quantity_available, not the total, when there are expired lots', () => {
+    const { container } = renderCard({
+      stock: {
+        ...baseStock,
+        quantity: 18,
+        quantity_available: 13,
+        quantity_expired: 5,
+      },
+    })
+    const qty = container.querySelector('[class*="stockQty"]:not([class*="stockQtyExpired"])')
+    expect(qty.textContent).toMatch(/13/)
+    expect(qty.textContent).not.toMatch(/18/)
+    const expired = container.querySelector('[class*="stockQtyExpired"]')
+    expect(expired).not.toBeNull()
+    expect(expired.textContent).toMatch(/5 expired/)
+  })
+
+  it('header omits the expired suffix when quantity_expired is 0', () => {
+    const { container } = renderCard({
+      stock: { ...baseStock, quantity: 5, quantity_available: 5, quantity_expired: 0 },
+    })
+    expect(container.querySelector('[class*="stockQtyExpired"]')).toBeNull()
+  })
+
+  it('header falls back to quantity when quantity_available is missing (cold cache)', () => {
+    // Simulates a snapshot persisted before T163 — only the legacy `quantity`
+    // is present. The fallback chain renders the value without crashing.
+    const { container } = renderCard({
+      stock: { ...baseStock, quantity: 7 },
+    })
+    const qty = container.querySelector('[class*="stockQty"]:not([class*="stockQtyExpired"])')
+    expect(qty.textContent).toMatch(/7/)
+  })
+
+  it('hides the consume button when quantity_available is 0 even with expired lots in the stock', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        quantity: 5,
+        quantity_available: 0,
+        quantity_expired: 5,
+        stock_severity: 'critical',
+      },
+    })
+    expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
+  })
+
+  // Per-lot indicators on a stock with mixed lot expiries. Each row carries
+  // its own data-expiring; the package <Icon> is tinted via iconClassForLot.
+  it('marks the past-expiry lot row as data-expiring="reached" and tints icon iconDanger', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const reachedRow = rows.find((r) => r.getAttribute('data-expiring') === 'reached')
+    expect(reachedRow).toBeDefined()
+    const icon = reachedRow.querySelector('svg use[href="#i-package"]').parentElement
+    expect(icon.getAttribute('class') ?? '').toContain('iconDanger')
+  })
+
+  it('marks the 15-day-out lot row as data-expiring="soon" and tints icon iconWarning', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const soonRow = rows.find((r) => r.getAttribute('data-expiring') === 'soon')
+    expect(soonRow).toBeDefined()
+    const icon = soonRow.querySelector('svg use[href="#i-package"]').parentElement
+    expect(icon.getAttribute('class') ?? '').toContain('iconWarning')
+  })
+
+  it('leaves the far-future lot row as data-expiring="none" and the icon untinted', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const farRow = rows.find((r) => r.textContent.includes('FAR'))
+    expect(farRow).toBeDefined()
+    expect(farRow.getAttribute('data-expiring')).toBe('none')
+    const icon = farRow.querySelector('svg use[href="#i-package"]').parentElement
+    const cls = icon.getAttribute('class') ?? ''
+    expect(cls).not.toContain('iconDanger')
+    expect(cls).not.toContain('iconWarning')
+  })
+
+  it('marks a lot without expiry_date as data-expiring="none"', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const noExpRow = rows.find((r) => r.textContent.includes('NO_EXP'))
+    expect(noExpRow).toBeDefined()
+    expect(noExpRow.getAttribute('data-expiring')).toBe('none')
+  })
+
+  // T166: per-lot expiry date tint + line-through on expired qty.
+
+  it('tints the lot expiry date span on a soon-expiring lot', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const soonRow = rows.find((r) => r.getAttribute('data-expiring') === 'soon')
+    expect(soonRow).toBeDefined()
+    const dateSpan = soonRow.querySelector('[class*="cardLotExpiry"]')
+    expect(dateSpan).not.toBeNull()
+    expect(dateSpan.getAttribute('class')).toContain('iconWarning')
+  })
+
+  it('applies line-through to the qty span of an expired (reached) lot', () => {
+    renderCard({ stock: multiLotStock })
+    const rows = screen.getAllByTestId('card-lot-row')
+    const reachedRow = rows.find((r) => r.getAttribute('data-expiring') === 'reached')
+    expect(reachedRow).toBeDefined()
+    const qtySpan = reachedRow.querySelector('[class*="cardLotQty"]')
+    expect(qtySpan).not.toBeNull()
+    expect(qtySpan.getAttribute('class')).toContain('cardLotQtyExpired')
   })
 })

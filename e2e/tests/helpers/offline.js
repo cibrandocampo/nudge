@@ -150,7 +150,10 @@ export async function openConflictOnRoutineRename(
   { newName = `conflict-${Date.now()}` } = {},
 ) {
   await page.goto(`/routines/${routineId}`)
-  await page.getByRole('link', { name: 'Edit' }).click()
+  // T182 turned the routine-detail "Edit" pencil from a `<Link>` into a
+  // `<button>` so it can show an offline-locked toast. The element is
+  // still labelled "Edit"; only the role changed from link to button.
+  await page.getByRole('button', { name: 'Edit' }).click()
   await page.waitForURL(new RegExp(`/routines/${routineId}/edit$`))
 
   // Take the page offline so the Save click enqueues instead of hitting

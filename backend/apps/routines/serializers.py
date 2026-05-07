@@ -4,6 +4,7 @@ from math import floor
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from rest_flex_fields import FlexFieldsModelSerializer
 from rest_framework import serializers
 
 from apps.core.mixins import SharedWithMixin
@@ -44,7 +45,7 @@ class ClientTimestampInputSerializer(serializers.Serializer):
         return validate_client_created_at(value)
 
 
-class StockLotSerializer(serializers.ModelSerializer):
+class StockLotSerializer(FlexFieldsModelSerializer):
     class Meta:
         model = StockLot
         fields = ["id", "quantity", "expiry_date", "lot_number", "created_at", "updated_at"]
@@ -61,18 +62,47 @@ class StockLotSerializer(serializers.ModelSerializer):
         return value
 
 
-class StockGroupSerializer(serializers.ModelSerializer):
+class StockGroupSerializer(FlexFieldsModelSerializer):
     class Meta:
         model = StockGroup
         fields = ["id", "name", "display_order", "created_at"]
         read_only_fields = ["id", "created_at"]
 
 
-class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
+class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
+    """Serializer for Stock items.
+
+    Raw fields a generic API consumer should rely on:
+
+    - ``id``, ``name``, ``group`` / ``group_name``, ``lots``, ``updated_at``.
+    - ``quantity``, ``quantity_available``, ``quantity_soon``,
+      ``quantity_healthy``, ``quantity_expired`` — partitioned counts derived
+      directly from ``lots``.
+    - ``owner_username`` and ``user_timezone`` — identify the owner whose
+      timezone anchors any time-based interpretation a client wishes to make.
+    - ``shared_with`` / ``shared_with_details``, ``is_owner``.
+
+    Convenience fields, **Nudge-specific** and computed from the raw fields
+    above using Nudge's policy. A generic consumer is free to ignore them
+    and apply its own classification:
+
+    - ``stock_severity``, ``expiry_severity`` — Nudge's 3-tier severity strings.
+      Thresholds configurable via ``STOCK_SEVERITY_*`` settings (see
+      ``docs/configuration.md``).
+    - ``estimated_depletion_date``, ``depletion_is_estimated``,
+      ``daily_consumption_own``, ``daily_consumption_shared`` — depletion
+      estimate using Nudge's heuristic.
+    - ``requires_lot_selection`` — UI hint: the stock has lot-numbered lots,
+      so the client must let the user pick which to consume before any decrement.
+    """
+
     lots = StockLotSerializer(many=True, read_only=True)
     quantity = serializers.SerializerMethodField()
+    quantity_available = serializers.SerializerMethodField()
+    quantity_soon = serializers.SerializerMethodField()
+    quantity_healthy = serializers.SerializerMethodField()
+    quantity_expired = serializers.SerializerMethodField()
     group_name = serializers.CharField(source="group.name", read_only=True, default=None)
-    expiring_lots = serializers.SerializerMethodField()
     requires_lot_selection = serializers.SerializerMethodField()
     estimated_depletion_date = serializers.SerializerMethodField()
     depletion_is_estimated = serializers.SerializerMethodField()
@@ -88,13 +118,9 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
     shared_with_details = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     owner_username = serializers.CharField(source="user.username", read_only=True)
-
-    WARNING_THRESHOLD_DAYS = 30
-    LOW_STOCK_THRESHOLD_UNITS = 3
-    # Window for the "estimate depletion from past direct consumption" branch.
-    # Trigger requires ≥1 unit consumed in EACH half (last 30d AND prev 30d).
-    DIRECT_CONSUMPTION_WINDOW_DAYS = 60
-    DIRECT_CONSUMPTION_HALF_DAYS = 30
+    user_timezone = serializers.CharField(source="user.timezone", read_only=True)
+    my_group = serializers.SerializerMethodField()
+    my_group_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
@@ -103,9 +129,14 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             "name",
             "group",
             "group_name",
+            "my_group",
+            "my_group_name",
             "quantity",
+            "quantity_available",
+            "quantity_soon",
+            "quantity_healthy",
+            "quantity_expired",
             "lots",
-            "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
             "depletion_is_estimated",
@@ -117,14 +148,20 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             "shared_with_details",
             "is_owner",
             "owner_username",
+            "user_timezone",
             "updated_at",
         ]
         read_only_fields = [
             "id",
             "quantity",
+            "quantity_available",
+            "quantity_soon",
+            "quantity_healthy",
+            "quantity_expired",
             "group_name",
+            "my_group",
+            "my_group_name",
             "lots",
-            "expiring_lots",
             "requires_lot_selection",
             "estimated_depletion_date",
             "depletion_is_estimated",
@@ -135,6 +172,7 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             "shared_with_details",
             "is_owner",
             "owner_username",
+            "user_timezone",
             "updated_at",
         ]
 
@@ -156,17 +194,58 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             return sum(lot.quantity for lot in obj.lots.all())
         return obj.quantity
 
-    def _expiring_lots(self, obj):
-        """Return expiring lots from the prefetch cache (no extra queries)."""
-        threshold = date.today() + timedelta(days=self.WARNING_THRESHOLD_DAYS)
-        return [
-            lot
-            for lot in obj.lots.all()
-            if lot.expiry_date is not None and lot.expiry_date <= threshold and lot.quantity > 0
-        ]
+    def _quantity_partition(self, obj):
+        """Partition lot quantities into soon / healthy / expired buckets.
 
-    def get_expiring_lots(self, obj):
-        return StockLotSerializer(self._expiring_lots(obj), many=True).data
+        Returns a cached dict so the four `get_quantity_*` getters share
+        a single iteration over the lots list. Lots with `quantity <= 0`
+        are skipped defensively (the post_save signal deletes them but
+        bulk paths can leave stragglers — see MEMORY.md).
+
+        Buckets follow the plan (`docs/plans/stock-severity-revised.md`):
+            expired:  expiry_date <= today
+            soon:     today < expiry_date < today + STOCK_SEVERITY_WARNING_DAYS
+            healthy:  expiry_date IS NULL or expiry_date >= today + STOCK_SEVERITY_WARNING_DAYS
+        """
+        cache_attr = "_quantity_partition_cache"
+        if hasattr(obj, cache_attr):
+            return getattr(obj, cache_attr)
+
+        today = date.today()
+        cutoff = today + timedelta(days=settings.STOCK_SEVERITY_WARNING_DAYS)
+        soon = healthy = expired = 0
+        for lot in obj.lots.all():
+            if lot.quantity <= 0:
+                continue
+            if lot.expiry_date is None:
+                healthy += lot.quantity
+            elif lot.expiry_date <= today:
+                expired += lot.quantity
+            elif lot.expiry_date < cutoff:
+                soon += lot.quantity
+            else:
+                healthy += lot.quantity
+
+        result = {
+            "available": soon + healthy,
+            "soon": soon,
+            "healthy": healthy,
+            "expired": expired,
+        }
+        setattr(obj, cache_attr, result)
+        return result
+
+    def get_quantity_available(self, obj):
+        return self._quantity_partition(obj)["available"]
+
+    def get_quantity_soon(self, obj):
+        return self._quantity_partition(obj)["soon"]
+
+    def get_quantity_healthy(self, obj):
+        return self._quantity_partition(obj)["healthy"]
+
+    def get_quantity_expired(self, obj):
+        return self._quantity_partition(obj)["expired"]
 
     def get_requires_lot_selection(self, obj):
         # Use prefetch cache when available to avoid an extra query
@@ -213,10 +292,10 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         # decides whether it contributes anything.
         recent = getattr(obj, "recent_consumptions", None)
         if recent is None:
-            window_start = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_WINDOW_DAYS)
+            window_start = timezone.now() - timedelta(days=settings.STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS)
             recent = list(obj.consumptions.filter(client_created_at__gte=window_start))
 
-        half_ago = timezone.now() - timedelta(days=self.DIRECT_CONSUMPTION_HALF_DAYS)
+        half_ago = timezone.now() - timedelta(days=settings.STOCK_DIRECT_CONSUMPTION_HALF_DAYS)
         last_month_units = sum(c.quantity for c in recent if c.client_created_at >= half_ago)
         prev_month_units = sum(c.quantity for c in recent if c.client_created_at < half_ago)
 
@@ -230,18 +309,21 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
                 else:
                     shared_direct_units += c.quantity
 
-            window = float(self.DIRECT_CONSUMPTION_WINDOW_DAYS)
+            window = float(settings.STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS)
             own += own_direct_units / window
             shared += shared_direct_units / window
             is_estimated = (own_direct_units + shared_direct_units) > 0
 
         total = own + shared
-        quantity = self.get_quantity(obj)
+        # Depletion is computed from the consumable quantity — expired lots
+        # are NOT subtracted from the user's burn rate, so including them in
+        # the numerator would overestimate days remaining (T164).
+        qty_available = self.get_quantity_available(obj)
 
-        if total > 0 and quantity > 0:
-            days = floor(quantity / total)
+        if total > 0 and qty_available > 0:
+            days = floor(qty_available / total)
             depletion_date = date.today() + timedelta(days=days)
-        elif total > 0 and quantity == 0:
+        elif total > 0 and qty_available == 0:
             depletion_date = date.today()
         else:
             depletion_date = None
@@ -268,24 +350,38 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         return self._consumption_data(obj)["shared"]
 
     def get_stock_severity(self, obj):
-        """Combine quantity-based and consumption-based criteria.
+        """3-tier severity (T164). Replaces the previous `'out'`/`'low'`/`'ok'`
+        model. The expiry signal lives on per-lot indicators only —
+        `expiry_severity='soon'` no longer pushes the stock-level border.
 
-        - qty == 0           → 'out'
-        - qty in {1, 2}      → 'low'
-        - qty >= 3 and depletion_date < today + 30 days → 'low'
-        - otherwise          → 'ok'
+        Returns:
+            'critical' — red. Triggers:
+                         - quantity_available == 0 (no lots, or all expired)
+                         - depletion_date < today + STOCK_SEVERITY_CRITICAL_DAYS
+            'low'      — orange. Triggers:
+                         Tipo 2 (depletion present): days_left < STOCK_SEVERITY_WARNING_DAYS
+                         Tipo 1 (no depletion):      quantity_healthy < STOCK_LOW_THRESHOLD_UNITS
+            'ok'       — green. Otherwise.
+
+        See `docs/plans/stock-severity-revised.md`.
         """
-        qty = self.get_quantity(obj)
-        if qty == 0:
-            return "out"
-        if qty < self.LOW_STOCK_THRESHOLD_UNITS:
-            return "low"
+        qty_available = self.get_quantity_available(obj)
+        if qty_available == 0:
+            return "critical"
+
         depletion = self._consumption_data(obj)["depletion_date"]
         if depletion is not None:
-            cutoff = date.today() + timedelta(days=self.WARNING_THRESHOLD_DAYS)
-            if depletion < cutoff:
+            days_left = (depletion - date.today()).days
+            if days_left < settings.STOCK_SEVERITY_CRITICAL_DAYS:
+                return "critical"
+            if days_left < settings.STOCK_SEVERITY_WARNING_DAYS:
                 return "low"
-        return "ok"
+            return "ok"
+
+        # Tipo 1 — no consumption estimate; fall back to healthy-units count.
+        if self.get_quantity_healthy(obj) >= settings.STOCK_LOW_THRESHOLD_UNITS:
+            return "ok"
+        return "low"
 
     def get_expiry_severity(self, obj):
         """Severity tier for stock lots' expiry dates.
@@ -298,7 +394,7 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
         soon-to-expire lot returns 'reached'.
         """
         today = date.today()
-        cutoff = today + timedelta(days=self.WARNING_THRESHOLD_DAYS)
+        cutoff = today + timedelta(days=settings.STOCK_SEVERITY_WARNING_DAYS)
         has_reached = False
         has_soon = False
         for lot in obj.lots.all():
@@ -314,22 +410,33 @@ class StockSerializer(SharedWithMixin, serializers.ModelSerializer):
             return "soon"
         return "ok"
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
+    def _get_override(self, obj):
+        """Return the viewer's UserStockGroup row for `obj` (or None).
+
+        ``None`` when there is no request, when the viewer is the stock's
+        owner (the owner's group lives on ``Stock.group`` directly, no
+        override concept applies), or when no override row exists. Reads
+        from the prefetched ``_my_group_override`` attribute populated by
+        ``StockViewSet.get_queryset`` to stay query-free in list endpoints.
+        """
         request = self.context.get("request")
-        if request and instance.user != request.user:
-            overrides = getattr(instance, "_my_group_override", None) or []
-            if overrides:
-                override = overrides[0]
-                data["group"] = override.group_id
-                data["group_name"] = override.group.name if override.group else None
-            else:
-                data["group"] = None
-                data["group_name"] = None
-        return data
+        if not request or obj.user_id == request.user.id:
+            return None
+        overrides = getattr(obj, "_my_group_override", None) or []
+        return overrides[0] if overrides else None
+
+    def get_my_group(self, obj):
+        override = self._get_override(obj)
+        return override.group_id if override else None
+
+    def get_my_group_name(self, obj):
+        override = self._get_override(obj)
+        if not override or not override.group:
+            return None
+        return override.group.name
 
 
-class StockConsumptionSerializer(serializers.ModelSerializer):
+class StockConsumptionSerializer(FlexFieldsModelSerializer):
     stock_name = serializers.CharField(source="stock.name", read_only=True)
     consumed_by_username = serializers.CharField(source="consumed_by.username", read_only=True, default=None)
 
@@ -360,10 +467,36 @@ class StockConsumptionSerializer(serializers.ModelSerializer):
         ]
 
 
-class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
+class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
+    """Serializer for Routine items.
+
+    Raw fields a generic API consumer should rely on to compute its own
+    interpretation of "due":
+
+    - ``interval_hours`` — recurrence period.
+    - ``last_entry_at`` — ISO timestamp of the most recent completion (UTC).
+    - ``next_due_at`` — ISO timestamp of the next due moment (UTC), derived
+      from ``last_entry_at + interval_hours``.
+    - ``user_timezone`` — IANA string of the routine owner. Use it to render
+      ``next_due_at`` / ``last_entry_at`` in local time and to apply any
+      day-bucket logic the client needs.
+    - ``stock`` (FK), ``stock_name``, ``stock_quantity``,
+      ``stock_quantity_available`` — current state of the linked stock, if any.
+
+    Convenience fields, **Nudge-specific**: ``is_due``, ``is_overdue``,
+    ``hours_until_due``. They encode Nudge's policy ("due today in the
+    owner's timezone" / "the exact due moment has passed"). A consumer
+    that wants different semantics (e.g. "due this week", "due in less
+    than 6 hours UTC") should ignore these and recompute from the raw
+    fields above. They may be omitted in future versions.
+    """
+
     # Read-only convenience field so the frontend doesn't need an extra request
     stock_name = serializers.CharField(source="stock.name", read_only=True)
     stock_quantity = serializers.IntegerField(source="stock.quantity", read_only=True)
+    stock_quantity_available = serializers.IntegerField(
+        source="stock.quantity_available", read_only=True, allow_null=True
+    )
 
     # Computed fields
     last_entry_at = serializers.SerializerMethodField()
@@ -382,9 +515,20 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
     shared_with_details = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     owner_username = serializers.CharField(source="user.username", read_only=True)
+    user_timezone = serializers.CharField(source="user.timezone", read_only=True)
 
-    # Write-only: backdates the first entry so the routine isn't immediately overdue
-    last_done_at = serializers.DateTimeField(write_only=True, required=False, allow_null=True)
+    backdated_first_entry_at = serializers.DateTimeField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Optional. When creating a routine, pre-dates the first "
+            "RoutineEntry to this timestamp so the routine doesn't become "
+            "immediately overdue. Useful when adding a routine that the "
+            "user has already been doing prior to setup. Must not be in "
+            "the future."
+        ),
+    )
 
     class Meta:
         model = Routine
@@ -396,12 +540,14 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
             "stock",
             "stock_name",
             "stock_quantity",
+            "stock_quantity_available",
             "stock_usage",
             "is_active",
             "created_at",
             "updated_at",
             "last_entry_at",
             "next_due_at",
+            "user_timezone",
             "is_due",
             "is_overdue",
             "hours_until_due",
@@ -410,7 +556,7 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
             "shared_with_details",
             "is_owner",
             "owner_username",
-            "last_done_at",
+            "backdated_first_entry_at",
         ]
         read_only_fields = [
             "id",
@@ -418,10 +564,12 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
             "updated_at",
             "stock_name",
             "stock_quantity",
+            "stock_quantity_available",
             "requires_lot_selection",
             "shared_with_details",
             "is_owner",
             "owner_username",
+            "user_timezone",
         ]
 
     def validate_stock(self, value):
@@ -439,16 +587,16 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
             return True
         return obj.user == request.user
 
-    def validate_last_done_at(self, value):
+    def validate_backdated_first_entry_at(self, value):
         if value and value > timezone.now():
             raise serializers.ValidationError("Cannot be in the future.")
         return value
 
     def create(self, validated_data):
-        last_done_at = validated_data.pop("last_done_at", None)
+        backdated_at = validated_data.pop("backdated_first_entry_at", None)
         routine = super().create(validated_data)
-        if last_done_at:
-            RoutineEntry.objects.create(routine=routine, created_at=last_done_at)
+        if backdated_at:
+            RoutineEntry.objects.create(routine=routine, created_at=backdated_at)
         return routine
 
     def get_last_entry_at(self, obj):
@@ -477,10 +625,13 @@ class RoutineSerializer(SharedWithMixin, serializers.ModelSerializer):
     def get_requires_lot_selection(self, obj):
         if not obj.stock_id:
             return False
-        return obj.stock.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
+        stock = obj.stock
+        if "lots" in stock.__dict__.get("_prefetched_objects_cache", {}):
+            return any(lot.lot_number and lot.quantity > 0 for lot in stock.lots.all())
+        return stock.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
 
 
-class RoutineEntrySerializer(serializers.ModelSerializer):
+class RoutineEntrySerializer(FlexFieldsModelSerializer):
     routine_name = serializers.CharField(source="routine.name", read_only=True)
     stock_name = serializers.CharField(source="routine.stock.name", read_only=True, default=None)
     completed_by_username = serializers.CharField(source="completed_by.username", read_only=True, default=None)

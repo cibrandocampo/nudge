@@ -35,13 +35,26 @@ export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', 
   await page.getByTestId('add-lot-toggle').click()
   await page.locator('input[type="number"]').first().fill(String(quantity))
   if (expiryDate) await page.locator('input[type="date"]').first().fill(expiryDate)
-  if (lotNumber) await page.getByPlaceholder(/batch id/i).fill(lotNumber)
+  if (lotNumber) {
+    const lotInput = page.getByPlaceholder(/batch id/i)
+    await lotInput.fill(lotNumber)
+    // The lot-number input opens a custom Combobox listbox on focus
+    // (PR #56). The popover is anchored to the input and overlaps the
+    // "Add batch" button below; if it stays open Playwright's click
+    // lands on the listbox option and never reaches the submit. Escape
+    // dismisses it via the component's `useEscapeKey` hook (`blur`
+    // alone does not — closing is gated on `useClickOutside`).
+    await lotInput.press('Escape')
+  }
   await page.getByRole('button', { name: 'Add batch' }).click()
 }
 
 export async function deleteLot(page, stockKeyOrName, lotNumber) {
   await goToStockDetail(page, stockKeyOrName)
-  const row = page.locator('[class*="lotRow"]').filter({ hasText: lotNumber }).first()
+  // T169 renamed the lot row CSS class to `cardLotRow`; the substring
+  // `[class*="lotRow"]` selector is case-sensitive and no longer
+  // matches. Use the stable `data-testid="lot-row"` instead.
+  const row = page.getByTestId('lot-row').filter({ hasText: lotNumber }).first()
   await row.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete' }).last().click()
 }

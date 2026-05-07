@@ -35,6 +35,10 @@
   text-decoration: none;
   color: var(--c-text-3);
   transition: color var(--transition);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .linkActive {

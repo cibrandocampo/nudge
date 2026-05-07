@@ -220,6 +220,15 @@ CELERY_BEAT_SCHEDULE = {
 _skew = env("OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS", default=None)
 OFFLINE_MAX_CLIENT_TIMESTAMP_SKEW_SECONDS = int(_skew) if _skew else None
 
+# ── Stock severity thresholds ────────────────────────────────────────────────
+# Drive `stock_severity` / `expiry_severity` and the depletion estimator. See
+# docs/configuration.md for the user-facing description of each variable.
+STOCK_SEVERITY_WARNING_DAYS = env.int("STOCK_SEVERITY_WARNING_DAYS", default=30)
+STOCK_SEVERITY_CRITICAL_DAYS = env.int("STOCK_SEVERITY_CRITICAL_DAYS", default=7)
+STOCK_LOW_THRESHOLD_UNITS = env.int("STOCK_LOW_THRESHOLD_UNITS", default=3)
+STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS = env.int("STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS", default=60)
+STOCK_DIRECT_CONSUMPTION_HALF_DAYS = env.int("STOCK_DIRECT_CONSUMPTION_HALF_DAYS", default=30)
+
 # ── Web Push VAPID ────────────────────────────────────────────────────────────
 
 VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")

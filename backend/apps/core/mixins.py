@@ -1,10 +1,19 @@
 from datetime import timezone as _dt_timezone
 from email.utils import parsedate_to_datetime
 
+from rest_flex_fields import WILDCARD_ALL
+from rest_flex_fields.serializers import FlexFieldsSerializerMixin
 from rest_framework import serializers, status
 from rest_framework.response import Response
 
 HEADER_NAME = "If-Unmodified-Since"
+
+# Sentinel passed to FlexFieldsModelSerializer's `omit` kwarg to neutralise
+# any ``?omit=...`` query string. The value never matches a real field, so
+# ``apply_flex_fields`` removes nothing; the kwarg is non-empty, so the
+# request-driven `_rep_only["omit"]` is short-circuited to []. Pairs with
+# ``fields=[WILDCARD_ALL]`` to neutralise ``?fields=`` the same way.
+_FLEX_OMIT_NEUTRAL = "__optimistic_lock_no_omit__"
 
 
 def parse_http_date(value):
@@ -39,12 +48,25 @@ class OptimisticLockingMixin:
     On mismatch the mixin returns 412 Precondition Failed with
     ``{"error": "conflict", "current": <serialized resource>}`` so the client
     has the latest state to surface in a conflict modal.
+
+    **Interaction with drf-flex-fields**: when the serializer is a
+    ``FlexFieldsSerializerMixin`` subclass, this mixin **neutralises** any
+    ``?fields=`` / ``?omit=`` query string for the conflict payload. A 412
+    must hand the client the full resource so it can render every field of
+    the diff in the conflict modal — partial responses would force the
+    client to issue a follow-up GET to reconstruct what changed. Sparse
+    filtering still applies to 2xx responses.
     """
 
     optimistic_lock_field = "updated_at"
 
     def _optimistic_lock_conflict_response(self, instance):
-        serializer = self.get_serializer(instance)
+        serializer_class = self.get_serializer_class()
+        kwargs = {"context": self.get_serializer_context()}
+        if isinstance(serializer_class, type) and issubclass(serializer_class, FlexFieldsSerializerMixin):
+            kwargs["fields"] = [WILDCARD_ALL]
+            kwargs["omit"] = [_FLEX_OMIT_NEUTRAL]
+        serializer = serializer_class(instance, **kwargs)
         return Response(
             {"error": "conflict", "current": serializer.data},
             status=status.HTTP_412_PRECONDITION_FAILED,

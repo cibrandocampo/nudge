@@ -86,7 +86,10 @@ test.describe('Inventory', () => {
     // to the lot row so we don't hit the top-bar "Delete stock" button
     // by accident — `getByTitle('Delete').last()` is fragile because
     // both buttons share the same title prefix.
-    const lotRow = page.locator('[class*="lotRow"]').first()
+    // Use the stable testid; the CSS module class was renamed to
+    // ``cardLotRow`` in T169, which a `[class*="lotRow"]` substring
+    // selector does not match (the camelCase L is uppercase).
+    const lotRow = page.getByTestId('lot-row').first()
     await lotRow.getByRole('button', { name: 'Delete' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
 

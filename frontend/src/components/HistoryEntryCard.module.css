@@ -2,6 +2,16 @@
   margin-bottom: 0.5rem;
 }
 
+/* History entries do not need the 72px floor `shared.cardHeader` enforces
+ * for routine/stock cards (icon + title + subtitle + action buttons). The
+ * entry's right column stacks ~3 short lines (~48px), so letting the card
+ * size to content shaves ~24px and tightens the list visually. */
+.entryHeader {
+  min-height: 0;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
 /* Type-tinted left border lets the eye separate routine logs (royal
  * blue) from stock consumptions (brand yellow) at a glance — pairs
  * with the badge-check / package icon already in the title row. */
@@ -27,10 +37,22 @@
 .rightCol {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.2rem;
   flex-shrink: 0;
   max-width: 50%;
+}
+
+/* Author label rides on the same line as the time, immediately to its
+ * left. Stacking them vertically (the previous layout) wasted ~14px of
+ * height on every entry — visible especially in dense histories where
+ * each row's metadata is short. ``align-items: center`` so the small
+ * users-icon doesn't drag the chip's baseline out of line with the time. */
+.metaLine {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
 }
 
 .entryTime {
@@ -39,30 +61,43 @@
   white-space: nowrap;
 }
 
+/* Same font-size as the time so both sit on the same optical line.
+ * The shared-blue tint (``--c-shared``, used by RoutineCard's share
+ * badge) reinforces the icon's meaning at a glance — "this entry was
+ * logged by someone you share with". */
 .entryAuthor {
-  font-size: 0.65rem;
-  color: var(--c-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--c-shared);
   white-space: nowrap;
 }
 
-.notesSide {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
+/* Notes flow on their own full-width row below the header so wrapped
+ * paragraphs use the entire card width — keeps the header height
+ * constant across entries and avoids cramming long text into the narrow
+ * right-column. The row inherits the card's padding via its own
+ * ``--c-border-inner`` divider so it reads as a continuation of the
+ * same card.
+ */
+.notesRow {
+  padding: 0 0.75rem 0.5rem;
 }
 
 .notesView {
+  display: block;
+  width: 100%;
   background: none;
   border: none;
   margin: 0;
-  padding: 0.25rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   font-size: 0.8rem;
   color: var(--c-text-2);
-  text-align: right;
+  text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
-  line-height: 1.35;
+  line-height: 1.4;
   border-radius: var(--radius);
 }
 
@@ -119,8 +154,11 @@
 }
 
 .compactAuthor {
-  font-size: 0.65rem;
-  color: var(--c-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--c-shared);
 }
 
 .compactLot {

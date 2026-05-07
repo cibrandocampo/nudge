@@ -4,12 +4,21 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
 import cx from '../utils/cx'
 import { findCachedStock } from '../utils/lotsForSelection'
+import { iconClassForStock } from '../utils/stockSeverity'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
 import shared from '../styles/shared.module.css'
 import s from './RoutineCard.module.css'
 
-function statusTokens(routine) {
+function statusTokens(routine, { stockDepleted } = {}) {
+  // Stock depletion overrides the time-based status: even a not-yet-due routine
+  // surfaces in red when the linked stock cannot satisfy a `Mark done`. Without
+  // this, a routine with `next_due_at` 60 days ahead and 0 units in stock looks
+  // identical to one in perfect shape — the user only finds out when they try
+  // to log and the backend 422s with `insufficient_stock`.
+  if (stockDepleted) {
+    return { border: shared.cardBorderDanger, dot: shared.dotDanger, text: shared.statusOverdue }
+  }
   if (!routine.is_due) {
     return { border: shared.cardBorderSuccess, dot: shared.dotSuccess, text: shared.statusOk }
   }
@@ -17,13 +26,6 @@ function statusTokens(routine) {
     return { border: shared.cardBorderDanger, dot: shared.dotDanger, text: shared.statusOverdue }
   }
   return { border: shared.cardBorderWarning, dot: shared.dotWarning, text: shared.statusDue }
-}
-
-function stockIconClass(severity) {
-  if (severity === 'out') return shared.iconDanger
-  if (severity === 'low') return shared.iconWarning
-  if (severity === 'ok') return shared.iconSuccess
-  return null
 }
 
 export default function RoutineCard({ routine, onMarkDone, completing }) {
@@ -35,9 +37,8 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     : `${t('card.since')} ${formatAbsoluteDate(routine.created_at)}`
 
   const resourceKey = `routine:${routine.id}`
-  const tokens = statusTokens(routine)
   const cachedStock = findCachedStock(queryClient, routine.stock)
-  const iconCls = stockIconClass(cachedStock?.stock_severity)
+  const iconCls = iconClassForStock(cachedStock)
 
   // Passive badge only — sharing is edited from the routine form
   // (ShareWithSection → ShareModal). Mirrors the pattern used on StockCard.
@@ -64,8 +65,13 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   // — pain_relief (ibuprofen 0u) is the canonical seed case. Keeping the
   // button visible (just disabled) lets the user see the reason via the
   // tooltip instead of silently hiding the affordance.
-  const stockDepleted =
-    Boolean(routine.stock_name) && Number(routine.stock_quantity ?? 0) < Number(routine.stock_usage ?? 1)
+  // T165: read `stock_quantity_available` (excludes expired lots) so a routine
+  // backed by a stock with only expired lots is correctly disabled. Falls back
+  // to `stock_quantity` for cached snapshots from the pre-T163 API contract;
+  // the fallback becomes dead code once caches refresh.
+  const stockAvailable = routine.stock_quantity_available ?? routine.stock_quantity ?? 0
+  const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage ?? 1)
+  const tokens = statusTokens(routine, { stockDepleted })
   const doneDisabled = completing || stockDepleted
   const doneTitle = stockDepleted ? t('card.noStockAvailable') : undefined
 
@@ -103,7 +109,6 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
             <span className={cx(shared.dot, tokens.dot)} />
             {timeLabel}
           </span>
-          {routine.interval_label && <span>{routine.interval_label}</span>}
         </span>
         {routine.stock_name && (
           <span className={shared.cardStockBadge}>

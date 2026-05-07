@@ -80,8 +80,9 @@ export const handlers = [
       quantity: 5,
       group: null,
       group_name: null,
+      my_group: null,
+      my_group_name: null,
       lots: [],
-      expiring_lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
       shared_with: [],
@@ -182,8 +183,9 @@ export const handlers = [
         quantity: 0,
         group: null,
         group_name: null,
+        my_group: null,
+        my_group_name: null,
         lots: [],
-        expiring_lots: [],
         stock_severity: 'out',
         expiry_severity: 'ok',
         shared_with: [],
@@ -203,8 +205,9 @@ export const handlers = [
       quantity: 5,
       group: null,
       group_name: null,
+      my_group: null,
+      my_group_name: null,
       lots: [],
-      expiring_lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
       shared_with: [],
@@ -225,14 +228,19 @@ export const handlers = [
 
   http.patch(`${BASE}/stock/:id/my-group/`, async ({ params, request }) => {
     const body = await request.json()
+    // T176 shape: ``group`` / ``group_name`` always reflect the owner's
+    // stock.group (this mock simulates a shared stock whose owner left it
+    // ungrouped, so they stay null). ``my_group`` / ``my_group_name`` are
+    // the recipient's personal override and echo the request body.
     return HttpResponse.json({
       id: Number(params.id),
       name: 'Water filter',
       quantity: 10,
-      group: body.group ?? null,
-      group_name: body.group ? 'Test Group' : null,
+      group: null,
+      group_name: null,
+      my_group: body.group ?? null,
+      my_group_name: body.group ? 'Test Group' : null,
       lots: [],
-      expiring_lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
       shared_with: [],
@@ -250,8 +258,9 @@ export const handlers = [
       quantity: 4,
       group: null,
       group_name: null,
+      my_group: null,
+      my_group_name: null,
       lots: [{ id: 100, quantity: 4, expiry_date: null, lot_number: '' }],
-      expiring_lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
       requires_lot_selection: false,

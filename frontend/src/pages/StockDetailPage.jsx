@@ -23,32 +23,11 @@ import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { parseIntSafe } from '../utils/number'
+import { effectiveGroupId } from '../utils/stockGroup'
+import { borderTokensFromStock, iconClassForLot, lotExpirySeverity } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import shared from '../styles/shared.module.css'
 import s from './StockDetailPage.module.css'
-
-function borderTokens(stock) {
-  if (!stock || stock.stock_severity === 'out') {
-    return { border: shared.cardBorderDanger, dot: shared.dotDanger }
-  }
-  if (stock.stock_severity === 'low') {
-    return { border: shared.cardBorderWarning, dot: shared.dotWarning }
-  }
-  return { border: shared.cardBorderSuccess, dot: shared.dotSuccess }
-}
-
-// Tri-state lot expiry severity derived from the lot's own expiry_date.
-// Independent of stock.expiring_lots (which the InventoryPage alert blocks
-// consume). Returned values match the data-expiring attribute on lot rows.
-function lotExpirySeverity(lot, today) {
-  if (lot.expiry_date == null) return 'none'
-  const expiry = new Date(lot.expiry_date)
-  if (expiry <= today) return 'reached'
-  const cutoff = new Date(today)
-  cutoff.setDate(cutoff.getDate() + 30)
-  if (expiry < cutoff) return 'soon'
-  return 'none'
-}
 
 export default function StockDetailPage() {
   const { id } = useParams()
@@ -85,14 +64,18 @@ export default function StockDetailPage() {
     ? lotSuggestions.filter((n) => n.toLowerCase().includes(lotSuggestQuery))
     : lotSuggestions
 
-  const tokens = borderTokens(stock)
-  const groupName = stock ? groups.find((g) => g.id === stock.group)?.name : undefined
+  const tokens = borderTokensFromStock(stock)
+  const groupName = stock ? groups.find((g) => g.id === effectiveGroupId(stock))?.name : undefined
   // Local-midnight today for lot expiry comparison; matches the backend's
   // `date.today()` semantics (a lot expiring today reads as 'reached').
   const today = new Date(new Date().toISOString().slice(0, 10))
 
   const handleAddLot = async (e) => {
     e.preventDefault()
+    if (!reachable) {
+      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+      return
+    }
     const qty = parseIntSafe(addForm.qty, -1)
     if (qty < 0) return
     setAddForm((f) => ({ ...f, adding: true }))
@@ -115,6 +98,10 @@ export default function StockDetailPage() {
   const doRemoveLot = async () => {
     const { lotId, updatedAt } = confirmRemoveLot
     setConfirmRemoveLot(null)
+    if (!reachable) {
+      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+      return
+    }
     try {
       await deleteLot.mutateAsync({ stockId, stockName: stock.name, lotId, updatedAt })
     } catch (err) {
@@ -124,6 +111,10 @@ export default function StockDetailPage() {
 
   const doDeleteStock = async () => {
     setConfirmDelete(false)
+    if (!reachable) {
+      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+      return
+    }
     try {
       await deleteStock.mutateAsync({ stockId, stockName: stock.name, updatedAt: stock.updated_at })
       navigate('/inventory')
@@ -134,6 +125,13 @@ export default function StockDetailPage() {
 
   const isOwner = stock?.is_owner !== false
   const { user } = useAuth()
+
+  // Recipients besides the current viewer. The owner sees every recipient;
+  // a non-owner recipient sees every other recipient. Used by the
+  // "Shared with" section so the label means the same thing on both sides.
+  const otherStockRecipients = (stock?.shared_with_details ?? []).filter(
+    (c) => isOwner || c.username !== user?.username,
+  )
 
   return (
     <QueryHandler
@@ -162,10 +160,17 @@ export default function StockDetailPage() {
               {isOwner && (
                 <button
                   type="button"
-                  className={cx(shared.btnAdd, shared.btnAddDanger)}
-                  onClick={() => setConfirmDelete(true)}
+                  className={cx(shared.btnAdd, shared.btnAddDanger, !reachable && shared.disabled)}
+                  onClick={() => {
+                    if (!reachable) {
+                      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                      return
+                    }
+                    setConfirmDelete(true)
+                  }}
+                  aria-disabled={!reachable}
                   aria-label={t('stockDetail.deleteStock')}
-                  title={t('stockDetail.deleteStock')}
+                  title={!reachable ? t('offline.pageUnavailable') : t('stockDetail.deleteStock')}
                 >
                   <Icon name="trash" />
                 </button>
@@ -173,10 +178,16 @@ export default function StockDetailPage() {
               <button
                 type="button"
                 className={cx(shared.btnAdd, !reachable && shared.disabled)}
-                onClick={() => navigate(`/inventory/${stockId}/edit`)}
-                disabled={!reachable}
+                onClick={() => {
+                  if (!reachable) {
+                    showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                    return
+                  }
+                  navigate(`/inventory/${stockId}/edit`)
+                }}
+                aria-disabled={!reachable}
                 aria-label={t('stockDetail.edit')}
-                title={!reachable ? t('offline.requiresConnection') : t('stockDetail.edit')}
+                title={!reachable ? t('offline.pageUnavailable') : t('stockDetail.edit')}
               >
                 <Icon name="pencil" />
               </button>
@@ -193,14 +204,19 @@ export default function StockDetailPage() {
                 <span className={shared.cardSubtitle}>
                   <span className={cx(shared.dot, tokens.dot)} />
                   <span className={shared.stockQty}>
-                    {stock.quantity} {t('common.total')}
+                    {stock.quantity_available ?? stock.quantity ?? 0} {t('common.total')}
                   </span>
+                  {(stock.quantity_expired ?? 0) > 0 && (
+                    <span className={shared.stockQtyExpired}>
+                      ({t('inventory.expiredCount', { count: stock.quantity_expired })})
+                    </span>
+                  )}
                   {stock.estimated_depletion_date && (
                     <span
                       className={cx(
                         shared.stockDepletion,
                         stock.stock_severity === 'low' && shared.stockDepletionWarn,
-                        stock.stock_severity === 'out' && shared.stockDepletionDanger,
+                        stock.stock_severity === 'critical' && shared.stockDepletionDanger,
                       )}
                       data-testid="depletion-date"
                       title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
@@ -220,38 +236,40 @@ export default function StockDetailPage() {
             </div>
           </div>
 
+          {/* Non-owner viewer: single card with the owner chip on the left
+              and (if any) the other recipients on the right. Mirrors
+              RoutineDetailPage. */}
           {stock.is_owner === false && stock.owner_username && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="owner-info">
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
-              </div>
-              <div className={shared.formChipsRow}>
-                <span className={shared.formChip}>
-                  <span className={shared.formChipAvatar} aria-hidden="true">
-                    {avatarInitial({ username: stock.owner_username })}
-                  </span>
-                  <span>{stock.owner_username}</span>
-                </span>
-                {stock.shared_with_details
-                  ?.filter((c) => c.username !== user?.username)
-                  .map((c) => (
-                    <span key={c.id} className={shared.formChip}>
+            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
+              <div className={s.peopleSplit}>
+                <div className={s.peopleColumn} data-testid="owner-info">
+                  <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
+                  <div className={shared.formChipsRow}>
+                    <span className={shared.formChip}>
                       <span className={shared.formChipAvatar} aria-hidden="true">
-                        {avatarInitial(c)}
+                        {avatarInitial({ username: stock.owner_username })}
                       </span>
-                      <span>{c.username}</span>
+                      <span>{stock.owner_username}</span>
                     </span>
-                  ))}
+                  </div>
+                </div>
+                {otherStockRecipients.length > 0 && (
+                  <div className={s.peopleColumn} data-testid="shared-with-info">
+                    <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+                    <SharedWithChips contacts={otherStockRecipients} />
+                  </div>
+                )}
               </div>
             </section>
           )}
 
-          {stock.is_owner !== false && stock.shared_with_details?.length > 0 && (
+          {/* Owner viewer keeps the standalone "Shared with" card. */}
+          {isOwner && otherStockRecipients.length > 0 && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">
               <div className={shared.formSectionHeader}>
                 <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
-              <SharedWithChips contacts={stock.shared_with_details} />
+              <SharedWithChips contacts={otherStockRecipients} />
             </section>
           )}
 
@@ -259,27 +277,29 @@ export default function StockDetailPage() {
             <p className={shared.sectionTitle}>{t('stockDetail.lots')}</p>
             <div className={s.lotsCard}>
               {stock.lots.length > 0 && (
-                <div className={s.lotsList}>
+                <div className={s.lotsList} data-with-pills={stock.lots.some((l) => l.lot_number) || undefined}>
                   {stock.lots.map((lot) => {
                     const sev = lotExpirySeverity(lot, today)
                     return (
-                      <div
-                        key={lot.id}
-                        className={cx(shared.cardLotRow, s.lotRow)}
-                        data-testid="lot-row"
-                        data-expiring={sev}
-                      >
+                      <div key={lot.id} className={shared.cardLotRow} data-testid="lot-row" data-expiring={sev}>
                         <div className={shared.cardLotMain}>
-                          <Icon name="package" size="sm" className={shared.cardLotIcon} />
-                          <span className={shared.cardLotQty}>
+                          <Icon
+                            name="package"
+                            size="sm"
+                            className={cx(shared.cardLotIcon, iconClassForLot(lot, today))}
+                          />
+                          <span className={cx(shared.cardLotQty, sev === 'reached' && shared.cardLotQtyExpired)}>
                             {lot.quantity} {t('common.unit')}
                           </span>
                         </div>
                         <div className={shared.cardLotMeta}>
+                          {/* Date and pill render in fixed grid columns (s.lotsList is
+                              a 4-col grid; cardLotMeta has display:contents, so these
+                              spans land directly in the parent grid). */}
                           {lot.expiry_date && (
-                            <span className={shared.cardLotExpiry}>
+                            <span className={cx(shared.cardLotExpiry, iconClassForLot(lot, today))}>
                               {t('inventory.lotExpiryDate', {
-                                date: formatShortDate(lot.expiry_date, { withDay: false }),
+                                date: formatShortDate(lot.expiry_date),
                               })}
                             </span>
                           )}
@@ -287,10 +307,22 @@ export default function StockDetailPage() {
                         </div>
                         <button
                           type="button"
-                          className={cx(shared.btnIcon, shared.btnIconDelete)}
-                          onClick={() => setConfirmRemoveLot({ lotId: lot.id, updatedAt: lot.updated_at })}
+                          className={cx(
+                            shared.btnIcon,
+                            shared.btnIconDelete,
+                            s.lotDeleteBtn,
+                            !reachable && shared.disabled,
+                          )}
+                          onClick={() => {
+                            if (!reachable) {
+                              showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                              return
+                            }
+                            setConfirmRemoveLot({ lotId: lot.id, updatedAt: lot.updated_at })
+                          }}
+                          aria-disabled={!reachable}
                           aria-label={t('inventory.deleteTooltip')}
-                          title={t('inventory.deleteTooltip')}
+                          title={!reachable ? t('offline.pageUnavailable') : t('inventory.deleteTooltip')}
                         >
                           <Icon name="trash" size="sm" />
                         </button>
@@ -380,8 +412,16 @@ export default function StockDetailPage() {
               ) : (
                 <button
                   type="button"
-                  className={s.addLotToggle}
-                  onClick={() => setShowAddLot(true)}
+                  className={cx(s.addLotToggle, !reachable && shared.disabled)}
+                  onClick={() => {
+                    if (!reachable) {
+                      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                      return
+                    }
+                    setShowAddLot(true)
+                  }}
+                  aria-disabled={!reachable}
+                  title={!reachable ? t('offline.pageUnavailable') : undefined}
                   data-testid="add-lot-toggle"
                 >
                   <Icon name="plus" size="sm" />

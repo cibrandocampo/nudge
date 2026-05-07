@@ -466,3 +466,66 @@ describe('rollback edge cases', () => {
     expect(qc.getQueryData(['stock'])).toEqual({ not: 'an array' })
   })
 })
+
+// ── useRoutine: seeded from list caches (T179) ───────────────────────────────
+
+function renderWithSeededQuery(hookFn, seedFn) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  if (typeof seedFn === 'function') seedFn(qc)
+  const wrapper = ({ children }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  const view = renderHook(hookFn, { wrapper })
+  return { ...view, qc }
+}
+
+describe('useRoutine — initialData from list caches', () => {
+  it('renders immediately with data when the routine is in the dashboard cache', async () => {
+    server.use(http.get(`${BASE}/routines/7/`, () => HttpResponse.json({ id: 7, name: 'Take vitamins (fresh)' })))
+    const { result } = renderWithSeededQuery(
+      () => useRoutine(7),
+      (qc) =>
+        qc.setQueryData(['dashboard'], {
+          due: [{ id: 7, name: 'Take vitamins', interval_hours: 24 }],
+          upcoming: [],
+        }),
+    )
+    // Frame 1: seed visible, no loading state.
+    expect(result.current.data?.name).toBe('Take vitamins')
+    expect(result.current.isLoading).toBe(false)
+    // Background refetch eventually replaces with the fresh server value.
+    await waitFor(() => expect(result.current.data?.name).toBe('Take vitamins (fresh)'))
+  })
+
+  it("falls back to the ['routines'] list cache when dashboard does not have the id", async () => {
+    server.use(http.get(`${BASE}/routines/9/`, () => HttpResponse.json({ id: 9, name: 'From list' })))
+    const { result } = renderWithSeededQuery(
+      () => useRoutine(9),
+      (qc) => qc.setQueryData(['routines'], [{ id: 9, name: 'From list', interval_hours: 12 }]),
+    )
+    expect(result.current.data?.name).toBe('From list')
+  })
+
+  it('starts in pending state when no list cache contains the id', () => {
+    server.use(http.get(`${BASE}/routines/99/`, () => HttpResponse.json({ id: 99, name: 'Cold' })))
+    const { result } = renderWithSeededQuery(() => useRoutine(99))
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(true)
+  })
+
+  it('keeps the seed when the network request fails (offline simulation)', async () => {
+    // Network failure mimics offline: the queryFn rejects, but TanStack
+    // Query keeps the data field at the seed value because initialData
+    // already populated it before the fetch started.
+    server.use(http.get(`${BASE}/routines/11/`, () => HttpResponse.error()))
+    const { result } = renderWithSeededQuery(
+      () => useRoutine(11),
+      (qc) =>
+        qc.setQueryData(['dashboard'], {
+          due: [{ id: 11, name: 'Cached' }],
+          upcoming: [],
+        }),
+    )
+    expect(result.current.data?.name).toBe('Cached')
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.data?.name).toBe('Cached')
+  })
+})

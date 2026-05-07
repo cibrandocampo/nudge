@@ -63,11 +63,18 @@ test.describe('History', () => {
   })
 
   test('Routine filter restricts list to selected routine', async ({ page }) => {
+    // The Routine filter only renders when Type=Routines, so flip the
+    // type first. The Item/Routine pickers were refactored from native
+    // `<select>` to a custom `<Combobox>` (input + listbox); selectOption
+    // no longer works — open by clicking the input, then click the
+    // matching `<li role="option">`.
+    await page.getByLabel('Type', { exact: true }).selectOption({ label: 'Routines' })
+    await page.getByPlaceholder('Search routines…').click()
+    await page.getByRole('option', { name: SEED.routines.takeAntihistamine }).click()
+
     // Selects `Take antihistamine` (14 daily entries, all within the
     // default 15-day filter). `takeVitaminD` is overdue with a 28-day
     // interval, so its newest entry is 35d ago — outside the filter.
-    await page.getByLabel('Routine', { exact: true }).selectOption({ label: SEED.routines.takeAntihistamine })
-
     // Retry-able settling assertion first — the filter change triggers a
     // TanStack refetch that replaces the list; a raw `.count()` below
     // needs the DOM to have settled.
@@ -82,8 +89,10 @@ test.describe('History', () => {
   })
 
   test('Stock filter restricts consumptions to selected stock', async ({ page }) => {
+    // Type=Stock reveals the Item Combobox (replaces the native select).
     await page.getByLabel('Type', { exact: true }).selectOption({ label: 'Stock' })
-    await page.getByLabel('Item', { exact: true }).selectOption({ label: SEED.stocks.hidroferol })
+    await page.getByPlaceholder('Search items…').click()
+    await page.getByRole('option', { name: SEED.stocks.hidroferol }).click()
 
     await expect(historyEntry(page, { stockKey: 'hidroferol', type: 'consumption' }).first()).toBeVisible()
     await expect(historyEntry(page, { stockKey: 'pumpCannulas', type: 'consumption' })).toHaveCount(0)
