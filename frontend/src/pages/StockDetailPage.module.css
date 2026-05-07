@@ -33,6 +33,25 @@
   margin-bottom: 1.5rem;
 }
 
+/* Two-column layout for the people block of a non-owner viewer:
+ * Owner on the left, "Shared with" on the right. Wraps to a stack on
+ * narrow screens so chips never overflow the card.
+ */
+.peopleSplit {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.peopleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
 .lotsCard {
@@ -48,21 +67,25 @@
   padding: 0 0.75rem;
 }
 
-/* Severity highlight overrides on top of shared.cardLotRow.
- * Composed via cx(shared.cardLotRow, s.lotRow) in JSX so the data-expiring
- * attribute selector matches the local hashed class. The empty .lotRow
- * declaration guarantees the class is exported by CSS modules. */
-.lotRow {
-  /* Marker class — overridden by shared.cardLotRow via cx(); used only as
-   * an attachment point for the [data-expiring] severity rules below. */
+/* Grid mode: activated when at least one lot has a lot_number (parent
+ * receives `data-with-pills` from the JSX). 4 columns: main | date | pill
+ * | trash. The shared `[data-with-pills]` rules in shared.module.css place
+ * cardLotMain (1), cardLotExpiry (2) and cardLotNumberPill (3); the trash
+ * button picks up column 4 via the local `.lotDeleteBtn` class. */
+.lotsList[data-with-pills] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  /* Same padding strategy as cardLotsBlock under data-with-pills: a 0.75rem
+   * right inset that matches `.cardHeader`'s padding-right (the canonical
+   * card horizontal margin), so the rightmost item lines up with header
+   * controls vertically. */
+  padding: 0 0.75rem 0 0;
 }
-.lotRow[data-expiring='reached'] {
-  border-left: 3px solid var(--c-danger);
-  background: var(--c-border-danger);
-}
-.lotRow[data-expiring='soon'] {
-  border-left: 3px solid var(--c-warning);
-  background: var(--c-border-warning);
+
+.lotDeleteBtn {
+  grid-column: 4;
 }
 
 .addLotForm {

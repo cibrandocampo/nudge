@@ -15,6 +15,7 @@ import { useStockList } from '../hooks/useStock'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
 import cx from '../utils/cx'
+import { errorToastMessage } from '../utils/errors'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import shared from '../styles/shared.module.css'
 import s from './DashboardPage.module.css'
@@ -68,8 +69,8 @@ export default function DashboardPage() {
           },
         })
       }
-    } catch {
-      showToast({ type: 'error', message: t('common.actionError') })
+    } catch (err) {
+      showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       setCompleting(null)
     }
@@ -117,10 +118,11 @@ export default function DashboardPage() {
         ) : (
           <button
             type="button"
-            disabled
             className={cx(shared.btnAdd, shared.disabled)}
+            onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
+            aria-disabled="true"
             aria-label={t('dashboard.newRoutine')}
-            title={t('offline.requiresConnection')}
+            title={t('offline.pageUnavailable')}
           >
             <Icon name="plus" />
           </button>

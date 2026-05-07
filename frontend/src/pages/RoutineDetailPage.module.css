@@ -57,6 +57,29 @@
   justify-content: flex-end;
 }
 
+.metaValuePending {
+  color: var(--c-text-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--c-text-3);
+}
+
+.metaValuePending svg {
+  text-decoration: none;
+}
+
+.metaRowPending {
+  padding-top: 0;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--c-border-inner);
+}
+
+.metaPendingNote {
+  color: var(--c-text-3);
+  font-size: 0.75rem;
+  font-style: italic;
+  font-weight: 400;
+}
+
 .primaryAction {
   width: 100%;
   padding: 0.75rem;
@@ -71,6 +94,25 @@
 
 .sharedBlock {
   margin-bottom: 1.5rem;
+}
+
+/* Two-column layout for the people block of a non-owner viewer:
+ * Owner on the left, "Shared with" on the right. Wraps to a stack on
+ * narrow screens so chips never overflow the card.
+ */
+.peopleSplit {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.peopleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 
 .entryList {

@@ -13,10 +13,10 @@ export function useCreateRoutine() {
     onSuccess: (_data, { payload }) => {
       qc.invalidateQueries({ queryKey: ['routines'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
-      // When the caller backdates the creation with `last_done_at`, the
-      // server writes a retroactive RoutineEntry — audit caches become
+      // When the caller backdates the creation with `backdated_first_entry_at`,
+      // the server writes a retroactive RoutineEntry — audit caches become
       // stale until they refetch.
-      if (payload?.last_done_at) {
+      if (payload?.backdated_first_entry_at) {
         qc.invalidateQueries({ queryKey: ['entries'] })
       }
     },

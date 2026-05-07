@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import ConflictOrchestrator from './components/ConflictOrchestrator'
 import IconsSprite from './components/IconsSprite'
 import Layout from './components/Layout'
+import OfflineRouteGuard from './components/OfflineRouteGuard'
 import ProtectedRoute from './components/ProtectedRoute'
 import { ToastProvider } from './components/Toast'
 import { useSyncToasts } from './hooks/useSyncToasts'
@@ -54,13 +55,27 @@ export default function App() {
                     <Route path="/routines/new" element={<RoutineFormPage />} />
                     <Route path="/routines/:id" element={<RoutineDetailPage />} />
                     <Route path="/routines/:id/edit" element={<RoutineFormPage />} />
-                    <Route path="/history" element={<HistoryPage />} />
+                    <Route
+                      path="/history"
+                      element={
+                        <OfflineRouteGuard>
+                          <HistoryPage />
+                        </OfflineRouteGuard>
+                      }
+                    />
                     <Route path="/inventory" element={<InventoryPage />} />
                     <Route path="/inventory/new" element={<StockFormPage />} />
                     <Route path="/inventory/groups" element={<StockGroupsPage />} />
                     <Route path="/inventory/:id" element={<StockDetailPage />} />
                     <Route path="/inventory/:id/edit" element={<StockFormPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route
+                      path="/settings"
+                      element={
+                        <OfflineRouteGuard>
+                          <SettingsPage />
+                        </OfflineRouteGuard>
+                      }
+                    />
                   </Route>
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

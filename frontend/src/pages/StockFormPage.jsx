@@ -16,6 +16,7 @@ import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
 import { parseIntSafe } from '../utils/number'
+import { effectiveGroupId } from '../utils/stockGroup'
 import shared from '../styles/shared.module.css'
 import s from './StockFormPage.module.css'
 
@@ -60,7 +61,7 @@ export default function StockFormPage() {
 
   useEffect(() => {
     if (!isEditing || !stock) return
-    setForm({ name: stock.name ?? '', group: stock.group ?? '' })
+    setForm({ name: stock.name ?? '', group: effectiveGroupId(stock) ?? '' })
     setSharedWith(Array.isArray(stock.shared_with) ? stock.shared_with : [])
   }, [isEditing, stock])
 

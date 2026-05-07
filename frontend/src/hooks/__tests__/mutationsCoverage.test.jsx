@@ -200,14 +200,14 @@ describe('useCreateStock — branches', () => {
 })
 
 describe('useCreateRoutine — branches', () => {
-  it('invalidates entries when payload carries last_done_at (backdated creation)', async () => {
+  it('invalidates entries when payload carries backdated_first_entry_at (backdated creation)', async () => {
     server.use(http.post(`${BASE}/routines/`, () => HttpResponse.json({ id: 7, name: 'Back' }, { status: 201 })))
     const { result, qc } = renderWith(() => useCreateRoutine())
     qc.setQueryData(['entries'], [])
 
     await act(async () => {
       await result.current.mutateAsync({
-        payload: { name: 'Back', interval_hours: 24, last_done_at: '2026-01-01T00:00:00Z' },
+        payload: { name: 'Back', interval_hours: 24, backdated_first_entry_at: '2026-01-01T00:00:00Z' },
       })
     })
     expect(qc.getQueryState(['entries']).isInvalidated).toBe(true)

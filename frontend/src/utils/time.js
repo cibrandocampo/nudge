@@ -42,13 +42,26 @@ export function formatShortDate(isoString, { withYear = true, withDay = true } =
 /**
  * Formats a UTC ISO datetime string as a human-readable relative label.
  * The browser's local timezone is used automatically via the Date API.
+ *
+ * Bucketing strategy:
+ *   - |diff| ≤ 1h overdue → "Due now"
+ *   - |diff| ≤ 48h        → hours, rounded to integer
+ *   - |diff| > 48h        → days, rounded to integer
+ *   - 0 ≤ diff < 1h       → minutes (rounded)
+ *
+ * Days are always integers — once the user is more than two days off the
+ * fractional part stops being useful information.
  */
 export function formatRelativeTime(isoString) {
   if (!isoString) return i18next.t('time.neverLogged')
   const diffHours = (new Date(isoString) - new Date()) / 3_600_000
 
-  if (diffHours < -1) return i18next.t('time.overdueBy', { n: Math.round(Math.abs(diffHours)) })
-  if (diffHours < 0) return i18next.t('time.dueNow')
+  if (diffHours < 0) {
+    const absHours = Math.abs(diffHours)
+    if (absHours <= 1) return i18next.t('time.dueNow')
+    if (absHours <= 48) return i18next.t('time.overdueBy', { n: Math.round(absHours) })
+    return i18next.t('time.overdueByDays', { n: Math.round(absHours / 24) })
+  }
   if (diffHours < 1) return i18next.t('time.inMin', { n: Math.round(diffHours * 60) })
   // Use the rounded hour count for the bucket cutoff so a value that
   // rounds to 24h (e.g. 23.9999... after a few µs of test latency)

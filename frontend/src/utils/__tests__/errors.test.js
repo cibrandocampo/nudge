@@ -25,4 +25,39 @@ describe('errorToastMessage', () => {
     const t = vi.fn((key) => key)
     expect(errorToastMessage(new OfflineError(), t, 'settings.errorSave')).toBe('offline.actionUnavailable')
   })
+
+  it('translates the body.code "insufficient_stock" with the i18n key + body args', () => {
+    const t = vi.fn((key, args) => `[${key}] required=${args?.required} available=${args?.available}`)
+    const err = new Error('HTTP 422')
+    err.status = 422
+    err.body = {
+      detail: 'Insufficient stock to log this routine.',
+      code: 'insufficient_stock',
+      required: 5,
+      available: 0,
+    }
+    expect(errorToastMessage(err, t)).toBe('[errors.insufficientStock] required=5 available=0')
+    expect(t).toHaveBeenCalledWith('errors.insufficientStock', err.body)
+  })
+
+  it('falls back to body.detail when the code is unknown but a detail string exists', () => {
+    const t = vi.fn((key) => key)
+    const err = new Error('HTTP 400')
+    err.body = { detail: 'Invalid stock item.', code: 'unknown_code_not_in_map' }
+    expect(errorToastMessage(err, t)).toBe('Invalid stock item.')
+  })
+
+  it('falls back to body.detail when the body has no code at all', () => {
+    const t = vi.fn((key) => key)
+    const err = new Error('HTTP 400')
+    err.body = { detail: 'Cannot be in the future.' }
+    expect(errorToastMessage(err, t)).toBe('Cannot be in the future.')
+  })
+
+  it('falls back to fallbackKey when body has no detail string and no recognised code', () => {
+    const t = vi.fn((key) => key)
+    const err = new Error('HTTP 500')
+    err.body = { code: 'mystery' }
+    expect(errorToastMessage(err, t)).toBe('common.actionError')
+  })
 })

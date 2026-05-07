@@ -87,6 +87,43 @@ describe('RoutineCard', () => {
     expect(card.className).toContain('cardBorderSuccess')
   })
 
+  it('escalates to danger when stock is depleted, even for a not-yet-due routine', () => {
+    // The card-level signal must communicate that the routine cannot be
+    // logged because the linked stock is empty — independent of `is_due`.
+    // Without this, a routine with `next_due_at` 60 days ahead and 0 units
+    // looks identical to one in perfect shape.
+    const routine = {
+      ...baseRoutine,
+      is_due: false,
+      is_overdue: false,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderDanger')
+    expect(card.className).not.toContain('cardBorderSuccess')
+  })
+
+  it('keeps the success border when the linked stock has enough quantity', () => {
+    // Pinned alongside the previous test: dropping the stock check would
+    // make every linked-stock routine red regardless of available units.
+    const routine = {
+      ...baseRoutine,
+      is_due: false,
+      is_overdue: false,
+      stock_name: 'Descaler tablets',
+      stock_quantity: 5,
+      stock_quantity_available: 5,
+      stock_usage: 1,
+    }
+    const { container } = renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
+    const card = container.firstChild
+    expect(card.className).toContain('cardBorderSuccess')
+  })
+
   // ── Sharing ────────────────────────────────────────────────────────────────
   // Sharing is edited from the routine form (ShareWithSection). The card
   // surfaces a passive `shared-badge` for both owner (filled variant) and
@@ -167,6 +204,7 @@ describe('RoutineCard', () => {
       ...baseRoutine,
       stock_name: 'Ibuprofen',
       stock_quantity: 0,
+      stock_quantity_available: 0,
       stock_usage: 1,
     }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
@@ -175,10 +213,21 @@ describe('RoutineCard', () => {
     expect(done).toHaveAttribute('title', expect.stringMatching(/no stock/i))
   })
 
-  it('shows the interval label when provided on the routine', () => {
-    const routine = { ...baseRoutine, interval_label: 'every 8 h' }
+  it('disables the Done button when stock_quantity_available is below stock_usage even though stock_quantity is high', () => {
+    // T165: stock with 10 ud total but all expired (qty_available=0). The
+    // legacy `stock_quantity` would report 10 and let the user click Done;
+    // the new contract reads `stock_quantity_available` and disables.
+    const routine = {
+      ...baseRoutine,
+      stock_name: 'Ibuprofen',
+      stock_quantity: 10,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
-    expect(screen.getByText('every 8 h')).toBeInTheDocument()
+    const done = screen.getByRole('button', { name: /done/i })
+    expect(done).toBeDisabled()
+    expect(done).toHaveAttribute('title', expect.stringMatching(/no stock/i))
   })
 
   // ── Stock severity icon tint ───────────────────────────────────────────────
@@ -187,23 +236,35 @@ describe('RoutineCard', () => {
   // landed on the dashboard before the stock list resolved), the icon falls
   // back to the badge's default text colour and stays neutral.
 
-  it('tints the stock icon red when the cached stock is out of stock', () => {
+  it('tints the stock icon red when the cached stock_severity is critical', () => {
+    // T165: 'critical' replaces the old 'out' as the red tier and now also
+    // covers running-out-fast and all-expired cases. See T164.
     const routine = { ...baseRoutine, stock: 7, stock_name: 'Ibuprofen', stock_quantity: 0, stock_usage: 1 }
-    const qc = clientWithStock({ id: 7, stock_severity: 'out' })
+    const qc = clientWithStock({ id: 7, stock_severity: 'critical' })
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />, { queryClient: qc })
     expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconDanger')
   })
 
-  it('tints the stock icon amber when the cached stock is low', () => {
+  it('tints the stock icon amber when the cached stock_severity is low', () => {
     const routine = { ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 2, stock_usage: 1 }
     const qc = clientWithStock({ id: 7, stock_severity: 'low' })
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />, { queryClient: qc })
     expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconWarning')
   })
 
-  it('tints the stock icon green when the cached stock is healthy', () => {
+  it('tints the stock icon green when the cached stock_severity is ok', () => {
     const routine = { ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 5, stock_usage: 1 }
     const qc = clientWithStock({ id: 7, stock_severity: 'ok' })
+    renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />, { queryClient: qc })
+    expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconSuccess')
+  })
+
+  // T165: documents the no-worst-of-two contract — `iconClassForStock` looks
+  // only at `stock_severity`. Even a soon/reached lot expiry never bubbles
+  // into the routine card's stock badge tint.
+  it('iconClassForStock ignores expiry_severity=soon when stock_severity is ok', () => {
+    const routine = { ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 5, stock_usage: 1 }
+    const qc = clientWithStock({ id: 7, stock_severity: 'ok', expiry_severity: 'soon' })
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />, { queryClient: qc })
     expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconSuccess')
   })

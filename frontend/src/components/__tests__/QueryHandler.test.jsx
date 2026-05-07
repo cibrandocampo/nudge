@@ -86,12 +86,7 @@ describe('QueryHandler', () => {
 
   it('404 wins over data presence (resource is definitively gone)', () => {
     render(
-      <QueryHandler
-        isError
-        error={{ status: 404 }}
-        data={{ id: 1, name: 'foo' }}
-        notFoundKey="stockDetail.notFound"
-      >
+      <QueryHandler isError error={{ status: 404 }} data={{ id: 1, name: 'foo' }} notFoundKey="stockDetail.notFound">
         <div>content</div>
       </QueryHandler>,
     )

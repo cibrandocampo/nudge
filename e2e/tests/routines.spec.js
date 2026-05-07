@@ -39,8 +39,8 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: 'Save' }).click()
     await page.waitForURL(/\/routines\/\d+$/)
 
-    // Edit
-    await page.getByRole('link', { name: 'Edit' }).click()
+    // Edit (T182: pencil is now a button, not a link).
+    await page.getByRole('button', { name: 'Edit' }).click()
     await expect(page).toHaveURL(/\/routines\/\d+\/edit$/)
 
     const newName = name + ' (edited)'

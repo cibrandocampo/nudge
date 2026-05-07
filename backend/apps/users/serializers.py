@@ -1,5 +1,3 @@
-import zoneinfo
-
 from django.utils.timezone import now as tz_now
 from rest_framework import serializers
 
@@ -48,18 +46,12 @@ class ContactSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
-    timezone = serializers.CharField(max_length=64)
     settings_updated_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = User
         fields = ["timezone", "daily_notification_time", "language", "settings_updated_at"]
         read_only_fields = ["settings_updated_at"]
-
-    def validate_timezone(self, value):
-        if value not in zoneinfo.available_timezones():
-            raise serializers.ValidationError(f'"{value}" is not a valid IANA timezone.')
-        return value
 
     def update(self, instance, validated_data):
         changed = any(

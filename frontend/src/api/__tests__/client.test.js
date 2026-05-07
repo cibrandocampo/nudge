@@ -420,10 +420,7 @@ describe('api client', () => {
       // spurious forceReload() during a backend outage.
       server.use(
         http.get(`${BASE}/dashboard/`, () =>
-          HttpResponse.json(
-            { due: [], upcoming: [] },
-            { headers: { 'X-App-Version': '9.9.9', 'X-From-Cache': '1' } },
-          ),
+          HttpResponse.json({ due: [], upcoming: [] }, { headers: { 'X-App-Version': '9.9.9', 'X-From-Cache': '1' } }),
         ),
       )
       const res = await api.get('/dashboard/')

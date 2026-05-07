@@ -20,7 +20,6 @@ const stock = {
   name: 'Water filter',
   quantity: 10,
   group: null,
-  expiring_lots: [],
   estimated_depletion_date: null,
   daily_consumption_own: null,
   daily_consumption_shared: null,
@@ -91,13 +90,49 @@ describe('StockDetailPage', () => {
     expect(await screen.findByText('Edit form stub')).toBeInTheDocument()
   })
 
-  it('disables the Edit button when offline', async () => {
+  it('marks the Edit button as aria-disabled when offline', async () => {
     reachableRef.current = false
     renderDetail()
     await screen.findByText('Water filter')
     const btn = screen.getByRole('button', { name: 'Edit' })
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveAttribute('title', 'Requires connection')
+    // Not `disabled`: the click handler still fires, surfacing a toast
+    // ``offline.pageUnavailable`` instead of silently swallowing the click.
+    expect(btn).toHaveAttribute('aria-disabled', 'true')
+    expect(btn).toHaveAttribute('title', 'This section is not available offline.')
+  })
+
+  it('offline: clicking Edit / Delete stock / Add lot / Delete lot surfaces the offline toast', async () => {
+    // Single integration-style test that exercises the four offline
+    // click-handler branches in one render. Keeping them together lets
+    // us assert the toast text once per branch without spinning four
+    // separate provider trees.
+    reachableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    let priorToastCount = 0
+    const expectNewToast = async () => {
+      // Toasts stack until auto-dismiss, so each click adds one. Assert
+      // the count grew by at least one (`findAllByText` retries) rather
+      // than fishing for a single element.
+      const toasts = await screen.findAllByText(/not available offline/i)
+      expect(toasts.length).toBeGreaterThan(priorToastCount)
+      priorToastCount = toasts.length
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await expectNewToast()
+
+    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await expectNewToast()
+
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    await expectNewToast()
+
+    // The first "Delete"-named button is the topbar "Delete stock"; the
+    // last one is the per-lot trash. Pick the last to avoid ambiguity.
+    const lotDeletes = screen.getAllByRole('button', { name: /Delete/, exact: false })
+    await user.click(lotDeletes[lotDeletes.length - 1])
+    await expectNewToast()
   })
 
   it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
@@ -236,11 +271,12 @@ describe('StockDetailPage', () => {
     expect(depletion.className).toMatch(/stockDepletionWarn/)
   })
 
-  it('paints the depletion date red when stock_severity is "out"', async () => {
+  it('paints the depletion date red when stock_severity is "critical"', async () => {
     const empty = {
       ...stock,
       quantity: 0,
-      stock_severity: 'out',
+      quantity_available: 0,
+      stock_severity: 'critical',
       estimated_depletion_date: '2026-04-27',
       lots: [],
     }
@@ -263,7 +299,11 @@ describe('StockDetailPage', () => {
     expect(section).toHaveTextContent('A')
   })
 
-  it('shows other recipients alongside the owner chip, excluding the current user', async () => {
+  it('keeps the owner chip in its own section, separate from other recipients', async () => {
+    // Owner is singular by definition. The "Propietario" section must
+    // contain ONLY the owner; other recipients move to the sibling
+    // "Shared with" section. Pre-fix the recipient case mashed both
+    // under the same misleading title.
     const sharedStock = {
       ...stock,
       is_owner: false,
@@ -275,13 +315,19 @@ describe('StockDetailPage', () => {
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
-    const section = await screen.findByTestId('owner-info')
-    expect(section).toHaveTextContent('alice')
-    expect(section).toHaveTextContent('bob')
-    expect(section).not.toHaveTextContent('testuser')
+    const ownerSection = await screen.findByTestId('owner-info')
+    expect(ownerSection).toHaveTextContent('alice')
+    expect(ownerSection).not.toHaveTextContent('bob')
+    expect(ownerSection).not.toHaveTextContent('testuser')
+    const sharedSection = screen.getByTestId('shared-with-info')
+    expect(sharedSection).toHaveTextContent('bob')
+    expect(sharedSection).not.toHaveTextContent('testuser')
+    expect(sharedSection).not.toHaveTextContent('alice')
   })
 
-  it('shows only the owner chip when the current user is the sole recipient', async () => {
+  it('hides the "Shared with" section when the current user is the sole recipient', async () => {
+    // No "other" recipients besides the viewer → the Shared-with section
+    // would be empty, so it does not render at all. The owner chip stays.
     const sharedStock = {
       ...stock,
       is_owner: false,
@@ -290,13 +336,13 @@ describe('StockDetailPage', () => {
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
-    const section = await screen.findByTestId('owner-info')
-    expect(section).toHaveTextContent('alice')
-    expect(section).not.toHaveTextContent('testuser')
+    const ownerSection = await screen.findByTestId('owner-info')
+    expect(ownerSection).toHaveTextContent('alice')
+    expect(screen.queryByTestId('shared-with-info')).not.toBeInTheDocument()
   })
 
-  it('renders the danger border when stock_severity is "out"', async () => {
-    const empty = { ...stock, quantity: 0, stock_severity: 'out', lots: [] }
+  it('renders the danger border when stock_severity is "critical"', async () => {
+    const empty = { ...stock, quantity: 0, quantity_available: 0, stock_severity: 'critical', lots: [] }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
@@ -313,6 +359,48 @@ describe('StockDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText('Household')).toBeInTheDocument())
+  })
+
+  it('falls back to the owner group when no personal override exists (T176)', async () => {
+    // ``my_group`` is null → frontend reads ``group`` (the owner's). The
+    // group label rendered must match the owner's group name. Pins the
+    // T176 fallback behaviour against regressions in `effectiveGroupId`.
+    const sharedStock = { ...stock, group: 1, my_group: null, my_group_name: null, is_owner: false }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
+      http.get(`${BASE}/stock-groups/`, () =>
+        HttpResponse.json({ results: [{ id: 1, name: 'Owner Group', display_order: 0 }] }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Owner Group')).toBeInTheDocument())
+  })
+
+  it('shows the personal override over the owner group when present (T176)', async () => {
+    // ``my_group`` is set → frontend prefers it over ``group``. The label
+    // shown is the override's name, not the owner's. Pairs with the
+    // fallback test above to lock in the ``my_group ?? group`` rule.
+    const sharedStock = {
+      ...stock,
+      group: 1,
+      my_group: 2,
+      my_group_name: 'My Override',
+      is_owner: false,
+    }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
+      http.get(`${BASE}/stock-groups/`, () =>
+        HttpResponse.json({
+          results: [
+            { id: 1, name: 'Owner Group', display_order: 0 },
+            { id: 2, name: 'My Override', display_order: 1 },
+          ],
+        }),
+      ),
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('My Override')).toBeInTheDocument())
+    expect(screen.queryByText('Owner Group')).not.toBeInTheDocument()
   })
 
   it('shows generic error state when the API fails with a non-404 status', async () => {
@@ -355,14 +443,15 @@ describe('StockDetailPage', () => {
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText(/Recent consumption/)).toBeInTheDocument())
-    // HistoryEntryCard renders consumed_by_username via the sharing.consumedBy
-    // i18n key → "by alice".
-    expect(screen.getByText('by alice')).toBeInTheDocument()
+    // The chip renders an icon + the bare username; the localised
+    // "by …" string lives on the aria-label / title for accessibility.
+    expect(screen.getByLabelText(/by alice/)).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
   })
 
-  // Lot highlight tri-state — derived in-page from each lot.expiry_date so
-  // it does not depend on the stock-level expiring_lots array. Today's
-  // clock is 2026-04-27 in the test environment.
+  // Lot highlight tri-state — derived in-page from each lot.expiry_date
+  // via `lotExpirySeverity`. Today's clock is 2026-04-27 in the test
+  // environment (matched by the hardcoded fixture dates below).
   it('marks a lot expired in the past as data-expiring="reached"', async () => {
     const past = {
       ...stock,
@@ -405,6 +494,122 @@ describe('StockDetailPage', () => {
     renderDetail()
     const row = await screen.findByTestId('lot-row')
     expect(row).toHaveAttribute('data-expiring', 'none')
+  })
+
+  // T167: stock-only border (no worst-of-two). The expiry signal lives on
+  // per-lot indicators only — see iconClassForLot tests below.
+  it('paints the header card border warning when stock_severity is "low"', async () => {
+    const lowStock = { ...stock, stock_severity: 'low' }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(lowStock)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    const card = container.querySelector('.card')
+    expect(card.getAttribute('class') ?? '').toContain('cardBorderWarning')
+  })
+
+  it('paints the header card border success when stock_severity is "ok"', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    const card = container.querySelector('.card')
+    expect(card.getAttribute('class') ?? '').toContain('cardBorderSuccess')
+  })
+
+  // T167: header rendering — quantity_available + (N expired) suffix.
+  it('header shows quantity_available with (N expired) suffix when there are expired lots', async () => {
+    const withExpired = {
+      ...stock,
+      quantity: 18,
+      quantity_available: 13,
+      quantity_expired: 5,
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(withExpired)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    // The qty span renders quantity_available (13), not the total (18).
+    const qty = container.querySelector('[class*="stockQty"]:not([class*="stockQtyExpired"])')
+    expect(qty.textContent).toMatch(/13/)
+    expect(qty.textContent).not.toMatch(/18/)
+    // The expired suffix span renders "(5 expired)".
+    const expiredSuffix = container.querySelector('[class*="stockQtyExpired"]')
+    expect(expiredSuffix).not.toBeNull()
+    expect(expiredSuffix.textContent).toMatch(/5 expired/)
+  })
+
+  it('header omits the expired suffix when quantity_expired is 0', async () => {
+    const noExpired = { ...stock, quantity_available: 10, quantity_expired: 0 }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(noExpired)))
+    const { container } = renderDetail()
+    await screen.findByText('Water filter')
+    expect(container.querySelector('[class*="stockQtyExpired"]')).toBeNull()
+  })
+
+  // T167: per-lot expiry date tint + line-through on expired lot qty.
+  it('tints the lot expiry date span for a soon-expiring lot', async () => {
+    const soonLot = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const dateSpan = row.querySelector('[class*="cardLotExpiry"]')
+    expect(dateSpan).not.toBeNull()
+    expect(dateSpan.getAttribute('class')).toContain('iconWarning')
+  })
+
+  it('applies line-through to the qty span of an expired (reached) lot', async () => {
+    const past = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-04-20', lot_number: 'OLD' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(past)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const qtySpan = row.querySelector('[class*="cardLotQty"]')
+    expect(qtySpan).not.toBeNull()
+    expect(qtySpan.getAttribute('class')).toContain('cardLotQtyExpired')
+  })
+
+  // Per-lot icon tint — derived from each lot.expiry_date (mirrors the
+  // data-expiring attribute). The package icon is the first <svg> inside
+  // the lot row; we walk via its <use href="#i-package"> to be unambiguous.
+  it('tints the package icon iconDanger for a lot in the past', async () => {
+    const past = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-04-20', lot_number: 'OLD' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(past)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    expect(svg.getAttribute('class') ?? '').toContain('iconDanger')
+  })
+
+  it('tints the package icon iconWarning for a lot expiring within 30 days', async () => {
+    const soonLot = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    expect(svg.getAttribute('class') ?? '').toContain('iconWarning')
+  })
+
+  it('leaves the package icon untinted for a far-future lot', async () => {
+    const far = {
+      ...stock,
+      lots: [{ id: 200, quantity: 3, expiry_date: '2027-01-01', lot_number: 'FAR' }],
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(far)))
+    renderDetail()
+    const row = await screen.findByTestId('lot-row')
+    const svg = row.querySelector('svg use[href="#i-package"]').parentElement
+    const cls = svg.getAttribute('class') ?? ''
+    expect(cls).not.toContain('iconDanger')
+    expect(cls).not.toContain('iconWarning')
   })
 
   it('renders the shared-with chips when the owner has shared the stock', async () => {

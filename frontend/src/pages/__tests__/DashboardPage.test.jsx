@@ -60,14 +60,15 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('link', { name: '+ New routine' })).toBeInTheDocument()
   })
 
-  it('renders the new-routine control as a disabled button when offline', async () => {
+  it('renders the new-routine control as an aria-disabled button when offline', async () => {
     reachableRef.current = false
     try {
       renderWithProviders(<DashboardPage />)
       await waitFor(() => expect(screen.getByRole('heading', { name: 'Routines' })).toBeInTheDocument())
       const btn = screen.getByRole('button', { name: '+ New routine' })
-      expect(btn).toBeDisabled()
-      expect(btn).toHaveAttribute('title', 'Requires connection')
+      // Not `disabled` — the click fires the offline toast instead.
+      expect(btn).toHaveAttribute('aria-disabled', 'true')
+      expect(btn).toHaveAttribute('title', 'This section is not available offline.')
       expect(screen.queryByRole('link', { name: '+ New routine' })).not.toBeInTheDocument()
     } finally {
       reachableRef.current = true

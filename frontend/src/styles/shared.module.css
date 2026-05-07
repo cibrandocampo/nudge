@@ -248,18 +248,9 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   background: var(--c-brand);
 }
 
-/* Inline icon tints. <Icon> uses currentColor, so applying these to the
- * icon (or a wrapping span) recolours just the glyph without touching
- * sibling text. Used to flag severity on routine cards' stock badges. */
-.iconSuccess {
-  color: var(--c-success);
-}
-.iconWarning {
-  color: var(--c-warning);
-}
-.iconDanger {
-  color: var(--c-danger);
-}
+/* Inline icon tints — declarations live further down (after .cardLotIcon)
+ * so source order makes them win. <Icon> uses currentColor; these classes
+ * recolour just the glyph without touching sibling text. */
 
 /* ── Card ────────────────────────────────────────────────────── */
 
@@ -537,6 +528,10 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   font-weight: 600;
   font-size: 0.8rem;
 }
+.stockQtyExpired {
+  color: var(--c-text-3);
+  font-weight: 400;
+}
 .stockDepletion {
   color: var(--c-text-3);
 }
@@ -551,9 +546,10 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   font-weight: 500;
 }
 /* ── Card lot rows ────────────────────────────────────────────
- * Used by StockCard list (read-only) and StockDetailPage detail
- * (with [data-expiring] severity overrides applied locally via
- * cx(shared.cardLotRow, s.lotRow)). */
+ * Used by StockCard list and StockDetailPage detail. The
+ * data-expiring attribute on rows is data-only; severity is
+ * surfaced via the lot icon's className (iconWarning / iconDanger)
+ * — see utils/stockSeverity.js. */
 
 .cardLotsBlock {
   padding: 0.4rem 0.75rem;
@@ -572,6 +568,69 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 }
 .cardLotRow + .cardLotRow {
   border-top: 1px solid var(--c-border-inner);
+}
+
+/* When the parent container carries `data-with-pills` (set by the JSX when
+ * at least one lot in the stock has a lot_number), switch to CSS Grid so
+ * dates align in a stable column across rows regardless of which rows have
+ * a pill. The grid lives on the parent (cardLotsBlock here, or s.lotsList
+ * in StockDetailPage). cardLotRow uses CSS Subgrid to inherit the parent's
+ * columns — keeping the row as a layout element preserves the existing
+ * `cardLotRow + cardLotRow { border-top }` separator (full-width line, no
+ * gaps). cardLotMeta uses display:contents so its date + pill children
+ * become direct subgrid items. Each item carries an explicit grid-column
+ * so position is independent of DOM order or sibling presence. */
+.cardLotsBlock[data-with-pills] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* Padding under data-with-pills:
+   *   - top/bottom: 0 so the first/last rows match the middle rows'
+   *     vertical rhythm (each row's own 0.3rem top/bottom is the half-gap).
+   *   - left: 0 — the visual inset lives on `[data-with-pills] .cardLotMain`
+   *     (`padding-left: 0.75rem`) so the row separator can reach the
+   *     block's left edge.
+   *   - right: 0.75rem to match `.cardHeader`'s right padding so the
+   *     rightmost item (pill or trash) lines up vertically with the chevron
+   *     in the card header. The row separator stops 0.75rem before the
+   *     right edge — same as the header's content rectangle. */
+  padding: 0 0.75rem 0 0;
+  /* row separator continues to be `cardLotRow + cardLotRow { border-top }`. */
+}
+
+[data-with-pills] .cardLotRow {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  column-gap: 0.5rem;
+  /* Normalize row height across rows: the pill (padding 0.15rem ×2 + font)
+   * naturally renders ~1.4rem tall, while rows without a pill collapse to
+   * ~1rem (font line-height). Setting a min-height keeps the visual rhythm
+   * consistent regardless of pill presence per row. */
+  min-height: 1.6rem;
+}
+[data-with-pills] .cardLotMeta {
+  display: contents;
+}
+[data-with-pills] .cardLotMain {
+  grid-column: 1;
+  /* Left inset previously on cardLotsBlock — moved here so border-top on
+   * cardLotRow can reach the block's left edge. */
+  padding-left: 0.75rem;
+}
+[data-with-pills] .cardLotExpiry {
+  grid-column: 2;
+  text-align: right;
+}
+[data-with-pills] .cardLotNumberPill {
+  grid-column: 3;
+  /* width: 100% + text-align: center makes every pill fill its grid cell so
+   * all pills in the stock share the same visual width (the cell auto-sizes
+   * to the longest pill across rows) and the lot_number is centered inside.
+   * Right breathing room lives on the parent block's `padding-right`. */
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .cardLotMain {
@@ -602,6 +661,9 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   color: var(--c-text);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+.cardLotQtyExpired {
+  text-decoration: line-through;
 }
 
 .cardLotExpiry {
@@ -925,4 +987,31 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   max-height: 90vh;
   width: 100%;
   padding: 0;
+}
+
+/* ── Inline icon tints — KEEP AT END OF FILE ──────────────────────
+ * These classes set `color` on an element whose default colour is
+ * provided by another class composed via `cx()`. Source order is
+ * the only specificity tiebreaker available (CSS Modules with
+ * `non-scoped` strategy). Anything that lands AFTER these would
+ * silently override them — see MEMORY.md gotcha "CSS source order
+ * trap" (T161 + T170 manual QA hits).
+ *
+ * Consumers (T165+):
+ *   - <Icon> via iconClassForLot() / iconClassForStock() — package
+ *     icons in StockCard, StockDetailPage, RoutineCard.
+ *   - <span className={shared.cardLotExpiry}> via iconClassForLot()
+ *     — per-lot expiry-date text in StockCard, StockDetailPage.
+ *
+ * IF YOU ADD A NEW CLASS BELOW THIS BLOCK, MOVE THIS BLOCK FURTHER
+ * DOWN. Verify the icon tint and date tint visually after any CSS
+ * change in this file. */
+.iconSuccess {
+  color: var(--c-success);
+}
+.iconWarning {
+  color: var(--c-warning);
+}
+.iconDanger {
+  color: var(--c-danger);
 }
