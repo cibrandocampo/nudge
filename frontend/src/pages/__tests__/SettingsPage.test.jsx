@@ -488,6 +488,21 @@ describe('SettingsPage', () => {
     expect(input.className).not.toMatch(/inputInvalid/)
   })
 
+  it('shows the cannot-add-yourself error when the backend returns 400 with that detail', async () => {
+    server.use(
+      http.post(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json({ detail: 'You cannot add yourself as a contact.' }, { status: 400 }),
+      ),
+    )
+    const { user } = renderWithProviders(<SettingsPage />)
+    await screen.findByText('Contacts')
+    await user.type(screen.getByTestId('add-contact-email'), 'me@nudge.test')
+    await user.click(screen.getByTestId('add-contact-submit'))
+    await waitFor(() =>
+      expect(screen.getByText("You can't add yourself as a contact.")).toBeInTheDocument(),
+    )
+  })
+
   it('shows the already-a-contact error when the backend returns 400 with that detail', async () => {
     server.use(
       http.post(`${BASE}/auth/contacts/`, () => HttpResponse.json({ detail: 'Already a contact.' }, { status: 400 })),

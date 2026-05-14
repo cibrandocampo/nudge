@@ -100,6 +100,20 @@ describe('AuthContext', () => {
     expect(result.current.allowSelfSignup).toBeNull()
   })
 
+  it('keeps allowSelfSignup=null when /auth/config/ returns a non-ok status', async () => {
+    // Distinct from the network-error case above: here the fetch
+    // resolves but the server replied 5xx. Exercises the `!res.ok`
+    // branch inside the queryFn that wraps the error with `err.status`.
+    server.use(http.get(`${BASE}/auth/config/`, () => new HttpResponse(null, { status: 500 })))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(qc.getQueryState(['auth-config']).status).toBe('error'))
+    expect(result.current.allowSelfSignup).toBeNull()
+    expect(qc.getQueryState(['auth-config']).error).toMatchObject({
+      message: 'auth_config_failed',
+      status: 500,
+    })
+  })
+
   // ── loginStart ──────────────────────────────────────────────────────────
 
   it('loginStart returns the method on a 200 response', async () => {
@@ -138,6 +152,46 @@ describe('AuthContext', () => {
         await result.current.loginStart('x@y.z')
       }),
     ).rejects.toThrow('login_start_failed')
+  })
+
+  it('loginStart rejects with disposable_email on 400 with that body', async () => {
+    server.use(
+      http.post(`${BASE}/auth/login/start/`, () =>
+        HttpResponse.json({ error: 'disposable_email' }, { status: 400 }),
+      ),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await expect(
+      act(async () => {
+        await result.current.loginStart('x@yopmail.com')
+      }),
+    ).rejects.toThrow('disposable_email')
+  })
+
+  it('loginStart rejects with status=400 when 400 carries a different error body', async () => {
+    // Covers the fall-through after the `disposable_email` short-circuit:
+    // a 400 with any other shape gets wrapped as login_start_failed +
+    // status=400 so the caller can branch on the status field.
+    server.use(
+      http.post(`${BASE}/auth/login/start/`, () =>
+        HttpResponse.json({ error: 'something_else' }, { status: 400 }),
+      ),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let caught
+    await act(async () => {
+      try {
+        await result.current.loginStart('x@y.z')
+      } catch (e) {
+        caught = e
+      }
+    })
+    expect(caught?.message).toBe('login_start_failed')
+    expect(caught?.status).toBe(400)
   })
 
   // ── loginVerify ─────────────────────────────────────────────────────────

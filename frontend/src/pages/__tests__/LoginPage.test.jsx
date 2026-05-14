@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import LoginPage from '../LoginPage'
 
@@ -244,5 +244,29 @@ describe('LoginPage — wizard (T196)', () => {
     const continueBtn = screen.getByRole('button', { name: 'Continue' })
     expect(continueBtn).toBeDisabled()
     expect(completeProfile).not.toHaveBeenCalled()
+  })
+
+  it('handleNameSubmit surfaces namesRequired when the form is submitted with blank fields', () => {
+    // The submit button is normally disabled when names are blank, but a
+    // direct `fireEvent.submit` exercises the defensive in-handler guard
+    // (cases where the form is submitted programmatically, e.g. via
+    // future Enter-key paths). Asserts the error appears AND the auth
+    // call is never made.
+    const completeProfile = vi.fn()
+    renderWithProviders(<LoginPage />, { auth: { completeProfile, isNewUser: true } })
+    const firstName = screen.getByPlaceholderText('First name')
+    fireEvent.submit(firstName.closest('form'))
+    expect(screen.getByText('First and last name are required.')).toBeInTheDocument()
+    expect(completeProfile).not.toHaveBeenCalled()
+  })
+
+  it('shows the generic error when completeProfile rejects', async () => {
+    const completeProfile = vi.fn().mockRejectedValue(new Error('boom'))
+    const { user } = renderWithProviders(<LoginPage />, { auth: { completeProfile, isNewUser: true } })
+    await user.type(screen.getByPlaceholderText('First name'), 'Ada')
+    await user.type(screen.getByPlaceholderText('Last name'), 'Lovelace')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(screen.getByText('Invalid email or password.')).toBeInTheDocument())
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })
