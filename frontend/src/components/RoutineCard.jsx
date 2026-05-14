@@ -48,7 +48,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   const isOwnerOfShare = routine.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
     ? t('sharing.sharedBadgeOwnerAria')
-    : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_username ?? '' })
+    : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name ?? '' })
   const sharedBadge = isShared && (
     <span
       className={cx(shared.btnIcon, isOwnerOfShare ? shared.btnIconShared : shared.btnIconSharedRecipient)}

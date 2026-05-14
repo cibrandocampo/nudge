@@ -78,8 +78,9 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     - ``quantity``, ``quantity_available``, ``quantity_soon``,
       ``quantity_healthy``, ``quantity_expired`` — partitioned counts derived
       directly from ``lots``.
-    - ``owner_username`` and ``user_timezone`` — identify the owner whose
-      timezone anchors any time-based interpretation a client wishes to make.
+    - ``owner_id``, ``owner_display_name`` and ``user_timezone`` — identify
+      the owner whose timezone anchors any time-based interpretation a
+      client wishes to make.
     - ``shared_with`` / ``shared_with_details``, ``is_owner``.
 
     Convenience fields, **Nudge-specific** and computed from the raw fields
@@ -117,7 +118,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     )
     shared_with_details = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
-    owner_username = serializers.CharField(source="user.username", read_only=True)
+    owner_id = serializers.IntegerField(source="user.id", read_only=True)
+    owner_display_name = serializers.CharField(source="user.display_name", read_only=True)
     user_timezone = serializers.CharField(source="user.timezone", read_only=True)
     my_group = serializers.SerializerMethodField()
     my_group_name = serializers.SerializerMethodField()
@@ -147,7 +149,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "shared_with",
             "shared_with_details",
             "is_owner",
-            "owner_username",
+            "owner_id",
+            "owner_display_name",
             "user_timezone",
             "updated_at",
         ]
@@ -171,7 +174,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "expiry_severity",
             "shared_with_details",
             "is_owner",
-            "owner_username",
+            "owner_id",
+            "owner_display_name",
             "user_timezone",
             "updated_at",
         ]
@@ -438,7 +442,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
 
 class StockConsumptionSerializer(FlexFieldsModelSerializer):
     stock_name = serializers.CharField(source="stock.name", read_only=True)
-    consumed_by_username = serializers.CharField(source="consumed_by.username", read_only=True, default=None)
+    consumed_by_id = serializers.IntegerField(source="consumed_by.id", read_only=True, default=None)
+    consumed_by_display_name = serializers.CharField(source="consumed_by.display_name", read_only=True, default=None)
 
     class Meta:
         model = StockConsumption
@@ -449,7 +454,8 @@ class StockConsumptionSerializer(FlexFieldsModelSerializer):
             "quantity",
             "consumed_lots",
             "notes",
-            "consumed_by_username",
+            "consumed_by_id",
+            "consumed_by_display_name",
             "created_at",
             "updated_at",
             "client_created_at",
@@ -460,7 +466,8 @@ class StockConsumptionSerializer(FlexFieldsModelSerializer):
             "stock_name",
             "quantity",
             "consumed_lots",
-            "consumed_by_username",
+            "consumed_by_id",
+            "consumed_by_display_name",
             "created_at",
             "updated_at",
             "client_created_at",
@@ -514,7 +521,8 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     )
     shared_with_details = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
-    owner_username = serializers.CharField(source="user.username", read_only=True)
+    owner_id = serializers.IntegerField(source="user.id", read_only=True)
+    owner_display_name = serializers.CharField(source="user.display_name", read_only=True)
     user_timezone = serializers.CharField(source="user.timezone", read_only=True)
 
     backdated_first_entry_at = serializers.DateTimeField(
@@ -537,6 +545,9 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "name",
             "description",
             "interval_hours",
+            "reminder_mode",
+            "reminder_interval_minutes",
+            "respect_quiet_hours",
             "stock",
             "stock_name",
             "stock_quantity",
@@ -555,7 +566,8 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "shared_with",
             "shared_with_details",
             "is_owner",
-            "owner_username",
+            "owner_id",
+            "owner_display_name",
             "backdated_first_entry_at",
         ]
         read_only_fields = [
@@ -568,7 +580,8 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "requires_lot_selection",
             "shared_with_details",
             "is_owner",
-            "owner_username",
+            "owner_id",
+            "owner_display_name",
             "user_timezone",
         ]
 
@@ -634,7 +647,8 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
 class RoutineEntrySerializer(FlexFieldsModelSerializer):
     routine_name = serializers.CharField(source="routine.name", read_only=True)
     stock_name = serializers.CharField(source="routine.stock.name", read_only=True, default=None)
-    completed_by_username = serializers.CharField(source="completed_by.username", read_only=True, default=None)
+    completed_by_id = serializers.IntegerField(source="completed_by.id", read_only=True, default=None)
+    completed_by_display_name = serializers.CharField(source="completed_by.display_name", read_only=True, default=None)
 
     class Meta:
         model = RoutineEntry
@@ -643,7 +657,8 @@ class RoutineEntrySerializer(FlexFieldsModelSerializer):
             "routine",
             "routine_name",
             "stock_name",
-            "completed_by_username",
+            "completed_by_id",
+            "completed_by_display_name",
             "created_at",
             "updated_at",
             "client_created_at",
@@ -658,5 +673,6 @@ class RoutineEntrySerializer(FlexFieldsModelSerializer):
             "client_created_at",
             "consumed_lots",
             "stock_name",
-            "completed_by_username",
+            "completed_by_id",
+            "completed_by_display_name",
         ]

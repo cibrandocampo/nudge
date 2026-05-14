@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { fullName } from '../utils/displayName'
 import Icon from './Icon'
 import ModalFrame from './ModalFrame'
 import s from './ShareModal.module.css'
@@ -24,7 +25,7 @@ export default function ShareModal({ contacts, sharedWith, onToggle, onClose }) 
               className={`${s.item} ${isShared ? s.itemSelected : ''}`}
               onClick={() => onToggle(contact.id)}
             >
-              <span className={s.name}>{contact.username}</span>
+              <span className={s.name}>{fullName(contact)}</span>
             </li>
           )
         })}

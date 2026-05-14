@@ -119,6 +119,8 @@ docker compose up -d
 
 The app is available at the configured port. Admin panel at `/nudge-admin/`.
 
+**First login**: head to `/login` and enter `ADMIN_EMAIL` + `ADMIN_PASSWORD`. The bootstrap admin is created with `auth_method="password"` so it works immediately, without any SMTP setup. See the [Authentication](#authentication) section below for opening self-signup and configuring OTP email delivery.
+
 For all configuration options, see [docs/configuration.md](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md).
 
 ### Logs
@@ -180,15 +182,57 @@ The command is destructive — it removes every non-superuser account, every rou
 
 The same logic is exposed as `POST /api/internal/seed/` (used by `e2e/global-setup.js` to reset state between test runs).
 
-The fixture creates three users — all with the same password (the value of `DEMO_USERS_PASSWORD`, default `change-me`):
+The fixture creates three users — all with `auth_method="password"` and the same password (the value of `DEMO_USERS_PASSWORD`, default `change-me`), so you can log in directly through the email-based wizard without SMTP setup:
 
-| Username | Role |
-|----------|------|
-| `cibran` | Protagonist of every screenshot. Owns 8 of the 10 routines. |
-| `maria`  | Sharing partner. Owns 2 routines (one shared with cibran, one private). |
-| `laura`  | Third mutual contact, no resources (used by the `unshare` E2E spec). |
+| Email | Display name | Locale | Role |
+|-------|--------------|--------|------|
+| `cibran@nudge.test` | Cibrán Docampo | en | Protagonist of every screenshot. Owns 8 of the 10 routines. |
+| `maria@nudge.test`  | María García   | es | Sharing partner. Owns 2 routines (one shared with cibran, one private). |
+| `laura@nudge.test`  | Laura Vázquez  | gl | Third mutual contact, no resources (used by the `unshare` E2E spec). |
 
 After seeding, cibran's dashboard shows nine routines (five private, three he shares with maria, one maria shares with him). The full catalogue of stocks, routines, lots, sharing edges and seeded history is documented in the source: [`backend/apps/core/management/commands/seed.py`](https://github.com/cibrandocampo/nudge/blob/main/backend/apps/core/management/commands/seed.py).
+
+### Authentication
+
+The frontend wizard at `/login` is identical regardless of who the user is — type your email, and the backend tells the client what to ask in step 2:
+
+- **`password`** — user has a password. The wizard asks for it. Used by the bootstrap admin and any user the admin creates manually in Django Admin.
+- **`otp`** — passwordless. The wizard asks for a 6-digit code, delivered by email. Used by self-signups, and by users whose admin flipped them in Django Admin.
+
+The `auth_method` is set when the user is created (and can be flipped later from the Django admin user-change form). Initial OTP codes expire in 10 minutes, allow 5 attempts, and are rate-limited per IP and per email destination. Full flow + endpoint reference: [docs/ARCHITECTURE.md#Authentication](https://github.com/cibrandocampo/nudge/blob/main/docs/ARCHITECTURE.md#Authentication).
+
+#### First user — created from env vars
+
+`ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` bootstrap a superuser on first container start, only if no superuser exists yet. The user lands with `auth_method="password"`, so you log in via the regular wizard at `/login` immediately — no SMTP setup required to get into the app. The bootstrap is a one-shot: changing `ADMIN_PASSWORD` later in `.env` does NOT rotate the existing user's password. Change it from `/nudge-admin/` instead.
+
+#### Opening self-signup
+
+Disabled by default. To let strangers register from `/login`:
+
+```env
+ALLOW_SELF_SIGNUP=True
+```
+
+Restart the backend and the `/login` wizard will advertise "Sign in or create an account". Unknown emails then create an `auth_method='otp'` user and the welcome OTP is emailed — so this path **requires working SMTP** (see next section). Registrations from disposable / throwaway mailbox providers (yopmail, mailinator, guerrillamail, 10minutemail, …) are rejected by default in production via [`BLOCK_DISPOSABLE_EMAIL`](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#self-signup); use `DISPOSABLE_EMAIL_EXTRA_DOMAINS` / `DISPOSABLE_EMAIL_ALLOW_DOMAINS` to tune the bundled list. The bundled list is curated from the community-maintained [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains) project (CC0-1.0, thanks to its maintainers) and a scheduled GitHub Actions workflow opens a PR when upstream changes, so the list stays current without compromising build determinism.
+
+#### Sending OTP and welcome emails (SMTP)
+
+The OTP path uses Django's standard email backends, fully env-driven. Point the `EMAIL_*` vars at your SMTP provider (OVH, Gmail with app password, Mailtrap, Postmark, …):
+
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.your-provider.example
+EMAIL_PORT=587
+EMAIL_HOST_USER=...
+EMAIL_HOST_PASSWORD=...
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=Nudge <noreply@yourdomain.com>
+NUDGE_SITE_URL=https://yourdomain.com
+```
+
+`NUDGE_SITE_URL` is rendered in the email footer as a "Nudge · `<host>`" link back to your deployment — leave it empty if you'd rather not link. Outbound messages are sent as multipart text/HTML with the Nudge logo embedded as a CID attachment and templates localised in en/es/gl.
+
+**Deliverability is your responsibility**: configure SPF, DKIM and DMARC on the sending domain. Without them, OTP codes will routinely land in spam and users will report "the code never arrived". Full SMTP reference + deliverability notes: [docs/configuration.md#email-smtp](https://github.com/cibrandocampo/nudge/blob/main/docs/configuration.md#email-smtp).
 
 ### Documentation
 

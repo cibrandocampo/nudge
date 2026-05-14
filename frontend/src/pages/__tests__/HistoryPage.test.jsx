@@ -545,11 +545,12 @@ describe('HistoryPage — note editing edge cases', () => {
 })
 
 describe('HistoryPage — sharing', () => {
-  it('shows completed_by username on routine entries', async () => {
+  it('shows the author display name on routine entries owned by someone else', async () => {
     const entriesWithUser = [
       {
         ...mockEntries[0],
-        completed_by_username: 'alice',
+        completed_by_id: 99,
+        completed_by_display_name: 'Alice',
       },
     ]
     server.use(
@@ -560,17 +561,16 @@ describe('HistoryPage — sharing', () => {
     )
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    // The visible chip renders the icon + username; the localised "by …"
-    // string lives on the aria-label / title for accessibility.
-    expect(screen.getByLabelText(/by alice/)).toBeInTheDocument()
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    expect(screen.getByLabelText(/by Alice/)).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
   })
 
-  it('shows consumed_by username on stock consumptions', async () => {
+  it('shows the consumer display name on stock consumptions owned by someone else', async () => {
     const consumptionsWithUser = [
       {
         ...mockConsumptions[0],
-        consumed_by_username: 'bob',
+        consumed_by_id: 99,
+        consumed_by_display_name: 'Bob',
       },
     ]
     server.use(
@@ -581,8 +581,8 @@ describe('HistoryPage — sharing', () => {
     )
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('Insulin pens')).toBeInTheDocument())
-    expect(screen.getByLabelText(/by bob/)).toBeInTheDocument()
-    expect(screen.getByText('bob')).toBeInTheDocument()
+    expect(screen.getByLabelText(/by Bob/)).toBeInTheDocument()
+    expect(screen.getByText('Bob')).toBeInTheDocument()
   })
 })
 

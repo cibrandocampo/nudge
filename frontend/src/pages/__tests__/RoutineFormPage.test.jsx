@@ -258,7 +258,7 @@ describe('RoutineFormPage', () => {
   })
 
   it('shows owner name for shared stocks in dropdown', async () => {
-    const sharedStock = { id: 2, name: 'Shared Item', quantity: 10, is_owner: false, owner_username: 'alice' }
+    const sharedStock = { id: 2, name: 'Shared Item', quantity: 10, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([sharedStock])))
     const { user } = renderCreate()
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Stock tracking' })).toBeInTheDocument())
@@ -270,7 +270,7 @@ describe('RoutineFormPage', () => {
   })
 
   it('does not show owner name for own stocks in dropdown', async () => {
-    const ownStock = { id: 1, name: 'My Item', quantity: 5, is_owner: true, owner_username: 'me' }
+    const ownStock = { id: 1, name: 'My Item', quantity: 5, is_owner: true, owner_display_name: 'me' }
     server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([ownStock])))
     const { user } = renderCreate()
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Stock tracking' })).toBeInTheDocument())
@@ -310,8 +310,8 @@ describe('RoutineFormPage', () => {
     server.use(
       http.get(`${BASE}/auth/contacts/`, () =>
         HttpResponse.json([
-          { id: 7, username: 'alice' },
-          { id: 8, username: 'bob' },
+          { id: 7, first_name: 'Alice', email: 'alice@example.com' },
+          { id: 8, first_name: 'Bob', email: 'bob@example.com' },
         ]),
       ),
       http.post(`${BASE}/routines/`, async ({ request }) => {
@@ -325,7 +325,7 @@ describe('RoutineFormPage', () => {
     await user.click(screen.getByRole('button', { name: /^share with/i }))
     const { within } = await import('@testing-library/react')
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     await user.keyboard('{Escape}')
     await user.click(screen.getByText('Save'))
 
@@ -360,15 +360,119 @@ describe('RoutineFormPage', () => {
 
   it('prefills the shared_with chips when editing a routine shared with contacts', async () => {
     server.use(
-      http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 7, username: 'alice' }])),
+      http.get(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json([{ id: 7, username: 'alice', email: 'alice@example.com', first_name: 'Alice' }]),
+      ),
       http.get(`${BASE}/routines/1/`, () =>
-        HttpResponse.json({ ...editRoutine, shared_with: [7], shared_with_details: [{ id: 7, username: 'alice' }] }),
+        HttpResponse.json({
+          ...editRoutine,
+          shared_with: [7],
+          shared_with_details: [{ id: 7, username: 'alice', email: 'alice@example.com', first_name: 'Alice' }],
+        }),
       ),
     )
     renderEdit()
     expect(await screen.findByDisplayValue('Take vitamins')).toBeInTheDocument()
-    // Chip for alice must be visible in the share section.
-    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
+    // Chip for alice must be visible in the share section. Editable
+    // chips render via `displayLabel` (post-T195 = `fullName`), so
+    // the visible text is `first_name`.
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
+  })
+
+  describe('Notifications block (T188)', () => {
+    it('renders defaults in create mode (intensive + 2h + respect)', async () => {
+      renderCreate()
+      // Section labels + mode radios
+      await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      const intensive = screen.getByRole('radio', { name: /^Intensive$/ })
+      const daily = screen.getByRole('radio', { name: /^Daily$/ })
+      expect(intensive).toBeChecked()
+      expect(daily).not.toBeChecked()
+      // Interval picker visible (intensive) with default 2h selected
+      expect(screen.getByText('Reminder interval')).toBeInTheDocument()
+      const twoHours = screen.getByRole('radio', { name: 'Every 2 hours' })
+      expect(twoHours).toBeChecked()
+      // Respect toggle visible and on by default
+      const respect = screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })
+      expect(respect).toBeChecked()
+    })
+
+    it('hides interval + respect when mode is daily', async () => {
+      const { user } = renderCreate()
+      await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      await user.click(screen.getByRole('radio', { name: /^Daily$/ }))
+      await waitFor(() => expect(screen.queryByText('Reminder interval')).not.toBeInTheDocument())
+      expect(screen.queryByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeInTheDocument()
+    })
+
+    it('preserves the interval value when toggling daily → intensive', async () => {
+      const { user } = renderCreate()
+      await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      // Pick 8h.
+      await user.click(screen.getByRole('radio', { name: 'Every 8 hours' }))
+      expect(screen.getByRole('radio', { name: 'Every 8 hours' })).toBeChecked()
+      // Switch to daily — interval picker unmounts but state must persist.
+      await user.click(screen.getByRole('radio', { name: /^Daily$/ }))
+      expect(screen.queryByText('Reminder interval')).not.toBeInTheDocument()
+      // Back to intensive — 8h should still be the selection.
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
+      await waitFor(() => expect(screen.getByRole('radio', { name: 'Every 8 hours' })).toBeChecked())
+    })
+
+    it('preserves the respect_quiet_hours toggle when toggling daily → intensive', async () => {
+      const { user } = renderCreate()
+      await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      // Turn respect OFF.
+      await user.click(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' }))
+      expect(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeChecked()
+      // daily → intensive → still OFF
+      await user.click(screen.getByRole('radio', { name: /^Daily$/ }))
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
+      await waitFor(() =>
+        expect(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeChecked(),
+      )
+    })
+
+    it('includes the 3 fields in the POST payload on create', async () => {
+      let capturedBody
+      server.use(
+        http.post(`${BASE}/routines/`, async ({ request }) => {
+          capturedBody = await request.json()
+          return HttpResponse.json({ id: 7 }, { status: 201 })
+        }),
+      )
+      const { user } = renderCreate()
+      await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+      await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Antibiotic')
+      // Move to intensive 60min + respect off (urgent).
+      await user.click(screen.getByRole('radio', { name: 'Every hour' }))
+      await user.click(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' }))
+      await user.click(screen.getByText('Save'))
+      await waitFor(() => expect(capturedBody).not.toBeUndefined())
+      expect(capturedBody).toMatchObject({
+        reminder_mode: 'intensive',
+        reminder_interval_minutes: 60,
+        respect_quiet_hours: false,
+      })
+    })
+
+    it('hydrates the form from a routine with non-default reminder fields in edit mode', async () => {
+      server.use(
+        http.get(`${BASE}/routines/1/`, () =>
+          HttpResponse.json({
+            ...editRoutine,
+            reminder_mode: 'daily',
+            reminder_interval_minutes: 240,
+            respect_quiet_hours: false,
+          }),
+        ),
+      )
+      renderEdit()
+      // Daily radio checked; sub-block not rendered.
+      await waitFor(() => expect(screen.getByRole('radio', { name: /^Daily$/ })).toBeChecked())
+      expect(screen.queryByText('Reminder interval')).not.toBeInTheDocument()
+      expect(screen.queryByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeInTheDocument()
+    })
   })
 
   describe('coupled-share popup', () => {
@@ -380,7 +484,7 @@ describe('RoutineFormPage', () => {
       shared_with_details: [],
       updated_at: '2026-03-01T10:00:00Z',
       is_owner: true,
-      owner_username: 'testuser',
+      owner_display_name: 'testuser',
       lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
@@ -394,8 +498,8 @@ describe('RoutineFormPage', () => {
       updated_at: '2026-03-01T11:00:00Z',
     }
     const contacts = [
-      { id: 7, username: 'alice' },
-      { id: 8, username: 'bob' },
+      { id: 7, username: 'alice', email: 'alice@example.com', first_name: 'Alice' },
+      { id: 8, username: 'bob', email: 'bob@example.com', first_name: 'Bob' },
     ]
 
     function setupCachedScenario({ stock = baseStock, routine = routineWithStock, contactsList = contacts } = {}) {
@@ -431,11 +535,11 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario()
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       // The interpolated message includes the stock name and username.
-      expect(await screen.findByText(/Filters.*alice/)).toBeInTheDocument()
+      expect(await screen.findByText(/Filters.*Alice/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Share both' })).toBeInTheDocument()
     })
 
@@ -452,7 +556,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario({ stock })
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
@@ -473,7 +577,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario({ routine })
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       await waitFor(() => expect(screen.getByText('Detail')).toBeInTheDocument())
@@ -485,7 +589,7 @@ describe('RoutineFormPage', () => {
       const routine = {
         ...routineWithStock,
         shared_with: [7],
-        shared_with_details: [{ id: 7, username: 'alice' }],
+        shared_with_details: [{ id: 7, username: 'alice', email: 'alice@example.com', first_name: 'Alice' }],
       }
       let routineCalled = false
       let capturedBody
@@ -498,11 +602,11 @@ describe('RoutineFormPage', () => {
       )
       const { user } = setupCachedScenario({ routine })
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
-      // Wait for the prefilled chip.
-      await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
+      // Wait for the prefilled chip (editable → displayLabel → first_name).
+      await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
 
       // Remove alice via the chip's labelled X button.
-      await user.click(screen.getByRole('button', { name: 'Unshare with alice' }))
+      await user.click(screen.getByRole('button', { name: 'Unshare with Alice' }))
       await user.click(screen.getByText('Save'))
 
       await waitFor(() => expect(routineCalled).toBe(true))
@@ -526,7 +630,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario()
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       const dialog = await screen.findByRole('dialog')
@@ -560,7 +664,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario({ stock: stockWithExisting })
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       const dialog = await screen.findByRole('dialog')
@@ -589,7 +693,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario()
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       const dialog = await screen.findByRole('dialog')
@@ -621,7 +725,7 @@ describe('RoutineFormPage', () => {
       const { user } = setupCachedScenario()
       await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
 
-      await addContactToShare(user, 'alice')
+      await addContactToShare(user, 'Alice')
       await user.click(screen.getByText('Save'))
 
       const dialog = await screen.findByRole('dialog')
@@ -643,7 +747,7 @@ describe('RoutineFormPage — non-owner deep-link', () => {
     // form is reachable only via deep-link / direct URL — without a guard
     // the user fills the form, hits Save, and gets a 403 from `IsOwner`.
     // Redirect on load instead.
-    const sharedRoutine = { ...editRoutine, is_owner: false, owner_username: 'alice' }
+    const sharedRoutine = { ...editRoutine, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
     renderEdit()
     // The redirect lands on the detail stub. Pinning the absence of any

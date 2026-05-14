@@ -7,7 +7,7 @@ import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { clear } from '../../offline/queue'
 import { useEntries, useStockConsumptions } from '../useEntries'
-import { useContacts, useContactSearch } from '../useContacts'
+import { useContacts } from '../useContacts'
 import { useUpdateEntry } from '../mutations/useUpdateEntry'
 import { useUpdateConsumption } from '../mutations/useUpdateConsumption'
 import { useUpdateMe } from '../mutations/useUpdateMe'
@@ -130,7 +130,7 @@ describe('useStockConsumptions', () => {
   })
 })
 
-describe('useContacts / useContactSearch', () => {
+describe('useContacts', () => {
   it('useContacts returns the list', async () => {
     server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([{ id: 10 }])))
     const { result } = renderWith(() => useContacts())
@@ -143,23 +143,6 @@ describe('useContacts / useContactSearch', () => {
     const { result } = renderWith(() => useContacts())
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(result.current.error.status).toBe(500)
-  })
-
-  it('useContactSearch is disabled for short queries', () => {
-    const { result } = renderWith(() => useContactSearch('a'))
-    expect(result.current.fetchStatus).toBe('idle')
-  })
-
-  it('useContactSearch debounces and fetches matching users', async () => {
-    server.use(
-      http.get(`${BASE}/auth/contacts/search/`, ({ request }) => {
-        const q = new URL(request.url).searchParams.get('q')
-        return HttpResponse.json([{ id: 99, username: q }])
-      }),
-    )
-    const { result } = renderWith(() => useContactSearch('bob', 10))
-    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 2000 })
-    expect(result.current.data).toEqual([{ id: 99, username: 'bob' }])
   })
 })
 
@@ -287,31 +270,35 @@ describe('entry/consumption/me/contact mutations', () => {
 
   it('useCreateContact appends to cache on success', async () => {
     server.use(
-      http.post(`${BASE}/auth/contacts/`, () => HttpResponse.json({ id: 50, username: 'bob' }, { status: 201 })),
+      http.post(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json({ id: 50, email: 'bob@example.com' }, { status: 201 }),
+      ),
     )
     const { result, qc } = renderWith(() => useCreateContact())
-    qc.setQueryData(['contacts'], [{ id: 10, username: 'alice' }])
+    qc.setQueryData(['contacts'], [{ id: 10, email: 'alice@example.com' }])
 
     await act(async () => {
-      await result.current.mutateAsync({ username: 'bob' })
+      await result.current.mutateAsync({ email: 'bob@example.com' })
     })
     expect(qc.getQueryData(['contacts'])).toEqual([
-      { id: 10, username: 'alice' },
-      { id: 50, username: 'bob' },
+      { id: 10, email: 'alice@example.com' },
+      { id: 50, email: 'bob@example.com' },
     ])
   })
 
   it('useCreateContact skips append when id is already cached', async () => {
     server.use(
-      http.post(`${BASE}/auth/contacts/`, () => HttpResponse.json({ id: 10, username: 'alice' }, { status: 201 })),
+      http.post(`${BASE}/auth/contacts/`, () =>
+        HttpResponse.json({ id: 10, email: 'alice@example.com' }, { status: 201 }),
+      ),
     )
     const { result, qc } = renderWith(() => useCreateContact())
-    qc.setQueryData(['contacts'], [{ id: 10, username: 'alice' }])
+    qc.setQueryData(['contacts'], [{ id: 10, email: 'alice@example.com' }])
 
     await act(async () => {
-      await result.current.mutateAsync({ username: 'alice' })
+      await result.current.mutateAsync({ email: 'alice@example.com' })
     })
-    expect(qc.getQueryData(['contacts'])).toEqual([{ id: 10, username: 'alice' }])
+    expect(qc.getQueryData(['contacts'])).toEqual([{ id: 10, email: 'alice@example.com' }])
   })
 
   it('useCreateContact rejects with OfflineError offline (online-only)', async () => {
@@ -321,7 +308,7 @@ describe('entry/consumption/me/contact mutations', () => {
     let caught = null
     await act(async () => {
       try {
-        await result.current.mutateAsync({ username: 'bob' })
+        await result.current.mutateAsync({ email: 'bob@example.com' })
       } catch (err) {
         caught = err
       }

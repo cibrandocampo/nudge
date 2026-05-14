@@ -3,10 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
 import ShareWithSection from '../ShareWithSection'
 
+// Post-T195: display helpers fall back to `email`, not `username`. The
+// fixtures now mirror the production contact shape: a username for
+// internal id, an email for display fallback, plus first_name so the
+// avatar initial path stays deterministic.
 const CONTACTS = [
-  { id: 2, username: 'alice' },
-  { id: 3, username: 'bob' },
-  { id: 4, username: 'carol' },
+  { id: 2, username: 'alice', email: 'alice@example.com', first_name: 'Alice' },
+  { id: 3, username: 'bob', email: 'bob@example.com', first_name: 'Bob' },
+  { id: 4, username: 'carol', email: 'carol@example.com', first_name: 'Carol' },
 ]
 
 function render(props = {}) {
@@ -28,9 +32,11 @@ describe('ShareWithSection', () => {
 
   it('renders a chip with the avatar initial per selected contact', () => {
     render({ value: [2] })
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    // SharedWithChips in editable mode (onRemove provided) renders the
+    // chip text via `displayLabel` — which is `fullName` post-T195, so
+    // `first_name` "Alice" shows.
+    expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('A')).toBeInTheDocument()
-    // The empty-state copy must be gone.
     expect(screen.queryByText(/not shared yet/i)).not.toBeInTheDocument()
   })
 
@@ -39,7 +45,7 @@ describe('ShareWithSection', () => {
     const { user } = render({ value: [], onChange })
     await user.click(screen.getByRole('button', { name: /^share with/i }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     expect(onChange).toHaveBeenCalledWith([2])
   })
 
@@ -48,7 +54,7 @@ describe('ShareWithSection', () => {
     const { user } = render({ value: [2], onChange })
     await user.click(screen.getByRole('button', { name: /^share with/i }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     expect(onChange).toHaveBeenCalledWith([])
   })
 

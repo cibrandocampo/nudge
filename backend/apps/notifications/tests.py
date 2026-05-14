@@ -42,10 +42,11 @@ User = get_user_model()
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def make_user(username="tester", tz="UTC", daily_time="08:30"):
+def make_user(username="tester", tz="UTC", daily_time="08:30", email=None):
     user = User.objects.create_user(
         username=username,
         password="pass",
+        email=email or f"{username}@example.com",
         timezone=tz,
         daily_notification_time=daily_time,
     )
@@ -858,7 +859,7 @@ class CheckReminderTest(TestCase):
         with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
             _check_reminder(routine, now)
             _, kwargs = mock_notify.call_args
-            self.assertEqual(kwargs["hours_overdue"], 4)
+            self.assertAlmostEqual(kwargs["hours_overdue"], 4, delta=0.1)
 
     def test_hours_overdue_positive_for_never_logged_routine(self):
         """Never-logged routine should report hours > 0, not 0."""
@@ -874,6 +875,219 @@ class CheckReminderTest(TestCase):
             _check_reminder(routine, now)
             _, kwargs = mock_notify.call_args
             self.assertGreater(kwargs["hours_overdue"], 0)
+
+
+# ── _check_reminder with cadence + quiet hours (T186) ───────────────────────
+
+
+class CheckReminderCadenceAndQuietHoursTest(TestCase):
+    """Covers the gates added in T186: reminder_mode='daily' early-exit,
+    routine.reminder_interval_minutes drives the cadence, per-recipient
+    quiet hours filter, and the no-seal rule when all recipients are silent.
+
+    Tests that involve timezone-sensitive checks patch
+    `django.utils.timezone.now` to a fixed January datetime so the UTC↔Madrid
+    offset is a deterministic +1h regardless of DST. The patch also keeps
+    entry/state creation, `routine.is_overdue()`, and `_check_reminder`'s
+    internal `timezone.now()` calls in sync with the `now_utc` argument we
+    pass in — otherwise the routine appears overdue against the real clock
+    but the interval calculation compares a "now in January" against a
+    "last reminder in May", producing nonsense deltas.
+    """
+
+    # 02:00 UTC in January = 03:00 Madrid (UTC+1, no DST).
+    FROZEN_NOW = datetime(2026, 1, 15, 2, 0, tzinfo=ZoneInfo("UTC"))
+
+    @staticmethod
+    def _make_overdue_routine(
+        owner,
+        *,
+        mode="intensive",
+        interval_minutes=120,
+        respect_quiet_hours=True,
+        last_reminder_offset_hours=None,
+        last_due_offset_hours=-9,
+    ):
+        """Build an overdue routine + NotificationState. Must be called
+        inside a `timezone.now()` patch context so the offsets resolve
+        against the frozen time."""
+        routine = Routine.objects.create(
+            user=owner,
+            name="Cadence test routine",
+            interval_hours=1,
+            reminder_mode=mode,
+            reminder_interval_minutes=interval_minutes,
+            respect_quiet_hours=respect_quiet_hours,
+        )
+        make_entry(routine, offset_hours=-2)  # 2h ago, overdue by 1h
+        last_reminder = (
+            timezone.now() + timedelta(hours=last_reminder_offset_hours)
+            if last_reminder_offset_hours is not None
+            else None
+        )
+        NotificationState.objects.create(
+            routine=routine,
+            last_due_notification=timezone.now() + timedelta(hours=last_due_offset_hours),
+            last_reminder=last_reminder,
+        )
+        return routine
+
+    # ── 1: daily mode early-exit ──
+
+    def test_daily_mode_never_fires_reminder(self):
+        user = make_user()
+        routine = self._make_overdue_routine(user, mode="daily")
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(routine, timezone.now())
+            mock_notify.assert_not_called()
+
+    # ── 2 & 3 & 4: interval_minutes drives cadence ──
+
+    def test_60min_cadence_skips_before_interval_elapsed(self):
+        user = make_user()
+        routine = self._make_overdue_routine(
+            user,
+            interval_minutes=60,
+            last_reminder_offset_hours=-0.5,  # 30 min ago
+        )
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(routine, timezone.now())
+            mock_notify.assert_not_called()
+
+    def test_60min_cadence_fires_after_70_minutes(self):
+        user = make_user()
+        routine = self._make_overdue_routine(
+            user,
+            interval_minutes=60,
+            last_reminder_offset_hours=-(70 / 60),  # 70 min ago
+        )
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(routine, timezone.now())
+            mock_notify.assert_called_once()
+        state = NotificationState.objects.get(routine=routine)
+        self.assertIsNotNone(state.last_reminder)
+
+    def test_480min_cadence_fires_after_9_hours(self):
+        user = make_user()
+        routine = self._make_overdue_routine(
+            user,
+            interval_minutes=480,
+            last_reminder_offset_hours=-9,
+        )
+        with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+            _check_reminder(routine, timezone.now())
+            mock_notify.assert_called_once()
+
+    # ── 5: respect=True + owner in quiet hours → no fire, no seal ──
+
+    def test_owner_in_quiet_hours_with_respect_true_skips_and_does_not_seal(self):
+        with patch("django.utils.timezone.now", return_value=self.FROZEN_NOW):
+            owner = make_user(username="madrid-owner", tz="Europe/Madrid")
+            owner.quiet_hours_enabled = True
+            owner.save()
+
+            routine = self._make_overdue_routine(
+                owner,
+                interval_minutes=60,
+                respect_quiet_hours=True,
+                last_reminder_offset_hours=-2,
+            )
+            with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+                _check_reminder(routine, timezone.now())
+                mock_notify.assert_not_called()
+            state = NotificationState.objects.get(routine=routine)
+            # last_reminder unchanged: still 2h before FROZEN_NOW, not sealed.
+            self.assertLess(state.last_reminder, self.FROZEN_NOW - timedelta(minutes=90))
+
+    # ── 6: respect=False + owner in quiet hours → fires anyway ──
+
+    def test_owner_in_quiet_hours_with_respect_false_still_fires(self):
+        with patch("django.utils.timezone.now", return_value=self.FROZEN_NOW):
+            owner = make_user(username="urgent-owner", tz="Europe/Madrid")
+            owner.quiet_hours_enabled = True
+            owner.save()
+
+            routine = self._make_overdue_routine(
+                owner,
+                interval_minutes=60,
+                respect_quiet_hours=False,
+                last_reminder_offset_hours=-2,
+            )
+            with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+                _check_reminder(routine, timezone.now())
+                mock_notify.assert_called_once()
+
+    # ── 7: shared routine, owner silent, shared user outside silence ──
+
+    def test_shared_routine_skips_silent_owner_but_fires_for_other_recipient(self):
+        with patch("django.utils.timezone.now", return_value=self.FROZEN_NOW):
+            owner = make_user(username="sharing-owner", tz="Europe/Madrid")
+            owner.quiet_hours_enabled = True
+            owner.save()
+            # shared user has quiet hours disabled — `is_in_quiet_hours`
+            # returns False unconditionally regardless of their tz.
+            shared = make_user(username="shared-no-quiet", tz="Europe/Madrid")
+
+            routine = self._make_overdue_routine(
+                owner,
+                interval_minutes=60,
+                respect_quiet_hours=True,
+                last_reminder_offset_hours=-2,
+            )
+            routine.shared_with.add(shared)
+
+            with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+                _check_reminder(routine, timezone.now())
+                self.assertEqual(mock_notify.call_count, 1)
+                _, kwargs = mock_notify.call_args
+                self.assertEqual(kwargs["target_user"], shared)
+            state = NotificationState.objects.get(routine=routine)
+            # Cycle sealed because at least one recipient (shared) received.
+            self.assertGreaterEqual(state.last_reminder, self.FROZEN_NOW - timedelta(seconds=1))
+
+    # ── 8: all recipients silent → no seal; next beat (recipient out) fires ──
+
+    def test_all_recipients_silent_no_seal_then_next_beat_fires(self):
+        # Beat #1 — both in silence at Madrid 03:00.
+        with patch("django.utils.timezone.now", return_value=self.FROZEN_NOW):
+            owner = make_user(username="owner-silent", tz="Europe/Madrid")
+            owner.quiet_hours_enabled = True
+            owner.save()
+            shared = make_user(username="shared-silent", tz="Europe/Madrid")
+            shared.quiet_hours_enabled = True
+            shared.save()
+
+            routine = self._make_overdue_routine(
+                owner,
+                interval_minutes=60,
+                respect_quiet_hours=True,
+                last_reminder_offset_hours=-2,
+            )
+            routine.shared_with.add(shared)
+            original_last_reminder = NotificationState.objects.get(routine=routine).last_reminder
+
+            with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+                _check_reminder(routine, timezone.now())
+                mock_notify.assert_not_called()
+            state = NotificationState.objects.get(routine=routine)
+            self.assertEqual(
+                state.last_reminder.replace(microsecond=0),
+                original_last_reminder.replace(microsecond=0),
+            )
+
+        # Beat #2 — 5 min later. Shared user's quiet range is shortened so
+        # they emerge (end=02:00 → 03:00 Madrid is outside their range).
+        beat2 = self.FROZEN_NOW + timedelta(minutes=5)
+        shared.quiet_hours_end = datetime(2026, 1, 15, 2, 0).time()
+        shared.save()
+        with patch("django.utils.timezone.now", return_value=beat2):
+            with patch("apps.notifications.tasks.notify_reminder") as mock_notify:
+                _check_reminder(routine, timezone.now())
+                self.assertEqual(mock_notify.call_count, 1)
+                _, kwargs = mock_notify.call_args
+                self.assertEqual(kwargs["target_user"], shared)
+            state.refresh_from_db()
+            self.assertGreaterEqual(state.last_reminder, beat2 - timedelta(seconds=1))
 
 
 # ── check_notifications Celery task ──────────────────────────────────────────
@@ -941,9 +1155,11 @@ class PushHelperLanguageTest(TestCase):
     """
 
     def _user(self, language, username=None):
+        uname = username or f"user_{language}"
         user = User.objects.create_user(
-            username=username or f"user_{language}",
+            username=uname,
             password="pass",
+            email=f"{uname}@example.com",
             timezone="UTC",
             daily_notification_time="08:30",
         )
@@ -1061,6 +1277,10 @@ class PushHelperLanguageTest(TestCase):
         self.assertEqual(mock_send.call_args[1]["body"], "Descripción personalizada")
 
     # ── reminder notification ─────────────────────────────────────────────────
+    # Bucketing mirrors frontend formatRelativeTime (frontend/src/utils/time.js):
+    #   ≤1h  → "due now"   (reminder_body_now)
+    #   ≤48h → hours       (reminder_body)
+    #   >48h → days        (reminder_body_days)
 
     def test_reminder_english(self):
         user = self._user("en")
@@ -1069,7 +1289,7 @@ class PushHelperLanguageTest(TestCase):
             notify_reminder(routine, hours_overdue=5)
         kwargs = mock_send.call_args[1]
         self.assertEqual(kwargs["title"], "Check engine")
-        self.assertEqual(kwargs["body"], "5h overdue")
+        self.assertEqual(kwargs["body"], "Overdue by 5h")
 
     def test_reminder_spanish(self):
         user = self._user("es")
@@ -1078,7 +1298,7 @@ class PushHelperLanguageTest(TestCase):
             notify_reminder(routine, hours_overdue=3)
         kwargs = mock_send.call_args[1]
         self.assertEqual(kwargs["title"], "Revisar motor")
-        self.assertEqual(kwargs["body"], "3h de retraso")
+        self.assertEqual(kwargs["body"], "Atrasado 3h")
 
     def test_reminder_galician(self):
         user = self._user("gl")
@@ -1087,7 +1307,72 @@ class PushHelperLanguageTest(TestCase):
             notify_reminder(routine, hours_overdue=3)
         kwargs = mock_send.call_args[1]
         self.assertEqual(kwargs["title"], "Revisar motor")
-        self.assertEqual(kwargs["body"], "3h de atraso")
+        self.assertEqual(kwargs["body"], "Atrasado 3h")
+
+    def test_reminder_due_now_english(self):
+        user = self._user("en")
+        routine = make_routine(user, name="Check engine")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=0.5)
+        self.assertEqual(mock_send.call_args[1]["body"], "Due now")
+
+    def test_reminder_due_now_spanish(self):
+        user = self._user("es")
+        routine = make_routine(user, name="Revisar motor")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=0.8)
+        self.assertEqual(mock_send.call_args[1]["body"], "Pendiente ahora")
+
+    def test_reminder_due_now_galician(self):
+        user = self._user("gl")
+        routine = make_routine(user, name="Revisar motor")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=1.0)
+        self.assertEqual(mock_send.call_args[1]["body"], "Pendente agora")
+
+    def test_reminder_switches_to_days_past_48h_english(self):
+        user = self._user("en")
+        routine = make_routine(user, name="Check engine")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=72)
+        self.assertEqual(mock_send.call_args[1]["body"], "Overdue by 3 days")
+
+    def test_reminder_switches_to_days_past_48h_spanish(self):
+        user = self._user("es")
+        routine = make_routine(user, name="Revisar motor")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=72)
+        self.assertEqual(mock_send.call_args[1]["body"], "Atrasado 3 días")
+
+    def test_reminder_switches_to_days_past_48h_galician(self):
+        user = self._user("gl")
+        routine = make_routine(user, name="Revisar motor")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=72)
+        self.assertEqual(mock_send.call_args[1]["body"], "Atrasado 3 días")
+
+    def test_reminder_at_48h_still_hours(self):
+        # Boundary: 48h matches the frontend's `absHours <= 48` hour bucket.
+        user = self._user("en")
+        routine = make_routine(user, name="Check engine")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=48)
+        self.assertEqual(mock_send.call_args[1]["body"], "Overdue by 48h")
+
+    def test_reminder_at_49h_switches_to_days(self):
+        user = self._user("en")
+        routine = make_routine(user, name="Check engine")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=49)
+        self.assertEqual(mock_send.call_args[1]["body"], "Overdue by 2 days")
+
+    def test_reminder_at_1h_boundary_is_due_now(self):
+        # Boundary: 1h matches the frontend's `absHours <= 1` "due now" bucket.
+        user = self._user("en")
+        routine = make_routine(user, name="Check engine")
+        with patch("apps.notifications.push.send_push_notification") as mock_send:
+            notify_reminder(routine, hours_overdue=1)
+        self.assertEqual(mock_send.call_args[1]["body"], "Due now")
 
     # ── test notification ───────────────────────────────────────────────────
 

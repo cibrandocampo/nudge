@@ -1,0 +1,10 @@
+Welcome to Nudge — a gentle reminder for recurring things.
+
+Your verification code is:
+
+    {{ code }}
+
+Enter it to finish creating your account. The code expires in 10 minutes.
+
+Best,
+the Nudge team

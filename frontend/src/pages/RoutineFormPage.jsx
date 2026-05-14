@@ -7,6 +7,7 @@ import FormField from '../components/FormField'
 import IntervalPicker from '../components/IntervalPicker'
 import QueryHandler from '../components/QueryHandler'
 import ShareWithSection from '../components/ShareWithSection'
+import { fullName } from '../utils/displayName'
 import { useContacts } from '../hooks/useContacts'
 import { useRoutine } from '../hooks/useRoutines'
 import { useServerReachable } from '../hooks/useServerReachable'
@@ -30,7 +31,18 @@ function toLocalDateTimeString(date) {
   return `${y}-${m}-${d}T${h}:${min}`
 }
 
-const EMPTY = { name: '', description: '', interval_hours: 24, stock: '', stock_usage: 1 }
+const EMPTY = {
+  name: '',
+  description: '',
+  interval_hours: 24,
+  reminder_mode: 'intensive',
+  reminder_interval_minutes: 120,
+  respect_quiet_hours: true,
+  stock: '',
+  stock_usage: 1,
+}
+
+const REMINDER_INTERVAL_CHOICES = [60, 120, 240, 480]
 
 function computeUsersNeedingStockShare(addedRecipients, cachedStock) {
   const stockShared = new Set((cachedStock?.shared_with ?? []).map(Number))
@@ -72,6 +84,12 @@ export default function RoutineFormPage() {
       name: routine.name,
       description: routine.description,
       interval_hours: routine.interval_hours,
+      // Defensive `??` fallbacks so a cached routine fetched before the
+      // T185 contract landed (no reminder_* keys) still hydrates the form
+      // with sensible defaults.
+      reminder_mode: routine.reminder_mode ?? 'intensive',
+      reminder_interval_minutes: routine.reminder_interval_minutes ?? 120,
+      respect_quiet_hours: routine.respect_quiet_hours ?? true,
       stock: routine.stock ?? '',
       stock_usage: routine.stock_usage,
     })
@@ -161,6 +179,9 @@ export default function RoutineFormPage() {
       name: form.name.trim(),
       description: form.description,
       interval_hours: Number(form.interval_hours),
+      reminder_mode: form.reminder_mode,
+      reminder_interval_minutes: form.reminder_interval_minutes,
+      respect_quiet_hours: form.respect_quiet_hours,
       stock: usesStock && form.stock ? Number(form.stock) : null,
       stock_usage: parseIntSafe(form.stock_usage, 1),
       shared_with: sharedWith,
@@ -177,7 +198,10 @@ export default function RoutineFormPage() {
     const usersNeedingStockShare = computeUsersNeedingStockShare(addedRecipients, cachedStock)
 
     if (stockId != null && cachedStock && usersNeedingStockShare.length > 0) {
-      const userIdToName = (uid) => contacts.find((c) => c.id === Number(uid))?.username ?? String(uid)
+      const userIdToName = (uid) => {
+        const c = contacts.find((x) => x.id === Number(uid))
+        return c ? fullName(c) : String(uid)
+      }
       const userLabels = usersNeedingStockShare.map(userIdToName)
       setCoupledShareConfirm({
         stockName: cachedStock.name ?? '',
@@ -247,6 +271,72 @@ export default function RoutineFormPage() {
             </FormField>
           </section>
 
+          {/* Notifications — mode + (conditional) interval + respect toggle */}
+          <section className={shared.formSection}>
+            <FormField label={t('routine.form.reminderMode')}>
+              <div className={s.modeOptions} role="radiogroup" aria-label={t('routine.form.reminderMode')}>
+                {['intensive', 'daily'].map((mode) => (
+                  <label key={mode} className={cx(s.modeOption, form.reminder_mode === mode && s.modeOptionActive)}>
+                    <input
+                      type="radio"
+                      name="reminder_mode"
+                      value={mode}
+                      checked={form.reminder_mode === mode}
+                      // The label wraps the input + a title span + a hint span, so the
+                      // implicit accessible name would concatenate both spans. Pin it
+                      // explicitly to the title so `getByRole('radio', { name: 'Daily' })`
+                      // works in tests without leaking hint copy into the a11y tree.
+                      aria-label={t(`routine.form.mode_${mode}`)}
+                      // Preservation: only `reminder_mode` changes here.
+                      // `reminder_interval_minutes` and `respect_quiet_hours`
+                      // stay as the user left them, so toggling daily↔intensive
+                      // doesn't reset the sub-block.
+                      onChange={() => setForm((f) => ({ ...f, reminder_mode: mode }))}
+                    />
+                    <span className={s.modeLabel}>{t(`routine.form.mode_${mode}`)}</span>
+                    <span className={s.modeHint}>{t(`routine.form.mode_${mode}_hint`)}</span>
+                  </label>
+                ))}
+              </div>
+            </FormField>
+
+            {form.reminder_mode === 'intensive' && (
+              <>
+                <FormField label={t('routine.form.reminderInterval')}>
+                  <div className={s.intervalChips} role="radiogroup" aria-label={t('routine.form.reminderInterval')}>
+                    {REMINDER_INTERVAL_CHOICES.map((min) => (
+                      <label
+                        key={min}
+                        className={cx(s.intervalChip, form.reminder_interval_minutes === min && s.intervalChipActive)}
+                      >
+                        <input
+                          type="radio"
+                          name="reminder_interval_minutes"
+                          value={min}
+                          checked={form.reminder_interval_minutes === min}
+                          onChange={() => setForm((f) => ({ ...f, reminder_interval_minutes: min }))}
+                        />
+                        <span>{t(`routine.form.interval_${min}`)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </FormField>
+
+                <div className={shared.formSectionHeader}>
+                  <div className={s.respectInfo}>
+                    <span className={shared.formSectionTitle}>{t('routine.form.respectQuietHours')}</span>
+                    <p className={shared.helpText}>{t('routine.form.respectQuietHoursHint')}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={form.respect_quiet_hours}
+                    onChange={(v) => setForm((f) => ({ ...f, respect_quiet_hours: v }))}
+                    ariaLabel={t('routine.form.respectQuietHours')}
+                  />
+                </div>
+              </>
+            )}
+          </section>
+
           {/* Stock tracking — header con toggle iOS-style */}
           <section className={shared.formSection}>
             <div className={shared.formSectionHeader}>
@@ -268,7 +358,7 @@ export default function RoutineFormPage() {
                           ? t('routine.form.sharedStockLabel', {
                               name: st.name,
                               qty: st.quantity,
-                              owner: st.owner_username,
+                              owner: st.owner_display_name,
                             })
                           : `${st.name} (${st.quantity} left)`}
                       </option>

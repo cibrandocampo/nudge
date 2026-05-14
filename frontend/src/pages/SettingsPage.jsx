@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Info } from 'lucide-react'
 import { api } from '../api/client'
 import { OfflineError } from '../api/errors'
 import { useAuth } from '../contexts/AuthContext'
-import { useContacts, useContactSearch } from '../hooks/useContacts'
+import { useContacts } from '../hooks/useContacts'
 import { useCreateContact } from '../hooks/mutations/useCreateContact'
 import { useDeleteContact } from '../hooks/mutations/useDeleteContact'
 import { useUpdateMe } from '../hooks/mutations/useUpdateMe'
@@ -19,7 +20,7 @@ import InstallCard from '../components/InstallCard'
 import { useToast } from '../components/useToast'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
-import { avatarInitial, displayLabel, fullName } from '../utils/displayName'
+import { avatarInitial, fullName } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import shared from '../styles/shared.module.css'
 import s from './SettingsPage.module.css'
@@ -31,6 +32,15 @@ const LANGUAGES = [
   { code: 'es', labelKey: 'settings.languageEs' },
   { code: 'gl', labelKey: 'settings.languageGl' },
 ]
+
+// True when `time` (HH:MM) falls inside the [start, end) range. Returns false
+// when any input is empty or when the range collapses to zero (start === end).
+// Supports midnight-crossing ranges (e.g. 22:00 → 07:00).
+function isInQuietHours(time, start, end) {
+  if (!time || !start || !end || start === end) return false
+  if (start < end) return time >= start && time < end
+  return time >= start || time < end
+}
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
@@ -56,6 +66,9 @@ export default function SettingsPage() {
   const [form, setForm] = useState(() => ({
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     daily_notification_time: '08:00',
+    quiet_hours_enabled: false,
+    quiet_hours_start: '22:00',
+    quiet_hours_end: '07:00',
   }))
 
   const {
@@ -66,10 +79,15 @@ export default function SettingsPage() {
   } = usePushStatus()
   const [pushLoading, setPushLoading] = useState(false)
 
-  const [contactQuery, setContactQuery] = useState('')
-  const [contactError, setContactError] = useState('')
-  // { id, username } when the user clicks the X on a contact row; cleared
-  // when they confirm or cancel the ConfirmModal.
+  const [contactEmail, setContactEmail] = useState('')
+  // True once an add-contact attempt has failed for the current value;
+  // cleared the moment the user edits the field. Drives the red
+  // border / text on the input so the offending email is visually
+  // marked even after the error toast fades out.
+  const [contactEmailInvalid, setContactEmailInvalid] = useState(false)
+  // { id, name } when the user clicks the X on a contact row; cleared
+  // when they confirm or cancel the ConfirmModal. `name` is the display
+  // string shown in the confirmation copy (never `username`).
   const [contactToRemove, setContactToRemove] = useState(null)
   const [showPwModal, setShowPwModal] = useState(false)
 
@@ -82,7 +100,6 @@ export default function SettingsPage() {
   const { data: contacts = [] } = useContacts()
   const createContact = useCreateContact()
   const deleteContact = useDeleteContact()
-  const { data: searchResults = [] } = useContactSearch(contactQuery)
   const reachable = useServerReachable()
 
   useEffect(() => {
@@ -91,6 +108,9 @@ export default function SettingsPage() {
       setForm({
         timezone: tz,
         daily_notification_time: (user.daily_notification_time || '08:00:00').slice(0, 5),
+        quiet_hours_enabled: user.quiet_hours_enabled ?? false,
+        quiet_hours_start: (user.quiet_hours_start || '22:00:00').slice(0, 5),
+        quiet_hours_end: (user.quiet_hours_end || '07:00:00').slice(0, 5),
       })
       if (user.language && user.language !== i18n.language) {
         i18n.changeLanguage(user.language)
@@ -155,34 +175,103 @@ export default function SettingsPage() {
     [i18n, autosave],
   )
 
-  const handleAddContact = async (contactUser) => {
-    setContactError('')
+  // True when the active quiet-hours range covers `daily_notification_time`.
+  // Drives the inline error + inhibits the autosave path for either field
+  // while the conflict is on the screen, so the backend never sees an
+  // invalid combination.
+  const dailyInQuietHours =
+    form.quiet_hours_enabled &&
+    isInQuietHours(form.daily_notification_time, form.quiet_hours_start, form.quiet_hours_end)
+
+  const handleQuietHoursEnabled = useCallback(
+    (enabled) => {
+      const next = { ...form, quiet_hours_enabled: enabled }
+      setForm(next)
+      const wouldOverlap =
+        enabled && isInQuietHours(next.daily_notification_time, next.quiet_hours_start, next.quiet_hours_end)
+      if (!wouldOverlap) {
+        autosave({ quiet_hours_enabled: enabled })
+      }
+    },
+    [form, autosave],
+  )
+
+  const handleQuietHoursTimeChange = useCallback(
+    (field, value) => {
+      const next = { ...form, [field]: value }
+      // Auto-disable when start === end: the range is empty, so the toggle
+      // is dishonest if left on. Frontend collapses to disabled and sends
+      // both fields in the same PATCH so the backend never sees an active
+      // start === end pairing.
+      const collapsedRange = next.quiet_hours_start === next.quiet_hours_end
+      if (collapsedRange && next.quiet_hours_enabled) {
+        next.quiet_hours_enabled = false
+      }
+      setForm(next)
+      const wouldOverlap =
+        next.quiet_hours_enabled &&
+        isInQuietHours(next.daily_notification_time, next.quiet_hours_start, next.quiet_hours_end)
+      if (wouldOverlap) return
+      const payload = { [field]: value }
+      if (next.quiet_hours_enabled !== form.quiet_hours_enabled) {
+        payload.quiet_hours_enabled = next.quiet_hours_enabled
+      }
+      autosave(payload)
+    },
+    [form, autosave],
+  )
+
+  // Lightweight client-side gate. The backend still does the real
+  // validation (404/400) — this just avoids round-trips on obvious typos.
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
+
+  const handleAddContact = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    const email = contactEmail.trim()
+    if (!email) return
+    if (!isValidEmail(email)) {
+      showToast({ type: 'error', message: t('settings.addContact.errorEmail') })
+      setContactEmailInvalid(true)
+      return
+    }
     try {
-      await createContact.mutateAsync({ username: contactUser.username })
-      setContactQuery('')
+      await createContact.mutateAsync({ email })
+      setContactEmail('')
+      setContactEmailInvalid(false)
     } catch (err) {
       if (err instanceof OfflineError) {
-        setContactError(t('offline.actionUnavailable'))
-      } else {
-        setContactError(err?.body?.detail || t('common.actionError'))
+        showToast({ type: 'error', message: t('offline.actionUnavailable') })
+        // Offline isn't a "wrong email" — don't mark the input as invalid.
+        return
       }
+      // Distinguish the common cases via status + detail (server emits
+      // descriptive strings via the contact_list_create view).
+      const detail = err?.body?.detail || ''
+      let message
+      if (err?.status === 404) {
+        message = t('settings.addContact.errorNotFound')
+      } else if (/yourself/i.test(detail)) {
+        message = t('settings.addContact.errorSelf')
+      } else if (/already/i.test(detail)) {
+        message = t('settings.addContact.errorAlready')
+      } else {
+        message = detail || t('common.actionError')
+      }
+      showToast({ type: 'error', message })
+      setContactEmailInvalid(true)
     }
   }
 
   const confirmRemoveContact = async () => {
     const contactId = contactToRemove?.id
-    const username = contactToRemove?.username
     setContactToRemove(null)
     if (contactId == null) return
-    setContactError('')
     try {
-      await deleteContact.mutateAsync({ contactId, username })
+      await deleteContact.mutateAsync({ contactId })
     } catch (err) {
-      setContactError(errorToastMessage(err, t))
+      showToast({ type: 'error', message: errorToastMessage(err, t) })
     }
   }
-
-  const visibleSearchResults = contactQuery.length >= 2 ? searchResults : []
 
   return (
     <div className={s.container}>
@@ -200,17 +289,10 @@ export default function SettingsPage() {
             {avatarInitial(user)}
           </span>
           <div className={s.profileMeta}>
-            {/* Show "First Last (username)" when names exist; fall back to
-             * just the username. The "(username)" tail is rendered in the
-             * helpText style so it reads as secondary. */}
-            {user?.first_name || user?.last_name ? (
-              <h2 className={s.username}>
-                {fullName(user)}
-                <span className={shared.helpText}> ({user.username})</span>
-              </h2>
-            ) : (
-              <h2 className={s.username}>{user?.username}</h2>
-            )}
+            {/* Post-T197: render the display name and the email below as
+             * secondary metadata. `username` is internal-only and never
+             * surfaces in the UI. */}
+            <h2 className={s.displayName}>{fullName(user)}</h2>
             {user?.email && <p className={shared.helpText}>{user.email}</p>}
           </div>
           <button
@@ -233,18 +315,14 @@ export default function SettingsPage() {
                 <span className={s.avatar} aria-hidden="true">
                   {avatarInitial(c)}
                 </span>
-                {c.first_name || c.last_name ? (
-                  <span className={s.contactName}>
-                    {fullName(c)}
-                    <span className={shared.helpText}> ({c.username})</span>
-                  </span>
-                ) : (
-                  <span className={s.contactName}>{c.username}</span>
-                )}
+                <span className={s.contactName}>
+                  {fullName(c)}
+                  {(c.first_name || c.last_name) && c.email && <span className={shared.helpText}> ({c.email})</span>}
+                </span>
                 <button
                   type="button"
                   className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
-                  onClick={() => setContactToRemove({ id: c.id, username: c.username })}
+                  onClick={() => setContactToRemove({ id: c.id, name: fullName(c) })}
                   title={!reachable ? t('offline.requiresConnection') : t('settings.removeContact')}
                   aria-label={t('settings.removeContact')}
                   disabled={!reachable}
@@ -258,19 +336,30 @@ export default function SettingsPage() {
           <p className={shared.helpText}>{t('settings.noContacts')}</p>
         )}
 
-        <Combobox
-          value=""
-          onChange={handleAddContact}
-          options={visibleSearchResults}
-          getLabel={(u) => displayLabel(u)}
-          getKey={(u) => u.id}
-          placeholder={t('settings.searchUsers')}
-          emptyMessage={t('settings.contactNotFound')}
-          onInputChange={setContactQuery}
-          disabled={!reachable}
-        />
-
-        {contactError && <p className={cx(shared.helpText, s.error)}>{contactError}</p>}
+        <form className={s.addContactForm} onSubmit={handleAddContact} noValidate>
+          <input
+            className={cx(shared.input, contactEmailInvalid && s.inputInvalid)}
+            type="email"
+            placeholder={t('settings.addContact.email')}
+            value={contactEmail}
+            onChange={(e) => {
+              setContactEmail(e.target.value)
+              if (contactEmailInvalid) setContactEmailInvalid(false)
+            }}
+            disabled={!reachable}
+            data-testid="add-contact-email"
+          />
+          <button
+            type="submit"
+            className={cx(shared.btnAdd, (!reachable || !contactEmail.trim()) && shared.disabled)}
+            disabled={!reachable || !contactEmail.trim()}
+            data-testid="add-contact-submit"
+            aria-label={t('settings.addContact.add')}
+            title={t('settings.addContact.add')}
+          >
+            <Icon name="plus" />
+          </button>
+        </form>
       </Section>
 
       <Section id="push" title={t('settings.push')} flash={flashId === 'push'}>
@@ -283,10 +372,59 @@ export default function SettingsPage() {
         />
       </Section>
 
+      <Section title={t('settings.quietHours')}>
+        <div className={s.quietHoursToggleRow}>
+          <ToggleSwitch
+            checked={form.quiet_hours_enabled}
+            onChange={handleQuietHoursEnabled}
+            ariaLabel={t('settings.quietHoursEnable')}
+            disabled={!reachable}
+          />
+          <span className={s.quietHoursToggleLabel}>{t('settings.quietHoursEnable')}</span>
+        </div>
+        <p className={shared.helpText}>{t('settings.quietHoursHint')}</p>
+        <div
+          className={cx(s.quietHoursRange, !form.quiet_hours_enabled && s.quietHoursRangeDisabled)}
+          data-testid="quiet-hours-range"
+        >
+          <label className={s.quietHoursField}>
+            <span className={shared.helpText}>{t('settings.quietHoursStart')}</span>
+            <input
+              className={shared.input}
+              type="time"
+              value={form.quiet_hours_start}
+              disabled={!form.quiet_hours_enabled || !reachable}
+              onChange={(e) => handleQuietHoursTimeChange('quiet_hours_start', e.target.value)}
+              data-testid="quiet-hours-start"
+            />
+          </label>
+          <label className={s.quietHoursField}>
+            <span className={shared.helpText}>{t('settings.quietHoursEnd')}</span>
+            <input
+              className={shared.input}
+              type="time"
+              value={form.quiet_hours_end}
+              disabled={!form.quiet_hours_enabled || !reachable}
+              onChange={(e) => handleQuietHoursTimeChange('quiet_hours_end', e.target.value)}
+              data-testid="quiet-hours-end"
+            />
+          </label>
+        </div>
+        <p className={s.quietHoursNote}>
+          <Info size={14} aria-hidden="true" />
+          <span>{t('settings.quietHoursHintExtra')}</span>
+        </p>
+        {dailyInQuietHours && (
+          <p className={cx(shared.helpText, s.error)} data-testid="quiet-hours-overlap-error">
+            {t('settings.quietHoursOverlapError')}
+          </p>
+        )}
+      </Section>
+
       <Section title={t('settings.dailyTime')}>
         <p className={shared.helpText}>{t('settings.dailyTimeHint')}</p>
         <input
-          className={shared.input}
+          className={cx(shared.input, dailyInQuietHours && s.inputError)}
           type="time"
           value={form.daily_notification_time}
           onChange={(e) => {
@@ -294,6 +432,12 @@ export default function SettingsPage() {
             setForm((f) => ({ ...f, daily_notification_time: next }))
             clearTimeout(timeSaveTimer.current)
             timeSaveTimer.current = setTimeout(() => {
+              // Snapshot of quiet hours at the time of change (form is captured
+              // in closure). The toggle/range never moves inside the debounce
+              // window, so this is safe.
+              const wouldOverlap =
+                form.quiet_hours_enabled && isInQuietHours(next, form.quiet_hours_start, form.quiet_hours_end)
+              if (wouldOverlap) return
               if (next && next !== (user?.daily_notification_time || '').slice(0, 5)) {
                 autosave({ daily_notification_time: next })
               }
@@ -340,7 +484,7 @@ export default function SettingsPage() {
 
       {contactToRemove && (
         <ConfirmModal
-          message={t('settings.confirmRemoveContact', { name: contactToRemove.username })}
+          message={t('settings.confirmRemoveContact', { name: contactToRemove.name })}
           confirmLabel={t('settings.removeContact')}
           onConfirm={confirmRemoveContact}
           onCancel={() => setContactToRemove(null)}
@@ -494,5 +638,23 @@ function Section({ id, title, children, flash = false }) {
       <p className={shared.sectionTitle}>{title}</p>
       {children}
     </div>
+  )
+}
+
+function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
+  return (
+    <label className={shared.formToggleSwitch}>
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        aria-label={ariaLabel}
+      />
+      <span className={shared.formToggleTrack}>
+        <span className={shared.formToggleThumb} />
+      </span>
+    </label>
   )
 }

@@ -46,25 +46,34 @@ describe('HistoryEntryCard — compact', () => {
   })
 
   it('shows the author when the entry was logged by a different user', () => {
-    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'alice' })} compact />)
-    expect(screen.getByText(/alice/)).toBeInTheDocument()
+    renderWithProviders(
+      <HistoryEntryCard entry={routineEntry({ completed_by_id: 99, completed_by_display_name: 'Alice' })} compact />,
+    )
+    expect(screen.getByText(/Alice/)).toBeInTheDocument()
   })
 
   it('hides the author when the entry was logged by the current user', () => {
-    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'testuser' })} compact />)
-    expect(screen.queryByText(/testuser/)).not.toBeInTheDocument()
+    // Default `user` in renderWithProviders has id=1; matching id hides the chip.
+    renderWithProviders(
+      <HistoryEntryCard entry={routineEntry({ completed_by_id: 1, completed_by_display_name: 'Test User' })} compact />,
+    )
+    expect(screen.queryByText(/Test User/)).not.toBeInTheDocument()
   })
 })
 
 describe('HistoryEntryCard — full card', () => {
   it('shows the author when the entry was logged by a different user', () => {
-    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'alice' })} />)
-    expect(screen.getByText(/alice/)).toBeInTheDocument()
+    renderWithProviders(
+      <HistoryEntryCard entry={routineEntry({ completed_by_id: 99, completed_by_display_name: 'Alice' })} />,
+    )
+    expect(screen.getByText(/Alice/)).toBeInTheDocument()
   })
 
   it('hides the author when the entry was logged by the current user', () => {
-    renderWithProviders(<HistoryEntryCard entry={routineEntry({ completed_by_username: 'testuser' })} />)
-    expect(screen.queryByText(/testuser/)).not.toBeInTheDocument()
+    renderWithProviders(
+      <HistoryEntryCard entry={routineEntry({ completed_by_id: 1, completed_by_display_name: 'Test User' })} />,
+    )
+    expect(screen.queryByText(/Test User/)).not.toBeInTheDocument()
   })
 
   it('renders a read-only notes view when editable callbacks are not wired', () => {

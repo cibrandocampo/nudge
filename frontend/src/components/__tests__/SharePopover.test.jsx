@@ -2,9 +2,11 @@ import { screen, fireEvent } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import SharePopover from '../SharePopover'
 
+// Post-T197: SharePopover renders `fullName(contact)` — username is
+// internal-only.
 const contacts = [
-  { id: 10, username: 'alice' },
-  { id: 11, username: 'bob' },
+  { id: 10, first_name: 'Alice', email: 'alice@example.com' },
+  { id: 11, first_name: 'Bob', email: 'bob@example.com' },
 ]
 
 describe('SharePopover', () => {
@@ -35,8 +37,8 @@ describe('SharePopover', () => {
     )
     await user.click(screen.getByLabelText('Share'))
     expect(screen.getByTestId('share-popover')).toBeInTheDocument()
-    expect(screen.getByText('alice')).toBeInTheDocument()
-    expect(screen.getByText('bob')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.getByText('Bob')).toBeInTheDocument()
   })
 
   it('shows checked state for shared contacts', async () => {

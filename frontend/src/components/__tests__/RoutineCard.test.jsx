@@ -132,7 +132,7 @@ describe('RoutineCard', () => {
   // for the recipient case instead.
 
   it('does not expose an interactive share button', () => {
-    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_username: 'testuser' }
+    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_display_name: 'testuser' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument()
   })
@@ -163,7 +163,7 @@ describe('RoutineCard', () => {
   })
 
   it('renders the recipient-variant badge when the user is not the owner', () => {
-    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'alice' }
+    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_display_name: 'alice' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     const badge = screen.getByTestId('shared-badge')
     expect(badge).toBeInTheDocument()
@@ -172,16 +172,16 @@ describe('RoutineCard', () => {
   })
 
   it('omits the badge entirely when the owner has not shared the routine', () => {
-    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_username: 'testuser' }
+    const routine = { ...baseRoutine, shared_with: [], is_owner: true, owner_display_name: 'testuser' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
   })
 
   it('never renders the inline owner-label, regardless of role', () => {
     for (const overrides of [
-      { shared_with: [], is_owner: true, owner_username: 'testuser' },
-      { shared_with: [10], is_owner: true, owner_username: 'testuser' },
-      { shared_with: [], is_owner: false, owner_username: 'alice' },
+      { shared_with: [], is_owner: true, owner_display_name: 'testuser' },
+      { shared_with: [10], is_owner: true, owner_display_name: 'testuser' },
+      { shared_with: [], is_owner: false, owner_display_name: 'alice' },
     ]) {
       const { unmount } = renderWithProviders(
         <RoutineCard routine={{ ...baseRoutine, ...overrides }} onMarkDone={vi.fn()} completing={false} />,
@@ -192,7 +192,7 @@ describe('RoutineCard', () => {
   })
 
   it('interpolates the owner username into the recipient badge aria-label', () => {
-    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_username: 'alice' }
+    const routine = { ...baseRoutine, shared_with: [], is_owner: false, owner_display_name: 'alice' }
     renderWithProviders(<RoutineCard routine={routine} onMarkDone={vi.fn()} completing={false} />)
     const badge = screen.getByTestId('shared-badge')
     expect(badge.getAttribute('aria-label')).toContain('alice')
