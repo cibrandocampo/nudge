@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '../hooks/useClickOutside'
 import cx from '../utils/cx'
+import { fullName } from '../utils/displayName'
 import Icon from './Icon'
 import s from './SharePopover.module.css'
 
@@ -42,7 +43,7 @@ export default function SharePopover({ sharedWith, contacts, isOwner, onToggleSh
                   onToggleShare(contact.id)
                 }}
               />
-              {contact.username}
+              {fullName(contact)}
             </label>
           ))}
         </div>

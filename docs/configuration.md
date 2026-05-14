@@ -19,15 +19,17 @@ These must be set before first startup:
 | `VAPID_PRIVATE_KEY` | Private key for Web Push notifications. Generate with: `pip install py-vapid && vapid --gen` |
 | `VAPID_PUBLIC_KEY` | Public key for Web Push notifications (generated with the private key) |
 
-## Admin user
+## Admin user (first-boot bootstrap)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADMIN_USERNAME` | `admin` | Username for the default admin account |
-| `ADMIN_EMAIL` | `admin@example.com` | Email for the default admin account |
+| `ADMIN_USERNAME` | `admin` | Username for the default admin account (internal identifier; not shown in the UI) |
+| `ADMIN_EMAIL` | `admin@example.com` | Email for the default admin account — used to log in via the email wizard |
 | `ADMIN_PASSWORD` | — | Password for the default admin account |
 
-The admin user is created automatically on first startup if no superuser exists.
+The admin user is created automatically on first startup if no superuser exists. It lands with `auth_method="password"` so you can log in immediately through the email wizard at `/login` (enter `ADMIN_EMAIL`, then the password) **without needing SMTP configured first** — handy because the OTP path needs working email to deliver codes, but this bootstrap account doesn't.
+
+The bootstrap is idempotent and only runs while there is no superuser in the database: changing `ADMIN_PASSWORD` later in `.env` and restarting does **not** rotate the existing user's password. After first boot, change it from the Django admin panel (`/nudge-admin/`).
 
 ## Django settings
 
@@ -89,6 +91,71 @@ This applies the rotation policy globally to all containers.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REDIS_PASSWORD` | — | Password for Redis authentication. Use alphanumeric characters — `REDIS_URL` is constructed automatically by Docker Compose from this value, and special characters can break URL parsing |
+
+## Email (SMTP)
+
+The email-OTP login flow ships outbound messages through Django's
+standard email backends. All settings are env-driven so swapping
+providers requires no code changes.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMAIL_BACKEND` | `django.core.mail.backends.console.EmailBackend` | Django email backend. Use `django.core.mail.backends.smtp.EmailBackend` in production; `console` is convenient in dev (the message body is printed to stdout) |
+| `EMAIL_HOST` | _empty_ | SMTP server hostname (e.g. `smtp.example.com`) |
+| `EMAIL_PORT` | `587` | SMTP port |
+| `EMAIL_HOST_USER` | _empty_ | SMTP username |
+| `EMAIL_HOST_PASSWORD` | _empty_ | SMTP password |
+| `EMAIL_USE_TLS` | `True` | Whether to use STARTTLS |
+| `DEFAULT_FROM_EMAIL` | `Nudge <noreply@nudge.local>` | From header on every outbound mail |
+
+**Deliverability**: the provider only does half the job. To keep OTP
+emails out of the recipient's spam folder you also need DNS records
+on the sender's domain:
+
+- **SPF** authorising the provider's SMTP servers to send on behalf of
+  the domain.
+- **DKIM** — usually configured via the provider's dashboard; produces
+  a public-key TXT record that signs every outbound message.
+- **DMARC** specifying the policy for receivers when SPF/DKIM fail
+  (start with `p=none` and harden later).
+
+A misconfigured DNS will produce intermittent "code never arrived"
+reports and is not detectable from the application logs.
+
+In tests (`manage.py test`) the backend is forced to `locmem`
+regardless of the env value so test code can assert on
+`django.core.mail.outbox`.
+
+## Self-signup
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ALLOW_SELF_SIGNUP` | `False` | When `True`, an unknown email on `POST /api/auth/login/start/` creates a new `is_active=False` user with `auth_method='otp'` and triggers a welcome email containing the OTP. When `False`, unknown emails return `404 user_not_found` — only admin-created accounts can log in. |
+| `BLOCK_DISPOSABLE_EMAIL` | `True` in production (`DJANGO_DEBUG=False`), `False` in development | Reject self-signup attempts from disposable / throwaway mailbox providers (yopmail, mailinator, guerrillamail, 10minutemail, …). The blocklist is bundled at `backend/apps/users/disposable_email_domains.txt`. Only applies to **new** signups — existing users with such an email keep their account. The frontend wizard surfaces the rejection as a localised "use a permanent email address" error. |
+| `DISPOSABLE_EMAIL_EXTRA_DOMAINS` | _empty_ | Comma-separated list of additional domains to block on top of the bundled file. Useful for blocking providers spotted in the wild without forking the bundled list. Example: `throwaway.example,burner.test`. |
+| `DISPOSABLE_EMAIL_ALLOW_DOMAINS` | _empty_ | Comma-separated list of domains to remove from the effective blocklist. Useful when a bundled entry is too aggressive for your deployment. Example: `mailinator.com`. |
+
+Leave `ALLOW_SELF_SIGNUP` at the default (`False`) until ready to open
+registration. The admin can flip it on temporarily (e.g. during an
+onboarding window) and back off later without restarting any data.
+
+The bundled disposable list is a curated subset of the excellent
+community-maintained
+[`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains)
+project (CC0-1.0) — thanks to its maintainers for keeping the upstream
+list current. A scheduled GitHub Actions workflow
+(`.github/workflows/sync-disposable-email-domains.yml`) opens a PR every
+Monday when upstream changes, so new throwaway providers are picked up
+automatically with a human review step in between. For full
+~4500-entry coverage right now without waiting for the next sync,
+replace the bundled file with upstream's
+`disposable_email_blocklist.conf` manually.
+
+## Branding
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NUDGE_SITE_URL` | _empty_ | Public URL of this Nudge instance, e.g. `https://nudge.example.com`. Used in the outbound email footer (rendered as "Nudge · `<host>`" with `<host>` linking to this URL). Leave empty to show just "Nudge" with no link. No trailing slash. |
 
 ## Web Push (VAPID)
 

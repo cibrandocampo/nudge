@@ -18,24 +18,27 @@ export default function SharedWithChips({ contacts = [], onRemove }) {
   if (!contacts || contacts.length === 0) return null
   return (
     <div className={shared.formChipsRow}>
-      {contacts.map((c) => (
-        <span key={c.id} className={shared.formChip}>
-          <span className={shared.formChipAvatar} aria-hidden="true">
-            {avatarInitial(c)}
+      {contacts.map((c) => {
+        const label = displayLabel(c)
+        return (
+          <span key={c.id} className={shared.formChip}>
+            <span className={shared.formChipAvatar} aria-hidden="true">
+              {avatarInitial(c)}
+            </span>
+            <span>{label}</span>
+            {onRemove && (
+              <button
+                type="button"
+                className={shared.formChipRemove}
+                onClick={() => onRemove(c.id)}
+                aria-label={t('stockForm.removeShare', { name: label })}
+              >
+                <Icon name="x" size="sm" />
+              </button>
+            )}
           </span>
-          <span>{onRemove ? displayLabel(c) : c.username}</span>
-          {onRemove && (
-            <button
-              type="button"
-              className={shared.formChipRemove}
-              onClick={() => onRemove(c.id)}
-              aria-label={t('stockForm.removeShare', { name: c.username })}
-            >
-              <Icon name="x" size="sm" />
-            </button>
-          )}
-        </span>
-      ))}
+        )
+      })}
     </div>
   )
 }

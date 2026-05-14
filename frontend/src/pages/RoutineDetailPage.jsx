@@ -136,7 +136,7 @@ export default function RoutineDetailPage() {
   // a non-owner recipient sees every other recipient. Used by the
   // "Shared with" section so the label means the same thing on both sides.
   const otherRecipients = (routine?.shared_with_details ?? []).filter(
-    (c) => routine?.is_owner !== false || c.username !== user?.username,
+    (c) => routine?.is_owner !== false || c.id !== user?.id,
   )
   const borderClass = routineStockDepleted
     ? shared.cardBorderDanger
@@ -242,6 +242,12 @@ export default function RoutineDetailPage() {
               <span className={s.metaValue}>{formatInterval(routine.interval_hours, t)}</span>
             </div>
             <div className={s.metaRow}>
+              <span className={s.metaLabel}>{t('routine.detail.notifications')}</span>
+              <span className={s.metaValue} data-testid="notifications-row-value">
+                {formatReminderDescription(routine, t)}
+              </span>
+            </div>
+            <div className={s.metaRow}>
               <span className={s.metaLabel}>{t('routine.detail.status')}</span>
               <span className={cx(s.metaValue, s.statusValue)}>
                 <span className={cx(shared.dot, routine.is_active ? shared.dotSuccess : shared.dotDanger)} />
@@ -294,7 +300,7 @@ export default function RoutineDetailPage() {
               and (if any) the other recipients on the right. Two distinct
               labels under one frame keeps the relationship clear without
               the visual noise of two stacked cards. */}
-          {routine.is_owner === false && routine.owner_username && (
+          {routine.is_owner === false && routine.owner_display_name && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
               <div className={s.peopleSplit}>
                 <div className={s.peopleColumn} data-testid="owner-info">
@@ -302,9 +308,9 @@ export default function RoutineDetailPage() {
                   <div className={shared.formChipsRow}>
                     <span className={shared.formChip}>
                       <span className={shared.formChipAvatar} aria-hidden="true">
-                        {avatarInitial({ username: routine.owner_username })}
+                        {avatarInitial({ first_name: routine.owner_display_name })}
                       </span>
-                      <span>{routine.owner_username}</span>
+                      <span>{routine.owner_display_name}</span>
                     </span>
                   </div>
                 </div>
@@ -432,4 +438,20 @@ function formatInterval(hours, t) {
   if (hours % 168 === 0) return t('routine.interval.weeks', { count: hours / 168 })
   if (hours % 24 === 0) return t('routine.interval.days', { count: hours / 24 })
   return t('routine.interval.hours', { count: hours })
+}
+
+// Renders the reminder configuration as a single human-readable line.
+// `'daily'` collapses to a single token; `'intensive'` composes interval + respect.
+// Reuses the `routine.form.interval_*` i18n keys added in T188 so the labels
+// stay in sync between the form (where the user picks them) and the detail
+// page (where the user reads them back).
+function formatReminderDescription(routine, t) {
+  if (routine.reminder_mode === 'daily') {
+    return t('routine.detail.reminderDaily')
+  }
+  const intervalLabel = t(`routine.form.interval_${routine.reminder_interval_minutes}`)
+  const respectLabel = routine.respect_quiet_hours
+    ? t('routine.detail.respectsQuietHours')
+    : t('routine.detail.ignoresQuietHours')
+  return `${intervalLabel}, ${respectLabel}`
 }

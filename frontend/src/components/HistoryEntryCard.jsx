@@ -37,15 +37,19 @@ export default function HistoryEntryCard({
   const { user } = useAuth()
   const isRoutine = entry._type === 'routine'
   const title = isRoutine ? entry.routine_name : entry.stock_name
-  const authorUsername = isRoutine ? entry.completed_by_username : entry.consumed_by_username
-  const showAuthor = Boolean(authorUsername && authorUsername !== user?.username)
+  const authorId = isRoutine ? entry.completed_by_id : entry.consumed_by_id
+  const authorName = isRoutine ? entry.completed_by_display_name : entry.consumed_by_display_name
+  // Show the chip only when the entry belongs to someone other than the
+  // current user. Comparison is by id (stable internal identifier);
+  // display is by `*_display_name` (post-T197 server field).
+  const showAuthor = Boolean(authorId && user?.id && authorId !== user.id && authorName)
   // Tooltip / aria fallback in the active language. The chip itself shows
-  // an icon + username instead of the localised "by …" prefix to keep the
+  // an icon + name instead of the localised "by …" prefix to keep the
   // metadata line short.
   const authorLabel = showAuthor
     ? isRoutine
-      ? t('sharing.completedBy', { username: authorUsername })
-      : t('sharing.consumedBy', { username: authorUsername })
+      ? t('sharing.completedBy', { name: authorName })
+      : t('sharing.consumedBy', { name: authorName })
     : null
 
   const totalQty = entry.consumed_lots?.reduce((sum, l) => sum + l.quantity, 0) ?? 0
@@ -71,7 +75,7 @@ export default function HistoryEntryCard({
               {showAuthor && (
                 <span className={s.compactAuthor} aria-label={authorLabel} title={authorLabel}>
                   <Icon name="users" size="sm" />
-                  <span>{authorUsername}</span>
+                  <span>{authorName}</span>
                 </span>
               )}
             </span>
@@ -80,7 +84,7 @@ export default function HistoryEntryCard({
             <span className={s.compactRight}>
               <span className={s.compactAuthor} aria-label={authorLabel} title={authorLabel}>
                 <Icon name="users" size="sm" />
-                <span>{authorUsername}</span>
+                <span>{authorName}</span>
               </span>
             </span>
           )}
@@ -117,7 +121,7 @@ export default function HistoryEntryCard({
             {showAuthor && (
               <span className={s.entryAuthor} aria-label={authorLabel} title={authorLabel}>
                 <Icon name="users" size="sm" />
-                <span>{authorUsername}</span>
+                <span>{authorName}</span>
               </span>
             )}
             <span className={s.entryTime}>{formatEntryTime(entry)}</span>

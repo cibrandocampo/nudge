@@ -99,27 +99,46 @@ class Command(BaseCommand):
 
     def _create_users(self):
         password = os.environ.get("DEMO_USERS_PASSWORD", "change-me")
-        # No first_name / last_name on purpose — keeps the displayLabel
-        # helper (`first_name + last_name`, falls back to `username`)
-        # rendering the username on chips, which is what the E2E specs
-        # match against. Locale spread mirrors the previous E2E seed
-        # (en / es / gl) so `i18n.spec.js` has a `gl` baseline to flip
-        # to `en` from.
+        # Demo users are created with `auth_method="password"` so the
+        # post-T193 wizard accepts the seeded `DEMO_USERS_PASSWORD`
+        # directly — no SMTP/Celery dance required to get past the
+        # login screen in dev. Locale spread mirrors the previous E2E
+        # seed (en / es / gl) so `i18n.spec.js` has a `gl` baseline to
+        # flip to `en` from. First/last names are real so the UI
+        # renders display labels (chips, profile header, history
+        # author) accurately.
         specs = [
             {
                 "username": "cibran",
+                "email": "cibran@nudge.test",
+                "first_name": "Cibrán",
+                "last_name": "Docampo",
+                "auth_method": "password",
                 "timezone": "Europe/Madrid",
                 "language": "en",
                 "daily_notification_time": time(8, 0),
+                # Quiet hours enabled on cibran so the demo data exercises
+                # the per-recipient gate on routines with respect_quiet_hours=True.
+                "quiet_hours_enabled": True,
+                "quiet_hours_start": time(22, 0),
+                "quiet_hours_end": time(7, 0),
             },
             {
                 "username": "maria",
+                "email": "maria@nudge.test",
+                "first_name": "María",
+                "last_name": "García",
+                "auth_method": "password",
                 "timezone": "Europe/Madrid",
                 "language": "es",
                 "daily_notification_time": time(9, 0),
             },
             {
                 "username": "laura",
+                "email": "laura@nudge.test",
+                "first_name": "Laura",
+                "last_name": "Vázquez",
+                "auth_method": "password",
                 "timezone": "Europe/Madrid",
                 "language": "gl",
                 "daily_notification_time": time(8, 30),
@@ -409,12 +428,17 @@ class Command(BaseCommand):
 
         # Take antihistamine — daily, due today. Latest entry placed at
         # interval-2h so due is in +2h.
+        # Demo of the "urgent medication" combo: intensive reminders every
+        # hour, ignoring quiet hours (so it would fire at 03:00 if overdue).
         routines["take_antihistamine"] = Routine.objects.create(
             user=cibran,
             name="Take antihistamine",
             interval_hours=24,
             stock=stocks["ebastine"],
             stock_usage=1,
+            reminder_mode="intensive",
+            reminder_interval_minutes=60,
+            respect_quiet_hours=False,
         )
 
         # ── Cibran — shared with maria ──────────────────────────────────────
@@ -440,10 +464,13 @@ class Command(BaseCommand):
         routines["fertilize_orchid"].shared_with.add(maria)
 
         # Water cactus — due today, no stock, shared.
+        # Demo of the "non-urgent" combo: daily mode, no recurring reminders,
+        # covered only by the morning heads-up.
         routines["water_cactus"] = Routine.objects.create(
             user=cibran,
             name="Water cactus",
             interval_hours=504,  # 3 weeks
+            reminder_mode="daily",
         )
         routines["water_cactus"].shared_with.add(maria)
 

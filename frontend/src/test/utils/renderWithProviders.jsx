@@ -9,14 +9,18 @@ const defaultAuth = {
   user: {
     id: 1,
     username: 'testuser',
+    email: 'testuser@example.com',
     is_staff: false,
     timezone: 'Europe/Madrid',
     language: 'en',
     daily_notification_time: '08:00:00',
   },
-  login: vi.fn(),
+  loginStart: vi.fn().mockResolvedValue({ method: 'password' }),
+  loginVerify: vi.fn().mockResolvedValue({ is_new: false }),
+  completeProfile: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn(),
   loading: false,
+  isNewUser: false,
 }
 
 /**

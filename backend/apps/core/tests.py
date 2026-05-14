@@ -151,7 +151,7 @@ class OptimisticLockingMixinTest(APITestCase):
     """
 
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", password="pw")
+        self.user = User.objects.create_user(username="alice", password="pw", email="alice@example.com")
         self.client.force_authenticate(user=self.user)
         self.stock = Stock.objects.create(user=self.user, name="Filter")
 
@@ -255,8 +255,8 @@ class SeedCommandTest(TestCase):
 
     def test_creates_expected_fixture(self):
         # An unrelated superuser must survive the wipe; non-superusers must not.
-        admin = User.objects.create_superuser(username="admin", password="pw")
-        doomed = User.objects.create_user(username="doomed", password="pw")
+        admin = User.objects.create_superuser(username="admin", password="pw", email="admin@example.com")
+        doomed = User.objects.create_user(username="doomed", password="pw", email="doomed@example.com")
 
         call_command("seed")
 
@@ -485,7 +485,7 @@ class SeedCommandTest(TestCase):
 
     def test_wipes_existing_business_data(self):
         # Create artefacts that should be wiped.
-        user = User.objects.create_user(username="victim", password="pw")
+        user = User.objects.create_user(username="victim", password="pw", email="victim@example.com")
         stock = Stock.objects.create(user=user, name="Doomed stock")
         StockLot.objects.create(stock=stock, quantity=1)
         PushSubscription.objects.create(user=user, endpoint="https://e.test/x", p256dh="p", auth="a")
@@ -584,8 +584,8 @@ class IsOwnerPermissionTest(TestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
-        self.owner = User.objects.create_user(username="owner-perm", password="pw")
-        self.other = User.objects.create_user(username="other-perm", password="pw")
+        self.owner = User.objects.create_user(username="owner-perm", password="pw", email="owner-perm@example.com")
+        self.other = User.objects.create_user(username="other-perm", password="pw", email="other-perm@example.com")
 
     def _make_request(self, user):
         request = self.factory.get("/")
@@ -639,14 +639,19 @@ class _MockObj:
 class SharedWithMixinTest(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.user = User.objects.create_user(username="cibran-mix", password="pw")
+        self.user = User.objects.create_user(username="cibran-mix", password="pw", email="cibran-mix@example.com")
         self.contact = User.objects.create_user(
             username="maria-mix",
             password="pw",
+            email="maria-mix@example.com",
             first_name="María",
             last_name="González",
         )
-        self.stranger = User.objects.create_user(username="stranger-mix", password="pw")
+        self.stranger = User.objects.create_user(
+            username="stranger-mix",
+            password="pw",
+            email="stranger-mix@example.com",
+        )
         self.user.contacts.add(self.contact)
 
     def _serializer(self):
@@ -677,9 +682,9 @@ class SharedWithMixinTest(TestCase):
             details[0],
             {
                 "id": self.contact.pk,
-                "username": "maria-mix",
                 "first_name": "María",
                 "last_name": "González",
+                "email": "maria-mix@example.com",
             },
         )
 

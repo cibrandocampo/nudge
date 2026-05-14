@@ -26,7 +26,7 @@ const stock = {
   stock_severity: 'ok',
   expiry_severity: 'ok',
   is_owner: true,
-  owner_username: 'testuser',
+  owner_display_name: 'testuser',
   shared_with: [],
   shared_with_details: [],
   updated_at: '2026-04-17T10:00:00Z',
@@ -137,7 +137,7 @@ describe('StockDetailPage', () => {
 
   it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
     server.use(
-      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_username: 'alice' })),
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_display_name: 'alice' })),
     )
     renderDetail()
     await screen.findByText('Water filter')
@@ -288,7 +288,7 @@ describe('StockDetailPage', () => {
   })
 
   it('shows an owner chip when the stock is shared with the current user', async () => {
-    const sharedStock = { ...stock, is_owner: false, owner_username: 'alice' }
+    const sharedStock = { ...stock, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
     const section = await screen.findByTestId('owner-info')
@@ -307,21 +307,21 @@ describe('StockDetailPage', () => {
     const sharedStock = {
       ...stock,
       is_owner: false,
-      owner_username: 'alice',
+      owner_display_name: 'alice',
       shared_with_details: [
-        { id: 3, username: 'testuser', first_name: '', last_name: '' },
-        { id: 4, username: 'bob', first_name: 'Bob', last_name: '' },
+        // id=1 matches the viewer; id=4 is bob — only bob should appear in
+        // the "Shared with" section.
+        { id: 1, first_name: '', last_name: '', email: 'testuser@example.com' },
+        { id: 4, first_name: 'Bob', last_name: '', email: 'bob@example.com' },
       ],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
     const ownerSection = await screen.findByTestId('owner-info')
     expect(ownerSection).toHaveTextContent('alice')
-    expect(ownerSection).not.toHaveTextContent('bob')
-    expect(ownerSection).not.toHaveTextContent('testuser')
+    expect(ownerSection).not.toHaveTextContent('Bob')
     const sharedSection = screen.getByTestId('shared-with-info')
-    expect(sharedSection).toHaveTextContent('bob')
-    expect(sharedSection).not.toHaveTextContent('testuser')
+    expect(sharedSection).toHaveTextContent('Bob')
     expect(sharedSection).not.toHaveTextContent('alice')
   })
 
@@ -331,8 +331,9 @@ describe('StockDetailPage', () => {
     const sharedStock = {
       ...stock,
       is_owner: false,
-      owner_username: 'alice',
-      shared_with_details: [{ id: 3, username: 'testuser', first_name: '', last_name: '' }],
+      owner_display_name: 'alice',
+      // id matches `defaultAuth.user.id` (= 1) → filtered out as "me".
+      shared_with_details: [{ id: 1, first_name: '', last_name: '', email: 'testuser@example.com' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)))
     renderDetail()
@@ -435,18 +436,30 @@ describe('StockDetailPage', () => {
       http.get(`${BASE}/stock-consumptions/`, () =>
         HttpResponse.json({
           results: [
-            { id: 1, quantity: 2, created_at: '2026-04-15T10:00:00Z', consumed_by_username: 'alice' },
-            { id: 2, quantity: 1, created_at: '2026-04-10T10:00:00Z', consumed_by_username: null },
+            {
+              id: 1,
+              quantity: 2,
+              created_at: '2026-04-15T10:00:00Z',
+              consumed_by_id: 99,
+              consumed_by_display_name: 'Alice',
+            },
+            {
+              id: 2,
+              quantity: 1,
+              created_at: '2026-04-10T10:00:00Z',
+              consumed_by_id: null,
+              consumed_by_display_name: null,
+            },
           ],
         }),
       ),
     )
     renderDetail()
     await waitFor(() => expect(screen.getByText(/Recent consumption/)).toBeInTheDocument())
-    // The chip renders an icon + the bare username; the localised
+    // The chip renders an icon + the bare display name; the localised
     // "by …" string lives on the aria-label / title for accessibility.
-    expect(screen.getByLabelText(/by alice/)).toBeInTheDocument()
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    expect(screen.getByLabelText(/by Alice/)).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
   })
 
   // Lot highlight tri-state — derived in-page from each lot.expiry_date
@@ -615,14 +628,14 @@ describe('StockDetailPage', () => {
   it('renders the shared-with chips when the owner has shared the stock', async () => {
     const ownedShared = {
       ...stock,
-      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
+      shared_with_details: [{ id: 20, first_name: 'Bob', last_name: 'Smith', email: 'bob@example.com' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(ownedShared)))
     renderDetail()
     const block = await screen.findByTestId('shared-with-info')
     expect(within(block).getByText('Shared with')).toBeInTheDocument()
-    // Read-only chips render the username (not the full display label).
-    expect(within(block).getByText('bob')).toBeInTheDocument()
+    // Post-T197: read-only chips render the display label (fullName).
+    expect(within(block).getByText('Bob Smith')).toBeInTheDocument()
   })
 
   it('cancel in the add-lot form closes it and clears the qty input', async () => {

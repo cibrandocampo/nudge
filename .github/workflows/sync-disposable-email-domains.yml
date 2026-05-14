@@ -1,0 +1,108 @@
+name: Sync disposable email domains list
+
+# Keeps `backend/apps/users/disposable_email_domains.txt` in sync with the
+# canonical community list at
+#   https://github.com/disposable-email-domains/disposable-email-domains
+# (CC0-1.0 — public domain). When the upstream list changes, this workflow
+# opens a PR with the diff so a human can review before merging — that way
+# the build remains deterministic for every commit and a malicious or
+# bogus upstream change can't sneak into production without sign-off.
+#
+# Repo setting needed (one-off):
+#   Settings → Actions → General → Workflow permissions →
+#     "Allow GitHub Actions to create and approve pull requests" ✓
+
+on:
+  schedule:
+    # Monday 06:30 UTC — 30 minutes after `weekly-rebuild.yml` to avoid
+    # contention on the runner pool.
+    - cron: '30 6 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fetch upstream blocklist
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 5 \
+            https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf \
+            -o /tmp/upstream.txt
+          lines=$(wc -l < /tmp/upstream.txt)
+          echo "Fetched $lines domains from upstream."
+          # Sanity check: a file with fewer than 1000 entries is almost
+          # certainly a fetch error (the list has ~4500). Fail loudly
+          # rather than silently shipping a near-empty blocklist via PR.
+          if [ "$lines" -lt 1000 ]; then
+            echo "::error::Upstream fetch returned suspiciously few lines ($lines). Aborting."
+            exit 1
+          fi
+
+      - name: Rebuild bundled file
+        run: |
+          set -euo pipefail
+          target=backend/apps/users/disposable_email_domains.txt
+          # Preserved header — attribution + operational notes. The body
+          # below is replaced wholesale with the upstream content.
+          cat > "$target" <<'HEADER'
+          # Mirror of the community-maintained disposable / throwaway email
+          # blocklist, blocked from self-signup when
+          # settings.BLOCK_DISPOSABLE_EMAIL is True (default in prod).
+          # One domain per line, lower-case.
+          #
+          # Auto-synced weekly from
+          #   https://github.com/disposable-email-domains/disposable-email-domains
+          # (CC0-1.0 — public domain). Huge thanks to that project's
+          # maintainers for keeping the upstream list current.
+          #
+          # DO NOT edit by hand — the next sync will overwrite your change.
+          # To add or remove domains for THIS deployment without forking
+          # the file, use the DISPOSABLE_EMAIL_EXTRA_DOMAINS and
+          # DISPOSABLE_EMAIL_ALLOW_DOMAINS env vars (see
+          # docs/configuration.md#self-signup).
+          #
+          HEADER
+          cat /tmp/upstream.txt >> "$target"
+
+      - name: Open PR if the bundled file changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/sync-disposable-email-domains
+          commit-message: 'chore: sync disposable email domains from upstream'
+          title: 'chore: sync disposable email domains from upstream'
+          body: |
+            Auto-sync of `backend/apps/users/disposable_email_domains.txt`
+            from upstream
+            [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains)
+            (CC0-1.0).
+
+            Review the diff before merging — this is the only gate against
+            an upstream change shipping straight to production.
+
+            ### First-sync note
+
+            If this is the very first time this PR opens, it migrates the
+            list from the curated ~80-entry subset to the full upstream
+            (~4500 entries). That is a real **behaviour change**: blocking
+            becomes much more aggressive. If you'd rather keep the curated
+            subset, close this PR and disable the workflow with
+            `gh workflow disable "Sync disposable email domains list"`.
+            Subsequent syncs are small diffs against upstream only.
+
+            ### Tuning without forking
+
+            `DISPOSABLE_EMAIL_EXTRA_DOMAINS` and
+            `DISPOSABLE_EMAIL_ALLOW_DOMAINS` let each deployment extend or
+            trim the effective blocklist via `.env` without touching the
+            bundled file (see `docs/configuration.md#self-signup`).
+          labels: |
+            dependencies
+            automated
+          delete-branch: true

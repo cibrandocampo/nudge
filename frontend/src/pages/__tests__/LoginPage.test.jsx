@@ -8,63 +8,241 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
-describe('LoginPage', () => {
+describe('LoginPage — wizard (T196)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
-  it('renders form with username and password fields', () => {
-    renderWithProviders(<LoginPage />)
-    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument()
-    expect(screen.getByText('Sign in')).toBeInTheDocument()
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  it('renders tagline', () => {
-    renderWithProviders(<LoginPage />)
-    expect(screen.getByText('A gentle reminder for recurring things.')).toBeInTheDocument()
-  })
+  // ── Happy paths ──────────────────────────────────────────────────────────
 
-  it('navigates to / on successful login', async () => {
-    const login = vi.fn().mockResolvedValue(undefined)
-    const { user } = renderWithProviders(<LoginPage />, { auth: { login } })
+  it('OTP login of an existing user navigates to /', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const loginVerify = vi.fn().mockResolvedValue({ is_new: false })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
 
-    await user.type(screen.getByPlaceholderText('Username'), 'testuser')
-    await user.type(screen.getByPlaceholderText('Password'), 'pass')
-    await user.click(screen.getByText('Sign in'))
+    await user.type(screen.getByPlaceholderText('Email'), 'user@example.com')
+    await user.click(screen.getByText('Continue'))
 
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+    expect(loginStart).toHaveBeenCalledWith('user@example.com')
+
+    // Typing the 6th digit auto-submits — no explicit Verify click needed.
+    await user.type(screen.getByPlaceholderText('6-digit code'), '123456')
+
+    await waitFor(() => expect(loginVerify).toHaveBeenCalledWith('user@example.com', { code: '123456' }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'))
-    expect(login).toHaveBeenCalledWith('testuser', 'pass')
   })
 
-  it('shows error on failed login', async () => {
-    const login = vi.fn().mockRejectedValue(new Error('fail'))
-    const { user } = renderWithProviders(<LoginPage />, { auth: { login } })
+  it('New signup goes through email → OTP → name and lands on /', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const loginVerify = vi.fn().mockResolvedValue({ is_new: true })
+    const completeProfile = vi.fn().mockResolvedValue(undefined)
+    const { user } = renderWithProviders(<LoginPage />, {
+      auth: { loginStart, loginVerify, completeProfile, isNewUser: false },
+    })
 
-    await user.type(screen.getByPlaceholderText('Username'), 'bad')
-    await user.type(screen.getByPlaceholderText('Password'), 'bad')
-    await user.click(screen.getByText('Sign in'))
+    await user.type(screen.getByPlaceholderText('Email'), 'fresh@example.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
 
-    await waitFor(() => expect(screen.getByText('Invalid username or password.')).toBeInTheDocument())
+    // Auto-submit fires when the 6th digit lands.
+    await user.type(screen.getByPlaceholderText('6-digit code'), '654321')
+
+    // Lands on the name step (is_new=true)
+    await waitFor(() => expect(screen.getByText('Welcome to Nudge!')).toBeInTheDocument())
+    expect(mockNavigate).not.toHaveBeenCalled()
+
+    await user.type(screen.getByPlaceholderText('First name'), 'Ada')
+    await user.type(screen.getByPlaceholderText('Last name'), 'Lovelace')
+    await user.click(screen.getByText('Continue'))
+
+    await waitFor(() => expect(completeProfile).toHaveBeenCalledWith('Ada', 'Lovelace'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'))
   })
 
-  it('shows loading state while submitting', async () => {
-    let resolveLogin
-    const login = vi.fn().mockImplementation(
-      () =>
-        new Promise((r) => {
-          resolveLogin = r
-        }),
-    )
-    const { user } = renderWithProviders(<LoginPage />, { auth: { login } })
+  it('Password login of a non-new user navigates to /', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'password' })
+    const loginVerify = vi.fn().mockResolvedValue({ is_new: false })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
 
-    await user.type(screen.getByPlaceholderText('Username'), 'u')
-    await user.type(screen.getByPlaceholderText('Password'), 'p')
+    await user.type(screen.getByPlaceholderText('Email'), 'admin@example.com')
+    await user.click(screen.getByText('Continue'))
+
+    await waitFor(() => expect(screen.getByText('Welcome back')).toBeInTheDocument())
+    await user.type(screen.getByPlaceholderText('Password'), 'pw')
     await user.click(screen.getByText('Sign in'))
 
-    expect(screen.getByText('Signing in…')).toBeDisabled()
+    await waitFor(() => expect(loginVerify).toHaveBeenCalledWith('admin@example.com', { password: 'pw' }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'))
+  })
 
-    resolveLogin()
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+  // ── Errors ───────────────────────────────────────────────────────────────
+
+  it('shows user_not_found error and stays on the email step', async () => {
+    const loginStart = vi.fn().mockRejectedValue(new Error('user_not_found'))
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'ghost@example.com')
+    await user.click(screen.getByText('Continue'))
+
+    await waitFor(() => expect(screen.getByText("We can't find an account with that email.")).toBeInTheDocument())
+    // Still on the email step.
+    expect(screen.getByPlaceholderText('Email')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('6-digit code')).not.toBeInTheDocument()
+  })
+
+  it('shows rate-limited error when loginStart fails with status 429', async () => {
+    const err = new Error('login_start_failed')
+    err.status = 429
+    const loginStart = vi.fn().mockRejectedValue(err)
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'u@x.com')
+    await user.click(screen.getByText('Continue'))
+
+    await waitFor(() => expect(screen.getByText('Too many attempts. Try again later.')).toBeInTheDocument())
+  })
+
+  it('shows codeInvalid on a bad OTP and does NOT navigate', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const verifyErr = new Error('login_verify_failed')
+    verifyErr.status = 400
+    const loginVerify = vi.fn().mockRejectedValue(verifyErr)
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'u@x.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+
+    // Auto-submit on the 6th digit triggers the (failing) verify call;
+    // no need to click Verify explicitly.
+    await user.type(screen.getByPlaceholderText('6-digit code'), '000000')
+
+    await waitFor(() => expect(screen.getByText('Invalid or expired code.')).toBeInTheDocument())
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // ── Back navigation ──────────────────────────────────────────────────────
+
+  it('"Back" from the OTP step returns to the email step and clears state', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'u@x.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+
+    await user.type(screen.getByPlaceholderText('6-digit code'), '123')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+
+    // Email step visible again, with the previous email still in the input.
+    expect(screen.getByPlaceholderText('Email')).toHaveValue('u@x.com')
+    // The code field is gone and its state was reset (no leakage).
+    expect(screen.queryByPlaceholderText('6-digit code')).not.toBeInTheDocument()
+  })
+
+  // ── Resend cooldown ──────────────────────────────────────────────────────
+
+  it('Resend button is disabled while the cooldown is ticking', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'u@x.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+
+    // The resend button starts the cooldown at 30s and is disabled.
+    // We assert the disabled state without trying to flush 30 wall-clock
+    // seconds in the test — the cooldown behaviour itself is a simple
+    // setTimeout chain that doesn't need timer mocking to be trusted.
+    const resendDisabled = screen.getByRole('button', { name: /Resend in \d+s/ })
+    expect(resendDisabled).toBeDisabled()
+    // Clicking the disabled button must not call loginStart again.
+    await user.click(resendDisabled)
+    expect(loginStart).toHaveBeenCalledTimes(1)
+  })
+
+  // ── Onboarding gate jump-in ──────────────────────────────────────────────
+
+  it('Jumps straight to the name step when mounted with isNewUser=true', () => {
+    renderWithProviders(<LoginPage />, { auth: { isNewUser: true } })
+    expect(screen.getByText('Welcome to Nudge!')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Email')).not.toBeInTheDocument()
+  })
+
+  // ── Auto-submit on 6th OTP digit ────────────────────────────────────────
+
+  it('Auto-submits the OTP as soon as the 6th digit is entered (no click needed)', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const loginVerify = vi.fn().mockResolvedValue({ is_new: false })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'auto@example.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+
+    // Typing the 6 digits without ever clicking Verify must still
+    // trigger the verify endpoint — the wizard auto-submits on the 6th
+    // character (covers both typing the last digit and pasting all six).
+    await user.type(screen.getByPlaceholderText('6-digit code'), '123456')
+
+    await waitFor(() => expect(loginVerify).toHaveBeenCalledWith('auto@example.com', { code: '123456' }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'))
+  })
+
+  it('Auto-submit only fires once per attempt (typing past 6 chars is impossible)', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
+    const loginVerify = vi.fn().mockResolvedValue({ is_new: false })
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
+
+    await user.type(screen.getByPlaceholderText('Email'), 'auto@example.com')
+    await user.click(screen.getByText('Continue'))
+    await waitFor(() => expect(screen.getByText('Check your email')).toBeInTheDocument())
+
+    // Type one extra digit at the end — maxLength + slice(0,6) drops it,
+    // and the loading guard in submitOtp prevents a second call.
+    await user.type(screen.getByPlaceholderText('6-digit code'), '1234567')
+
+    await waitFor(() => expect(loginVerify).toHaveBeenCalledTimes(1))
+    expect(loginVerify).toHaveBeenCalledWith('auto@example.com', { code: '123456' })
+  })
+
+  // ── Email-step copy reflects ALLOW_SELF_SIGNUP ──────────────────────────
+
+  it('Shows "Sign in or create an account" when self-signup is enabled', () => {
+    renderWithProviders(<LoginPage />, { auth: { allowSelfSignup: true } })
+    expect(screen.getByText('Sign in or create an account')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()
+  })
+
+  it('Shows "Sign in" when self-signup is disabled', () => {
+    renderWithProviders(<LoginPage />, { auth: { allowSelfSignup: false } })
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.queryByText('Sign in or create an account')).not.toBeInTheDocument()
+  })
+
+  it('Renders neither heading until the auth config has loaded', () => {
+    renderWithProviders(<LoginPage />, { auth: { allowSelfSignup: null } })
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Sign in or create an account')).not.toBeInTheDocument()
+    // The form is still usable while loading — the email input is mounted.
+    expect(screen.getByPlaceholderText('Email')).toBeInTheDocument()
+  })
+
+  it('Rejects empty name submissions on the name step', async () => {
+    const completeProfile = vi.fn()
+    const { user } = renderWithProviders(<LoginPage />, { auth: { completeProfile, isNewUser: true } })
+
+    // Submit-button disabled when fields are blank; type whitespace and
+    // confirm the client-side guard fires.
+    await user.type(screen.getByPlaceholderText('First name'), '   ')
+    const continueBtn = screen.getByRole('button', { name: 'Continue' })
+    expect(continueBtn).toBeDisabled()
+    expect(completeProfile).not.toHaveBeenCalled()
   })
 })

@@ -31,7 +31,7 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
   const isOwnerOfShare = stock.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
     ? t('sharing.sharedBadgeOwnerAria')
-    : t('sharing.sharedBadgeRecipientAria', { owner: stock.owner_username ?? '' })
+    : t('sharing.sharedBadgeRecipientAria', { owner: stock.owner_display_name ?? '' })
   const ownRate = stock.daily_consumption_own || 0
   const sharedRate = stock.daily_consumption_shared || 0
   const totalRate = ownRate + sharedRate

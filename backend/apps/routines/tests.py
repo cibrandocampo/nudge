@@ -4,6 +4,7 @@ from math import floor
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import serializers
@@ -20,8 +21,12 @@ User = get_user_model()
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def make_user(username="user1", password="pass"):
-    return User.objects.create_user(username=username, password=password)
+def make_user(username="user1", password="pass", email=None):
+    return User.objects.create_user(
+        username=username,
+        password=password,
+        email=email or f"{username}@example.com",
+    )
 
 
 def make_stock(user, name="Filter"):
@@ -736,6 +741,103 @@ class RoutineSerializerTest(TestCase):
         )
         self.assertFalse(s.is_valid())
         self.assertIn("stock", s.errors)
+
+
+class ReminderCadenceFieldTest(APITestCase):
+    """Routine.reminder_mode / reminder_interval_minutes / respect_quiet_hours
+    field-level behavior: defaults, choices enforcement, API round-trip."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+
+    def test_defaults(self):
+        r = make_routine(self.user)
+        self.assertEqual(r.reminder_mode, "intensive")
+        self.assertEqual(r.reminder_interval_minutes, 120)
+        self.assertTrue(r.respect_quiet_hours)
+
+    def test_invalid_mode_fails_full_clean(self):
+        r = make_routine(self.user)
+        r.reminder_mode = "weekly"
+        with self.assertRaises(DjangoValidationError):
+            r.full_clean()
+
+    def test_invalid_interval_fails_full_clean(self):
+        r = make_routine(self.user)
+        r.reminder_interval_minutes = 45
+        with self.assertRaises(DjangoValidationError):
+            r.full_clean()
+
+    def test_post_api_persists_three_fields(self):
+        response = self.client.post(
+            "/api/routines/",
+            {
+                "name": "Critical med",
+                "interval_hours": 8,
+                "reminder_mode": "intensive",
+                "reminder_interval_minutes": 60,
+                "respect_quiet_hours": False,
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.json())
+        body = response.json()
+        self.assertEqual(body["reminder_mode"], "intensive")
+        self.assertEqual(body["reminder_interval_minutes"], 60)
+        self.assertFalse(body["respect_quiet_hours"])
+        r = Routine.objects.get(pk=body["id"])
+        self.assertEqual(r.reminder_mode, "intensive")
+        self.assertEqual(r.reminder_interval_minutes, 60)
+        self.assertFalse(r.respect_quiet_hours)
+
+    def test_patch_api_updates_three_fields(self):
+        r = make_routine(self.user, name="Tweak me")
+        response = self.client.patch(
+            f"/api/routines/{r.id}/",
+            {
+                "reminder_mode": "daily",
+                "reminder_interval_minutes": 480,
+                "respect_quiet_hours": False,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        body = response.json()
+        self.assertEqual(body["reminder_mode"], "daily")
+        self.assertEqual(body["reminder_interval_minutes"], 480)
+        self.assertFalse(body["respect_quiet_hours"])
+
+    def test_get_api_exposes_three_fields(self):
+        r = make_routine(self.user)
+        response = self.client.get(f"/api/routines/{r.id}/")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("reminder_mode", body)
+        self.assertIn("reminder_interval_minutes", body)
+        self.assertIn("respect_quiet_hours", body)
+
+    def test_post_api_rejects_invalid_mode(self):
+        response = self.client.post(
+            "/api/routines/",
+            {
+                "name": "Bad mode",
+                "interval_hours": 24,
+                "reminder_mode": "weekly",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("reminder_mode", response.json())
+
+    def test_post_api_rejects_invalid_interval(self):
+        response = self.client.post(
+            "/api/routines/",
+            {
+                "name": "Bad interval",
+                "interval_hours": 24,
+                "reminder_interval_minutes": 45,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("reminder_interval_minutes", response.json())
 
 
 class SharedWithValidationTest(TestCase):
@@ -2010,9 +2112,9 @@ class RoutineEntryNotesTest(APITestCase):
 
 class SharedRoutineTest(APITestCase):
     def setUp(self):
-        self.alice = User.objects.create_user(username="alice", password="pass")
-        self.bob = User.objects.create_user(username="bob", password="pass")
-        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.alice = User.objects.create_user(username="alice", password="pass", email="alice@example.com")
+        self.bob = User.objects.create_user(username="bob", password="pass", email="bob@example.com")
+        self.carol = User.objects.create_user(username="carol", password="pass", email="carol@example.com")
         # alice and bob are contacts
         self.alice.contacts.add(self.bob)
         self.routine = make_routine(self.alice, name="Shared routine")
@@ -2113,9 +2215,9 @@ class SharedRoutineTest(APITestCase):
 
 class SharedStockTest(APITestCase):
     def setUp(self):
-        self.alice = User.objects.create_user(username="alice", password="pass")
-        self.bob = User.objects.create_user(username="bob", password="pass")
-        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.alice = User.objects.create_user(username="alice", password="pass", email="alice@example.com")
+        self.bob = User.objects.create_user(username="bob", password="pass", email="bob@example.com")
+        self.carol = User.objects.create_user(username="carol", password="pass", email="carol@example.com")
         self.alice.contacts.add(self.bob)
         self.stock = make_stock(self.alice, name="Shared stock")
         make_lot(self.stock, quantity=50)
@@ -2200,8 +2302,8 @@ class SharedStockTest(APITestCase):
 
 class UserStockGroupTest(APITestCase):
     def setUp(self):
-        self.owner = User.objects.create_user("usg_owner", password="pw")
-        self.recipient = User.objects.create_user("usg_recipient", password="pw")
+        self.owner = User.objects.create_user("usg_owner", password="pw", email="usg_owner@example.com")
+        self.recipient = User.objects.create_user("usg_recipient", password="pw", email="usg_recipient@example.com")
         self.owner.contacts.add(self.recipient)
         self.group = StockGroup.objects.create(user=self.recipient, name="My Group")
         self.stock = Stock.objects.create(user=self.owner, name="Aspirin")
@@ -2222,7 +2324,7 @@ class UserStockGroupTest(APITestCase):
         self.assertFalse(UserStockGroup.objects.filter(stock=self.stock).exists())
 
     def test_owner_unshare_does_not_affect_other_overrides(self):
-        other = User.objects.create_user("usg_other", password="pw")
+        other = User.objects.create_user("usg_other", password="pw", email="usg_other@example.com")
         self.owner.contacts.add(other)
         self.stock.shared_with.add(other)
         other_group = StockGroup.objects.create(user=other, name="Other Group")
@@ -2240,8 +2342,8 @@ class UserStockGroupTest(APITestCase):
 
 class UserStockGroupSerializerTest(APITestCase):
     def setUp(self):
-        self.owner = User.objects.create_user("owner2", password="pw")
-        self.recipient = User.objects.create_user("recip2", password="pw")
+        self.owner = User.objects.create_user("owner2", password="pw", email="owner2@example.com")
+        self.recipient = User.objects.create_user("recip2", password="pw", email="recip2@example.com")
         self.owner.contacts.add(self.recipient)
         self.owner_group = StockGroup.objects.create(user=self.owner, name="Owner Group")
         self.recip_group = StockGroup.objects.create(user=self.recipient, name="Recip Group")
@@ -2348,7 +2450,7 @@ class UserStockGroupSerializerTest(APITestCase):
         self.assertEqual(self.stock.group, new_group)
 
     def test_my_group_not_accessible_to_non_shared_user(self):
-        stranger = User.objects.create_user("stranger2", password="pw")
+        stranger = User.objects.create_user("stranger2", password="pw", email="stranger2@example.com")
         self.client.force_authenticate(user=stranger)
         res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": None}, format="json")
         self.assertEqual(res.status_code, 404)
@@ -2359,8 +2461,8 @@ class UserStockGroupSerializerTest(APITestCase):
 
 class ContactRemovalCascadeTest(APITestCase):
     def setUp(self):
-        self.alice = User.objects.create_user(username="alice", password="pass")
-        self.bob = User.objects.create_user(username="bob", password="pass")
+        self.alice = User.objects.create_user(username="alice", password="pass", email="alice@example.com")
+        self.bob = User.objects.create_user(username="bob", password="pass", email="bob@example.com")
         self.alice.contacts.add(self.bob)
 
         self.alice_routine = make_routine(self.alice, name="Alice routine")
@@ -2392,9 +2494,9 @@ class ContactRemovalCascadeTest(APITestCase):
 
 class ValidateStockSharedTest(APITestCase):
     def setUp(self):
-        self.alice = User.objects.create_user(username="alice", password="pass")
-        self.bob = User.objects.create_user(username="bob", password="pass")
-        self.carol = User.objects.create_user(username="carol", password="pass")
+        self.alice = User.objects.create_user(username="alice", password="pass", email="alice@example.com")
+        self.bob = User.objects.create_user(username="bob", password="pass", email="bob@example.com")
+        self.carol = User.objects.create_user(username="carol", password="pass", email="carol@example.com")
         self.alice.contacts.add(self.bob)
         self.stock = make_stock(self.alice, name="Shared stock")
         self.stock.shared_with.add(self.bob)

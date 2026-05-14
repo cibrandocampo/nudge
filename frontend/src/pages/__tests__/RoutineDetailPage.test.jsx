@@ -567,7 +567,7 @@ describe('RoutineDetailPage — advance button', () => {
   })
 
   it('shows the owner username when the routine is shared with the current user', async () => {
-    const sharedRoutine = { ...routine, is_owner: false, owner_username: 'alice' }
+    const sharedRoutine = { ...routine, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
     renderDetail()
     await screen.findByText('Take vitamins')
@@ -580,7 +580,7 @@ describe('RoutineDetailPage — advance button', () => {
     // with 403 "Only the owner can modify this resource." We avoid letting
     // the user click into a guaranteed failure: the three owner-only
     // actions disappear when ``is_owner === false``.
-    const sharedRoutine = { ...routine, is_owner: false, owner_username: 'alice' }
+    const sharedRoutine = { ...routine, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
     renderDetail()
     await screen.findByText('Take vitamins')
@@ -609,28 +609,28 @@ describe('RoutineDetailPage — advance button', () => {
     const ownedShared = {
       ...routine,
       is_owner: true,
-      shared_with_details: [{ id: 20, username: 'bob', first_name: 'Bob', last_name: 'Smith' }],
+      shared_with_details: [{ id: 20, first_name: 'Bob', last_name: 'Smith', email: 'bob@example.com' }],
     }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(ownedShared)))
     renderDetail()
     const block = await screen.findByTestId('shared-with-info')
     expect(within(block).getByText('Shared with')).toBeInTheDocument()
-    // Read-only chips render the username (not the full display label).
-    expect(within(block).getByText('bob')).toBeInTheDocument()
+    // Post-T197: chips render the display label (fullName).
+    expect(within(block).getByText('Bob Smith')).toBeInTheDocument()
   })
 
   it('shared user sees owner alone in "Owner" section and other recipients in "Shared with"', async () => {
     // Owner is singular — the "Propietario" section must contain ONLY
     // the owner chip. Other recipients (excluding the viewer) move to a
-    // sibling "Shared with" section, matching the symmetric experience
-    // an owner already gets when they share with people.
+    // sibling "Shared with" section. Viewer is filtered out by id.
     const sharedRoutine = {
       ...routine,
       is_owner: false,
-      owner_username: 'alice',
+      owner_display_name: 'alice',
       shared_with_details: [
-        { id: 30, username: 'testuser', first_name: '', last_name: '' },
-        { id: 31, username: 'carol', first_name: 'Carol', last_name: '' },
+        // id=1 matches the viewer (default test user) → filtered out.
+        { id: 1, first_name: '', last_name: '', email: 'testuser@example.com' },
+        { id: 31, first_name: 'Carol', last_name: '', email: 'carol@example.com' },
       ],
     }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
@@ -638,12 +638,10 @@ describe('RoutineDetailPage — advance button', () => {
     const ownerSection = await screen.findByTestId('owner-info')
     expect(ownerSection).toHaveTextContent('Owner')
     expect(ownerSection).toHaveTextContent('alice')
-    expect(ownerSection).not.toHaveTextContent('carol')
-    expect(ownerSection).not.toHaveTextContent('testuser')
+    expect(ownerSection).not.toHaveTextContent('Carol')
     const sharedSection = screen.getByTestId('shared-with-info')
     expect(sharedSection).toHaveTextContent('Shared with')
-    expect(sharedSection).toHaveTextContent('carol')
-    expect(sharedSection).not.toHaveTextContent('testuser')
+    expect(sharedSection).toHaveTextContent('Carol')
     expect(sharedSection).not.toHaveTextContent('alice')
   })
 
@@ -651,8 +649,9 @@ describe('RoutineDetailPage — advance button', () => {
     const sharedRoutine = {
       ...routine,
       is_owner: false,
-      owner_username: 'alice',
-      shared_with_details: [{ id: 30, username: 'testuser', first_name: '', last_name: '' }],
+      owner_display_name: 'alice',
+      // id=1 matches the viewer → no "other" recipients left.
+      shared_with_details: [{ id: 1, first_name: '', last_name: '', email: 'testuser@example.com' }],
     }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
     renderDetail()
@@ -809,5 +808,53 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     const dot = await screen.findByTestId('stock-severity-dot')
     expect(dot.className).toContain('dotDanger')
     expect(dot.className).not.toContain('dotWarning')
+  })
+
+  describe('Notifications meta row (T189)', () => {
+    async function renderWithRoutine(extra) {
+      server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, ...extra })))
+      renderDetail()
+      // Wait for the page to mount; the meta row sits next to the title.
+      await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
+      return screen.getByTestId('notifications-row-value')
+    }
+
+    it('renders "Daily" when reminder_mode is daily', async () => {
+      const value = await renderWithRoutine({
+        reminder_mode: 'daily',
+        reminder_interval_minutes: 120,
+        respect_quiet_hours: true,
+      })
+      expect(value).toHaveTextContent('Daily')
+      // Sanity: the interval label must NOT leak into the daily output.
+      expect(value).not.toHaveTextContent('Every')
+    })
+
+    it('renders interval + "respects quiet hours" for intensive mode with respect=true', async () => {
+      const value = await renderWithRoutine({
+        reminder_mode: 'intensive',
+        reminder_interval_minutes: 120,
+        respect_quiet_hours: true,
+      })
+      expect(value).toHaveTextContent('Every 2 hours, respects quiet hours')
+    })
+
+    it('renders interval + "ignores quiet hours" for intensive mode with respect=false', async () => {
+      const value = await renderWithRoutine({
+        reminder_mode: 'intensive',
+        reminder_interval_minutes: 60,
+        respect_quiet_hours: false,
+      })
+      expect(value).toHaveTextContent('Every hour, ignores quiet hours')
+    })
+
+    it('picks the 480 min interval label for 8h cadence', async () => {
+      const value = await renderWithRoutine({
+        reminder_mode: 'intensive',
+        reminder_interval_minutes: 480,
+        respect_quiet_hours: true,
+      })
+      expect(value).toHaveTextContent('Every 8 hours, respects quiet hours')
+    })
   })
 })

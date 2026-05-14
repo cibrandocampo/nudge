@@ -177,20 +177,20 @@ describe('StockFormPage — create', () => {
     )
     mockGroups()
     mockContacts([
-      { id: 2, username: 'alice' },
-      { id: 3, username: 'bob' },
+      { id: 2, username: 'alice', email: 'alice@example.com', first_name: 'Alice' },
+      { id: 3, username: 'bob', email: 'bob@example.com', first_name: 'Bob' },
     ])
 
     const { user } = renderCreate()
     await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Water filters')
     await user.click(screen.getByRole('button', { name: /Share with/ }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     // Close the modal (click overlay).
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    // Chip for alice appears.
-    expect(screen.getByText('alice')).toBeInTheDocument()
+    // Chip for alice appears (editable chip uses displayLabel → first_name).
+    expect(screen.getByText('Alice')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(sharedBody).toEqual({ shared_with: [2] }))
@@ -199,18 +199,18 @@ describe('StockFormPage — create', () => {
   it('removes a selected contact via the chip × button without reopening the modal', async () => {
     mockGroups()
     mockContacts([
-      { id: 2, username: 'alice' },
-      { id: 3, username: 'bob' },
+      { id: 2, username: 'alice', email: 'alice@example.com', first_name: 'Alice' },
+      { id: 3, username: 'bob', email: 'bob@example.com', first_name: 'Bob' },
     ])
 
     const { user } = renderCreate()
     await user.click(screen.getByRole('button', { name: /Share with/ }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // Chip visible. Click its × to remove.
-    await user.click(screen.getByRole('button', { name: /Unshare with alice/ }))
+    await user.click(screen.getByRole('button', { name: /Unshare with Alice/ }))
     expect(screen.queryByText('alice')).not.toBeInTheDocument()
   })
 })
@@ -281,13 +281,13 @@ describe('StockFormPage — create error paths', () => {
       }),
     )
     mockGroups()
-    mockContacts([{ id: 2, username: 'alice' }])
+    mockContacts([{ id: 2, first_name: 'Alice', email: 'alice@example.com' }])
 
     const { user } = renderCreate()
     await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Share')
     await user.click(screen.getByRole('button', { name: /Share with/ }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByText('alice'))
+    await user.click(within(dialog).getByText('Alice'))
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Create' }))
@@ -399,7 +399,7 @@ describe('StockFormPage — edit as recipient (shared stock)', () => {
     group: null,
     shared_with: [],
     is_owner: false,
-    owner_username: 'alice',
+    owner_display_name: 'alice',
     updated_at: '2026-04-22T10:00:00Z',
   }
 

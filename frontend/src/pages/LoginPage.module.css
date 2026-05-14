@@ -46,5 +46,94 @@
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.stepTitle {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--c-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+}
+
+.linkBtn:disabled {
+  color: var(--c-muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+/* ── OTP 6-slot input ────────────────────────────────────────────────────
+ * Visual trick: a real <input maxLength=6> overlays 6 boxes. The input
+ * is transparent (text + caret) but still receives focus, keyboard, paste
+ * and browser/iOS autofill — the boxes are purely presentational and
+ * mirror `code[i]` via React. Keeping a single <input> behind the scenes
+ * means paste-fills-all works for free and we don't have to juggle
+ * focus across 6 fields. */
+.otpWrap {
+  position: relative;
+  width: 100%;
+}
+
+.otpHiddenInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-size: 1.5rem;
+  text-align: center;
+  z-index: 2;
+  cursor: text;
+}
+
+.otpSlots {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  pointer-events: none;
+}
+
+.otpSlot {
+  flex: 1 1 0;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--c-text);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.otpSlotActive {
+  border-color: var(--c-text-3);
+  box-shadow: var(--shadow-focus);
 }

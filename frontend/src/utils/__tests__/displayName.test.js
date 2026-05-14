@@ -1,42 +1,47 @@
 import { describe, expect, it } from 'vitest'
 import { avatarInitial, displayLabel, fullName } from '../displayName'
 
+// Post-T195 the helpers fall back to `email`, never `username` — username
+// is an internal-only identifier that the frontend never renders.
+
 describe('fullName', () => {
   it('combines first_name and last_name when both are present', () => {
-    expect(fullName({ first_name: 'Cibran', last_name: 'Docampo', username: 'cibran' })).toBe('Cibran Docampo')
+    expect(fullName({ first_name: 'Cibran', last_name: 'Docampo', email: 'c@x.com' })).toBe('Cibran Docampo')
   })
 
   it('uses only first_name when last_name is missing', () => {
-    expect(fullName({ first_name: 'María', username: 'maria' })).toBe('María')
+    expect(fullName({ first_name: 'María', email: 'maria@x.com' })).toBe('María')
   })
 
   it('uses only last_name when first_name is missing', () => {
-    expect(fullName({ last_name: 'González', username: 'maria' })).toBe('González')
+    expect(fullName({ last_name: 'González', email: 'maria@x.com' })).toBe('González')
   })
 
-  it('falls back to username when no name parts are present', () => {
-    expect(fullName({ username: 'admin' })).toBe('admin')
+  it('falls back to email when no name parts are present', () => {
+    expect(fullName({ email: 'admin@example.com' })).toBe('admin@example.com')
+  })
+
+  it('returns empty string when neither names nor email are available', () => {
+    expect(fullName({})).toBe('')
   })
 
   it('returns empty string for nullish input', () => {
     expect(fullName(null)).toBe('')
     expect(fullName(undefined)).toBe('')
   })
+
+  it('ignores `username` even when present (no longer a fallback)', () => {
+    expect(fullName({ username: 'admin' })).toBe('')
+  })
 })
 
 describe('displayLabel', () => {
-  it('renders "First Last (username)" when full name exists', () => {
-    expect(displayLabel({ first_name: 'María', last_name: 'González', username: 'maria' })).toBe(
-      'María González (maria)',
-    )
+  it('is identical to fullName — the "(username)" suffix is gone', () => {
+    expect(displayLabel({ first_name: 'María', last_name: 'González', email: 'm@x.com' })).toBe('María González')
   })
 
-  it('renders "First (username)" when only first_name', () => {
-    expect(displayLabel({ first_name: 'Cibran', username: 'cibran' })).toBe('Cibran (cibran)')
-  })
-
-  it('renders just username when no name parts', () => {
-    expect(displayLabel({ username: 'admin' })).toBe('admin')
+  it('renders the email fallback when no name parts', () => {
+    expect(displayLabel({ email: 'admin@example.com' })).toBe('admin@example.com')
   })
 
   it('returns empty string for nullish input', () => {
@@ -46,14 +51,14 @@ describe('displayLabel', () => {
 
 describe('avatarInitial', () => {
   it('returns the uppercased first letter of first_name when present', () => {
-    expect(avatarInitial({ first_name: 'maría', username: 'maria' })).toBe('M')
+    expect(avatarInitial({ first_name: 'maría', email: 'm@x.com' })).toBe('M')
   })
 
-  it('falls back to the first letter of username when first_name is missing', () => {
-    expect(avatarInitial({ username: 'admin' })).toBe('A')
+  it('falls back to the first letter of email when first_name is missing', () => {
+    expect(avatarInitial({ email: 'admin@example.com' })).toBe('A')
   })
 
-  it('returns "?" when neither first_name nor username are available', () => {
+  it('returns "?" when neither first_name nor email are available', () => {
     expect(avatarInitial({})).toBe('?')
   })
 

@@ -1,0 +1,10 @@
+{% if first_name %}Hola {{ first_name }},{% else %}Hola,{% endif %}
+
+Tu código de acceso a Nudge es:
+
+    {{ code }}
+
+Este código caduca en 10 minutos. Si no intentaste iniciar sesión, ignora este correo.
+
+Recibe un saludo,
+el equipo de Nudge
