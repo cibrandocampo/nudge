@@ -26,7 +26,9 @@ _MSGS = {
         "due_title": "{name}",
         "due_body": "Due at {time}",
         "reminder_title": "{name}",
-        "reminder_body": "{hours}h overdue",
+        "reminder_body_now": "Due now",
+        "reminder_body": "Overdue by {hours}h",
+        "reminder_body_days": "Overdue by {days} days",
         "action_done": "Mark as done",
         "action_dismiss": "Dismiss",
         "test_title": "Push test",
@@ -44,7 +46,9 @@ _MSGS = {
         "due_title": "{name}",
         "due_body": "Desde las {time}",
         "reminder_title": "{name}",
-        "reminder_body": "{hours}h de retraso",
+        "reminder_body_now": "Pendiente ahora",
+        "reminder_body": "Atrasado {hours}h",
+        "reminder_body_days": "Atrasado {days} días",
         "action_done": "Marcar como hecho",
         "action_dismiss": "Ignorar",
         "test_title": "Prueba push",
@@ -62,7 +66,9 @@ _MSGS = {
         "due_title": "{name}",
         "due_body": "Dende as {time}",
         "reminder_title": "{name}",
-        "reminder_body": "{hours}h de atraso",
+        "reminder_body_now": "Pendente agora",
+        "reminder_body": "Atrasado {hours}h",
+        "reminder_body_days": "Atrasado {days} días",
         "action_done": "Marcar como feito",
         "action_dismiss": "Ignorar",
         "test_title": "Proba push",
@@ -206,12 +212,20 @@ def notify_due(routine, *, target_user=None):
     )
 
 
-def notify_reminder(routine, hours_overdue: int, *, target_user=None):
+def notify_reminder(routine, hours_overdue: float, *, target_user=None):
     user = target_user or routine.user
+    # Mirror frontend's formatRelativeTime bucketing: ≤1h → "due now",
+    # 1-48h → hours (rounded), >48h → days (rounded).
+    if hours_overdue <= 1:
+        body = _m(user, "reminder_body_now")
+    elif hours_overdue <= 48:
+        body = _m(user, "reminder_body", hours=round(hours_overdue))
+    else:
+        body = _m(user, "reminder_body_days", days=round(hours_overdue / 24))
     send_push_notification(
         user,
         title=_m(user, "reminder_title", name=routine.name),
-        body=_m(user, "reminder_body", hours=hours_overdue),
+        body=body,
         type=TYPE_REMINDER,
         data={"routine_id": routine.id},
         actions=_actions(user),
@@ -231,7 +245,7 @@ def notify_contact_added(requester, target):
     send_push_notification(
         target,
         title=_m(target, "contact_added_title"),
-        body=_m(target, "contact_added_body", owner=requester.username),
+        body=_m(target, "contact_added_body", owner=requester.display_name),
         type=TYPE_CONTACT_ADDED,
     )
 
@@ -240,7 +254,7 @@ def notify_routine_shared(routine, new_user):
     send_push_notification(
         new_user,
         title=_m(new_user, "routine_shared_title", name=routine.name),
-        body=_m(new_user, "routine_shared_body", owner=routine.user.username),
+        body=_m(new_user, "routine_shared_body", owner=routine.user.display_name),
         type=TYPE_ROUTINE_SHARED,
         data={"routine_id": routine.id},
     )
@@ -250,6 +264,6 @@ def notify_stock_shared(stock, new_user):
     send_push_notification(
         new_user,
         title=_m(new_user, "stock_shared_title", name=stock.name),
-        body=_m(new_user, "stock_shared_body", owner=stock.user.username),
+        body=_m(new_user, "stock_shared_body", owner=stock.user.display_name),
         type=TYPE_STOCK_SHARED,
     )

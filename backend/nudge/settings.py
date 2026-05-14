@@ -178,14 +178,27 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": (),
     "DEFAULT_THROTTLE_RATES": {
         "auth": "9999/minute" if DEBUG else "5/minute",
+        # Per-IP rate on /api/auth/login/start/ — every hit can trigger
+        # an outbound email, hence the per-hour cap.
+        "login_start": "9999/hour" if DEBUG else "10/hour",
+        # Per-IP rate on /api/auth/login/verify/ — protects the OTP code
+        # input from brute force on top of the per-code `attempts` limit.
+        "login_verify": "9999/minute" if DEBUG else "10/minute",
+        # Per-email-destination rate on /api/auth/login/start/ — caps
+        # how many OTP emails a single address can receive, even if the
+        # requests come from different IPs.
+        "email_dest": "9999/hour" if DEBUG else "3/hour",
     },
 }
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=15),
+    # Short access lifetime keeps the window of a stolen token small.
+    # Refresh is long because every interactive login costs an OTP email,
+    # so we want sessions to last ~2 months before re-auth.
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
@@ -209,7 +222,50 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.idempotency.tasks.cleanup_idempotency_records",
         "schedule": 24 * 60 * 60,  # once a day
     },
+    "cleanup-login-codes": {
+        "task": "apps.users.tasks.cleanup_login_codes",
+        "schedule": 24 * 60 * 60,  # once a day
+    },
 }
+
+# ── Email (SMTP) ──────────────────────────────────────────────────────────────
+# All env-driven. In dev, default backend is `console` so emails appear in
+# the Django / Celery stdout. In prod set EMAIL_BACKEND to
+# `django.core.mail.backends.smtp.EmailBackend` and fill the SMTP fields.
+# In the test run (`manage.py test`) the backend is forced to `locmem` so
+# tests can assert on `django.core.mail.outbox` (see "Test-run quiet mode"
+# block at the end of this file).
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Nudge <noreply@nudge.local>")
+
+# ── Auth: self-signup gate ────────────────────────────────────────────────────
+# When False (default), /api/auth/login/start/ with an unknown email returns
+# 404 — only admin-created accounts can log in. When True, an unknown email
+# is auto-created with auth_method='otp' and is_active=False; verifying the
+# OTP from the welcome email activates the account.
+ALLOW_SELF_SIGNUP = env.bool("ALLOW_SELF_SIGNUP", default=False)
+
+# Disposable / throwaway email blacklist for self-signup. Defaults to ON in
+# production (DEBUG=False) and OFF in dev. The bundled file in
+# `apps/users/disposable_email_domains.txt` is a curated ~80-entry list,
+# distilled from the community-maintained CC0 list at
+# https://github.com/disposable-email-domains/disposable-email-domains —
+# extend it via env var or swap the file for that project's full
+# `disposable_email_blocklist.conf` for ~4500 entries.
+BLOCK_DISPOSABLE_EMAIL = env.bool("BLOCK_DISPOSABLE_EMAIL", default=not DEBUG)
+DISPOSABLE_EMAIL_EXTRA_DOMAINS = env.list("DISPOSABLE_EMAIL_EXTRA_DOMAINS", default=[])
+DISPOSABLE_EMAIL_ALLOW_DOMAINS = env.list("DISPOSABLE_EMAIL_ALLOW_DOMAINS", default=[])
+
+# ── Branding ──────────────────────────────────────────────────────────────────
+# Public URL where this Nudge instance is hosted. Used in the email footer
+# and (potentially) future deep-link generation. Leave empty to suppress
+# the "nudge.example.com" line in transactional emails.
+NUDGE_SITE_URL = env("NUDGE_SITE_URL", default="")
 
 # ── Offline sync safeguards ──────────────────────────────────────────────────
 
@@ -303,3 +359,17 @@ if "test" in sys.argv:
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     }
     STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+
+    # Force the in-memory mail backend so tests can assert on
+    # `django.core.mail.outbox` without touching the configured SMTP
+    # backend (console in dev, real SMTP in prod). Overrides whatever
+    # EMAIL_BACKEND was resolved above.
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+    # Run Celery tasks synchronously in tests so `.delay()` actually
+    # produces side effects we can observe (mail outbox, DB writes from
+    # the task body). Without this the tests would have to manually
+    # invoke each task — which loses the wiring guarantee that the view
+    # is enqueueing the right task with the right args.
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True

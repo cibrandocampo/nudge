@@ -1,0 +1,1 @@
+{% if first_name %}Bienvenido de nuevo, {{ first_name }}{% else %}Bienvenido de nuevo a Nudge{% endif %}

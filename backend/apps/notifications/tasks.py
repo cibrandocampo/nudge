@@ -16,7 +16,6 @@ from .push import notify_daily_heads_up, notify_due, notify_reminder, notify_tes
 
 logger = logging.getLogger(__name__)
 
-REMINDER_INTERVAL_HOURS = 2
 DAILY_WINDOW_MINUTES = 5  # tolerance around the user's configured time
 
 
@@ -30,7 +29,10 @@ def check_notifications():
     Runs every 5 minutes. For each active user:
       1. Daily heads-up  — once per day at the user's configured local time.
       2. Due notification — when a routine becomes overdue, once per cycle.
-      3. Reminder        — every REMINDER_INTERVAL_HOURS while the routine remains overdue.
+      3. Reminder        — every routine.reminder_interval_minutes while overdue,
+                           gated by routine.reminder_mode ('daily' skips entirely)
+                           and per-recipient quiet hours when
+                           routine.respect_quiet_hours is True.
 
     Shared routines are included: due/reminder notifications are sent to all
     members (owner + shared_with). A processed_routines set prevents duplicate
@@ -246,13 +248,29 @@ def _check_due_notification(routine, now_utc):
 
 
 def _check_reminder(routine, now_utc):
-    """
-    Send a reminder every REMINDER_INTERVAL_HOURS while the routine remains overdue.
+    """Send a recurring reminder while the routine remains overdue.
+
+    Three gates layered on top of the previous behavior:
+      - `reminder_mode == 'daily'` short-circuits the whole flow. The user's
+        daily heads-up covers the routine instead.
+      - Interval is per-routine (`reminder_interval_minutes`) rather than a
+        module constant.
+      - Each recipient is checked individually against their own quiet hours
+        (`respect_quiet_hours=True`). Recipients in silence are skipped. If
+        the resulting recipient list is empty, the cycle is NOT sealed —
+        the next 5-min beat retries until at least one recipient emerges.
+
     Only fires after the initial 'due' notification has been sent.
-    Sends to all members (owner + shared_with).
     """
     if not routine.is_overdue():
         logger.debug("Reminder: routine %r not overdue — skipped.", routine.name)
+        return
+
+    if routine.reminder_mode == "daily":
+        logger.debug(
+            "Reminder: routine %r is daily-mode — heads-up will cover it.",
+            routine.name,
+        )
         return
 
     with transaction.atomic():
@@ -263,9 +281,10 @@ def _check_reminder(routine, now_utc):
             return
 
         last_notif = state.last_reminder or state.last_due_notification
+        interval = timedelta(minutes=routine.reminder_interval_minutes)
 
-        if (now_utc - last_notif) < timedelta(hours=REMINDER_INTERVAL_HOURS):
-            remaining = timedelta(hours=REMINDER_INTERVAL_HOURS) - (now_utc - last_notif)
+        if (now_utc - last_notif) < interval:
+            remaining = interval - (now_utc - last_notif)
             logger.debug(
                 "Reminder: routine %r too soon (last_notif=%s, remaining=%s) — skipped.",
                 routine.name,
@@ -274,19 +293,52 @@ def _check_reminder(routine, now_utc):
             )
             return
 
+        # Per-recipient quiet-hours gate.
+        members = _get_routine_members(routine)
+        recipients = []
+        for member in members:
+            if routine.respect_quiet_hours:
+                try:
+                    member_tz = ZoneInfo(member.timezone)
+                except (ZoneInfoNotFoundError, ValueError):
+                    logger.warning(
+                        "Reminder: invalid timezone %r for user %s — skipping recipient.",
+                        member.timezone,
+                        member.id,
+                    )
+                    continue
+                member_local = now_utc.astimezone(member_tz).time()
+                if member.is_in_quiet_hours(member_local):
+                    logger.debug(
+                        "Reminder: user %s is in quiet hours — skipping recipient.",
+                        member.username,
+                    )
+                    continue
+            recipients.append(member)
+
+        if not recipients:
+            # All recipients in silence. Don't seal `last_reminder` —
+            # the next beat retries (5 min later) until someone emerges.
+            logger.debug(
+                "Reminder: routine %r — all recipients in quiet hours, cycle not sealed.",
+                routine.name,
+            )
+            return
+
         next_due = routine.next_due_at()
         if next_due:
-            hours_overdue = round((now_utc - next_due).total_seconds() / 3600)
+            hours_overdue = (now_utc - next_due).total_seconds() / 3600
         else:
-            hours_overdue = round((now_utc - state.last_due_notification).total_seconds() / 3600)
+            hours_overdue = (now_utc - state.last_due_notification).total_seconds() / 3600
 
-        members = _get_routine_members(routine)
-        for member in members:
+        for member in recipients:
             notify_reminder(routine, hours_overdue=hours_overdue, target_user=member)
         logger.info(
-            "Reminder sent for routine %r (user %s, %dh overdue, last_notif=%s).",
+            "Reminder sent for routine %r (%d/%d recipients, interval=%dmin, %.1fh overdue, last_notif=%s).",
             routine.name,
-            routine.user.username,
+            len(recipients),
+            len(members),
+            routine.reminder_interval_minutes,
             hours_overdue,
             last_notif.isoformat(),
         )

@@ -25,8 +25,8 @@ def auth_headers(user):
 
 class MiddlewareTest(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", password="pw")
-        self.other = User.objects.create_user(username="bob", password="pw")
+        self.user = User.objects.create_user(username="alice", password="pw", email="alice@example.com")
+        self.other = User.objects.create_user(username="bob", password="pw", email="bob@example.com")
         self.auth = auth_headers(self.user)
 
     # ── No header ────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ class MiddlewareTest(APITestCase):
 
 class CleanupTaskTest(TestCase):
     def test_cleanup_deletes_old_and_preserves_recent(self):
-        user = User.objects.create_user(username="alice", password="pw")
+        user = User.objects.create_user(username="alice", password="pw", email="alice@example.com")
 
         fresh = IdempotencyRecord.objects.create(
             user=user,
@@ -208,7 +208,7 @@ class CleanupTaskTest(TestCase):
 
 class IdempotencyRecordStrTest(TestCase):
     def test_str_truncates_key_and_shows_user_and_endpoint(self):
-        user = User.objects.create_user(username="alice", password="pw")
+        user = User.objects.create_user(username="alice", password="pw", email="alice@example.com")
         record = IdempotencyRecord.objects.create(
             user=user,
             key="abcdefghijklmnop",  # 16 chars; first 8 shown

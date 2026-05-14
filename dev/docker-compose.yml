@@ -37,6 +37,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local SMTP catcher + Web UI for inspecting outbound mail in dev.
+  # Backend / Celery point their EMAIL_HOST at `mailpit:1025` (no auth).
+  # The Web UI is exposed on http://localhost:18025 with search, full
+  # MIME view, source view, and attachment inspection — open it after
+  # any login/start request to see the rendered OTP email.
+  mailpit:
+    image: axllent/mailpit:latest
+    environment:
+      # Accept any SMTP credentials (or none) — we're not authenticating
+      # in dev. Mailpit drops the message into its in-memory store.
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "127.0.0.1:11025:1025"   # SMTP (host port only useful for manual smoke tests)
+      - "127.0.0.1:18025:8025"   # Web UI — open this in the browser
+    networks:
+      - nudge_net
+
   backend:
     build:
       context: ..
@@ -51,6 +69,24 @@ services:
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,backend,host.docker.internal"
       DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      # SMTP for the email-OTP flow defaults to the local Mailpit
+      # container, but every value falls back to whatever is in the
+      # root `.env` so a developer can point at a real provider
+      # (Gmail / Mailtrap / OVH / …) by setting `EMAIL_HOST=… etc.`
+      # there without editing this file. `${VAR:-default}` reads the
+      # value from compose's interpolation environment (--env-file
+      # plus shell) and applies the default only when it is unset.
+      EMAIL_BACKEND: "${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}"
+      EMAIL_HOST: "${EMAIL_HOST:-mailpit}"
+      EMAIL_PORT: "${EMAIL_PORT:-1025}"
+      EMAIL_USE_TLS: "${EMAIL_USE_TLS:-False}"
+      EMAIL_HOST_USER: "${EMAIL_HOST_USER:-}"
+      EMAIL_HOST_PASSWORD: "${EMAIL_HOST_PASSWORD:-}"
+      DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-Nudge <noreply@nudge.local>}"
+      # Open self-signup by default in dev so the email-wizard registration
+      # path is reachable without extra setup. Override to `False` in `.env`
+      # if you want to test the admin-only login flow locally.
+      ALLOW_SELF_SIGNUP: "${ALLOW_SELF_SIGNUP:-True}"
     volumes:
       - ../backend:/app
     ports:
@@ -73,6 +109,16 @@ services:
       DJANGO_DEBUG: "True"
       DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      # See backend service above — celery is what actually executes
+      # `send_login_email`, so it must point at Mailpit (or whatever
+      # provider .env overrides to) too.
+      EMAIL_BACKEND: "${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}"
+      EMAIL_HOST: "${EMAIL_HOST:-mailpit}"
+      EMAIL_PORT: "${EMAIL_PORT:-1025}"
+      EMAIL_USE_TLS: "${EMAIL_USE_TLS:-False}"
+      EMAIL_HOST_USER: "${EMAIL_HOST_USER:-}"
+      EMAIL_HOST_PASSWORD: "${EMAIL_HOST_PASSWORD:-}"
+      DEFAULT_FROM_EMAIL: "${DEFAULT_FROM_EMAIL:-Nudge <noreply@nudge.local>}"
     volumes:
       - ../backend:/app
     networks:
@@ -82,6 +128,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   frontend:
     build:

@@ -129,9 +129,7 @@ export default function StockDetailPage() {
   // Recipients besides the current viewer. The owner sees every recipient;
   // a non-owner recipient sees every other recipient. Used by the
   // "Shared with" section so the label means the same thing on both sides.
-  const otherStockRecipients = (stock?.shared_with_details ?? []).filter(
-    (c) => isOwner || c.username !== user?.username,
-  )
+  const otherStockRecipients = (stock?.shared_with_details ?? []).filter((c) => isOwner || c.id !== user?.id)
 
   return (
     <QueryHandler
@@ -239,7 +237,7 @@ export default function StockDetailPage() {
           {/* Non-owner viewer: single card with the owner chip on the left
               and (if any) the other recipients on the right. Mirrors
               RoutineDetailPage. */}
-          {stock.is_owner === false && stock.owner_username && (
+          {stock.is_owner === false && stock.owner_display_name && (
             <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
               <div className={s.peopleSplit}>
                 <div className={s.peopleColumn} data-testid="owner-info">
@@ -247,9 +245,9 @@ export default function StockDetailPage() {
                   <div className={shared.formChipsRow}>
                     <span className={shared.formChip}>
                       <span className={shared.formChipAvatar} aria-hidden="true">
-                        {avatarInitial({ username: stock.owner_username })}
+                        {avatarInitial({ first_name: stock.owner_display_name })}
                       </span>
-                      <span>{stock.owner_username}</span>
+                      <span>{stock.owner_display_name}</span>
                     </span>
                   </div>
                 </div>

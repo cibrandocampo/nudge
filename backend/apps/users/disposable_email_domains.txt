@@ -1,0 +1,108 @@
+# Curated list of well-known disposable / throwaway email domains, blocked
+# from self-signup when settings.BLOCK_DISPOSABLE_EMAIL is True (default in
+# prod). One domain per line, lower-case. Comments (#) and blank lines are
+# ignored.
+#
+# Curated from the excellent community-maintained list at
+# https://github.com/disposable-email-domains/disposable-email-domains
+# (CC0-1.0 — public domain). Huge thanks to that project's maintainers
+# for keeping it up to date.
+#
+# That list has ~4500 entries. The bundled file below is the ~80 most
+# common providers — enough to stop casual signup abuse without weighing
+# the repo down. For full coverage, replace this file with the upstream
+# `disposable_email_blocklist.conf` or extend at runtime via
+# DISPOSABLE_EMAIL_EXTRA_DOMAINS (comma-separated env var).
+#
+# Per-instance corporate domains that happen to match (rare) can be
+# allow-listed via DISPOSABLE_EMAIL_ALLOW_DOMAINS.
+
+# YOPmail family
+yopmail.com
+yopmail.fr
+yopmail.net
+
+# Mailinator family
+mailinator.com
+mailinator.org
+mailinator.net
+
+# Guerrilla Mail family
+guerrillamail.com
+guerrillamail.org
+guerrillamail.net
+guerrillamail.de
+guerrillamail.info
+guerrillamail.biz
+guerrillamailblock.com
+sharklasers.com
+grr.la
+pokemail.net
+spam4.me
+
+# 10 Minute Mail
+10minutemail.com
+10minutemail.net
+10minutemail.org
+10minemail.com
+10minutesmail.com
+
+# Temp Mail family
+tempmail.com
+temp-mail.org
+temp-mail.io
+tempmail.io
+tempmailo.com
+tempr.email
+tempmailaddress.com
+disposablemail.com
+dispostable.com
+fakeinbox.com
+fakemail.fr
+fake-mail.net
+
+# Throwaway services
+throwaway.email
+throwawaymail.com
+trashmail.com
+trashmail.de
+trashmail.net
+trashmail.io
+mailcatch.com
+maildrop.cc
+getnada.com
+mvrht.net
+mintemail.com
+mytemp.email
+emailondeck.com
+emailfake.com
+
+# Others widely used
+mohmal.com
+hour-mail.com
+spambox.us
+spambog.com
+mailnesia.com
+inboxbear.com
+deadaddress.com
+einrot.com
+dropmail.me
+moakt.cc
+moakt.com
+moakt.ws
+correo.blogos.net
+mailtemporanea.com
+mailcuk.com
+mailpoof.com
+luxusmail.org
+emkei.cz
+boximail.com
+spamgourmet.com
+mintmail.com
+discard.email
+chronicmail.com
+mailbox007.com
+fakermail.com
+incognitomail.org
+incognitomail.com
+mailsac.com

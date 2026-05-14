@@ -139,7 +139,7 @@ Celery beat runs `check_notifications` every 5 minutes. For each active routine 
 |-------|-----------|---------|
 | Daily heads-up | Routine has something due today, within ±5 min of user's daily time | Once per calendar day |
 | Due notification | Routine has just become overdue | Once per due cycle |
-| Reminder | Routine still overdue | Every 8 hours |
+| Reminder | Routine still overdue AND `reminder_mode='intensive'` AND recipient not in quiet hours | Every `routine.reminder_interval_minutes` (default 2h; choices 1h/2h/4h/8h) |
 
 `NotificationState` tracks the last send time for each type, preventing duplicates.
 
@@ -147,15 +147,45 @@ Additionally, `send_scheduled_test` is a one-off Celery task (not periodic) that
 
 ### Authentication
 
-Username + password login returns a JWT access token and a refresh token (simplejwt). Tokens are stored in `localStorage` — acceptable for a private, personal instance. The API client automatically refreshes the access token on 401 and retries the original request.
+Every user carries an `auth_method` field — either `'otp'` or `'password'` — chosen when the account is created. Self-signups default to OTP; admins creating users manually from Django Admin can pick either. The two methods are orthogonal to `is_staff`: any user can have any method.
+
+**Login is a two-step wizard, identical on the frontend regardless of method**:
+
+1. `POST /api/auth/login/start/ { email }` — the backend looks up the user by email and answers with `{ method: 'otp' | 'password' }`. For OTP users (and for self-signups when `ALLOW_SELF_SIGNUP=True`) a 6-digit code is hashed, persisted as a `LoginCode` row, and enqueued for email delivery via Celery. Password users get the method back with no email side-effect.
+2. `POST /api/auth/login/verify/ { email, code | password }` — validates the proof and returns `{ access, refresh, is_new }`. `is_new` is true when the user has no `first_name` / `last_name` yet, signalling that the frontend should render the onboarding step (capture name + last name → `PATCH /api/auth/me/`) before the dashboard.
+
+**OTP codes** are 6 digits, expire in 10 minutes, allow 5 attempts. Only the SHA-256 hash is stored. A daily Celery beat task (`cleanup_login_codes`) sweeps rows past their `expires_at`.
+
+**Rate limits**:
+
+- `login/start/`: 10/hour per IP (every hit can send an email) plus a separate 3/hour per email destination (defends against an attacker rotating IPs to spam a single inbox).
+- `login/verify/`: 10/minute per IP.
+
+**Self-signup** is gated by the `ALLOW_SELF_SIGNUP` env var (default `False`). When False, unknown emails on `login/start/` return `404 user_not_found`. When True, unknown emails create an `is_active=False` user with `auth_method='otp'` and trigger a welcome email containing the OTP — the first successful verify activates the account.
+
+**Disposable email blocking**: when self-signup is open, registrations from throwaway providers (yopmail, mailinator, guerrillamail, 10minutemail, …) are rejected with `400 disposable_email`. The blocklist lives at `backend/apps/users/disposable_email_domains.txt` — a curated ~80-entry subset of the community-maintained [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains) project (CC0-1.0, thanks to its maintainers). It is gated by `BLOCK_DISPOSABLE_EMAIL` (default ON in production, OFF in `DJANGO_DEBUG=True`) and can be extended or trimmed via `DISPOSABLE_EMAIL_EXTRA_DOMAINS` / `DISPOSABLE_EMAIL_ALLOW_DOMAINS`. The check only applies to **new** signups — pre-existing users with such an email keep their account.
+
+**Frontend config probe**: `GET /api/auth/config/` is public and unauthenticated. It returns `{ allow_self_signup: bool }` so `/login` can render "Sign in" or "Sign in or create an account" without baking the flag into the build. The query inherits the global `staleTime: 30s`, so a server-side flip is picked up on the next page load without manual cache invalidation.
+
+**Branding**: outbound emails (welcome + login code) are sent as multipart text/HTML with the Nudge logo embedded as CID. The HTML footer links back to `NUDGE_SITE_URL` (env var); leave it empty to render just "Nudge" without a link. Templates live in `backend/templates/emails/{login_code,welcome_signup}/{en,es,gl}.body.html` and extend a shared `_layout.html`.
+
+**JWT lifetimes**: access tokens last 2 hours, refresh tokens 60 days. Tokens are stored in `localStorage` (acceptable for a self-hosted personal instance). The API client refreshes the access token automatically on 401 and retries the original request. The long refresh window keeps interactive logins infrequent given each one costs an email round-trip for OTP users.
+
+**Username phase-out**: the legacy `username` field still exists on `AbstractUser` as an internal identifier (auto-generated on self-signup from the email local-part with a numeric suffix on collision). The frontend never renders it — display name is "first + last" (helper `getDisplayName(user)`), falling back to email when names are absent.
+
+The legacy endpoint `POST /api/auth/token/` (username + password) is kept operational for the `/admin/` access flow (`admin-access` view trades a JWT for a Django session). The frontend stops using it.
 
 ### REST API — key endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/auth/token/` | Login |
+| GET | `/api/auth/config/` | Public, unauthenticated. Returns `{ allow_self_signup }` so `/login` can adapt its copy |
+| POST | `/api/auth/login/start/` | Step 1 of the email-OTP / password wizard — returns `{ method }` |
+| POST | `/api/auth/login/verify/` | Step 2 — accepts `{ code }` or `{ password }`, returns `{ access, refresh, is_new }` |
+| POST | `/api/auth/token/` | Legacy username+password login (kept for `admin-access`) |
 | POST | `/api/auth/refresh/` | Refresh JWT |
-| GET | `/api/auth/me/` | Current user |
+| GET / PATCH | `/api/auth/me/` | Current user — PATCH accepts `first_name`/`last_name` for onboarding |
+| GET / POST / DELETE | `/api/auth/contacts/` | Contacts — POST adds by exact email match |
 | GET | `/api/dashboard/` | Due + upcoming routines |
 | GET/POST/PATCH/DELETE | `/api/routines/` | Routine CRUD |
 | POST | `/api/routines/{id}/log/` | Log completion (decrements stock) |
@@ -440,6 +470,19 @@ Rebuilds both images from scratch (`no-cache: true`) to pick up upstream base-im
 security patches and `~=`-compatible dependency upgrades. No tests are run because
 the code itself hasn't changed — only transitive dependencies get updated. The CI
 pipeline already gates every code change with the full lint + test suite.
+
+### `sync-disposable-email-domains.yml` — runs every Monday at 06:30 UTC
+
+Fetches the canonical [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains)
+blocklist (CC0-1.0) and, if it differs from the bundled
+`backend/apps/users/disposable_email_domains.txt`, opens a PR with the
+diff. The PR is the only gate: each upstream change is reviewed before
+landing on `main`, so builds remain deterministic and an unexpected
+upstream commit can't auto-ship to production. The first PR migrates the
+bundled file from the curated subset to the full upstream mirror —
+subsequent PRs are small diffs against upstream. A sanity check aborts
+the sync if the fetched file has fewer than 1000 lines (the real list is
+~4500), so a partial / failed fetch can't silently empty the blocklist.
 
 ---
 

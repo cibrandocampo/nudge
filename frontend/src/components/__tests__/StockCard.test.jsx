@@ -18,7 +18,7 @@ const baseStock = {
   shared_with: [],
   shared_with_details: [],
   is_owner: true,
-  owner_username: 'testuser',
+  owner_display_name: 'testuser',
   updated_at: '2026-04-17T10:00:00Z',
 }
 
@@ -113,7 +113,7 @@ describe('StockCard', () => {
 
   it('renders the recipient-variant badge when the user is not the owner', () => {
     renderCard({
-      stock: { ...baseStock, is_owner: false, shared_with: [], owner_username: 'alice' },
+      stock: { ...baseStock, is_owner: false, shared_with: [], owner_display_name: 'alice' },
     })
     const badge = screen.getByTestId('shared-badge')
     expect(badge).toBeInTheDocument()
@@ -122,15 +122,15 @@ describe('StockCard', () => {
   })
 
   it('omits the badge when the owner has not shared the stock', () => {
-    renderCard({ stock: { ...baseStock, shared_with: [], is_owner: true, owner_username: 'testuser' } })
+    renderCard({ stock: { ...baseStock, shared_with: [], is_owner: true, owner_display_name: 'testuser' } })
     expect(screen.queryByTestId('shared-badge')).not.toBeInTheDocument()
   })
 
   it('never renders the inline owner-label, regardless of role', () => {
     for (const overrides of [
-      { shared_with: [], is_owner: true, owner_username: 'testuser' },
-      { shared_with: [2], is_owner: true, owner_username: 'testuser' },
-      { shared_with: [], is_owner: false, owner_username: 'alice' },
+      { shared_with: [], is_owner: true, owner_display_name: 'testuser' },
+      { shared_with: [2], is_owner: true, owner_display_name: 'testuser' },
+      { shared_with: [], is_owner: false, owner_display_name: 'alice' },
     ]) {
       const { unmount } = renderCard({ stock: { ...baseStock, ...overrides } })
       expect(screen.queryByTestId('owner-label')).not.toBeInTheDocument()
@@ -140,7 +140,7 @@ describe('StockCard', () => {
 
   it('interpolates the owner username into the recipient badge aria-label', () => {
     renderCard({
-      stock: { ...baseStock, is_owner: false, shared_with: [], owner_username: 'alice' },
+      stock: { ...baseStock, is_owner: false, shared_with: [], owner_display_name: 'alice' },
     })
     const badge = screen.getByTestId('shared-badge')
     expect(badge.getAttribute('aria-label')).toContain('alice')

@@ -31,3 +31,82 @@
 .submitBtn {
   flex: 1;
 }
+
+/* Notifications — mode picker (2 stacked cards, radio inside) */
+.modeOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.modeOption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.6rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--c-bg);
+}
+.modeOption:hover {
+  background: var(--c-bg-elev);
+}
+.modeOption input[type='radio'] {
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+.modeLabel {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.modeHint {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}
+.modeOptionActive {
+  border-color: var(--c-brand);
+  background: var(--c-brand-soft, var(--c-bg-elev));
+}
+
+/* Notifications — interval pill picker (radios hidden, label is the chip) */
+.intervalChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.intervalChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: var(--c-bg);
+  user-select: none;
+}
+.intervalChip input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.intervalChip:hover {
+  background: var(--c-bg-elev);
+}
+.intervalChipActive {
+  background: var(--c-brand);
+  color: var(--c-on-brand, white);
+  border-color: var(--c-brand);
+}
+
+.respectInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}

@@ -27,6 +27,10 @@ export function mockNetworkError(method, path) {
 export const mockUser = {
   id: 1,
   username: 'testuser',
+  // T191 made email required + unique on the backend; the fixture now
+  // carries one so display helpers (which fall back to email post-T195)
+  // have something to show when first/last name are absent.
+  email: 'testuser@example.com',
   is_staff: false,
   timezone: 'Europe/Madrid',
   language: 'en',
@@ -53,7 +57,8 @@ export const mockRoutine = {
   shared_with: [],
   shared_with_details: [],
   is_owner: true,
-  owner_username: 'testuser',
+  owner_id: 1,
+  owner_display_name: 'Test User',
 }
 
 export const handlers = [
@@ -88,7 +93,8 @@ export const handlers = [
       shared_with: [],
       shared_with_details: [],
       is_owner: true,
-      owner_username: 'testuser',
+      owner_id: 1,
+      owner_display_name: 'Test User',
     }),
   ),
 
@@ -146,19 +152,30 @@ export const handlers = [
 
   http.post(`${BASE}/auth/contacts/`, async ({ request }) => {
     const body = await request.json()
-    return HttpResponse.json({ id: 50, username: body.username }, { status: 201 })
+    // Post-T197: contacts API speaks `email` end-to-end. Response shape
+    // mirrors the new ContactSerializer (no `username` leaked).
+    return HttpResponse.json(
+      {
+        id: 50,
+        first_name: '',
+        last_name: '',
+        email: body.email,
+      },
+      { status: 201 },
+    )
   }),
 
   http.delete(`${BASE}/auth/contacts/:id/`, () => new HttpResponse(null, { status: 204 })),
 
-  http.get(`${BASE}/auth/contacts/search/`, ({ request }) => {
-    const url = new URL(request.url)
-    const q = url.searchParams.get('q') || ''
-    if (!q) return HttpResponse.json([])
-    return HttpResponse.json([{ id: 50, username: 'bob' }])
-  }),
-
   http.post(`${BASE}/auth/token/`, () => HttpResponse.json({ access: 'fake-access', refresh: 'fake-refresh' })),
+
+  http.get(`${BASE}/auth/config/`, () => HttpResponse.json({ allow_self_signup: false })),
+
+  http.post(`${BASE}/auth/login/start/`, () => HttpResponse.json({ method: 'otp' })),
+
+  http.post(`${BASE}/auth/login/verify/`, () =>
+    HttpResponse.json({ access: 'fake-access', refresh: 'fake-refresh', is_new: false }),
+  ),
 
   http.post(`${BASE}/auth/refresh/`, () => HttpResponse.json({ access: 'new-access', refresh: 'new-refresh' })),
 
@@ -191,7 +208,8 @@ export const handlers = [
         shared_with: [],
         shared_with_details: [],
         is_owner: true,
-        owner_username: 'testuser',
+        owner_id: 1,
+        owner_display_name: 'Test User',
       },
       { status: 201 },
     ),
@@ -213,7 +231,8 @@ export const handlers = [
       shared_with: [],
       shared_with_details: [],
       is_owner: true,
-      owner_username: 'testuser',
+      owner_id: 1,
+      owner_display_name: 'Test User',
       ...body,
     })
   }),
@@ -246,7 +265,8 @@ export const handlers = [
       shared_with: [],
       shared_with_details: [],
       is_owner: false,
-      owner_username: 'alice',
+      owner_id: 2,
+      owner_display_name: 'Alice',
       updated_at: '2026-04-17T10:00:00Z',
     })
   }),
@@ -267,7 +287,8 @@ export const handlers = [
       shared_with: [],
       shared_with_details: [],
       is_owner: true,
-      owner_username: 'testuser',
+      owner_id: 1,
+      owner_display_name: 'Test User',
     }),
   ),
 

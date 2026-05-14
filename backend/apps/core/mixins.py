@@ -111,7 +111,8 @@ class SharedWithMixin:
       - ``validate_shared_with(value)``: ensures every target user is in
         ``request.user.contacts``. Raises ValidationError otherwise.
       - ``get_shared_with_details(obj)``: serializes the M2M as a list
-        of ``{id, username, first_name, last_name}`` dicts.
+        of ``{id, first_name, last_name, email}`` dicts — `email`
+        replaces the legacy `username` exposure (T197).
 
     Both ``Stock`` and ``Routine`` use this; consolidates ~30 LoC.
     """
@@ -130,9 +131,9 @@ class SharedWithMixin:
         return [
             {
                 "id": u.pk,
-                "username": u.username,
                 "first_name": u.first_name,
                 "last_name": u.last_name,
+                "email": u.email,
             }
             for u in obj.shared_with.all()
         ]

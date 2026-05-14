@@ -308,6 +308,35 @@ class Routine(models.Model):
         validators=[MinValueValidator(1)],
         help_text="Number of hours between entries (minimum 1)",
     )
+    REMINDER_MODE_CHOICES = [
+        ("intensive", "Intensive"),
+        ("daily", "Daily"),
+    ]
+    REMINDER_INTERVAL_CHOICES = [
+        (60, "1 hour"),
+        (120, "2 hours"),
+        (240, "4 hours"),
+        (480, "8 hours"),
+    ]
+    # 'intensive' fires recurring reminders every `reminder_interval_minutes`
+    # while the routine remains overdue (gated by `respect_quiet_hours` per
+    # recipient). 'daily' skips the reminder loop entirely — the user's
+    # daily heads-up covers it.
+    reminder_mode = models.CharField(
+        max_length=16,
+        choices=REMINDER_MODE_CHOICES,
+        default="intensive",
+        help_text="'intensive' = repeating reminders; 'daily' = covered by heads-up only",
+    )
+    reminder_interval_minutes = models.PositiveIntegerField(
+        choices=REMINDER_INTERVAL_CHOICES,
+        default=120,
+        help_text="Minutes between reminders when mode is 'intensive'",
+    )
+    # When True (default), reminders pause during the recipient's quiet hours.
+    # Set to False for urgent routines (e.g. nightly medication) that must
+    # fire regardless of time.
+    respect_quiet_hours = models.BooleanField(default=True)
     stock = models.ForeignKey(
         Stock,
         null=True,

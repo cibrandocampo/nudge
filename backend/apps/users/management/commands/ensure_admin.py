@@ -22,5 +22,17 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("ADMIN_PASSWORD env var not set — skipping admin creation."))
             return
 
-        User.objects.create_superuser(username=username, email=email, password=password)
+        # Email is required: it backs the unique email constraint and the
+        # OTP/password identity model. Without it the seed admin cannot be
+        # created and the migration that adds unique(email) would fail later.
+        if not email:
+            self.stdout.write(self.style.ERROR("ADMIN_EMAIL env var not set — skipping admin creation."))
+            return
+
+        User.objects.create_superuser(
+            username=username,
+            email=email,
+            password=password,
+            auth_method="password",
+        )
         self.stdout.write(self.style.SUCCESS(f'Superuser "{username}" created.'))

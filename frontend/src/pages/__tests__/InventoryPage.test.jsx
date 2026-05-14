@@ -48,7 +48,7 @@ function stock(overrides = {}) {
     shared_with: [],
     shared_with_details: [],
     is_owner: true,
-    owner_username: 'testuser',
+    owner_display_name: 'testuser',
     updated_at: '2026-04-17T10:00:00Z',
     ...overrides,
   }

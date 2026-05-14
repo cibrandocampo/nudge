@@ -1,0 +1,9 @@
+{% extends "emails/_layout.html" %}
+
+{% block greeting %}{% if first_name %}Hola {{ first_name }}{% else %}Bienvenido de nuevo{% endif %}{% endblock %}
+
+{% block intro %}Usa el código de abajo para terminar de acceder a tu cuenta de Nudge.{% endblock %}
+
+{% block expiry %}Este código caduca en 10 minutos. Si no intentaste iniciar sesión, ignora este correo.{% endblock %}
+
+{% block signoff %}Recibe un saludo,<br>el equipo de Nudge{% endblock %}

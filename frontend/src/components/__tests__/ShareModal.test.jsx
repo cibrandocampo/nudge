@@ -2,9 +2,12 @@ import { screen, fireEvent } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import ShareModal from '../ShareModal'
 
+// Post-T197: ShareModal renders `fullName(contact)` — the username is
+// internal-only. Test fixtures carry first_name so the visible text is
+// deterministic.
 const contacts = [
-  { id: 10, username: 'alice' },
-  { id: 11, username: 'bob' },
+  { id: 10, first_name: 'Alice', email: 'alice@example.com' },
+  { id: 11, first_name: 'Bob', email: 'bob@example.com' },
 ]
 
 describe('ShareModal', () => {
@@ -19,10 +22,10 @@ describe('ShareModal', () => {
     vi.clearAllMocks()
   })
 
-  it('renders contacts list', () => {
+  it('renders contacts list using the display name', () => {
     renderWithProviders(<ShareModal {...defaultProps} />)
-    expect(screen.getByText('alice')).toBeInTheDocument()
-    expect(screen.getByText('bob')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.getByText('Bob')).toBeInTheDocument()
   })
 
   it('shows selected state for shared contacts', () => {
@@ -35,7 +38,7 @@ describe('ShareModal', () => {
   it('calls onToggle with contact id when item clicked', async () => {
     const onToggle = vi.fn()
     const { user } = renderWithProviders(<ShareModal {...defaultProps} onToggle={onToggle} />)
-    await user.click(screen.getByText('alice'))
+    await user.click(screen.getByText('Alice'))
     expect(onToggle).toHaveBeenCalledWith(10)
   })
 

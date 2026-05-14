@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 
@@ -16,20 +15,5 @@ export function useContacts() {
   return useQuery({
     queryKey: ['contacts'],
     queryFn: () => getJson('/auth/contacts/'),
-  })
-}
-
-export function useContactSearch(query, debounceMs = 300) {
-  const [debounced, setDebounced] = useState(query)
-
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(query), debounceMs)
-    return () => clearTimeout(id)
-  }, [query, debounceMs])
-
-  return useQuery({
-    queryKey: ['contacts-search', debounced],
-    queryFn: () => getJson(`/auth/contacts/search/?q=${encodeURIComponent(debounced)}`),
-    enabled: debounced.length >= 2,
   })
 }

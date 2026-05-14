@@ -1,0 +1,10 @@
+Benvido a Nudge — un recordatorio amable para tarefas recorrentes.
+
+O teu código de verificación é:
+
+    {{ code }}
+
+Introdúceo para rematar a creación da túa conta. O código caduca en 10 minutos.
+
+Saúdos,
+o equipo de Nudge

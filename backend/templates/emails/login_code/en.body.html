@@ -1,0 +1,9 @@
+{% extends "emails/_layout.html" %}
+
+{% block greeting %}{% if first_name %}Hi {{ first_name }}{% else %}Welcome back{% endif %}{% endblock %}
+
+{% block intro %}Use the code below to finish signing in to your Nudge account.{% endblock %}
+
+{% block expiry %}This code expires in 10 minutes. If you didn't try to sign in, ignore this email.{% endblock %}
+
+{% block signoff %}Best,<br>the Nudge team{% endblock %}

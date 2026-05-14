@@ -46,14 +46,54 @@ with other local projects on the standard ports):
 | Backend       | http://localhost:18000           |
 | Frontend      | http://localhost:15173           |
 | Django Admin  | http://localhost:18000/admin     |
+| Mailpit (UI)  | http://localhost:18025           |
 | PostgreSQL    | localhost:15432                  |
 | Redis         | localhost:16379                  |
+| Mailpit (SMTP) | localhost:11025                 |
 
 Internal docker network ports are unchanged — services still talk
 to `db:5432`, `redis:6379`, `backend:8000`. Only the host-side
 mapping uses the prefixed ports.
 
 The backend runs migrations and creates the admin user automatically on first startup.
+
+## Logging in (dev)
+
+The wizard at `/login` keys off the user's email. Two methods coexist:
+
+| User | Email | Method | Password / OTP |
+|------|-------|--------|----------------|
+| `admin` | value of `ADMIN_EMAIL` (`admin@example.com` by default) | password | value of `ADMIN_PASSWORD` (`change-me` by default) |
+| Demo seed users (`cibran` / `maria` / `laura`) | `<name>@nudge.test` | password | `DEMO_USERS_PASSWORD` (`change-me` by default) |
+
+All four arrive with `auth_method="password"`, so you can log in via the email-wizard without setting up SMTP or Celery. If you want to test the OTP flow:
+
+1. Open the user in Django Admin (`http://localhost:18000/admin/users/user/`) and flip their `Auth method` to `OTP`, OR
+2. Sign up with any new email — the dev compose enables `ALLOW_SELF_SIGNUP=True` by default, so the `/login` wizard advertises "Sign in or create an account" and unknown emails create an OTP user on the fly. Override to `False` in `.env` if you want to exercise the admin-only login path locally.
+
+For the OTP path to deliver the code, bring Celery up (the `send_login_email` task fires via `.delay()`) — the dev compose has Mailpit wired in by default, so the message lands in its inbox without ever touching the public internet:
+
+```bash
+docker compose --env-file .env -f dev/docker-compose.yml up -d celery
+```
+
+Then open **http://localhost:18025** (Mailpit Web UI). Every OTP / welcome email shows up with full source, MIME breakdown, and search — perfect for debugging templates and From/To headers. The Mailpit container is part of the default dev `up` set, so it's already running.
+
+To override Mailpit and use a real provider (Gmail, Mailtrap, OVH, etc.), set the `EMAIL_*` vars in `.env` — the values in `dev/docker-compose.yml` are hard defaults but `env_file` is loaded first, so anything in `.env` wins:
+
+```bash
+# .env (root) — example pointing at Mailtrap, Gmail with app password, …
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.your-provider.example
+EMAIL_PORT=587
+EMAIL_HOST_USER=…
+EMAIL_HOST_PASSWORD=…
+EMAIL_USE_TLS=True
+```
+
+A faster alternative used by the test smokes (no SMTP at all): open `manage.py shell` and overwrite `LoginCode.code_hash` for the most recent unconsumed row with a known value (see [`docs/tasks/evidence/T198/smoke_signup.txt`](../docs/tasks/evidence/T198/smoke_signup.txt) for the snippet).
+
+The disposable-email blocklist is **off** by default in dev (`DJANGO_DEBUG=True`), so you can self-sign-up freely with throwaway addresses while testing. To exercise the rejection locally, export `BLOCK_DISPOSABLE_EMAIL=True` in `.env` and try signing up with e.g. `someone@yopmail.com`. The bundled list lives at `backend/apps/users/disposable_email_domains.txt`; `DISPOSABLE_EMAIL_EXTRA_DOMAINS` / `DISPOSABLE_EMAIL_ALLOW_DOMAINS` let you extend or override it from `.env`. See [`docs/configuration.md#self-signup`](../docs/configuration.md#self-signup) for the full reference.
 
 ## Run tests
 
