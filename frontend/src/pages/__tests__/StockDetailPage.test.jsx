@@ -15,6 +15,15 @@ vi.mock('../../hooks/useServerReachable', () => ({
 
 const BASE = 'http://localhost/api'
 
+// Lot expiry severity is `today`-relative (see utils/stockSeverity.js), so any
+// literal future date in the fixtures decays the moment the calendar crosses
+// it. Anchor "soon" and "far" fixtures off the current date instead.
+function daysFromNow(n) {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
 const stock = {
   id: 1,
   name: 'Water filter',
@@ -31,7 +40,7 @@ const stock = {
   shared_with_details: [],
   updated_at: '2026-04-17T10:00:00Z',
   lots: [
-    { id: 100, quantity: 5, expiry_date: '2027-01-01', lot_number: 'LOT-A', updated_at: '2026-04-17T10:00:00Z' },
+    { id: 100, quantity: 5, expiry_date: daysFromNow(60), lot_number: 'LOT-A', updated_at: '2026-04-17T10:00:00Z' },
     { id: 101, quantity: 5, expiry_date: null, lot_number: '', updated_at: '2026-04-17T10:00:00Z' },
   ],
 }
@@ -479,7 +488,7 @@ describe('StockDetailPage', () => {
   it('marks a lot expiring within 30 days as data-expiring="soon"', async () => {
     const soon = {
       ...stock,
-      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+      lots: [{ id: 200, quantity: 3, expiry_date: daysFromNow(15), lot_number: 'NEXT' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soon)))
     renderDetail()
@@ -490,7 +499,7 @@ describe('StockDetailPage', () => {
   it('leaves a far-future lot as data-expiring="none"', async () => {
     const far = {
       ...stock,
-      lots: [{ id: 200, quantity: 3, expiry_date: '2027-01-01', lot_number: 'FAR' }],
+      lots: [{ id: 200, quantity: 3, expiry_date: daysFromNow(60), lot_number: 'FAR' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(far)))
     renderDetail()
@@ -561,7 +570,7 @@ describe('StockDetailPage', () => {
   it('tints the lot expiry date span for a soon-expiring lot', async () => {
     const soonLot = {
       ...stock,
-      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+      lots: [{ id: 200, quantity: 3, expiry_date: daysFromNow(15), lot_number: 'NEXT' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
     renderDetail()
@@ -602,7 +611,7 @@ describe('StockDetailPage', () => {
   it('tints the package icon iconWarning for a lot expiring within 30 days', async () => {
     const soonLot = {
       ...stock,
-      lots: [{ id: 200, quantity: 3, expiry_date: '2026-05-15', lot_number: 'NEXT' }],
+      lots: [{ id: 200, quantity: 3, expiry_date: daysFromNow(15), lot_number: 'NEXT' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(soonLot)))
     renderDetail()
@@ -614,7 +623,7 @@ describe('StockDetailPage', () => {
   it('leaves the package icon untinted for a far-future lot', async () => {
     const far = {
       ...stock,
-      lots: [{ id: 200, quantity: 3, expiry_date: '2027-01-01', lot_number: 'FAR' }],
+      lots: [{ id: 200, quantity: 3, expiry_date: daysFromNow(60), lot_number: 'FAR' }],
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(far)))
     renderDetail()
