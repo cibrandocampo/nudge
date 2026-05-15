@@ -265,12 +265,20 @@ describe('InventoryPage — grouping', () => {
 })
 
 describe('InventoryPage — alerts (4 severity-driven blocks)', () => {
-  // Today is 2026-04-27 in the test runner's clock. The alerts derive
-  // reached / soon buckets from `stock.lots` via `lotExpirySeverity`:
+  // Alerts derive reached / soon buckets from `stock.lots` via
+  // `lotExpirySeverity`:
   //   expiry_date <= today                → 'reached' (red alert)
   //   today < expiry_date < today + 30d   → 'soon' (orange alert)
+  // `FUTURE_DATE` must be computed off the runner's clock so the fixture
+  // does not decay when the calendar crosses a literal date. `PAST_DATE`
+  // stays a literal — once past, it's past forever.
+  const daysFromNow = (n) => {
+    const d = new Date()
+    d.setDate(d.getDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
   const PAST_DATE = '2026-04-20'
-  const FUTURE_DATE = '2026-05-15'
+  const FUTURE_DATE = daysFromNow(15)
 
   it('does not render the alert section when no stock has any severity', async () => {
     mockStocks([stock()])
