@@ -1,0 +1,29 @@
+# Nudge
+
+> A self-hosted, offline-first PWA for recurring tasks and consumable tracking. Push notifications, household sharing, inventory with FEFO, and a sync queue that never drops a tap.
+
+Nudge is a self-hosted progressive web app that helps households and small teams track recurring jobs — medication schedules, filter replacements, pet care, server backups, anything with an interval. It sends push notifications when something comes due, tracks consumable stock lot by lot (First-Expired-First-Out), supports household sharing, and keeps working offline with a sync queue.
+
+## Key facts
+
+- Self-hosted: runs entirely on your Docker stack — no SaaS, no public registration, no telemetry
+- Offline-first: reads come from the Service Worker cache; mutations queue in IndexedDB and sync on reconnect with per-field conflict resolution
+- Push notifications: due alert at the interval, follow-ups every 2 hours, daily heads-up at a configurable time
+- Inventory: attach consumables to routines, FEFO lot selection, expiry warnings 30 days out
+- Sharing: share routines and stock items with household contacts
+- Languages: English, Spanish, Galician (auto-detected from browser, overridable per user)
+- License: MIT — free to use, modify, and self-host
+
+## Tech stack
+
+- Backend: Python 3.13, Django 5.2, PostgreSQL, Redis, Celery
+- Frontend: React 18, Vite
+- Infrastructure: Docker Compose, multi-arch images (amd64 + arm64)
+
+## Links
+
+- [Project site](https://nudge.cibran.es/)
+- [Source code](https://github.com/cibrandocampo/nudge)
+- [Docker Hub — backend](https://hub.docker.com/r/cibrandocampo/nudge-backend)
+- [Docker Hub — frontend](https://hub.docker.com/r/cibrandocampo/nudge-frontend)
+- [Self-hosting guide](https://github.com/cibrandocampo/nudge#self-hosting-and-technical-details)

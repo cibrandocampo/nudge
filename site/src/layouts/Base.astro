@@ -11,7 +11,7 @@ const {
   description = 'Offline-first, self-hosted PWA for recurring tasks and consumable tracking. Push notifications, household sharing, inventory with FEFO, and a sync queue that never drops a tap.',
 } = Astro.props
 
-const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://cibrandocampo.github.io').toString()
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://nudge.cibran.es').toString()
 ---
 <!doctype html>
 <html lang="en" class="scroll-smooth">
@@ -31,6 +31,31 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://cibrandocam
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
+    <meta name="robots" content="index, follow" />
+    <link rel="sitemap" href="/sitemap.xml" />
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Nudge",
+      "applicationCategory": "LifestyleApplication",
+      "operatingSystem": "Linux, Docker",
+      "description": "Offline-first, self-hosted PWA for recurring tasks and consumable tracking. Push notifications, household sharing, inventory with FEFO, and a sync queue that never drops a tap.",
+      "url": "https://nudge.cibran.es/",
+      "downloadUrl": "https://hub.docker.com/r/cibrandocampo/nudge-backend",
+      "codeRepository": "https://github.com/cibrandocampo/nudge",
+      "license": "https://github.com/cibrandocampo/nudge/blob/main/LICENSE",
+      "programmingLanguage": ["Python", "JavaScript"],
+      "keywords": "recurring tasks, PWA, self-hosted, push notifications, inventory, offline-first, Docker",
+      "author": {
+        "@type": "Person",
+        "name": "Cibrán Docampo Piñeiro"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    })} />
   </head>
   <body class="min-h-screen bg-gradient-to-br from-nudge-950 via-slate-950 to-nudge-900 text-slate-100 antialiased">
     <slot />
