@@ -10,7 +10,7 @@ RUN npm install
 CMD ["npm", "run", "dev", "--", "--host"]
 
 # ── Production build ─────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM --platform=linux/amd64 node:22-alpine AS builder
 RUN corepack enable npm && corepack prepare npm@11 --activate
 WORKDIR /app
 COPY package*.json ./
