@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <a href="https://cibrandocampo.github.io/nudge/"><strong>See the project site →</strong></a>
+  <a href="https://nudge.cibran.es/"><strong>See the project site →</strong></a>
   <br/>
   <sub>Product tour, how it works, features, screenshots and FAQ</sub>
 </p>
@@ -51,7 +51,7 @@
 
 ## Self-hosting and technical details
 
-What follows is the reference for running your own instance. For what Nudge does and how it looks in use, see the [project site](https://cibrandocampo.github.io/nudge/).
+What follows is the reference for running your own instance. For what Nudge does and how it looks in use, see the [project site](https://nudge.cibran.es/).
 
 ### Quick start
 
