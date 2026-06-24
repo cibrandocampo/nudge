@@ -756,3 +756,155 @@ describe('RoutineFormPage — non-owner deep-link', () => {
     expect(screen.queryByDisplayValue('Take vitamins')).not.toBeInTheDocument()
   })
 })
+
+
+describe('interval phases', () => {
+  it('phase editor is hidden and toggle button is visible by default', async () => {
+    renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    expect(screen.queryByText('Phase 1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Phase 2')).not.toBeInTheDocument()
+  })
+
+  it('clicking toggle expands the phase editor with 2 default phases', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    expect(screen.getByText('Phase 2')).toBeInTheDocument()
+    expect(screen.queryByText('Phase 3')).not.toBeInTheDocument()
+  })
+
+  it('clicking add phase inserts a phase before the last one', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /Add phase/i }))
+    await waitFor(() => expect(screen.getByText('Phase 3')).toBeInTheDocument())
+    expect(screen.getByText('Phase 1')).toBeInTheDocument()
+    expect(screen.getByText('Phase 2')).toBeInTheDocument()
+  })
+
+  it('remove button is not shown when only 2 phases remain', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Remove phase' })).not.toBeInTheDocument()
+  })
+
+  it('remove button removes a non-last phase when 3+ phases exist', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /Add phase/i }))
+    await waitFor(() => expect(screen.getByText('Phase 3')).toBeInTheDocument())
+    const [firstRemove] = screen.getAllByRole('button', { name: 'Remove phase' })
+    await user.click(firstRemove)
+    await waitFor(() => expect(screen.queryByText('Phase 3')).not.toBeInTheDocument())
+    expect(screen.getByText('Phase 1')).toBeInTheDocument()
+    expect(screen.getByText('Phase 2')).toBeInTheDocument()
+  })
+
+  it('submit with phases enabled sends interval_phases and omits interval_hours', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument(),
+    )
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'IPL Treatment')
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
+    expect(Array.isArray(capturedBody.interval_phases)).toBe(true)
+    expect(capturedBody.interval_phases).toHaveLength(2)
+    expect(capturedBody.interval_phases[0]).toMatchObject({ count: 4, interval_hours: 360 })
+    expect(capturedBody.interval_phases[1]).toMatchObject({ interval_hours: 720 })
+    expect(capturedBody.interval_hours).toBeUndefined()
+  })
+
+  it('submit with phases disabled sends interval_hours and interval_phases null', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument(),
+    )
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Simple routine')
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_hours).toBeDefined())
+    expect(capturedBody.interval_phases).toBeNull()
+    expect(typeof capturedBody.interval_hours).toBe('number')
+    expect(capturedBody.interval_hours).toBeGreaterThan(0)
+  })
+
+  it('editing a routine with interval_phases pre-fills the phase editor', async () => {
+    const routineWithPhases = {
+      ...editRoutine,
+      interval_phases: [
+        { count: 3, interval_hours: 240 },
+        { interval_hours: 480 },
+      ],
+    }
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(routineWithPhases)))
+    renderEdit()
+    await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    expect(screen.getByText('Phase 2')).toBeInTheDocument()
+  })
+
+  it('shows validation error when a non-last phase has count of 0', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Test routine')
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    // Set count to 0 — noValidate on the form lets handleSubmit run despite min=1
+    const countInput = screen.getByDisplayValue('4')
+    fireEvent.change(countInput, { target: { value: '0' } })
+    await user.click(screen.getByText('Save'))
+    await waitFor(() =>
+      expect(
+        screen.getByText('Each phase (except the last) must repeat at least once.'),
+      ).toBeInTheDocument(),
+    )
+  })
+
+  it('clicking toggle again collapses the editor and restores the IntervalPicker', async () => {
+    const { user } = renderCreate()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.queryByText('Phase 1')).not.toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'days' })).toBeInTheDocument()
+  })
+})

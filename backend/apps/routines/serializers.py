@@ -480,10 +480,12 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     Raw fields a generic API consumer should rely on to compute its own
     interpretation of "due":
 
-    - ``interval_hours`` — recurrence period.
+    - ``interval_hours`` — recurrence period (fixed schedule, used when interval_phases is null).
+    - ``interval_phases`` — optional list of phases for dynamic scheduling. When set,
+      overrides ``interval_hours`` for next-due-date calculation.
     - ``last_entry_at`` — ISO timestamp of the most recent completion (UTC).
     - ``next_due_at`` — ISO timestamp of the next due moment (UTC), derived
-      from ``last_entry_at + interval_hours``.
+      from ``last_entry_at`` + the current phase's ``interval_hours``.
     - ``user_timezone`` — IANA string of the routine owner. Use it to render
       ``next_due_at`` / ``last_entry_at`` in local time and to apply any
       day-bucket logic the client needs.
@@ -545,6 +547,7 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "name",
             "description",
             "interval_hours",
+            "interval_phases",
             "reminder_mode",
             "reminder_interval_minutes",
             "respect_quiet_hours",
@@ -592,6 +595,44 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             is_shared = value.shared_with.filter(pk=request.user.pk).exists()
             if not is_owner and not is_shared:
                 raise serializers.ValidationError("Invalid stock item.")
+        return value
+
+    def validate_interval_phases(self, value):
+        if value is None:
+            return value
+
+        if not isinstance(value, list) or len(value) < 2:
+            raise serializers.ValidationError(
+                "interval_phases must be a list with at least 2 phases."
+            )
+
+        for i, phase in enumerate(value):
+            is_last = i == len(value) - 1
+
+            if "interval_hours" not in phase:
+                raise serializers.ValidationError(
+                    f"Phase {i + 1} is missing 'interval_hours'."
+                )
+            if not isinstance(phase["interval_hours"], int) or phase["interval_hours"] < 1:
+                raise serializers.ValidationError(
+                    f"Phase {i + 1}: 'interval_hours' must be an integer >= 1."
+                )
+
+            if is_last:
+                if "count" in phase:
+                    raise serializers.ValidationError(
+                        "The last phase must not have a 'count' (it repeats indefinitely)."
+                    )
+            else:
+                if "count" not in phase:
+                    raise serializers.ValidationError(
+                        f"Phase {i + 1} must have a 'count'."
+                    )
+                if not isinstance(phase["count"], int) or phase["count"] < 1:
+                    raise serializers.ValidationError(
+                        f"Phase {i + 1}: 'count' must be an integer >= 1."
+                    )
+
         return value
 
     def get_is_owner(self, obj):

@@ -1,0 +1,14 @@
+# Postgres data volume — owned by uid 70, not readable by Docker build context
+data/
+
+# Dev/CI artifacts that don't belong in any image
+.git/
+.github/
+docs/
+e2e/
+site/
+.claude/
+*.md
+.env
+.env.*
+!.env.example

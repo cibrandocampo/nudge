@@ -450,5 +450,14 @@
   "pwa.install.sheetStepGeneric1": "Abre el menú de tu navegador",
   "pwa.install.sheetStepGeneric2": "Pulsa \"Añadir a pantalla de inicio\" o \"Instalar\"",
   "pwa.install.sheetStepGeneric3": "Confirma",
-  "pwa.install.sheetClose": "Cerrar"
+  "pwa.install.sheetClose": "Cerrar",
+  "routine.form.dynamicInterval": "Intervalo dinámico",
+  "routine.form.phase": "Fase {{n}}",
+  "routine.form.phaseCount": "veces",
+  "routine.form.phaseIndefinite": "indefinidamente",
+  "routine.form.addPhase": "Añadir fase",
+  "routine.form.removePhase": "Eliminar fase",
+  "routine.form.errorPhasesMin": "El intervalo dinámico requiere al menos 2 fases.",
+  "routine.form.errorPhaseInterval": "Cada fase debe tener un intervalo mayor que 0.",
+  "routine.form.errorPhaseCount": "Cada fase (excepto la última) debe repetirse al menos una vez."
 }
