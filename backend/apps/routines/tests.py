@@ -281,6 +281,160 @@ class RoutineModelTest(TestCase):
         self.assertEqual(names, sorted(names))
 
 
+# ── Routine interval phases ──────────────────────────────────────────────────
+
+
+class RoutineIntervalPhasesTest(TestCase):
+    """Tests for next_due_at() and entry_count() with interval_phases."""
+
+    TWO_PHASE = [
+        {"count": 4, "interval_hours": 360},  # 15 days x 4
+        {"interval_hours": 720},  # 30 days, indefinite
+    ]
+
+    def setUp(self):
+        self.user = make_user()
+
+    def _make_phased(self, phases=None):
+        r = make_routine(self.user, interval_hours=24)
+        r.interval_phases = phases if phases is not None else self.TWO_PHASE
+        r.save()
+        return r
+
+    def _clear_cache(self, routine):
+        for attr in ("_last_entry_cache", "_entry_count_cache"):
+            if hasattr(routine, attr):
+                delattr(routine, attr)
+
+    def test_null_phases_uses_interval_hours(self):
+        r = make_routine(self.user, interval_hours=48)
+        self.assertIsNone(r.interval_phases)
+        entry = make_entry(r, offset_hours=-10)
+        expected = entry.effective_created_at + timedelta(hours=48)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+    def test_never_logged_returns_none_with_phases(self):
+        r = self._make_phased()
+        self.assertIsNone(r.next_due_at())
+
+    def test_phase_1_used_with_one_entry(self):
+        r = self._make_phased()
+        entry = make_entry(r, offset_hours=-5)
+        expected = entry.effective_created_at + timedelta(hours=360)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+    def test_phase_1_used_with_three_entries(self):
+        # 3 entries: remaining=3 < count=4 → still phase 1
+        r = self._make_phased()
+        make_entry(r, offset_hours=-30)
+        make_entry(r, offset_hours=-20)
+        last = make_entry(r, offset_hours=-5)
+        expected = last.effective_created_at + timedelta(hours=360)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+    def test_phase_2_starts_at_entry_count_4(self):
+        # 4 entries: 4-4=0 → phase 2
+        r = self._make_phased()
+        make_entry(r, offset_hours=-40)
+        make_entry(r, offset_hours=-30)
+        make_entry(r, offset_hours=-20)
+        last = make_entry(r, offset_hours=-5)
+        expected = last.effective_created_at + timedelta(hours=720)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+    def test_phase_2_persists_beyond_count(self):
+        # Last phase repeats indefinitely — 10 entries still use phase 2
+        r = self._make_phased()
+        for i in range(9):
+            make_entry(r, offset_hours=-(50 - i * 4))
+        last = make_entry(r, offset_hours=-2)
+        expected = last.effective_created_at + timedelta(hours=720)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+    def test_boundary_at_phase_transition(self):
+        # 3 entries → phase 1 (360h); 4 entries → phase 2 (720h)
+        r = self._make_phased()
+        make_entry(r, offset_hours=-30)
+        make_entry(r, offset_hours=-20)
+        make_entry(r, offset_hours=-10)
+        last3 = r.last_entry()
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last3.effective_created_at + timedelta(hours=360)).timestamp(),
+            delta=1,
+        )
+        last4 = make_entry(r, offset_hours=-1)
+        self._clear_cache(r)
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last4.effective_created_at + timedelta(hours=720)).timestamp(),
+            delta=1,
+        )
+
+    def test_three_phase_routine(self):
+        phases = [
+            {"count": 2, "interval_hours": 100},
+            {"count": 3, "interval_hours": 200},
+            {"interval_hours": 300},
+        ]
+        r = self._make_phased(phases=phases)
+        # 1 entry → phase 1 (100h)
+        last = make_entry(r, offset_hours=-10)
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last.effective_created_at + timedelta(hours=100)).timestamp(),
+            delta=1,
+        )
+        # 2nd entry → phase 2 (200h) starts
+        last = make_entry(r, offset_hours=-8)
+        self._clear_cache(r)
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last.effective_created_at + timedelta(hours=200)).timestamp(),
+            delta=1,
+        )
+        # 4th entry → still phase 2 (count=3, so entries 2-4 are phase 2)
+        make_entry(r, offset_hours=-6)
+        last = make_entry(r, offset_hours=-4)
+        self._clear_cache(r)
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last.effective_created_at + timedelta(hours=200)).timestamp(),
+            delta=1,
+        )
+        # 5th entry → phase 3 (300h)
+        last = make_entry(r, offset_hours=-2)
+        self._clear_cache(r)
+        self.assertAlmostEqual(
+            r.next_due_at().timestamp(),
+            (last.effective_created_at + timedelta(hours=300)).timestamp(),
+            delta=1,
+        )
+
+    def test_entry_count_cache_bypasses_db(self):
+        r = self._make_phased()
+        e1 = make_entry(r, offset_hours=-3)
+        make_entry(r, offset_hours=-2)
+        make_entry(r, offset_hours=-1)
+        # Simulate a 1-entry prefetch on a routine that has 3 DB entries
+        r._prefetched_entries = [e1]
+        with self.assertNumQueries(0):
+            count = r.entry_count()
+        self.assertEqual(count, 1)
+        # Second call uses the _entry_count_cache — still 0 DB queries
+        with self.assertNumQueries(0):
+            self.assertEqual(r.entry_count(), 1)
+
+    def test_empty_interval_phases_falls_back_to_interval_hours(self):
+        # [] is falsy — treated the same as None (fixed schedule)
+        r = make_routine(self.user, interval_hours=24)
+        r.interval_phases = []
+        r.save()
+        entry = make_entry(r, offset_hours=-5)
+        expected = entry.effective_created_at + timedelta(hours=24)
+        self.assertAlmostEqual(r.next_due_at().timestamp(), expected.timestamp(), delta=1)
+
+
 # ── RoutineEntry model ───────────────────────────────────────────────────────
 
 
@@ -741,6 +895,99 @@ class RoutineSerializerTest(TestCase):
         )
         self.assertFalse(s.is_valid())
         self.assertIn("stock", s.errors)
+
+
+# ── Interval phases serializer validation ────────────────────────────────────
+
+
+class IntervalPhasesSerializerTest(TestCase):
+    """Validates RoutineSerializer.validate_interval_phases()."""
+
+    VALID_2_PHASE = [
+        {"count": 4, "interval_hours": 360},
+        {"interval_hours": 720},
+    ]
+
+    def setUp(self):
+        self.user = make_user()
+
+    def _base_data(self, phases):
+        return {"name": "Test routine", "interval_hours": 24, "is_active": True, "interval_phases": phases}
+
+    def _assert_valid(self, phases):
+        s = RoutineSerializer(data=self._base_data(phases))
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def _assert_invalid(self, phases, error_substring=None):
+        s = RoutineSerializer(data=self._base_data(phases))
+        self.assertFalse(s.is_valid())
+        self.assertIn("interval_phases", s.errors)
+        if error_substring:
+            self.assertIn(error_substring, str(s.errors["interval_phases"]))
+
+    def test_null_is_valid(self):
+        self._assert_valid(None)
+
+    def test_two_valid_phases_accepted(self):
+        self._assert_valid(self.VALID_2_PHASE)
+
+    def test_empty_list_is_invalid(self):
+        self._assert_invalid([], "at least 2")
+
+    def test_single_phase_is_invalid(self):
+        self._assert_invalid([{"interval_hours": 360}], "at least 2")
+
+    def test_last_phase_with_count_is_invalid(self):
+        self._assert_invalid(
+            [{"count": 3, "interval_hours": 360}, {"count": 2, "interval_hours": 720}],
+            "last phase must not have",
+        )
+
+    def test_non_last_phase_missing_count_is_invalid(self):
+        self._assert_invalid(
+            [{"interval_hours": 360}, {"interval_hours": 720}],
+            "must have a 'count'",
+        )
+
+    def test_interval_hours_zero_is_invalid(self):
+        self._assert_invalid(
+            [{"count": 4, "interval_hours": 0}, {"interval_hours": 720}],
+            "interval_hours",
+        )
+
+    def test_interval_hours_negative_is_invalid(self):
+        self._assert_invalid(
+            [{"count": 4, "interval_hours": -10}, {"interval_hours": 720}],
+            "interval_hours",
+        )
+
+    def test_count_zero_is_invalid(self):
+        self._assert_invalid(
+            [{"count": 0, "interval_hours": 360}, {"interval_hours": 720}],
+            "count",
+        )
+
+    def test_phase_missing_interval_hours_is_invalid(self):
+        self._assert_invalid(
+            [{"count": 4}, {"interval_hours": 720}],
+            "interval_hours",
+        )
+
+    def test_null_phases_creates_routine(self):
+        s = RoutineSerializer(data=self._base_data(None))
+        self.assertTrue(s.is_valid(), s.errors)
+        r = s.save(user=self.user)
+        self.assertIsNone(r.interval_phases)
+
+    def test_valid_phases_creates_routine(self):
+        s = RoutineSerializer(data=self._base_data(self.VALID_2_PHASE))
+        self.assertTrue(s.is_valid(), s.errors)
+        r = s.save(user=self.user)
+        self.assertEqual(len(r.interval_phases), 2)
+        self.assertEqual(r.interval_phases[0]["count"], 4)
+        self.assertEqual(r.interval_phases[0]["interval_hours"], 360)
+        self.assertEqual(r.interval_phases[1]["interval_hours"], 720)
+        self.assertNotIn("count", r.interval_phases[1])
 
 
 class ReminderCadenceFieldTest(APITestCase):

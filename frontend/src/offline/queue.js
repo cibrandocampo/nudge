@@ -106,6 +106,10 @@ export function markPending(id) {
   return patchStatus(id, { status: 'pending', errorMessage: undefined })
 }
 
+export function markPendingFresh(id) {
+  return patchStatus(id, { status: 'pending', errorMessage: undefined, retryCount: 0, nextAttemptAt: null })
+}
+
 /**
  * Reschedules an entry for a future retry. Increments `retryCount` and
  * stamps `nextAttemptAt` so `processQueue` skips it until the timer fires.

@@ -31,6 +31,24 @@ function toLocalDateTimeString(date) {
   return `${y}-${m}-${d}T${h}:${min}`
 }
 
+const DEFAULT_PHASES = [
+  { interval_hours: 360, count: 4 },  // 15 days × 4
+  { interval_hours: 720 },            // 30 days, indefinite
+]
+
+function addPhase(phases) {
+  const last = phases[phases.length - 1]
+  return [...phases.slice(0, -1), { interval_hours: 168, count: 1 }, last]
+}
+
+function removePhase(phases, index) {
+  return phases.filter((_, i) => i !== index)
+}
+
+function updatePhase(phases, index, patch) {
+  return phases.map((p, i) => (i === index ? { ...p, ...patch } : p))
+}
+
 const EMPTY = {
   name: '',
   description: '',
@@ -38,6 +56,7 @@ const EMPTY = {
   reminder_mode: 'intensive',
   reminder_interval_minutes: 120,
   respect_quiet_hours: true,
+  interval_phases: null,
   stock: '',
   stock_usage: 1,
 }
@@ -75,6 +94,7 @@ export default function RoutineFormPage() {
   const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
   const [lastDoneAt, setLastDoneAt] = useState('')
   const [errors, setErrors] = useState({})
+  const [phasesEnabled, setPhasesEnabled] = useState(false)
   const [coupledShareConfirm, setCoupledShareConfirm] = useState(null)
 
   // Prefill once the edit routine is loaded.
@@ -90,9 +110,11 @@ export default function RoutineFormPage() {
       reminder_mode: routine.reminder_mode ?? 'intensive',
       reminder_interval_minutes: routine.reminder_interval_minutes ?? 120,
       respect_quiet_hours: routine.respect_quiet_hours ?? true,
+      interval_phases: routine.interval_phases ?? null,
       stock: routine.stock ?? '',
       stock_usage: routine.stock_usage,
     })
+    setPhasesEnabled(routine.interval_phases != null)
     setUsesStock(routine.stock !== null)
     setSharedWith(Array.isArray(routine.shared_with) ? routine.shared_with : [])
   }, [isEditing, routine])
@@ -123,7 +145,18 @@ export default function RoutineFormPage() {
   const validate = () => {
     const err = {}
     if (!form.name.trim()) err.name = t('routine.form.errorName')
-    if (!form.interval_hours || Number(form.interval_hours) <= 0) err.interval_hours = t('routine.form.errorInterval')
+    if (!phasesEnabled) {
+      if (!form.interval_hours || Number(form.interval_hours) <= 0) err.interval_hours = t('routine.form.errorInterval')
+    } else {
+      const phases = form.interval_phases ?? DEFAULT_PHASES
+      if (phases.length < 2) err.interval_phases = t('routine.form.errorPhasesMin')
+      phases.forEach((phase, i) => {
+        if (!phase.interval_hours || phase.interval_hours < 1)
+          err[`phase_interval_${i}`] = t('routine.form.errorPhaseInterval')
+        if (i < phases.length - 1 && (!phase.count || phase.count < 1))
+          err[`phase_count_${i}`] = t('routine.form.errorPhaseCount')
+      })
+    }
     return err
   }
 
@@ -178,7 +211,9 @@ export default function RoutineFormPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description,
-      interval_hours: Number(form.interval_hours),
+      ...(phasesEnabled
+        ? { interval_phases: form.interval_phases ?? DEFAULT_PHASES }
+        : { interval_hours: Number(form.interval_hours), interval_phases: null }),
       reminder_mode: form.reminder_mode,
       reminder_interval_minutes: form.reminder_interval_minutes,
       respect_quiet_hours: form.respect_quiet_hours,
@@ -238,7 +273,7 @@ export default function RoutineFormPage() {
           <h1 className={shared.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
         </div>
 
-        <form onSubmit={handleSubmit} className={s.form}>
+        <form onSubmit={handleSubmit} className={s.form} noValidate>
           {/* Basics */}
           <section className={shared.formSection}>
             <FormField label={t('routine.form.name')} error={errors.name}>
@@ -262,13 +297,104 @@ export default function RoutineFormPage() {
 
           {/* Schedule */}
           <section className={shared.formSection}>
-            <FormField label={t('routine.form.interval')}>
-              <IntervalPicker
-                valueHours={Number(form.interval_hours) || 0}
-                onChange={(hours) => setForm((f) => ({ ...f, interval_hours: hours }))}
-                error={errors.interval_hours}
-              />
-            </FormField>
+            {!phasesEnabled && (
+              <FormField label={t('routine.form.interval')}>
+                <IntervalPicker
+                  valueHours={Number(form.interval_hours) || 0}
+                  onChange={(hours) => setForm((f) => ({ ...f, interval_hours: hours }))}
+                  error={errors.interval_hours}
+                />
+              </FormField>
+            )}
+            <button
+              type="button"
+              className={s.phasesToggle}
+              onClick={() => {
+                setPhasesEnabled((v) => !v)
+                if (!phasesEnabled && !form.interval_phases) {
+                  setForm((f) => ({ ...f, interval_phases: DEFAULT_PHASES }))
+                }
+              }}
+            >
+              {t('routine.form.dynamicInterval')} {phasesEnabled ? '▾' : '▸'}
+            </button>
+            {phasesEnabled && (
+              <div className={s.phasesEditor}>
+                {(form.interval_phases ?? DEFAULT_PHASES).map((phase, i) => {
+                  const phases = form.interval_phases ?? DEFAULT_PHASES
+                  const isLast = i === phases.length - 1
+                  return (
+                    <div key={i} className={s.phaseRow}>
+                      <span className={s.phaseLabel}>{t('routine.form.phase', { n: i + 1 })}</span>
+                      <IntervalPicker
+                        valueHours={phase.interval_hours}
+                        onChange={(hours) =>
+                          setForm((f) => ({
+                            ...f,
+                            interval_phases: updatePhase(f.interval_phases ?? DEFAULT_PHASES, i, {
+                              interval_hours: hours,
+                            }),
+                          }))
+                        }
+                        error={errors[`phase_interval_${i}`]}
+                      />
+                      {isLast ? (
+                        <span className={s.phaseIndefinite}>{t('routine.form.phaseIndefinite')}</span>
+                      ) : (
+                        <>
+                          <input
+                            type="number"
+                            min={1}
+                            value={phase.count ?? 1}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                interval_phases: updatePhase(f.interval_phases ?? DEFAULT_PHASES, i, {
+                                  count: Number(e.target.value),
+                                }),
+                              }))
+                            }
+                            className={s.phaseCountInput}
+                          />
+                          <span>{t('routine.form.phaseCount')}</span>
+                          {errors[`phase_count_${i}`] && (
+                            <p className={s.phaseError}>{errors[`phase_count_${i}`]}</p>
+                          )}
+                        </>
+                      )}
+                      {!isLast && phases.length > 2 && (
+                        <button
+                          type="button"
+                          aria-label={t('routine.form.removePhase')}
+                          className={s.phaseRemoveBtn}
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              interval_phases: removePhase(f.interval_phases ?? DEFAULT_PHASES, i),
+                            }))
+                          }
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+                {errors.interval_phases && <p className={s.phaseError}>{errors.interval_phases}</p>}
+                <button
+                  type="button"
+                  className={s.addPhaseBtn}
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      interval_phases: addPhase(f.interval_phases ?? DEFAULT_PHASES),
+                    }))
+                  }
+                >
+                  + {t('routine.form.addPhase')}
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Notifications — mode + (conditional) interval + respect toggle */}

@@ -753,5 +753,83 @@ describe('offline sync worker', () => {
       expect(entry.status).toBe('pending')
       expect(entry.retryCount).toBe(2)
     })
+
+    it('resets error entries to pending with retryCount=0 during forceSync', async () => {
+      // Simulate an entry that was previously marked error (e.g. HTTP 401 after
+      // exhausted retries or a cached idempotency response). The user clicking
+      // "Retry All" calls forceSync(), which must reset error entries so that
+      // processQueue() can pick them up — without this they are silently skipped.
+      server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({}, { status: 201 })))
+      await enqueue(
+        pendingEntry({
+          status: 'error',
+          retryCount: 3,
+          nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
+          errorMessage: 'HTTP 401',
+        }),
+      )
+      initSyncWorker(fakeQueryClient())
+      await forceSync()
+
+      // Entry should have been retried and removed on success.
+      expect(await list()).toHaveLength(0)
+    })
+
+    it('resets error entry retryCount to 0 so backoff starts fresh', async () => {
+      // Block the network so we can observe the reset without the drain completing.
+      server.use(mockNetworkError('post', '/routines/1/log/'))
+      await enqueue(
+        pendingEntry({
+          status: 'error',
+          retryCount: 3,
+          nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
+          errorMessage: 'HTTP 401',
+        }),
+      )
+      initSyncWorker(fakeQueryClient())
+      await forceSync()
+
+      const [entry] = await list()
+      // Entry is back to pending with a fresh retryCount.
+      expect(entry.status).toBe('pending')
+      expect(entry.retryCount).toBe(0)
+      expect(entry.nextAttemptAt).toBeNull()
+    })
+
+    it('leaves non-error entries untouched during forceSync reset pass', async () => {
+      // resetErrorsForRetry only acts on 'error' entries — pending entries
+      // should pass through without being altered by the reset step.
+      server.use(mockNetworkError('post', '/routines/1/log/'))
+      await enqueue(pendingEntry({ id: 'p-1', status: 'pending', retryCount: 1 }))
+      await enqueue(pendingEntry({ id: 'e-1', status: 'error', retryCount: 3, errorMessage: 'HTTP 400' }))
+      initSyncWorker(fakeQueryClient())
+      await forceSync()
+
+      const entries = await list()
+      const pending = entries.find((e) => e.id === 'p-1')
+      const error = entries.find((e) => e.id === 'e-1')
+      // The pending entry keeps its retryCount; the error one is reset to 0.
+      expect(pending.retryCount).toBe(1)
+      expect(error.retryCount).toBe(0)
+    })
+  })
+
+  describe('queryKeysForResource coverage', () => {
+    // These tests exercise the resource-key → query-key mapping for types that
+    // are not covered by the main sync tests ('me', 'contact', 'stock-group',
+    // and unknown types that hit the default branch).
+    it.each([
+      ['me', 'me'],
+      ['contact:1', 'contact'],
+      ['stock-group:1', 'stock-group'],
+      ['unknown-type:9', 'default'],
+    ])('drains a queue entry with resourceKey "%s" (%s branch)', async (resourceKey) => {
+      const qc = fakeQueryClient()
+      server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({}, { status: 201 })))
+      await enqueue(pendingEntry({ resourceKey }))
+      initSyncWorker(qc)
+      await processQueue()
+      expect(await list()).toHaveLength(0)
+    })
   })
 })

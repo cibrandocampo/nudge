@@ -379,6 +379,7 @@
   "offline.panel.discard": "Discard",
   "offline.panel.resolve": "Resolve",
   "offline.panel.retryAll": "Retry all",
+  "offline.panel.showError": "Show error details",
   "offline.status.pending": "Waiting for connection",
   "offline.status.syncing": "Syncing…",
   "offline.status.error": "Failed to sync",
@@ -450,5 +451,14 @@
   "pwa.install.sheetStepGeneric1": "Open your browser menu",
   "pwa.install.sheetStepGeneric2": "Tap \"Add to Home Screen\" or \"Install\"",
   "pwa.install.sheetStepGeneric3": "Confirm",
-  "pwa.install.sheetClose": "Close"
+  "pwa.install.sheetClose": "Close",
+  "routine.form.dynamicInterval": "Dynamic interval",
+  "routine.form.phase": "Phase {{n}}",
+  "routine.form.phaseCount": "times",
+  "routine.form.phaseIndefinite": "indefinitely",
+  "routine.form.addPhase": "Add phase",
+  "routine.form.removePhase": "Remove phase",
+  "routine.form.errorPhasesMin": "Dynamic interval requires at least 2 phases.",
+  "routine.form.errorPhaseInterval": "Each phase must have an interval greater than 0.",
+  "routine.form.errorPhaseCount": "Each phase (except the last) must repeat at least once."
 }

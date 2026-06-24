@@ -27,6 +27,7 @@ export default function PendingBadge() {
   const qc = useQueryClient()
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [openedDetail, setOpenedDetail] = useState(null)
   const wrapperRef = useRef(null)
 
   useClickOutside(wrapperRef, () => setOpen(false), open)
@@ -75,25 +76,44 @@ export default function PendingBadge() {
           <ul className={s.list}>
             {entries.map((entry) => (
               <li key={entry.id} className={s.item} data-testid={`pending-item-${entry.status}`}>
-                <span className={`${s.statusIcon} ${s[`status_${entry.status}`]}`}>
-                  <Icon name={STATUS_ICON[entry.status]} size="sm" />
-                </span>
-                <div className={s.itemBody}>
-                  <div className={s.itemTitle}>
-                    {entry.labelKey ? t(entry.labelKey, entry.labelArgs ?? {}) : `${entry.method} ${entry.endpoint}`}
+                <div className={s.itemRow}>
+                  {entry.status === 'error' ? (
+                    <button
+                      type="button"
+                      className={`${s.statusIconBtn} ${s.status_error}`}
+                      onClick={() => setOpenedDetail((v) => (v === entry.id ? null : entry.id))}
+                      aria-label={t('offline.panel.showError')}
+                      aria-expanded={openedDetail === entry.id}
+                    >
+                      <Icon name={STATUS_ICON[entry.status]} size="sm" />
+                    </button>
+                  ) : (
+                    <span className={`${s.statusIcon} ${s[`status_${entry.status}`]}`}>
+                      <Icon name={STATUS_ICON[entry.status]} size="sm" />
+                    </span>
+                  )}
+                  <div className={s.itemBody}>
+                    <div className={s.itemTitle}>
+                      {entry.labelKey ? t(entry.labelKey, entry.labelArgs ?? {}) : `${entry.method} ${entry.endpoint}`}
+                    </div>
+                    <div className={s.itemMeta}>
+                      {t(`offline.status.${entry.status}`)} · {formatShortDate(entry.createdAt)}
+                    </div>
                   </div>
-                  <div className={s.itemMeta}>
-                    {t(`offline.status.${entry.status}`)} · {formatShortDate(entry.createdAt)}
-                  </div>
+                  <button
+                    type="button"
+                    className={s.discard}
+                    onClick={() => discard(entry.id, qc)}
+                    aria-label={t('offline.panel.discard')}
+                  >
+                    {t('offline.panel.discard')}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={s.discard}
-                  onClick={() => discard(entry.id, qc)}
-                  aria-label={t('offline.panel.discard')}
-                >
-                  {t('offline.panel.discard')}
-                </button>
+                {openedDetail === entry.id && entry.errorMessage && (
+                  <div className={s.errorDetail} data-testid="error-detail">
+                    {entry.errorMessage}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

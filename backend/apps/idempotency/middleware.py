@@ -79,7 +79,7 @@ class IdempotencyMiddleware:
 
         response = self.get_response(request)
 
-        if 200 <= response.status_code < 500:
+        if 200 <= response.status_code < 300:
             self._store(user, request, key, body_hash, response)
 
         return response

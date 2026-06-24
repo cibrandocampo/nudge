@@ -104,10 +104,9 @@ describe('PendingBadge', () => {
     const user = userEvent.setup()
     await user.click(screen.getByTestId('pending-badge'))
     await user.click(screen.getByRole('button', { name: /retry/i }))
-    // The retry button re-queues via forceSync — with a pending 'error' entry,
-    // processQueue won't drain it (only picks up 'pending'). That's expected;
-    // we just assert the button is wired without throwing.
-    expect(hits).toBe(0)
+    // forceSync resets error → pending and then drains; the entry should be
+    // processed and the queue empty.
+    await waitFor(() => expect(hits).toBe(1))
   })
 
   it('reports the "syncing" dominant state when an entry is in flight', async () => {
@@ -218,6 +217,56 @@ describe('PendingBadge', () => {
     await waitFor(() => screen.getByTestId('pending-badge'))
     await user.click(screen.getByTestId('pending-badge'))
     expect(screen.getByText('Change password')).toBeInTheDocument()
+  })
+
+  it('renders a label when labelKey is set but labelArgs is null', async () => {
+    // Covers the `entry.labelArgs ?? {}` null-coalescing branch: when an entry
+    // carries a labelKey but no labelArgs, the fallback empty object is used.
+    await enqueue(
+      entry({
+        id: 'nullargs',
+        labelKey: 'offline.label.changePassword',
+        labelArgs: null,
+      }),
+    )
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    expect(screen.getByText('Change password')).toBeInTheDocument()
+  })
+
+  it('clicking the warning icon on an error entry shows the error message', async () => {
+    await enqueue(entry({ id: 'err', status: 'error', errorMessage: 'HTTP 401' }))
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.getByTestId('error-detail')).toHaveTextContent('HTTP 401')
+  })
+
+  it('clicking the warning icon again hides the error detail', async () => {
+    await enqueue(entry({ id: 'err', status: 'error', errorMessage: 'HTTP 401' }))
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.getByTestId('error-detail')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
+  })
+
+  it('does not render error-detail when error entry has no errorMessage', async () => {
+    await enqueue(entry({ id: 'err', status: 'error' }))
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
   })
 
   it('discard rolls back the optimistic before removing the entry (T113)', async () => {

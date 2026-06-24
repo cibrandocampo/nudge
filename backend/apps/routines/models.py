@@ -308,6 +308,17 @@ class Routine(models.Model):
         validators=[MinValueValidator(1)],
         help_text="Number of hours between entries (minimum 1)",
     )
+    interval_phases = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Optional ordered list of interval phases. "
+            "Each phase (except the last) must have 'count' (int >= 1) and 'interval_hours' (int >= 1). "
+            "The last phase has only 'interval_hours' and repeats indefinitely. "
+            "When null, interval_hours is used (fixed schedule)."
+        ),
+    )
     REMINDER_MODE_CHOICES = [
         ("intensive", "Intensive"),
         ("daily", "Daily"),
@@ -368,15 +379,33 @@ class Routine(models.Model):
                 self._last_entry_cache = self.entries.order_by("-client_created_at").first()
         return self._last_entry_cache
 
+    def entry_count(self):
+        if not hasattr(self, "_entry_count_cache"):
+            if hasattr(self, "_prefetched_entries"):
+                self._entry_count_cache = len(self._prefetched_entries)
+            else:
+                self._entry_count_cache = self.entries.count()
+        return self._entry_count_cache
+
     def next_due_at(self):
         last = self.last_entry()
         if last is None:
-            # Never logged — already due
             return None
-        # Use the effective action time (client_created_at when provided,
-        # else server-assigned created_at). Keeps due-time math correct for
-        # entries synced from offline.
-        return last.effective_created_at + timedelta(hours=self.interval_hours)
+
+        if not self.interval_phases:
+            return last.effective_created_at + timedelta(hours=self.interval_hours)
+
+        # Phase-based scheduling: walk phases subtracting counts until we find
+        # which phase the next entry falls in. The last phase repeats forever.
+        remaining = self.entry_count()
+        phase = self.interval_phases[-1]
+        for p in self.interval_phases[:-1]:
+            if remaining < p["count"]:
+                phase = p
+                break
+            remaining -= p["count"]
+
+        return last.effective_created_at + timedelta(hours=phase["interval_hours"])
 
     def is_overdue(self):
         """True when the exact due time has passed (or routine was never logged)."""
