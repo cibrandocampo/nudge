@@ -111,11 +111,18 @@ select.input::-ms-expand {
   display: none;
 }
 
-/* `<input type="time">`: tone the WebKit picker indicator (a stark
- * black clock by default) into the muted palette so it sits next to
- * the value the way the chevron does on selects. Width stays at the
- * shared `.input` 100% so it looks identical to the timezone field
- * inside the same card. */
+/* `<input type="time">`: iOS Safari renders time inputs with its own
+ * intrinsic height, ignoring padding, making them 3-4× taller than
+ * other inputs. `-webkit-appearance: none` forces it to respect the
+ * shared `.input` sizing while still opening the native time-picker
+ * wheel on tap. */
+input[type='time'].input {
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Tone the WebKit picker indicator (a stark black clock by default)
+ * into the muted palette so it sits next to the value the way the
+ * chevron does on selects. */
 input[type='time'].input::-webkit-calendar-picker-indicator {
   opacity: 0.55;
   cursor: pointer;
