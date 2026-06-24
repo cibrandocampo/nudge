@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('routines', '0013_reminder_cadence'),
+        ("routines", "0013_reminder_cadence"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='routine',
-            name='interval_phases',
-            field=models.JSONField(blank=True, default=None, help_text="Optional ordered list of interval phases. Each phase (except the last) must have 'count' (int >= 1) and 'interval_hours' (int >= 1). The last phase has only 'interval_hours' and repeats indefinitely. When null, interval_hours is used (fixed schedule).", null=True),
+            model_name="routine",
+            name="interval_phases",
+            field=models.JSONField(
+                blank=True,
+                default=None,
+                help_text="Optional ordered list of interval phases. Each phase (except the last) must have 'count' (int >= 1) and 'interval_hours' (int >= 1). The last phase has only 'interval_hours' and repeats indefinitely. When null, interval_hours is used (fixed schedule).",
+                null=True,
+            ),
         ),
     ]

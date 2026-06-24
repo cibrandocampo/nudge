@@ -289,7 +289,7 @@ class RoutineIntervalPhasesTest(TestCase):
 
     TWO_PHASE = [
         {"count": 4, "interval_hours": 360},  # 15 days x 4
-        {"interval_hours": 720},               # 30 days, indefinite
+        {"interval_hours": 720},  # 30 days, indefinite
     ]
 
     def setUp(self):

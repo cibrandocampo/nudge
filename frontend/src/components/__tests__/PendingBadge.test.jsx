@@ -219,6 +219,23 @@ describe('PendingBadge', () => {
     expect(screen.getByText('Change password')).toBeInTheDocument()
   })
 
+  it('renders a label when labelKey is set but labelArgs is null', async () => {
+    // Covers the `entry.labelArgs ?? {}` null-coalescing branch: when an entry
+    // carries a labelKey but no labelArgs, the fallback empty object is used.
+    await enqueue(
+      entry({
+        id: 'nullargs',
+        labelKey: 'offline.label.changePassword',
+        labelArgs: null,
+      }),
+    )
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    expect(screen.getByText('Change password')).toBeInTheDocument()
+  })
+
   it('clicking the warning icon on an error entry shows the error message', async () => {
     await enqueue(entry({ id: 'err', status: 'error', errorMessage: 'HTTP 401' }))
     const user = userEvent.setup()
@@ -238,6 +255,16 @@ describe('PendingBadge', () => {
     await user.click(screen.getByTestId('pending-badge'))
     await user.click(screen.getByRole('button', { name: /show error details/i }))
     expect(screen.getByTestId('error-detail')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
+  })
+
+  it('does not render error-detail when error entry has no errorMessage', async () => {
+    await enqueue(entry({ id: 'err', status: 'error' }))
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
     await user.click(screen.getByRole('button', { name: /show error details/i }))
     expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
   })

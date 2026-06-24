@@ -795,5 +795,41 @@ describe('offline sync worker', () => {
       expect(entry.retryCount).toBe(0)
       expect(entry.nextAttemptAt).toBeNull()
     })
+
+    it('leaves non-error entries untouched during forceSync reset pass', async () => {
+      // resetErrorsForRetry only acts on 'error' entries — pending entries
+      // should pass through without being altered by the reset step.
+      server.use(mockNetworkError('post', '/routines/1/log/'))
+      await enqueue(pendingEntry({ id: 'p-1', status: 'pending', retryCount: 1 }))
+      await enqueue(pendingEntry({ id: 'e-1', status: 'error', retryCount: 3, errorMessage: 'HTTP 400' }))
+      initSyncWorker(fakeQueryClient())
+      await forceSync()
+
+      const entries = await list()
+      const pending = entries.find((e) => e.id === 'p-1')
+      const error = entries.find((e) => e.id === 'e-1')
+      // The pending entry keeps its retryCount; the error one is reset to 0.
+      expect(pending.retryCount).toBe(1)
+      expect(error.retryCount).toBe(0)
+    })
+  })
+
+  describe('queryKeysForResource coverage', () => {
+    // These tests exercise the resource-key → query-key mapping for types that
+    // are not covered by the main sync tests ('me', 'contact', 'stock-group',
+    // and unknown types that hit the default branch).
+    it.each([
+      ['me', 'me'],
+      ['contact:1', 'contact'],
+      ['stock-group:1', 'stock-group'],
+      ['unknown-type:9', 'default'],
+    ])('drains a queue entry with resourceKey "%s" (%s branch)', async (resourceKey) => {
+      const qc = fakeQueryClient()
+      server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({}, { status: 201 })))
+      await enqueue(pendingEntry({ resourceKey }))
+      initSyncWorker(qc)
+      await processQueue()
+      expect(await list()).toHaveLength(0)
+    })
   })
 })

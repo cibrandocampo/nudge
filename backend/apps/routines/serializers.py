@@ -602,21 +602,15 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             return value
 
         if not isinstance(value, list) or len(value) < 2:
-            raise serializers.ValidationError(
-                "interval_phases must be a list with at least 2 phases."
-            )
+            raise serializers.ValidationError("interval_phases must be a list with at least 2 phases.")
 
         for i, phase in enumerate(value):
             is_last = i == len(value) - 1
 
             if "interval_hours" not in phase:
-                raise serializers.ValidationError(
-                    f"Phase {i + 1} is missing 'interval_hours'."
-                )
+                raise serializers.ValidationError(f"Phase {i + 1} is missing 'interval_hours'.")
             if not isinstance(phase["interval_hours"], int) or phase["interval_hours"] < 1:
-                raise serializers.ValidationError(
-                    f"Phase {i + 1}: 'interval_hours' must be an integer >= 1."
-                )
+                raise serializers.ValidationError(f"Phase {i + 1}: 'interval_hours' must be an integer >= 1.")
 
             if is_last:
                 if "count" in phase:
@@ -625,13 +619,9 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
                     )
             else:
                 if "count" not in phase:
-                    raise serializers.ValidationError(
-                        f"Phase {i + 1} must have a 'count'."
-                    )
+                    raise serializers.ValidationError(f"Phase {i + 1} must have a 'count'.")
                 if not isinstance(phase["count"], int) or phase["count"] < 1:
-                    raise serializers.ValidationError(
-                        f"Phase {i + 1}: 'count' must be an integer >= 1."
-                    )
+                    raise serializers.ValidationError(f"Phase {i + 1}: 'count' must be an integer >= 1.")
 
         return value
 
