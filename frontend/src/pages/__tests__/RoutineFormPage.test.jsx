@@ -896,6 +896,32 @@ describe('interval phases', () => {
     )
   })
 
+  it('changing the IntervalPicker of a phase updates that phase interval_hours', async () => {
+    // Phase 1 default: 360 h = 15 days (picker initialises in "days" unit).
+    // Switching to "weeks" keeps the displayed count (15) but changes the unit:
+    // 15 weeks × 168 h = 2520 h. This exercises the onChange callback at
+    // lines 332-337 of RoutineFormPage.jsx.
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Phase routine')
+    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
+    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    // getAllByRole returns one "weeks" tab per visible IntervalPicker; the
+    // first belongs to Phase 1's picker.
+    const [phase1WeeksTab] = screen.getAllByRole('tab', { name: 'weeks' })
+    await user.click(phase1WeeksTab)
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
+    expect(capturedBody.interval_phases[0].interval_hours).toBe(2520) // 15 weeks
+  })
+
   it('clicking toggle again collapses the editor and restores the IntervalPicker', async () => {
     const { user } = renderCreate()
     await waitFor(() =>
