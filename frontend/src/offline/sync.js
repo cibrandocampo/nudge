@@ -6,6 +6,7 @@ import {
   markConflict,
   markError,
   markPending,
+  markPendingFresh,
   markRetryPending,
   markSyncing,
   registerAbortController,
@@ -278,7 +279,23 @@ export async function processQueue() {
  */
 export async function forceSync() {
   await resetStuckSyncing()
+  await resetErrorsForRetry()
   await processQueue()
+}
+
+/**
+ * Converts `error` entries back to `pending` (with a fresh retryCount=0) so
+ * that `processQueue` picks them up again. Called only from `forceSync` —
+ * i.e. on app startup and on explicit user retries — never from the `online`
+ * event handler, which calls `processQueue` directly.
+ */
+async function resetErrorsForRetry() {
+  const all = await list()
+  for (const entry of all) {
+    if (entry.status === 'error') {
+      await markPendingFresh(entry.id)
+    }
+  }
 }
 
 function onOnline() {

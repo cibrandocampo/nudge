@@ -138,17 +138,20 @@ class MiddlewareTest(APITestCase):
                     )
         self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
-    # ── 4xx response IS cached ───────────────────────────────────────────────
-    def test_client_error_is_cached(self):
-        # Invalid payload → 400. Still cached so retries return the same error.
+    # ── 4xx response is NOT cached ───────────────────────────────────────────
+    def test_client_error_is_not_cached(self):
+        # Invalid payload → 400. Error responses are not cached so the client
+        # can retry after fixing the problem (e.g. re-authenticating on 401,
+        # restocking on 422 insufficient-stock, etc.).
         headers = {**self.auth, "HTTP_IDEMPOTENCY_KEY": "bad-payload"}
         first = self.client.post("/api/routines/", {}, **headers)
         self.assertEqual(first.status_code, 400)
-        self.assertEqual(IdempotencyRecord.objects.count(), 1)
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
+        # Second attempt also hits the view (no cached record).
         second = self.client.post("/api/routines/", {}, **headers)
         self.assertEqual(second.status_code, 400)
-        self.assertEqual(second.json(), first.json())
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
     # ── Same key for two different users is independent ──────────────────────
     def test_same_key_different_users_is_independent(self):

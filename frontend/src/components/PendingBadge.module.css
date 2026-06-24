@@ -93,13 +93,18 @@
 
 .item {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
   padding: 0.55rem 0.75rem;
   border-bottom: 1px solid var(--c-border-inner);
 }
 .item:last-child {
   border-bottom: none;
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .statusIcon {
@@ -111,6 +116,24 @@
   height: 22px;
   border-radius: var(--radius-sm);
   color: var(--c-text-3);
+}
+
+.statusIconBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.statusIconBtn:hover {
+  opacity: 0.7;
 }
 .status_pending {
   color: var(--c-text-3);
@@ -181,6 +204,16 @@
 }
 .retry:hover {
   background: var(--c-primary-hover);
+}
+
+.errorDetail {
+  margin-top: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.65rem;
+  color: var(--c-delete);
+  background: color-mix(in srgb, var(--c-delete) 8%, transparent);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
 }
 
 @keyframes pulse {

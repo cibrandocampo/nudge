@@ -379,6 +379,7 @@
   "offline.panel.discard": "Descartar",
   "offline.panel.resolve": "Resolver",
   "offline.panel.retryAll": "Reintentar",
+  "offline.panel.showError": "Ver detalle do erro",
   "offline.status.pending": "Agardando conexión",
   "offline.status.syncing": "Sincronizando…",
   "offline.status.error": "Erro ao sincronizar",
