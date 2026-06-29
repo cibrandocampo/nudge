@@ -31,7 +31,7 @@ test.setTimeout(60_000)
 test('shared stock in a group is visible to recipient (grouped-stock bug)', async ({ page, browser }) => {
   // ── 1. Login as admin ──────────────────────────────────────────────────
   await login(page)
-  await ensureContact(page, USER2.username)
+  await ensureContact(page, USER2.email)
   await expect(page.getByTestId('offline-banner')).toBeHidden()
 
   // ── 2. Navigate to Inventory ───────────────────────────────────────────
@@ -76,7 +76,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
       const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 
       const contacts = await fetch('/api/auth/contacts/', { headers }).then((r) => r.json())
-      const contact = contacts.find((c) => c.username === contactUsername)
+      const contact = contacts.find((c) => c.email === contactUsername)
       if (!contact) throw new Error(`Contact ${contactUsername} not found`)
 
       const stocks = await fetch('/api/stock/', { headers }).then((r) => r.json())
@@ -91,7 +91,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
       })
       if (!res.ok) throw new Error(`PATCH failed: ${res.status}`)
     },
-    { sName: stockName, contactUsername: USER2.username },
+    { sName: stockName, contactUsername: USER2.email },
   )
 
   // ── Screenshot 1: owner's inventory (stock inside a group) ────────────
@@ -107,7 +107,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // hydrate as admin from shared localStorage / IDB.
   const ctx2 = await browser.newContext()
   const page2 = await ctx2.newPage()
-  await loginAs(page2, USER2.username, USER2.password)
+  await loginAs(page2, USER2.email, USER2.password)
   await page2.getByRole('link', { name: 'Inventory' }).click()
   await expect(page2).toHaveURL('/inventory')
 
@@ -120,7 +120,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   // exposed via the badge's aria-label (the inline label was removed in T134).
   const recipientBadge = sharedCard.getByTestId('shared-badge')
   await expect(recipientBadge).toHaveAttribute('data-variant', 'recipient')
-  await expect(recipientBadge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
+  await expect(recipientBadge).toHaveAttribute('aria-label', new RegExp(SEED.admin.name))
 
   // ── Screenshot 2: close-up of user2's shared card (with owner label) ──
   await sharedCard.screenshot({ path: path.join(SCREENSHOTS_DIR, '2-user2-shared-card.png') })

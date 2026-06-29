@@ -58,10 +58,10 @@ async function fetchUser2Id(page) {
       headers: { Authorization: `Bearer ${token}` },
     })
     const contacts = await res.json()
-    const user = contacts.find((c) => c.username === uname)
+    const user = contacts.find((c) => c.email === uname)
     if (!user) throw new Error(`Contact ${uname} not found`)
     return user.id
-  }, USER2.username)
+  }, USER2.email)
 }
 
 test.describe('Coupled share — routine with linked stock', () => {
@@ -70,7 +70,7 @@ test.describe('Coupled share — routine with linked stock', () => {
     await loginAsUser1(page)
     // Seed already adds user2 as a mutual contact; this is a no-op safety net
     // in case the contact graph drifts.
-    await ensureContact(page, USER2.username)
+    await ensureContact(page, USER2.email)
   })
 
   test('accepting the popup shares routine and stock', async ({ page, browser }) => {
@@ -103,7 +103,7 @@ test.describe('Coupled share — routine with linked stock', () => {
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const shareDialog = page.getByRole('dialog')
     await expect(shareDialog).toBeVisible()
-    await shareDialog.locator('li').filter({ hasText: USER2.username }).click()
+    await shareDialog.locator('li').filter({ hasText: USER2.name }).click()
     await page.keyboard.press('Escape')
     await expect(shareDialog).toBeHidden()
 
@@ -113,7 +113,7 @@ test.describe('Coupled share — routine with linked stock', () => {
     const popup = page.getByRole('dialog')
     await expect(popup).toBeVisible()
     await expect(popup.getByText(STOCK_NAME)).toBeVisible()
-    await expect(popup.getByText(USER2.username)).toBeVisible()
+    await expect(popup.getByText(USER2.name)).toBeVisible()
 
     await Promise.all([
       page.waitForResponse(
@@ -145,7 +145,7 @@ test.describe('Coupled share — routine with linked stock', () => {
     const ctx2 = await browser.newContext()
     const page2 = await ctx2.newPage()
     try {
-      await loginAs(page2, USER2.username, USER2.password)
+      await loginAs(page2, USER2.email, USER2.password)
       await expect(
         page2.getByTestId('routine-card').filter({ hasText: ROUTINE_NAME }),
       ).toBeVisible({ timeout: 10_000 })
@@ -181,7 +181,7 @@ test.describe('Coupled share — routine with linked stock', () => {
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const shareDialog = page.getByRole('dialog')
     await expect(shareDialog).toBeVisible()
-    await shareDialog.locator('li').filter({ hasText: USER2.username }).click()
+    await shareDialog.locator('li').filter({ hasText: USER2.name }).click()
     await page.keyboard.press('Escape')
     await expect(shareDialog).toBeHidden()
 

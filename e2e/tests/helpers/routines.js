@@ -42,20 +42,18 @@ export async function markRoutineDone(page, routineKey, { expectBlocked = false,
  *   intervalValue?: number,
  *   intervalUnit?: 'hours'|'days'|'weeks'|'months'|'years'
  * }} data
- *   `intervalValue` + `intervalUnit` drive the IntervalPicker (segmented
- *   unit tab + stepper). Omit both to use the default (Days = 1).
+ *   `intervalValue` + `intervalUnit` drive the IntervalPicker (unit
+ *   `<select>` + numeric amount input). Omit both to use the default
+ *   (Days = 1). The amount input's accessible name follows the selected
+ *   unit word (e.g. "weeks").
  */
 export async function createRoutine(page, { name, intervalValue, intervalUnit = 'days' }) {
   await page.goto('/routines/new')
   await page.getByPlaceholder(/change water filter/i).fill(name)
 
   if (intervalValue != null) {
-    await page.getByRole('tab', { name: intervalUnit }).click()
-    // Stepper defaults to value=1 after switching units; step up to target.
-    const increase = page.getByRole('button', { name: 'Increase' })
-    for (let i = 1; i < Math.max(1, intervalValue); i += 1) {
-      await increase.click()
-    }
+    await page.getByRole('combobox', { name: 'Unit' }).selectOption(intervalUnit)
+    await page.getByRole('textbox', { name: intervalUnit }).fill(String(intervalValue))
   }
 
   await page.getByRole('button', { name: 'Save' }).click()

@@ -35,6 +35,9 @@ const OUT = join(__dirname, '..', 'docs', 'screenshots')
 const BASE = (process.env.BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '')
 const USER = process.env.DEMO_USERNAME ?? 'cibran'
 const USER2 = process.env.DEMO_USER2_USERNAME ?? 'maria'
+// Login is email-based (T193+). Demo users' emails follow `<username>@nudge.test`.
+const USER_EMAIL = process.env.DEMO_EMAIL ?? `${USER}@nudge.test`
+const USER2_EMAIL = process.env.DEMO_USER2_EMAIL ?? `${USER2}@nudge.test`
 const PASS = process.env.DEMO_PASSWORD ?? ''
 
 /* -- helpers ------------------------------------------------- */
@@ -69,9 +72,10 @@ async function screenshot(page, name) {
   console.log(`  ${name}.png`)
 }
 
-async function login(page, username, password) {
+async function login(page, email, password) {
   await page.goto(`${BASE}/login`)
-  await page.getByPlaceholder('Username').fill(username)
+  await page.getByPlaceholder('Email').fill(email)
+  await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByPlaceholder('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.waitForURL('**/')
@@ -108,7 +112,7 @@ async function main() {
     await screenshot(page, 'login')
 
     // 2. Log in as cibran.
-    await login(page, USER, PASS)
+    await login(page, USER_EMAIL, PASS)
 
     // 3. Dashboard.
     await page.goto(`${BASE}/`)
@@ -176,7 +180,7 @@ async function main() {
         locale: 'en-US',
       })
       const page2 = await context2.newPage()
-      await login(page2, USER2, PASS)
+      await login(page2, USER2_EMAIL, PASS)
       await page2.goto(`${BASE}/`)
       await screenshot(page2, 'shared-dashboard')
       await context2.close()
@@ -227,7 +231,7 @@ async function main() {
     //     Fresh page so scene-12 IDB/reachability leftovers don't leak.
     await page.close()
     const pageC = await context.newPage()
-    await login(pageC, USER, PASS)
+    await login(pageC, USER_EMAIL, PASS)
     await pageC.goto(`${BASE}/routines/${vitaminD.id}/edit`)
     await pageC.waitForLoadState('networkidle')
     const nameInput = pageC.getByPlaceholder('e.g. Change water filter')
@@ -286,7 +290,7 @@ async function main() {
     //     Done opens the LotSelectionModal (role="dialog" aria-modal).
     //     Fresh page so modal state is pristine.
     const pageL = await context.newPage()
-    await login(pageL, USER, PASS)
+    await login(pageL, USER_EMAIL, PASS)
     await pageL.goto(`${BASE}/`)
     await pageL.waitForLoadState('networkidle')
     const vitDTitle = pageL.getByText('Take Vitamin D', { exact: true }).first()

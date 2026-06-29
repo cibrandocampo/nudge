@@ -8,11 +8,19 @@ const SHARED_PASSWORD = process.env.DEMO_USERS_PASSWORD ?? 'change-me'
 export const SEED = {
   admin: {
     username: process.env.E2E_USERNAME ?? 'admin',
+    // Login is email-based (T193+). The bootstrap admin's email is ADMIN_EMAIL
+    // (defaults to admin@example.com); override via E2E_ADMIN_EMAIL if needed.
+    email: process.env.E2E_ADMIN_EMAIL ?? 'admin@example.com',
+    // The bootstrap admin has no name, so `loginAs` completes the one-time
+    // onboarding with "Admin User" — its deterministic display name thereafter.
+    name: 'Admin User',
     password: process.env.E2E_PASSWORD ?? '',
   },
-  user1: { username: 'cibran', password: SHARED_PASSWORD },
-  user2: { username: 'maria', password: SHARED_PASSWORD },
-  user3: { username: 'laura', password: SHARED_PASSWORD },
+  // `name` is the display name (first + last) that the UI renders post-T197
+  // — share modals and contact rows show this, never the username.
+  user1: { username: 'cibran', email: 'cibran@nudge.test', name: 'Cibrán Docampo', password: SHARED_PASSWORD },
+  user2: { username: 'maria', email: 'maria@nudge.test', name: 'María García', password: SHARED_PASSWORD },
+  user3: { username: 'laura', email: 'laura@nudge.test', name: 'Laura Vázquez', password: SHARED_PASSWORD },
   routines: {
     takeVitaminD: 'Take Vitamin D',
     changePumpCannula: 'Change pump cannula',

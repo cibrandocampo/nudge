@@ -15,7 +15,7 @@ const USER2 = SEED.user2
 test.describe('Sharing — Routines', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
-    await ensureContact(page, USER2.username)
+    await ensureContact(page, USER2.email)
     await expect(page.getByTestId('offline-banner')).toBeHidden()
   })
 
@@ -29,7 +29,7 @@ test.describe('Sharing — Routines', () => {
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByText(USER2.username)).toBeVisible()
+    await expect(dialog.getByText(USER2.name)).toBeVisible()
   })
 
   test('share routine via API and verify the edit form reflects it', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('Sharing — Routines', () => {
         }
         const contactsRes = await fetch('/api/auth/contacts/', { headers })
         const contacts = await contactsRes.json()
-        const contact = contacts.find((c) => c.username === contactUsername)
+        const contact = contacts.find((c) => c.email === contactUsername)
         if (!contact) throw new Error(`Contact ${contactUsername} not found`)
 
         await fetch(`/api/routines/${rid}/`, {
@@ -63,7 +63,7 @@ test.describe('Sharing — Routines', () => {
           body: JSON.stringify({ shared_with: [contact.id] }),
         })
       },
-      { rid: routineId, contactUsername: USER2.username },
+      { rid: routineId, contactUsername: USER2.email },
     )
 
     // Dashboard: the card should carry the passive shared badge.
@@ -78,7 +78,7 @@ test.describe('Sharing — Routines', () => {
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
+    await expect(dialog.locator('li').filter({ hasText: USER2.name })).toHaveClass(/itemSelected/)
   })
 
   test('shared routine visible to second user', async ({ page, browser }) => {
@@ -101,7 +101,7 @@ test.describe('Sharing — Routines', () => {
         // Get contact ID
         const contactsRes = await fetch('/api/auth/contacts/', { headers })
         const contacts = await contactsRes.json()
-        const contact = contacts.find((c) => c.username === contactUsername)
+        const contact = contacts.find((c) => c.email === contactUsername)
         if (!contact) throw new Error(`Contact ${contactUsername} not found`)
 
         // Share routine with contact
@@ -111,7 +111,7 @@ test.describe('Sharing — Routines', () => {
           body: JSON.stringify({ shared_with: [contact.id] }),
         })
       },
-      { rid: routineId, contactUsername: USER2.username },
+      { rid: routineId, contactUsername: USER2.email },
     )
 
     // Open the recipient's session in a fresh browser context so the
@@ -122,7 +122,7 @@ test.describe('Sharing — Routines', () => {
     // storage.
     const ctx2 = await browser.newContext()
     const page2 = await ctx2.newPage()
-    await loginAs(page2, USER2.username, USER2.password)
+    await loginAs(page2, USER2.email, USER2.password)
 
     // The shared routine should appear on user2's dashboard
     await expect(page2.getByText(routineName)).toBeVisible({ timeout: 10000 })
@@ -132,7 +132,7 @@ test.describe('Sharing — Routines', () => {
     const sharedCard = page2.locator('[data-testid="routine-card"]').filter({ hasText: routineName })
     const badge = sharedCard.getByTestId('shared-badge')
     await expect(badge).toHaveAttribute('data-variant', 'recipient')
-    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
+    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.name))
 
     await ctx2.close()
   })
@@ -141,7 +141,7 @@ test.describe('Sharing — Routines', () => {
 test.describe('Sharing — Inventory', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
-    await ensureContact(page, USER2.username)
+    await ensureContact(page, USER2.email)
     await page.getByRole('link', { name: 'Inventory' }).click()
     await expect(page).toHaveURL('/inventory')
     await expect(page.getByTestId('offline-banner')).toBeHidden()
@@ -156,7 +156,7 @@ test.describe('Sharing — Inventory', () => {
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByText(USER2.username)).toBeVisible()
+    await expect(dialog.getByText(USER2.name)).toBeVisible()
   })
 
   test('stock shared from the form is persisted and shows a shared badge', async ({ page }) => {
@@ -168,13 +168,13 @@ test.describe('Sharing — Inventory', () => {
     // Open share modal, pick USER2, close with Escape.
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
-    await dialog.locator('li').filter({ hasText: USER2.username }).click()
-    await expect(dialog.locator('li').filter({ hasText: USER2.username })).toHaveClass(/itemSelected/)
+    await dialog.locator('li').filter({ hasText: USER2.name }).click()
+    await expect(dialog.locator('li').filter({ hasText: USER2.name })).toHaveClass(/itemSelected/)
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
 
     // A chip with the contact should render below the Share with button.
-    await expect(page.getByText(USER2.username, { exact: true })).toBeVisible()
+    await expect(page.getByText(USER2.name, { exact: true })).toBeVisible()
 
     // Submit the form and confirm we land on the detail page.
     await page.getByRole('button', { name: 'Create' }).click()
@@ -195,7 +195,7 @@ test.describe('Sharing — Inventory', () => {
 
     await page.getByRole('button', { name: 'Share with…', exact: true }).click()
     const dialog = page.getByRole('dialog')
-    await dialog.locator('li').filter({ hasText: USER2.username }).click()
+    await dialog.locator('li').filter({ hasText: USER2.name }).click()
     await page.keyboard.press('Escape')
 
     await Promise.all([
@@ -213,7 +213,7 @@ test.describe('Sharing — Inventory', () => {
     // never actually flips to user2.
     const ctx2 = await browser.newContext()
     const page2 = await ctx2.newPage()
-    await loginAs(page2, USER2.username, USER2.password)
+    await loginAs(page2, USER2.email, USER2.password)
     await page2.getByRole('link', { name: 'Inventory' }).click()
     await expect(page2).toHaveURL('/inventory')
 
@@ -224,7 +224,7 @@ test.describe('Sharing — Inventory', () => {
     // lives inside the badge's aria-label (the inline label was dropped in T134).
     const badge = sharedCard.getByTestId('shared-badge')
     await expect(badge).toHaveAttribute('data-variant', 'recipient')
-    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.username))
+    await expect(badge).toHaveAttribute('aria-label', new RegExp(SEED.admin.name))
 
     await ctx2.close()
   })
