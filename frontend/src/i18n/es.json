@@ -452,13 +452,15 @@
   "pwa.install.sheetStepGeneric2": "Pulsa \"Añadir a pantalla de inicio\" o \"Instalar\"",
   "pwa.install.sheetStepGeneric3": "Confirma",
   "pwa.install.sheetClose": "Cerrar",
-  "routine.form.dynamicInterval": "Intervalo dinámico",
-  "routine.form.phase": "Fase {{n}}",
+  "routine.form.phaseEvery": "Cada",
+  "routine.form.phaseDuring": "durante",
+  "routine.form.unit": "Unidad",
   "routine.form.phaseCount": "veces",
   "routine.form.phaseIndefinite": "indefinidamente",
-  "routine.form.addPhase": "Añadir fase",
-  "routine.form.removePhase": "Eliminar fase",
-  "routine.form.errorPhasesMin": "El intervalo dinámico requiere al menos 2 fases.",
-  "routine.form.errorPhaseInterval": "Cada fase debe tener un intervalo mayor que 0.",
-  "routine.form.errorPhaseCount": "Cada fase (excepto la última) debe repetirse al menos una vez."
+  "routine.form.addInterval": "Añadir intervalo",
+  "routine.form.removeInterval": "Eliminar intervalo",
+  "routine.form.intervalHelpAria": "¿Qué son los intervalos dinámicos?",
+  "routine.form.intervalHelp": "Los intervalos dinámicos permiten que una rutina cambie su frecuencia con el tiempo. Añade intervalos con el «+»: cada uno se repite un número de veces antes de pasar al siguiente, y el último se repite indefinidamente. Ejemplo: cada 2 días durante 4 veces y luego cada 15 días indefinidamente.",
+  "routine.form.errorPhaseInterval": "Cada intervalo debe ser mayor que 0.",
+  "routine.form.errorPhaseCount": "Cada intervalo (excepto el último) debe repetirse al menos una vez."
 }

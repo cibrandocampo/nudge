@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UNIT_KEYS, UNIT_MAX_VALUES, clampValue, hoursToHuman, toHours } from '../utils/interval'
+import { UNIT_KEYS, clampValue, hoursToHuman, toHours } from '../utils/interval'
 import cx from '../utils/cx'
-import Icon from './Icon'
 import shared from '../styles/shared.module.css'
 import s from './IntervalPicker.module.css'
 
 /**
- * Segmented unit picker + numeric stepper bound to a single
- * `interval_hours` number. Internal state keeps `unit` + `value` +
- * `draft`; `onChange` fires the derived hours count whenever the user
- * commits a change (step, clamp-on-blur, or unit switch).
+ * Numeric amount input + unit dropdown bound to a single `interval_hours`
+ * number. Internal state keeps `unit` + `value` + `draft`; `onChange`
+ * fires the derived hours count whenever the user commits a change
+ * (clamp-on-blur or unit switch).
  */
 export default function IntervalPicker({ valueHours, onChange, error }) {
   const { t } = useTranslation()
@@ -42,14 +41,6 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
     emit(clamped, nextUnit)
   }
 
-  const handleStep = (delta) => {
-    const clamped = clampValue(value + delta, unit)
-    if (clamped === value) return
-    setValue(clamped)
-    setDraft(null)
-    emit(clamped, unit)
-  }
-
   const commitDraft = () => {
     if (draft === null) return
     const clamped = clampValue(draft, unit)
@@ -58,47 +49,16 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
     if (clamped !== value) emit(clamped, unit)
   }
 
-  const max = UNIT_MAX_VALUES[unit]
-  const atMin = value <= 1
-  const atMax = value >= max
   const displayValue = draft !== null ? draft : String(value)
 
   return (
     <div className={s.root}>
-      <div className={s.segmented} role="tablist">
-        {UNIT_KEYS.map((key) => {
-          const active = unit === key
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={cx(s.segmentedItem, active && s.segmentedItemActive)}
-              onClick={() => handleUnit(key)}
-            >
-              {t(`routine.form.${key}`)}
-            </button>
-          )
-        })}
-      </div>
-
-      <div className={s.stepperRow}>
-        <button
-          type="button"
-          className={s.stepperBtn}
-          onClick={() => handleStep(-1)}
-          disabled={atMin}
-          aria-label={t('routine.form.decrement')}
-          title={t('routine.form.decrement')}
-        >
-          <Icon name="minus" size="sm" />
-        </button>
+      <div className={s.controlRow}>
         <input
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          className={s.stepperInput}
+          className={cx(shared.input, s.amountInput)}
           value={displayValue}
           onFocus={() => setDraft('')}
           onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
@@ -111,17 +71,19 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
           }}
           aria-label={t(`routine.form.${unit}`)}
         />
-        <button
-          type="button"
-          className={s.stepperBtn}
-          onClick={() => handleStep(1)}
-          disabled={atMax}
-          aria-label={t('routine.form.increment')}
-          title={t('routine.form.increment')}
+
+        <select
+          className={cx(shared.input, s.unitSelect)}
+          value={unit}
+          onChange={(e) => handleUnit(e.target.value)}
+          aria-label={t('routine.form.unit')}
         >
-          <Icon name="plus" size="sm" />
-        </button>
-        <span className={s.stepperHint}>· {t(`routine.interval.${unit}`, { count: value })}</span>
+          {UNIT_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {t(`routine.form.${key}`)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && <p className={shared.error}>{error}</p>}

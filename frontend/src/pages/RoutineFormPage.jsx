@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import ConfirmModal from '../components/ConfirmModal'
 import FormField from '../components/FormField'
+import Icon from '../components/Icon'
 import IntervalPicker from '../components/IntervalPicker'
 import QueryHandler from '../components/QueryHandler'
 import ShareWithSection from '../components/ShareWithSection'
@@ -18,6 +19,7 @@ import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
 import { findCachedStock } from '../utils/lotsForSelection'
+import { hoursToHuman } from '../utils/interval'
 import { parseIntSafe } from '../utils/number'
 import shared from '../styles/shared.module.css'
 import s from './RoutineFormPage.module.css'
@@ -31,20 +33,6 @@ function toLocalDateTimeString(date) {
   return `${y}-${m}-${d}T${h}:${min}`
 }
 
-const DEFAULT_PHASES = [
-  { interval_hours: 360, count: 4 },  // 15 days × 4
-  { interval_hours: 720 },            // 30 days, indefinite
-]
-
-function addPhase(phases) {
-  const last = phases[phases.length - 1]
-  return [...phases.slice(0, -1), { interval_hours: 168, count: 1 }, last]
-}
-
-function removePhase(phases, index) {
-  return phases.filter((_, i) => i !== index)
-}
-
 function updatePhase(phases, index, patch) {
   return phases.map((p, i) => (i === index ? { ...p, ...patch } : p))
 }
@@ -53,7 +41,7 @@ const EMPTY = {
   name: '',
   description: '',
   interval_hours: 24,
-  reminder_mode: 'intensive',
+  reminder_mode: 'daily',
   reminder_interval_minutes: 120,
   respect_quiet_hours: true,
   interval_phases: null,
@@ -94,8 +82,8 @@ export default function RoutineFormPage() {
   const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
   const [lastDoneAt, setLastDoneAt] = useState('')
   const [errors, setErrors] = useState({})
-  const [phasesEnabled, setPhasesEnabled] = useState(false)
   const [coupledShareConfirm, setCoupledShareConfirm] = useState(null)
+  const [showIntervalHelp, setShowIntervalHelp] = useState(false)
 
   // Prefill once the edit routine is loaded.
   useEffect(() => {
@@ -107,14 +95,13 @@ export default function RoutineFormPage() {
       // Defensive `??` fallbacks so a cached routine fetched before the
       // T185 contract landed (no reminder_* keys) still hydrates the form
       // with sensible defaults.
-      reminder_mode: routine.reminder_mode ?? 'intensive',
+      reminder_mode: routine.reminder_mode ?? 'daily',
       reminder_interval_minutes: routine.reminder_interval_minutes ?? 120,
       respect_quiet_hours: routine.respect_quiet_hours ?? true,
       interval_phases: routine.interval_phases ?? null,
       stock: routine.stock ?? '',
       stock_usage: routine.stock_usage,
     })
-    setPhasesEnabled(routine.interval_phases != null)
     setUsesStock(routine.stock !== null)
     setSharedWith(Array.isArray(routine.shared_with) ? routine.shared_with : [])
   }, [isEditing, routine])
@@ -145,11 +132,11 @@ export default function RoutineFormPage() {
   const validate = () => {
     const err = {}
     if (!form.name.trim()) err.name = t('routine.form.errorName')
-    if (!phasesEnabled) {
+    const phases = form.interval_phases
+    const multi = Array.isArray(phases) && phases.length >= 2
+    if (!multi) {
       if (!form.interval_hours || Number(form.interval_hours) <= 0) err.interval_hours = t('routine.form.errorInterval')
     } else {
-      const phases = form.interval_phases ?? DEFAULT_PHASES
-      if (phases.length < 2) err.interval_phases = t('routine.form.errorPhasesMin')
       phases.forEach((phase, i) => {
         if (!phase.interval_hours || phase.interval_hours < 1)
           err[`phase_interval_${i}`] = t('routine.form.errorPhaseInterval')
@@ -211,8 +198,8 @@ export default function RoutineFormPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description,
-      ...(phasesEnabled
-        ? { interval_phases: form.interval_phases ?? DEFAULT_PHASES }
+      ...(Array.isArray(form.interval_phases) && form.interval_phases.length >= 2
+        ? { interval_phases: form.interval_phases }
         : { interval_hours: Number(form.interval_hours), interval_phases: null }),
       reminder_mode: form.reminder_mode,
       reminder_interval_minutes: form.reminder_interval_minutes,
@@ -295,172 +282,151 @@ export default function RoutineFormPage() {
             </FormField>
           </section>
 
-          {/* Schedule */}
+          {/* Schedule — a single progressive editor: one interval row by
+              default; "Add interval" turns it into a multi-phase sequence
+              where every row but the last repeats a fixed number of times. */}
           <section className={shared.formSection}>
-            {!phasesEnabled && (
-              <FormField label={t('routine.form.interval')}>
-                <IntervalPicker
-                  valueHours={Number(form.interval_hours) || 0}
-                  onChange={(hours) => setForm((f) => ({ ...f, interval_hours: hours }))}
-                  error={errors.interval_hours}
-                />
-              </FormField>
-            )}
-            <button
-              type="button"
-              className={s.phasesToggle}
-              onClick={() => {
-                setPhasesEnabled((v) => !v)
-                if (!phasesEnabled && !form.interval_phases) {
-                  setForm((f) => ({ ...f, interval_phases: DEFAULT_PHASES }))
-                }
-              }}
-            >
-              {t('routine.form.dynamicInterval')} {phasesEnabled ? '▾' : '▸'}
-            </button>
-            {phasesEnabled && (
-              <div className={s.phasesEditor}>
-                {(form.interval_phases ?? DEFAULT_PHASES).map((phase, i) => {
-                  const phases = form.interval_phases ?? DEFAULT_PHASES
-                  const isLast = i === phases.length - 1
-                  return (
-                    <div key={i} className={s.phaseRow}>
-                      <span className={s.phaseLabel}>{t('routine.form.phase', { n: i + 1 })}</span>
-                      <IntervalPicker
-                        valueHours={phase.interval_hours}
-                        onChange={(hours) =>
-                          setForm((f) => ({
-                            ...f,
-                            interval_phases: updatePhase(f.interval_phases ?? DEFAULT_PHASES, i, {
-                              interval_hours: hours,
-                            }),
-                          }))
-                        }
-                        error={errors[`phase_interval_${i}`]}
-                      />
-                      {isLast ? (
-                        <span className={s.phaseIndefinite}>{t('routine.form.phaseIndefinite')}</span>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            min={1}
-                            value={phase.count ?? 1}
-                            onChange={(e) =>
-                              setForm((f) => ({
-                                ...f,
-                                interval_phases: updatePhase(f.interval_phases ?? DEFAULT_PHASES, i, {
-                                  count: Number(e.target.value),
-                                }),
-                              }))
-                            }
-                            className={s.phaseCountInput}
-                          />
-                          <span>{t('routine.form.phaseCount')}</span>
-                          {errors[`phase_count_${i}`] && (
-                            <p className={s.phaseError}>{errors[`phase_count_${i}`]}</p>
-                          )}
-                        </>
-                      )}
-                      {!isLast && phases.length > 2 && (
-                        <button
-                          type="button"
-                          aria-label={t('routine.form.removePhase')}
-                          className={s.phaseRemoveBtn}
-                          onClick={() =>
-                            setForm((f) => ({
-                              ...f,
-                              interval_phases: removePhase(f.interval_phases ?? DEFAULT_PHASES, i),
-                            }))
-                          }
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-                {errors.interval_phases && <p className={s.phaseError}>{errors.interval_phases}</p>}
+            <div className={shared.formSectionHeader}>
+              <span className={shared.inputLabel}>{t('routine.form.interval')}</span>
+              <div className={s.intervalHeaderActions}>
                 <button
                   type="button"
-                  className={s.addPhaseBtn}
-                  onClick={() =>
-                    setForm((f) => ({
-                      ...f,
-                      interval_phases: addPhase(f.interval_phases ?? DEFAULT_PHASES),
-                    }))
-                  }
+                  className={s.intervalInfoBtn}
+                  onClick={() => setShowIntervalHelp((v) => !v)}
+                  aria-expanded={showIntervalHelp}
+                  aria-label={t('routine.form.intervalHelpAria')}
+                  title={t('routine.form.intervalHelpAria')}
                 >
-                  + {t('routine.form.addPhase')}
+                  <Icon name="info" size="sm" />
+                </button>
+                <button
+                  type="button"
+                  className={shared.btnAdd}
+                  onClick={() =>
+                    setForm((f) => {
+                      const cur =
+                        Array.isArray(f.interval_phases) && f.interval_phases.length >= 2
+                          ? f.interval_phases
+                          : [{ interval_hours: Number(f.interval_hours) || 24 }]
+                      const withCounts = cur.map((r, idx) =>
+                        idx === cur.length - 1 ? { ...r, count: r.count ?? 1 } : r,
+                      )
+                      return { ...f, interval_phases: [...withCounts, { interval_hours: 168 }] }
+                    })
+                  }
+                  aria-label={t('routine.form.addInterval')}
+                  title={t('routine.form.addInterval')}
+                >
+                  <Icon name="plus" />
                 </button>
               </div>
-            )}
-          </section>
+            </div>
+            {showIntervalHelp && <p className={s.intervalHelp}>{t('routine.form.intervalHelp')}</p>}
+            {(() => {
+              const phases = form.interval_phases
+              const multi = Array.isArray(phases) && phases.length >= 2
+              const rows = multi ? phases : [{ interval_hours: Number(form.interval_hours) || 24 }]
+              return (
+                <div className={s.intervalEditor}>
+                  {rows.map((row, i) => {
+                    const isLast = i === rows.length - 1
+                    return (
+                      <div key={i} className={cx(s.intervalRow, multi && s.intervalCard)}>
+                        <div className={s.intervalControls}>
+                          <span className={s.intervalEvery}>
+                            <span className={s.everyLabel}>{t('routine.form.phaseEvery')}</span>
+                            <IntervalPicker
+                              valueHours={row.interval_hours}
+                              onChange={(hours) =>
+                                setForm((f) => {
+                                  if (!(Array.isArray(f.interval_phases) && f.interval_phases.length >= 2))
+                                    return { ...f, interval_hours: hours }
+                                  return {
+                                    ...f,
+                                    interval_phases: updatePhase(f.interval_phases, i, {
+                                      interval_hours: hours,
+                                    }),
+                                  }
+                                })
+                              }
+                              error={errors[`phase_interval_${i}`]}
+                            />
+                          </span>
+                          {multi && !isLast && (
+                            <span className={s.intervalCount}>
+                              <span className={s.phaseDuringLabel}>{t('routine.form.phaseDuring')}</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={row.count ?? 1}
+                                onChange={(e) => {
+                                  const count = Number(e.target.value)
+                                  setForm((f) => ({
+                                    ...f,
+                                    interval_phases: updatePhase(f.interval_phases, i, { count }),
+                                  }))
+                                }}
+                                className={cx(shared.input, s.phaseCountInput)}
+                              />
+                              <span className={s.phaseDuringLabel}>{t('routine.form.phaseCount')}</span>
+                            </span>
+                          )}
+                          {multi && isLast && (
+                            <span className={s.intervalIndefinite}>{t('routine.form.phaseIndefinite')}</span>
+                          )}
+                          {multi && (
+                            <button
+                              type="button"
+                              className={cx(shared.btnIcon, shared.btnIconDelete, s.intervalRemove)}
+                              onClick={() =>
+                                setForm((f) => {
+                                  const next = f.interval_phases.filter((_, idx) => idx !== i)
+                                  if (next.length <= 1)
+                                    return {
+                                      ...f,
+                                      interval_hours: next[0]?.interval_hours ?? (Number(f.interval_hours) || 24),
+                                      interval_phases: null,
+                                    }
+                                  return { ...f, interval_phases: next }
+                                })
+                              }
+                              aria-label={t('routine.form.removeInterval')}
+                              title={t('routine.form.removeInterval')}
+                            >
+                              <Icon name="x" size="sm" />
+                            </button>
+                          )}
+                        </div>
+                        {errors[`phase_count_${i}`] && <p className={s.phaseError}>{errors[`phase_count_${i}`]}</p>}
+                      </div>
+                    )
+                  })}
+                  {errors.interval_hours && <p className={shared.error}>{errors.interval_hours}</p>}
 
-          {/* Notifications — mode + (conditional) interval + respect toggle */}
-          <section className={shared.formSection}>
-            <FormField label={t('routine.form.reminderMode')}>
-              <div className={s.modeOptions} role="radiogroup" aria-label={t('routine.form.reminderMode')}>
-                {['intensive', 'daily'].map((mode) => (
-                  <label key={mode} className={cx(s.modeOption, form.reminder_mode === mode && s.modeOptionActive)}>
-                    <input
-                      type="radio"
-                      name="reminder_mode"
-                      value={mode}
-                      checked={form.reminder_mode === mode}
-                      // The label wraps the input + a title span + a hint span, so the
-                      // implicit accessible name would concatenate both spans. Pin it
-                      // explicitly to the title so `getByRole('radio', { name: 'Daily' })`
-                      // works in tests without leaking hint copy into the a11y tree.
-                      aria-label={t(`routine.form.mode_${mode}`)}
-                      // Preservation: only `reminder_mode` changes here.
-                      // `reminder_interval_minutes` and `respect_quiet_hours`
-                      // stay as the user left them, so toggling daily↔intensive
-                      // doesn't reset the sub-block.
-                      onChange={() => setForm((f) => ({ ...f, reminder_mode: mode }))}
-                    />
-                    <span className={s.modeLabel}>{t(`routine.form.mode_${mode}`)}</span>
-                    <span className={s.modeHint}>{t(`routine.form.mode_${mode}_hint`)}</span>
-                  </label>
-                ))}
-              </div>
-            </FormField>
-
-            {form.reminder_mode === 'intensive' && (
-              <>
-                <FormField label={t('routine.form.reminderInterval')}>
-                  <div className={s.intervalChips} role="radiogroup" aria-label={t('routine.form.reminderInterval')}>
-                    {REMINDER_INTERVAL_CHOICES.map((min) => (
-                      <label
-                        key={min}
-                        className={cx(s.intervalChip, form.reminder_interval_minutes === min && s.intervalChipActive)}
-                      >
-                        <input
-                          type="radio"
-                          name="reminder_interval_minutes"
-                          value={min}
-                          checked={form.reminder_interval_minutes === min}
-                          onChange={() => setForm((f) => ({ ...f, reminder_interval_minutes: min }))}
-                        />
-                        <span>{t(`routine.form.interval_${min}`)}</span>
-                      </label>
-                    ))}
+                  <div className={s.intervalSummary}>
+                    {(() => {
+                      const phrase = (row, isLast) => {
+                        const { unit, value } = hoursToHuman(row.interval_hours)
+                        const every = t(`routine.interval.${unit}`, { count: value })
+                        if (!multi) return every
+                        return isLast
+                          ? `${every} ${t('routine.form.phaseIndefinite')}`
+                          : `${every} ${t('routine.form.phaseDuring')} ${row.count ?? 1} ${t('routine.form.phaseCount')}`
+                      }
+                      return multi ? (
+                        <ul className={s.summaryList}>
+                          {rows.map((row, i) => (
+                            <li key={i}>{phrase(row, i === rows.length - 1)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span>{phrase(rows[0], true)}</span>
+                      )
+                    })()}
                   </div>
-                </FormField>
-
-                <div className={shared.formSectionHeader}>
-                  <div className={s.respectInfo}>
-                    <span className={shared.formSectionTitle}>{t('routine.form.respectQuietHours')}</span>
-                    <p className={shared.helpText}>{t('routine.form.respectQuietHoursHint')}</p>
-                  </div>
-                  <ToggleSwitch
-                    checked={form.respect_quiet_hours}
-                    onChange={(v) => setForm((f) => ({ ...f, respect_quiet_hours: v }))}
-                    ariaLabel={t('routine.form.respectQuietHours')}
-                  />
                 </div>
-              </>
-            )}
+              )
+            })()}
           </section>
 
           {/* Stock tracking — header con toggle iOS-style */}
@@ -476,7 +442,12 @@ export default function RoutineFormPage() {
             {usesStock && (
               <>
                 <FormField label={t('routine.form.stockItem')}>
-                  <select className={shared.input} value={form.stock} onChange={field('stock')}>
+                  <select
+                    className={shared.input}
+                    value={form.stock}
+                    onChange={field('stock')}
+                    aria-label={t('routine.form.stockItem')}
+                  >
                     <option value="">{t('routine.form.selectDefault')}</option>
                     {stocks.map((st) => (
                       <option key={st.id} value={st.id}>
@@ -536,6 +507,77 @@ export default function RoutineFormPage() {
               )}
             </section>
           )}
+
+          {/* Notifications — mode + (conditional) interval + respect toggle.
+              Last block: Daily is the default; choosing Intensive reveals the
+              repeat-interval picker + quiet-hours toggle. */}
+          <section className={shared.formSection}>
+            <FormField label={t('routine.form.reminderMode')}>
+              <div className={s.modeOptions} role="radiogroup" aria-label={t('routine.form.reminderMode')}>
+                {['daily', 'intensive'].map((mode) => (
+                  <label key={mode} className={cx(s.modeOption, form.reminder_mode === mode && s.modeOptionActive)}>
+                    <input
+                      type="radio"
+                      name="reminder_mode"
+                      value={mode}
+                      checked={form.reminder_mode === mode}
+                      // The label wraps the input + a title span + a hint span, so the
+                      // implicit accessible name would concatenate both spans. Pin it
+                      // explicitly to the title so `getByRole('radio', { name: 'Daily' })`
+                      // works in tests without leaking hint copy into the a11y tree.
+                      aria-label={t(`routine.form.mode_${mode}`)}
+                      // Preservation: only `reminder_mode` changes here.
+                      // `reminder_interval_minutes` and `respect_quiet_hours`
+                      // stay as the user left them, so toggling daily↔intensive
+                      // doesn't reset the sub-block.
+                      onChange={() => setForm((f) => ({ ...f, reminder_mode: mode }))}
+                    />
+                    <span className={s.modeLabel}>{t(`routine.form.mode_${mode}`)}</span>
+                    <span className={s.modeHint}>{t(`routine.form.mode_${mode}_hint`)}</span>
+                  </label>
+                ))}
+              </div>
+            </FormField>
+
+            {form.reminder_mode === 'intensive' && (
+              <>
+                <FormField label={t('routine.form.reminderInterval')}>
+                  <div className={s.intervalSentence} role="radiogroup" aria-label={t('routine.form.reminderInterval')}>
+                    <span className={s.everyLabel}>{t('routine.form.phaseEvery')}</span>
+                    {REMINDER_INTERVAL_CHOICES.map((min) => (
+                      <label
+                        key={min}
+                        className={cx(s.numChip, form.reminder_interval_minutes === min && s.numChipActive)}
+                      >
+                        <input
+                          type="radio"
+                          name="reminder_interval_minutes"
+                          value={min}
+                          checked={form.reminder_interval_minutes === min}
+                          onChange={() => setForm((f) => ({ ...f, reminder_interval_minutes: min }))}
+                          aria-label={t(`routine.form.interval_${min}`)}
+                        />
+                        <span>{min / 60}</span>
+                      </label>
+                    ))}
+                    <span className={s.everyLabel}>{t('routine.form.hours')}</span>
+                  </div>
+                </FormField>
+
+                <div className={cx(shared.formSectionHeader, s.quietHoursRow)}>
+                  <div className={s.respectInfo}>
+                    <span className={shared.formSectionTitle}>{t('routine.form.respectQuietHours')}</span>
+                    <p className={shared.helpText}>{t('routine.form.respectQuietHoursHint')}</p>
+                  </div>
+                  <ToggleSwitch
+                    checked={form.respect_quiet_hours}
+                    onChange={(v) => setForm((f) => ({ ...f, respect_quiet_hours: v }))}
+                    ariaLabel={t('routine.form.respectQuietHours')}
+                  />
+                </div>
+              </>
+            )}
+          </section>
 
           {errors.submit && <p className={shared.error}>{errors.submit}</p>}
           {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}

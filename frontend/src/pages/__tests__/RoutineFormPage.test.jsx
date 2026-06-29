@@ -69,18 +69,18 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByText(/Could not load data/)).toBeInTheDocument())
   })
 
-  it('renders the IntervalPicker segmented tabs', async () => {
+  it('renders the IntervalPicker unit select with all five units', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'hours' })).toBeInTheDocument())
-    expect(screen.getByRole('tab', { name: 'days' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'weeks' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'months' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'years' })).toBeInTheDocument()
+    const select = await screen.findByRole('combobox', { name: 'Unit' })
+    ;['hours', 'days', 'weeks', 'months', 'years'].forEach((unit) =>
+      expect(within(select).getByRole('option', { name: unit })).toBeInTheDocument(),
+    )
   })
 
   it('defaults to Days=1 (24 hours) in create mode', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'days' })).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Unit' })).toHaveValue('days'))
+    expect(screen.getByDisplayValue('1')).toBeInTheDocument()
   })
 
   it('switching the picker unit updates the submitted interval_hours', async () => {
@@ -95,8 +95,8 @@ describe('RoutineFormPage', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
 
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Weekly routine')
-    // days=1 → click weeks → weeks=1 (168h).
-    await user.click(screen.getByRole('tab', { name: 'weeks' }))
+    // days=1 → pick weeks → weeks=1 (168h).
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Unit' }), 'weeks')
     await user.click(screen.getByText('Save'))
 
     await waitFor(() => expect(capturedBody?.interval_hours).toBe(168))
@@ -349,7 +349,7 @@ describe('RoutineFormPage', () => {
     await user.click(toggle)
     // The Field wrapper keeps label + select as siblings; grab the combobox directly.
     await waitFor(() => expect(screen.getByText('Stock item')).toBeInTheDocument())
-    await user.selectOptions(screen.getByRole('combobox'), '1')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Stock item' }), '1')
     // Turn off → fields should be reset in state.
     await user.click(toggle)
 
@@ -380,34 +380,33 @@ describe('RoutineFormPage', () => {
   })
 
   describe('Notifications block (T188)', () => {
-    it('renders defaults in create mode (intensive + 2h + respect)', async () => {
+    it('defaults to daily mode in create mode', async () => {
       renderCreate()
-      // Section labels + mode radios
       await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
-      const intensive = screen.getByRole('radio', { name: /^Intensive$/ })
-      const daily = screen.getByRole('radio', { name: /^Daily$/ })
-      expect(intensive).toBeChecked()
-      expect(daily).not.toBeChecked()
-      // Interval picker visible (intensive) with default 2h selected
-      expect(screen.getByText('Reminder interval')).toBeInTheDocument()
-      const twoHours = screen.getByRole('radio', { name: 'Every 2 hours' })
-      expect(twoHours).toBeChecked()
-      // Respect toggle visible and on by default
-      const respect = screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })
-      expect(respect).toBeChecked()
+      expect(screen.getByRole('radio', { name: /^Daily$/ })).toBeChecked()
+      expect(screen.getByRole('radio', { name: /^Intensive$/ })).not.toBeChecked()
     })
 
-    it('hides interval + respect when mode is daily', async () => {
+    it('reveals interval + respect on intensive and hides them again on daily', async () => {
       const { user } = renderCreate()
       await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      // Daily default: sub-block hidden.
+      expect(screen.queryByText('Reminder interval')).not.toBeInTheDocument()
+      // Intensive reveals the sub-block with 2h selected by default.
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
+      await waitFor(() => expect(screen.getByText('Reminder interval')).toBeInTheDocument())
+      expect(screen.getByRole('radio', { name: 'Every 2 hours' })).toBeChecked()
+      expect(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })).toBeChecked()
+      // Back to daily hides it again.
       await user.click(screen.getByRole('radio', { name: /^Daily$/ }))
       await waitFor(() => expect(screen.queryByText('Reminder interval')).not.toBeInTheDocument())
       expect(screen.queryByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeInTheDocument()
     })
 
-    it('preserves the interval value when toggling daily → intensive', async () => {
+    it('preserves the interval value when toggling intensive → daily → intensive', async () => {
       const { user } = renderCreate()
       await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
       // Pick 8h.
       await user.click(screen.getByRole('radio', { name: 'Every 8 hours' }))
       expect(screen.getByRole('radio', { name: 'Every 8 hours' })).toBeChecked()
@@ -419,13 +418,14 @@ describe('RoutineFormPage', () => {
       await waitFor(() => expect(screen.getByRole('radio', { name: 'Every 8 hours' })).toBeChecked())
     })
 
-    it('preserves the respect_quiet_hours toggle when toggling daily → intensive', async () => {
+    it('preserves the respect_quiet_hours toggle when toggling intensive → daily → intensive', async () => {
       const { user } = renderCreate()
       await waitFor(() => expect(screen.getByText('Reminder type')).toBeInTheDocument())
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
       // Turn respect OFF.
       await user.click(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' }))
       expect(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' })).not.toBeChecked()
-      // daily → intensive → still OFF
+      // intensive → daily → intensive → still OFF
       await user.click(screen.getByRole('radio', { name: /^Daily$/ }))
       await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
       await waitFor(() =>
@@ -445,6 +445,7 @@ describe('RoutineFormPage', () => {
       await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
       await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Antibiotic')
       // Move to intensive 60min + respect off (urgent).
+      await user.click(screen.getByRole('radio', { name: /^Intensive$/ }))
       await user.click(screen.getByRole('radio', { name: 'Every hour' }))
       await user.click(screen.getByRole('switch', { name: 'Pause reminders during quiet hours' }))
       await user.click(screen.getByText('Save'))
@@ -757,68 +758,25 @@ describe('RoutineFormPage — non-owner deep-link', () => {
   })
 })
 
-
 describe('interval phases', () => {
-  it('phase editor is hidden and toggle button is visible by default', async () => {
+  it('shows a single interval and the add control by default', async () => {
     renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    expect(screen.queryByText('Phase 1')).not.toBeInTheDocument()
-    expect(screen.queryByText('Phase 2')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add interval' })).toBeInTheDocument())
+    // Single interval: no repeat-count, no "indefinitely", no remove control.
+    expect(screen.queryByRole('button', { name: 'Remove interval' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   })
 
-  it('clicking toggle expands the phase editor with 2 default phases', async () => {
+  it('adding an interval turns the row into a repeatable sequence with an indefinite tail', async () => {
     const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    expect(screen.getByText('Phase 2')).toBeInTheDocument()
-    expect(screen.queryByText('Phase 3')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add interval' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    // Two intervals: a repeat-count (spinbutton) on the first + a remove control per row.
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toBeInTheDocument())
+    expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(2)
   })
 
-  it('clicking add phase inserts a phase before the last one', async () => {
-    const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Add phase/i }))
-    await waitFor(() => expect(screen.getByText('Phase 3')).toBeInTheDocument())
-    expect(screen.getByText('Phase 1')).toBeInTheDocument()
-    expect(screen.getByText('Phase 2')).toBeInTheDocument()
-  })
-
-  it('remove button is not shown when only 2 phases remain', async () => {
-    const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: 'Remove phase' })).not.toBeInTheDocument()
-  })
-
-  it('remove button removes a non-last phase when 3+ phases exist', async () => {
-    const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Add phase/i }))
-    await waitFor(() => expect(screen.getByText('Phase 3')).toBeInTheDocument())
-    const [firstRemove] = screen.getAllByRole('button', { name: 'Remove phase' })
-    await user.click(firstRemove)
-    await waitFor(() => expect(screen.queryByText('Phase 3')).not.toBeInTheDocument())
-    expect(screen.getByText('Phase 1')).toBeInTheDocument()
-    expect(screen.getByText('Phase 2')).toBeInTheDocument()
-  })
-
-  it('submit with phases enabled sends interval_phases and omits interval_hours', async () => {
+  it('adding twice yields a 3-interval sequence in the payload', async () => {
     let capturedBody
     server.use(
       http.post(`${BASE}/routines/`, async ({ request }) => {
@@ -827,22 +785,59 @@ describe('interval phases', () => {
       }),
     )
     const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument(),
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Three steps')
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
+    expect(capturedBody.interval_phases).toHaveLength(3)
+  })
+
+  it('removing an interval down to one reverts to a simple interval', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
     )
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Back to simple')
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(2))
+    await user.click(screen.getAllByRole('button', { name: 'Remove interval' })[0])
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove interval' })).not.toBeInTheDocument())
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_hours).toBeDefined())
+    expect(capturedBody.interval_phases).toBeNull()
+  })
+
+  it('submit with multiple intervals sends interval_phases and omits interval_hours', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'IPL Treatment')
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
     await user.click(screen.getByText('Save'))
     await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
     expect(Array.isArray(capturedBody.interval_phases)).toBe(true)
     expect(capturedBody.interval_phases).toHaveLength(2)
-    expect(capturedBody.interval_phases[0]).toMatchObject({ count: 4, interval_hours: 360 })
-    expect(capturedBody.interval_phases[1]).toMatchObject({ interval_hours: 720 })
+    // First interval inherits the simple default (24h) + a repeat count of 1;
+    // the appended tail is 168h (1 week), indefinite.
+    expect(capturedBody.interval_phases[0]).toMatchObject({ count: 1, interval_hours: 24 })
+    expect(capturedBody.interval_phases[1]).toMatchObject({ interval_hours: 168 })
     expect(capturedBody.interval_hours).toBeUndefined()
   })
 
-  it('submit with phases disabled sends interval_hours and interval_phases null', async () => {
+  it('submit with a single interval sends interval_hours and interval_phases null', async () => {
     let capturedBody
     server.use(
       http.post(`${BASE}/routines/`, async ({ request }) => {
@@ -851,9 +846,7 @@ describe('interval phases', () => {
       }),
     )
     const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Simple routine')
     await user.click(screen.getByText('Save'))
     await waitFor(() => expect(capturedBody?.interval_hours).toBeDefined())
@@ -862,45 +855,34 @@ describe('interval phases', () => {
     expect(capturedBody.interval_hours).toBeGreaterThan(0)
   })
 
-  it('editing a routine with interval_phases pre-fills the phase editor', async () => {
+  it('editing a routine with interval_phases pre-fills the multi-interval editor', async () => {
     const routineWithPhases = {
       ...editRoutine,
-      interval_phases: [
-        { count: 3, interval_hours: 240 },
-        { interval_hours: 480 },
-      ],
+      interval_phases: [{ count: 3, interval_hours: 240 }, { interval_hours: 480 }],
     }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(routineWithPhases)))
     renderEdit()
     await waitFor(() => expect(screen.getByDisplayValue('Take vitamins')).toBeInTheDocument())
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    expect(screen.getByText('Phase 2')).toBeInTheDocument()
+    // Two intervals → two remove controls; the first carries its repeat count (3).
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(2))
+    expect(screen.getByRole('spinbutton')).toHaveValue(3)
   })
 
-  it('shows validation error when a non-last phase has count of 0', async () => {
+  it('shows a validation error when a non-last interval has a count of 0', async () => {
     const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Test routine')
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    // Set count to 0 — noValidate on the form lets handleSubmit run despite min=1
-    const countInput = screen.getByDisplayValue('4')
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    // noValidate on the form lets handleSubmit run despite min=1
+    const countInput = await screen.findByRole('spinbutton')
     fireEvent.change(countInput, { target: { value: '0' } })
     await user.click(screen.getByText('Save'))
     await waitFor(() =>
-      expect(
-        screen.getByText('Each phase (except the last) must repeat at least once.'),
-      ).toBeInTheDocument(),
+      expect(screen.getByText('Each interval (except the last) must repeat at least once.')).toBeInTheDocument(),
     )
   })
 
-  it('changing the IntervalPicker of a phase updates that phase interval_hours', async () => {
-    // Phase 1 default: 360 h = 15 days (picker initialises in "days" unit).
-    // Switching to "weeks" keeps the displayed count (15) but changes the unit:
-    // 15 weeks × 168 h = 2520 h. This exercises the onChange callback at
-    // lines 332-337 of RoutineFormPage.jsx.
+  it('changing an interval unit updates that interval_hours in the payload', async () => {
     let capturedBody
     server.use(
       http.post(`${BASE}/routines/`, async ({ request }) => {
@@ -911,26 +893,12 @@ describe('interval phases', () => {
     const { user } = renderCreate()
     await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
     await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Phase routine')
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    // getAllByRole returns one "weeks" tab per visible IntervalPicker; the
-    // first belongs to Phase 1's picker.
-    const [phase1WeeksTab] = screen.getAllByRole('tab', { name: 'weeks' })
-    await user.click(phase1WeeksTab)
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    // First interval default: 24h = days=1. Switch its unit to weeks -> 168h.
+    const [firstUnit] = screen.getAllByRole('combobox', { name: 'Unit' })
+    await user.selectOptions(firstUnit, 'weeks')
     await user.click(screen.getByText('Save'))
     await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
-    expect(capturedBody.interval_phases[0].interval_hours).toBe(2520) // 15 weeks
-  })
-
-  it('clicking toggle again collapses the editor and restores the IntervalPicker', async () => {
-    const { user } = renderCreate()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Dynamic interval/i })).toBeInTheDocument(),
-    )
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.getByText('Phase 1')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Dynamic interval/i }))
-    await waitFor(() => expect(screen.queryByText('Phase 1')).not.toBeInTheDocument())
-    expect(screen.getByRole('tab', { name: 'days' })).toBeInTheDocument()
+    expect(capturedBody.interval_phases[0].interval_hours).toBe(168)
   })
 })
