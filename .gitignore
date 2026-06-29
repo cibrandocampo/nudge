@@ -251,3 +251,6 @@ Thumbs.db
 .claude/*
 !.claude/skills/
 !.claude/commands/
+
+# Local RS256 dev keypair — generated locally, never commit secrets
+backend/*.pem
