@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { v4 as uuidv4 } from 'uuid'
 import { api } from '../api/client'
 import { OfflineError } from '../api/errors'
 import { enqueue } from '../offline/queue'
@@ -128,7 +127,7 @@ export function useOfflineMutation({
       callerOnSettled?.(data, error, vars, ctx?.userCtx)
     },
     mutationFn: async (vars) => {
-      const idempotencyKey = uuidv4()
+      const idempotencyKey = crypto.randomUUID()
       const descriptor = request(vars, { idempotencyKey })
       const { method, path, body, ifUnmodifiedSince = null } = descriptor
       const m = method.toLowerCase()

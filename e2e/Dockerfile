@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.59.1-jammy
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 WORKDIR /e2e
 COPY package.json ./
 RUN npm install

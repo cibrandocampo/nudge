@@ -17,7 +17,7 @@ Nudge is a self-hosted progressive web app that helps households and small teams
 ## Tech stack
 
 - Backend: Python 3.13, Django 5.2, PostgreSQL, Redis, Celery
-- Frontend: React 18, Vite
+- Frontend: React 19, Vite
 - Infrastructure: Docker Compose, multi-arch images (amd64 + arm64)
 
 ## Links

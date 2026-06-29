@@ -89,7 +89,7 @@ docker compose restart backend
 
 ### User cannot log in
 
-1. Check that the user exists in Django Admin: `https://nudge.naseira.es/api/admin/`
+1. Check that the user exists in Django Admin: `https://nudge.naseira.es/admin/`
 2. Reset password from Django Admin if needed.
 3. Check backend logs for auth errors.
 
