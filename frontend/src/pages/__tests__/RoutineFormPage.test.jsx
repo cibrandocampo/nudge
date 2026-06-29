@@ -767,6 +767,18 @@ describe('interval phases', () => {
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   })
 
+  it('toggles the dynamic-interval help text via the info button', async () => {
+    const { user } = renderCreate()
+    const infoButton = await screen.findByRole('button', { name: 'What are dynamic intervals?' })
+    // Collapsed by default.
+    expect(screen.queryByText(/Dynamic intervals let a routine change/)).not.toBeInTheDocument()
+    await user.click(infoButton)
+    expect(screen.getByText(/Dynamic intervals let a routine change/)).toBeInTheDocument()
+    // A second click collapses it again.
+    await user.click(infoButton)
+    expect(screen.queryByText(/Dynamic intervals let a routine change/)).not.toBeInTheDocument()
+  })
+
   it('adding an interval turns the row into a repeatable sequence with an indefinite tail', async () => {
     const { user } = renderCreate()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add interval' })).toBeInTheDocument())
@@ -812,6 +824,29 @@ describe('interval phases', () => {
     await user.click(screen.getByText('Save'))
     await waitFor(() => expect(capturedBody?.interval_hours).toBeDefined())
     expect(capturedBody.interval_phases).toBeNull()
+  })
+
+  it('removing one interval from a 3-step sequence keeps a multi-phase sequence', async () => {
+    let capturedBody
+    server.use(
+      http.post(`${BASE}/routines/`, async ({ request }) => {
+        capturedBody = await request.json()
+        return HttpResponse.json({ id: 99 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await waitFor(() => expect(screen.getByPlaceholderText('e.g. Change water filter')).toBeInTheDocument())
+    await user.type(screen.getByPlaceholderText('e.g. Change water filter'), 'Three to two')
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    await user.click(screen.getByRole('button', { name: 'Add interval' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(3))
+    // Removing one row leaves two phases — still a multi-phase sequence, so
+    // the editor keeps the repeatable rows instead of collapsing to simple.
+    await user.click(screen.getAllByRole('button', { name: 'Remove interval' })[0])
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(2))
+    await user.click(screen.getByText('Save'))
+    await waitFor(() => expect(capturedBody?.interval_phases).toBeDefined())
+    expect(capturedBody.interval_phases).toHaveLength(2)
   })
 
   it('submit with multiple intervals sends interval_phases and omits interval_hours', async () => {
