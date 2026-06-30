@@ -12,8 +12,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13"/>
   <img src="https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white" alt="Django 5.2"/>
-  <img src="https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white" alt="React 18.3"/>
-  <img src="https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white" alt="Vite 5.4"/>
+  <img src="https://img.shields.io/badge/React-19.2-61DAFB?logo=react&logoColor=white" alt="React 19.2"/>
+  <img src="https://img.shields.io/badge/Vite-8.1-646CFF?logo=vite&logoColor=white" alt="Vite 8.1"/>
 </p>
 
 <p align="center">
@@ -117,7 +117,7 @@ mkdir -p data
 docker compose up -d
 ```
 
-The app is available at the configured port. Admin panel at `/nudge-admin/`.
+The app is available at the configured port. Admin panel at `/admin/`.
 
 **First login**: head to `/login` and enter `ADMIN_EMAIL` + `ADMIN_PASSWORD`. The bootstrap admin is created with `auth_method="password"` so it works immediately, without any SMTP setup. See the [Authentication](#authentication) section below for opening self-signup and configuring OTP email delivery.
 
@@ -203,7 +203,7 @@ The `auth_method` is set when the user is created (and can be flipped later from
 
 #### First user — created from env vars
 
-`ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` bootstrap a superuser on first container start, only if no superuser exists yet. The user lands with `auth_method="password"`, so you log in via the regular wizard at `/login` immediately — no SMTP setup required to get into the app. The bootstrap is a one-shot: changing `ADMIN_PASSWORD` later in `.env` does NOT rotate the existing user's password. Change it from `/nudge-admin/` instead.
+`ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` bootstrap a superuser on first container start, only if no superuser exists yet. The user lands with `auth_method="password"`, so you log in via the regular wizard at `/login` immediately — no SMTP setup required to get into the app. The bootstrap is a one-shot: changing `ADMIN_PASSWORD` later in `.env` does NOT rotate the existing user's password. Change it from `/admin/` instead.
 
 #### Opening self-signup
 

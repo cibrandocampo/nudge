@@ -39,23 +39,26 @@
   gap: 0.5rem;
 }
 .modeOption {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 0.6rem;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--c-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   cursor: pointer;
   background: var(--c-bg);
 }
 .modeOption:hover {
   background: var(--c-bg-elev);
 }
+/* Radio is the source of truth (a11y + tests) but visually hidden: the
+ * selected card is filled, mirroring the [1][2][4][8] number buttons. */
 .modeOption input[type='radio'] {
-  grid-row: 1 / span 2;
-  margin: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 .modeLabel {
   font-weight: 600;
@@ -65,42 +68,68 @@
   font-size: 0.8rem;
   color: var(--c-text-3);
 }
-.modeOptionActive {
-  border-color: var(--c-brand);
-  background: var(--c-brand-soft, var(--c-bg-elev));
+.modeOptionActive,
+.modeOptionActive:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+}
+.modeOptionActive .modeLabel {
+  color: var(--c-surface);
+}
+.modeOptionActive .modeHint {
+  color: var(--c-surface);
+  opacity: 0.8;
 }
 
-/* Notifications — interval pill picker (radios hidden, label is the chip) */
-.intervalChips {
+/* Notifications — interval as a compact sentence: "Every [1][2][4][8] hours"
+ * where the numbers are small single-select buttons (hidden radios). */
+.intervalSentence {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
-.intervalChip {
+.numChip {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.7rem;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
   border: 1px solid var(--c-border);
-  border-radius: 999px;
-  font-size: 0.85rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   background: var(--c-bg);
   user-select: none;
 }
-.intervalChip input[type='radio'] {
+.numChip input[type='radio'] {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
   pointer-events: none;
 }
-.intervalChip:hover {
+.numChip:hover {
   background: var(--c-bg-elev);
 }
-.intervalChipActive {
-  background: var(--c-brand);
-  color: var(--c-on-brand, white);
-  border-color: var(--c-brand);
+.numChipActive {
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border-color: var(--c-primary);
+}
+.numChipActive:hover {
+  background: var(--c-primary);
+}
+
+/* Divider so the repeat-interval row and the quiet-hours toggle read as
+ * two distinct zones rather than one run-on block. */
+.quietHoursRow {
+  margin-top: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--c-border);
 }
 
 .respectInfo {
@@ -112,66 +141,85 @@
 }
 
 /* Dynamic interval phase editor */
-.phasesToggle {
-  background: none;
-  border: none;
-  color: var(--c-accent);
-  cursor: pointer;
-  font-size: 0.875rem;
-  padding: 0.25rem 0;
-  text-align: left;
-}
-
-.phasesEditor {
+.intervalEditor {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: 0.5rem;
+}
+
+/* Base row: just the controls. No box — a single interval needs no
+ * visual grouping. */
+.intervalRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* Boxed variant, applied only when there is more than one interval so
+ * the sequence reads as distinct, grouped steps. Extra right padding
+ * reserves space for the absolutely-positioned remove button so it never
+ * pushes the controls onto a second line. */
+.intervalCard {
+  position: relative;
+  padding: 0.6rem 2rem 0.6rem 0.6rem;
+  background: var(--c-bg, var(--c-surface));
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
 }
 
-.phaseRow {
+.intervalControls {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.phaseLabel {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
-  min-width: 3.5rem;
+/* "each [amount] [unit]" stays together as one unwrappable group so that,
+ * when the row wraps on mobile, only the "for N times" part drops below. */
+.intervalEvery {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-.phaseCountInput {
-  width: 4rem;
-  text-align: center;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-size: 0.9rem;
+.everyLabel {
+  font-size: 0.85rem;
+  color: var(--c-text-2);
 }
 
-.phaseIndefinite {
-  font-size: 0.8rem;
-  color: var(--c-text-3);
+.intervalCount {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.intervalIndefinite {
+  font-size: 0.85rem;
   font-style: italic;
+  color: var(--c-text-3);
 }
 
-.phaseRemoveBtn {
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  cursor: pointer;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0 0.25rem;
+.intervalRemove {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  flex-shrink: 0;
 }
-.phaseRemoveBtn:hover {
-  color: var(--c-error, #e53e3e);
+
+/* Same register as `.everyLabel` so "Every" and "for / times" read as
+ * one homogeneous sentence. */
+.phaseDuringLabel {
+  font-size: 0.85rem;
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+
+input.phaseCountInput {
+  width: 3.25rem;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
 }
 
 .phaseError {
@@ -180,16 +228,66 @@
   margin: 0;
 }
 
-.addPhaseBtn {
-  background: none;
-  border: 1px dashed var(--c-border);
-  border-radius: var(--radius);
-  color: var(--c-accent);
-  cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0.4rem 0.75rem;
-  text-align: left;
+/* Section-header actions: an (i) help toggle next to the standard "+"
+ * add button, top-right and aligned with the "Interval" label. */
+.intervalHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
-.addPhaseBtn:hover {
-  background: var(--c-bg-elev);
+
+.intervalInfoBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+.intervalInfoBtn:hover {
+  color: var(--c-text);
+}
+
+/* Inline explainer toggled by the (i) button. */
+.intervalHelp {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--c-border-inner, var(--c-bg));
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--c-text-2);
+}
+
+/* Read-only recap of the configured schedule, in plain language. */
+.intervalSummary {
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--c-bg, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--c-text-2);
+}
+
+.summaryList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* On narrow screens the "for N times" / "indefinitely" part wraps onto
+ * its own line under "Every N units". Center it so it doesn't read as an
+ * orphaned, left-stranded fragment. */
+@media (max-width: 480px) {
+  .intervalCount,
+  .intervalIndefinite {
+    flex-basis: 100%;
+    justify-content: center;
+    text-align: center;
+  }
 }

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { v4 as uuidv4 } from 'uuid'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { discard, enqueue, remove } from '../offline/queue'
 import { forceSync } from '../offline/sync'
@@ -49,7 +48,7 @@ export default function ConflictOrchestrator() {
     const newUpdatedAt = conflict.conflictCurrent?.updated_at ?? conflict.conflictCurrent?.settings_updated_at ?? null
     await remove(conflict.id)
     await enqueue({
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       method: conflict.method,
       endpoint: conflict.endpoint,
       body: conflict.body,

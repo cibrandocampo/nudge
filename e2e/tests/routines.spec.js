@@ -21,7 +21,7 @@ test.describe('Routines', () => {
     await page.getByPlaceholder(/change water filter/i).fill(ROUTINE_NAME)
 
     // Switch the IntervalPicker unit to Weeks; default value = 1.
-    await page.getByRole('tab', { name: 'weeks' }).click()
+    await page.getByRole('combobox', { name: 'Unit' }).selectOption('weeks')
 
     await page.getByRole('button', { name: 'Save' }).click()
 
@@ -71,10 +71,9 @@ test.describe('Routines', () => {
     await page.goto('/routines/new')
     await page.getByPlaceholder(/change water filter/i).fill(`Interval test ${Date.now()}`)
 
-    // Pick Months via the segmented tab, then step up to 6.
-    await page.getByRole('tab', { name: 'months' }).click()
-    const plus = page.getByRole('button', { name: 'Increase' })
-    for (let i = 0; i < 5; i += 1) await plus.click()
+    // Pick Months via the unit select, then set the amount to 6.
+    await page.getByRole('combobox', { name: 'Unit' }).selectOption('months')
+    await page.getByRole('textbox', { name: 'months' }).fill('6')
 
     await page.getByRole('button', { name: 'Save' }).click()
     await page.waitForURL(/\/routines\/\d+$/)

@@ -20,14 +20,21 @@ test.describe('PendingBadge mobile responsive', () => {
     await loginAsUser1(page)
     await page.waitForURL('/')
 
-    // Enqueue one mutation offline so the badge mounts and the panel has
-    // an item to render. `morningStretch` is always due per the seed.
-    await goOffline(page, context)
-    await page
+    // The dashboard must finish rendering the target card BEFORE we go
+    // offline: `goOffline` cuts the network, so if the `/dashboard/` GET is
+    // still in flight (slow late in a full serial run) the card would never
+    // appear and the `Done` click would hang until the 30s test timeout.
+    // Waiting for the button online makes the offline enqueue deterministic.
+    const doneButton = page
       .getByTestId('routine-card')
       .filter({ hasText: SEED.routines.iplHairRemoval })
       .getByRole('button', { name: 'Done' })
-      .click()
+    await expect(doneButton).toBeVisible()
+
+    // Enqueue one mutation offline so the badge mounts and the panel has
+    // an item to render. `iplHairRemoval` is always due per the seed.
+    await goOffline(page, context)
+    await doneButton.click()
     await expectPendingBadge(page, { count: 1 })
 
     // Open the panel and measure.

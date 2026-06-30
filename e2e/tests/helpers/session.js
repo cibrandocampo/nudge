@@ -1,31 +1,52 @@
 import { SEED } from './constants.js'
 
 export async function login(page) {
-  await loginAs(page, SEED.admin.username, SEED.admin.password)
+  await loginAs(page, SEED.admin.email, SEED.admin.password)
 }
 
-export async function loginAs(page, username, password) {
+/**
+ * Log in via the email-based wizard (T193+): enter email → Continue →
+ * (password users) enter password → Sign in. All seeded users —
+ * admin + cibran/maria/laura — are `auth_method='password'`, so they
+ * always take the password branch.
+ */
+export async function loginAs(page, email, password) {
   await page.goto('/login')
-  await page.getByPlaceholder('Username').fill(username)
+  await page.getByPlaceholder('Email').fill(email)
+  await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByPlaceholder('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('/')
+
+  // Accounts with no name yet (e.g. the bootstrap admin) land on a
+  // one-time onboarding step before the dashboard. Race the two outcomes
+  // so users that already have a name (the demo seed users) incur no delay.
+  const firstName = page.getByPlaceholder('First name')
+  await Promise.race([
+    page.waitForURL('/'),
+    firstName.waitFor({ state: 'visible' }),
+  ])
+  if (await firstName.isVisible().catch(() => false)) {
+    await firstName.fill('Admin')
+    await page.getByPlaceholder('Last name').fill('User')
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.waitForURL('/')
+  }
 }
 
 export async function loginAsAdmin(page) {
-  return loginAs(page, SEED.admin.username, SEED.admin.password)
+  return loginAs(page, SEED.admin.email, SEED.admin.password)
 }
 
 export async function loginAsUser1(page) {
-  return loginAs(page, SEED.user1.username, SEED.user1.password)
+  return loginAs(page, SEED.user1.email, SEED.user1.password)
 }
 
 export async function loginAsUser2(page) {
-  return loginAs(page, SEED.user2.username, SEED.user2.password)
+  return loginAs(page, SEED.user2.email, SEED.user2.password)
 }
 
 export async function loginAsUser3(page) {
-  return loginAs(page, SEED.user3.username, SEED.user3.password)
+  return loginAs(page, SEED.user3.email, SEED.user3.password)
 }
 
 /**
@@ -80,11 +101,13 @@ export async function resetSeed(context) {
 }
 
 /**
- * Ensure `username` is in the current user's contact list via the API (not
- * the UI). Works regardless of where the test currently is.
+ * Ensure `email` is in the current user's contact list via the API (not
+ * the UI). Works regardless of where the test currently is. Contacts are
+ * keyed by email (T197): the API adds by exact email match and the
+ * serializer exposes `email`, not `username`.
  */
-export async function ensureContact(page, username) {
-  await page.evaluate(async (contactUsername) => {
+export async function ensureContact(page, email) {
+  await page.evaluate(async (contactEmail) => {
     const token = localStorage.getItem('access_token')
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -92,11 +115,11 @@ export async function ensureContact(page, username) {
     }
     const res = await fetch('/api/auth/contacts/', { headers })
     const contacts = await res.json()
-    if (contacts.some((c) => c.username === contactUsername)) return
+    if (contacts.some((c) => c.email === contactEmail)) return
     await fetch('/api/auth/contacts/', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ username: contactUsername }),
+      body: JSON.stringify({ email: contactEmail }),
     })
-  }, username)
+  }, email)
 }

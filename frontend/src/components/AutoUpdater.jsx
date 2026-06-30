@@ -18,7 +18,12 @@ export default function AutoUpdater() {
   // also fire when the flag flips while the user is parked on a safe
   // route — reloading on top of an open modal or in-flight form.
   const updateRef = useRef(updateAvailable)
-  updateRef.current = updateAvailable
+  // Sync the ref to the latest flag *in an effect* (never during render —
+  // `react-hooks/refs`) so the navigation effect below can read the current
+  // value without taking `updateAvailable` as a dependency.
+  useEffect(() => {
+    updateRef.current = updateAvailable
+  }, [updateAvailable])
 
   useEffect(() => {
     if (updateRef.current && SAFE_ROUTES.has(location.pathname)) {

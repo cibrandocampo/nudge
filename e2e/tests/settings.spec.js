@@ -26,14 +26,11 @@ test.describe('Settings', () => {
     await expect(page.getByText('Push notifications')).toBeVisible()
   })
 
-  test('shows username', async ({ page }) => {
-    // Profile block renders the username as an h2. When the user also has
-    // a first/last name populated, the heading reads "First Last (username)";
-    // otherwise just "username". Use a substring assertion so the test
-    // works in both configurations. `.first()` avoids strict-mode
-    // violations when other h2s appear (e.g. the dashboard section
-    // header above the profile, or future sections).
-    await expect(page.getByRole('heading', { level: 2 }).first()).toContainText(SEED.admin.username)
+  test('shows the signed-in user email in the profile block', async ({ page }) => {
+    // Post-T197 the profile renders the display name as an h2 with the
+    // email below it; `username` is internal-only and never surfaces.
+    // The email is the stable, deterministic identifier to assert on.
+    await expect(page.getByText(SEED.admin.email)).toBeVisible()
   })
 
   test('save timezone change', async ({ page }) => {
@@ -49,7 +46,13 @@ test.describe('Settings', () => {
 
     await tzInput.click()
     await tzInput.fill('Madrid')
+    // Autosave fires a PATCH on selection — wait for it to land before
+    // reloading, otherwise the reload can race ahead of the persisted value.
+    const saved = page.waitForResponse(
+      (r) => r.url().includes('/api/auth/me/') && r.request().method() === 'PATCH',
+    )
     await page.getByRole('option', { name: 'Europe/Madrid' }).click()
+    await saved
 
     await page.reload()
     await expect(page.getByPlaceholder('Search timezone…')).toHaveValue('Europe/Madrid')

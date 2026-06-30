@@ -29,7 +29,7 @@ These must be set before first startup:
 
 The admin user is created automatically on first startup if no superuser exists. It lands with `auth_method="password"` so you can log in immediately through the email wizard at `/login` (enter `ADMIN_EMAIL`, then the password) **without needing SMTP configured first** — handy because the OTP path needs working email to deliver codes, but this bootstrap account doesn't.
 
-The bootstrap is idempotent and only runs while there is no superuser in the database: changing `ADMIN_PASSWORD` later in `.env` and restarting does **not** rotate the existing user's password. After first boot, change it from the Django admin panel (`/nudge-admin/`).
+The bootstrap is idempotent and only runs while there is no superuser in the database: changing `ADMIN_PASSWORD` later in `.env` and restarting does **not** rotate the existing user's password. After first boot, change it from the Django admin panel (`/admin/`).
 
 ## Django settings
 

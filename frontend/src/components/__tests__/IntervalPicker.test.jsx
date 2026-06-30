@@ -12,28 +12,15 @@ function render(props = {}) {
 describe('IntervalPicker', () => {
   it('renders with Days selected and value 1 for valueHours=24', () => {
     render({ valueHours: 24 })
-    const daysTab = screen.getByRole('tab', { name: 'days' })
-    expect(daysTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('combobox')).toHaveValue('days')
     expect(screen.getByDisplayValue('1')).toBeInTheDocument()
-  })
-
-  it('clicking + emits onChange with the next hours count', async () => {
-    const onChange = vi.fn()
-    const { user } = render({ valueHours: 24, onChange })
-    await user.click(screen.getByRole('button', { name: 'Increase' }))
-    expect(onChange).toHaveBeenCalledWith(48)
-  })
-
-  it('disables the − button when value is already 1', () => {
-    render({ valueHours: 24 })
-    expect(screen.getByRole('button', { name: 'Decrease' })).toBeDisabled()
   })
 
   it('switching units keeps the numeric value and re-emits hours', async () => {
     const onChange = vi.fn()
     const { user } = render({ valueHours: 48, onChange })
-    // 48 hours → days=2; click Weeks → 2 weeks = 336h.
-    await user.click(screen.getByRole('tab', { name: 'weeks' }))
+    // 48 hours → days=2; pick Weeks → 2 weeks = 336h.
+    await user.selectOptions(screen.getByRole('combobox'), 'weeks')
     expect(onChange).toHaveBeenCalledWith(336)
   })
 
@@ -42,8 +29,15 @@ describe('IntervalPicker', () => {
     // 29*24 = 696h. Not divisible by week/month/year so hoursToHuman picks
     // days=29. months max = 24 → switching clamps to 24 and emits 24 * 720.
     const { user } = render({ valueHours: 29 * 24, onChange })
-    await user.click(screen.getByRole('tab', { name: 'months' }))
+    await user.selectOptions(screen.getByRole('combobox'), 'months')
     expect(onChange).toHaveBeenCalledWith(24 * 720)
+  })
+
+  it('does not re-emit when the already-selected unit is chosen again', async () => {
+    const onChange = vi.fn()
+    const { user } = render({ valueHours: 24, onChange })
+    await user.selectOptions(screen.getByRole('combobox'), 'days')
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('commits the input on blur converting typed value to hours', async () => {
@@ -54,6 +48,17 @@ describe('IntervalPicker', () => {
     await user.type(input, '7')
     input.blur()
     expect(onChange).toHaveBeenCalledWith(7 * 24)
+  })
+
+  it('clamps a typed value above the unit max down to the cap on blur', async () => {
+    const onChange = vi.fn()
+    // days cap = 730. Typing 999 clamps to 730 → 730 * 24 hours.
+    const { user } = render({ valueHours: 24, onChange })
+    const input = screen.getByDisplayValue('1')
+    await user.clear(input)
+    await user.type(input, '999')
+    input.blur()
+    expect(onChange).toHaveBeenCalledWith(730 * 24)
   })
 
   it('commits an invalid draft as 1 on blur', async () => {
@@ -70,13 +75,6 @@ describe('IntervalPicker', () => {
   it('renders the error message when the error prop is truthy', () => {
     render({ valueHours: 24, error: 'Must be greater than 0.' })
     expect(screen.getByText('Must be greater than 0.')).toBeInTheDocument()
-  })
-
-  it('does not re-emit when the same unit tab is clicked again', async () => {
-    const onChange = vi.fn()
-    const { user } = render({ valueHours: 24, onChange })
-    await user.click(screen.getByRole('tab', { name: 'days' }))
-    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('does not re-emit when a blurred draft matches the current value', async () => {
@@ -101,14 +99,6 @@ describe('IntervalPicker', () => {
     await user.click(input)
     await user.type(input, '5{Enter}')
     expect(onChange).toHaveBeenCalledWith(5 * 24)
-  })
-
-  it('ignores + clicks that do not change the clamped value', async () => {
-    const onChange = vi.fn()
-    // months max = 24 → starting at 24 months, + is a no-op.
-    const { user } = render({ valueHours: 24 * 720, onChange })
-    const plusBtn = screen.getByRole('button', { name: 'Increase' })
-    expect(plusBtn).toBeDisabled()
   })
 
   it('syncs internal state to a new valueHours prop without firing onChange', async () => {

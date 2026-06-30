@@ -498,9 +498,7 @@ describe('SettingsPage', () => {
     await screen.findByText('Contacts')
     await user.type(screen.getByTestId('add-contact-email'), 'me@nudge.test')
     await user.click(screen.getByTestId('add-contact-submit'))
-    await waitFor(() =>
-      expect(screen.getByText("You can't add yourself as a contact.")).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText("You can't add yourself as a contact.")).toBeInTheDocument())
   })
 
   it('shows the already-a-contact error when the backend returns 400 with that detail', async () => {

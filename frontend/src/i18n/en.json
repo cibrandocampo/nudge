@@ -452,13 +452,15 @@
   "pwa.install.sheetStepGeneric2": "Tap \"Add to Home Screen\" or \"Install\"",
   "pwa.install.sheetStepGeneric3": "Confirm",
   "pwa.install.sheetClose": "Close",
-  "routine.form.dynamicInterval": "Dynamic interval",
-  "routine.form.phase": "Phase {{n}}",
+  "routine.form.phaseEvery": "Every",
+  "routine.form.phaseDuring": "for",
+  "routine.form.unit": "Unit",
   "routine.form.phaseCount": "times",
   "routine.form.phaseIndefinite": "indefinitely",
-  "routine.form.addPhase": "Add phase",
-  "routine.form.removePhase": "Remove phase",
-  "routine.form.errorPhasesMin": "Dynamic interval requires at least 2 phases.",
-  "routine.form.errorPhaseInterval": "Each phase must have an interval greater than 0.",
-  "routine.form.errorPhaseCount": "Each phase (except the last) must repeat at least once."
+  "routine.form.addInterval": "Add interval",
+  "routine.form.removeInterval": "Remove interval",
+  "routine.form.intervalHelpAria": "What are dynamic intervals?",
+  "routine.form.intervalHelp": "Dynamic intervals let a routine change how often it repeats over time. Add intervals with the “+”: each one repeats a set number of times before moving on to the next, and the last repeats indefinitely. Example: every 2 days for 4 times, then every 15 days indefinitely.",
+  "routine.form.errorPhaseInterval": "Each interval must be greater than 0.",
+  "routine.form.errorPhaseCount": "Each interval (except the last) must repeat at least once."
 }

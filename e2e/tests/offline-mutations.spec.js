@@ -48,6 +48,12 @@ test.describe('offline-mutations', () => {
     // Starting state: due routine lives in Today.
     await expect(cactusInToday).toBeVisible()
 
+    // Arm the response wait BEFORE clicking so we never miss it. The mark
+    // done POST is online; reloading before it lands would abort the
+    // in-flight request and the entry would never persist (flaky).
+    const logSaved = page.waitForResponse(
+      (r) => /\/routines\/\d+\/log\/$/.test(r.url()) && r.request().method() === 'POST',
+    )
     await cactusInToday.getByRole('button', { name: 'Done' }).click()
 
     // Optimistic: the card disappears from Today immediately (<500 ms).
@@ -58,9 +64,10 @@ test.describe('offline-mutations', () => {
     // Online → nothing should have landed in the offline queue.
     await expectPendingBadge(page, { count: 0 })
 
-    // After reload the backend-computed next_due_at moves the routine
-    // to the Upcoming section; that proves the mutation actually hit
-    // the server (not just the optimistic cache).
+    // Wait for the server to actually persist the completion, then reload.
+    // The backend-computed next_due_at moves the routine to Upcoming —
+    // proving the mutation hit the server, not just the optimistic cache.
+    await logSaved
     await page.reload()
     await expect(cactusInUpcoming).toBeVisible()
     await expect(cactusInToday).toHaveCount(0)

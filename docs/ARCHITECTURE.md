@@ -47,20 +47,20 @@ Browser / Mobile
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| Frontend | Vite + React | React 18, Vite 5 |
-| PWA | Workbox + vite-plugin-pwa | Workbox 7 |
+| Frontend | Vite + React | React 19, Vite 8 |
+| PWA | Workbox + vite-plugin-pwa | Workbox 7, vite-plugin-pwa 1.x |
 | UI | Custom CSS (no framework) | — |
-| i18n | i18next | 23.x |
-| Backend | Django + Django REST Framework | Django 5, DRF 3.15 |
-| Auth | JWT (simplejwt) | 5.3.x |
-| Database | PostgreSQL | 16 |
-| Task queue | Celery + Redis | Celery 5.3, Redis 8 |
+| i18n | i18next | 26.x |
+| Backend | Django + Django REST Framework | Django 5.2 LTS, DRF 3.17 |
+| Auth | JWT (simplejwt) | 5.5.x |
+| Database | PostgreSQL | 17 |
+| Task queue | Celery + Redis | Celery 5.6, Redis 8 (redis-py 6.4) |
 | Push | Web Push API / VAPID (pywebpush) | 2.x |
-| Runtime | Python 3.12, Node 22 | — |
+| Runtime | Python 3.13, Node 24 | — |
 | Testing (backend) | unittest + coverage.py | — |
-| Testing (frontend) | Vitest + Testing Library + MSW | Vitest 2.x |
-| Linting (backend) | ruff (check + format) | 0.8+ |
-| Linting (frontend) | ESLint 9 (flat config) + Prettier | 9.x |
+| Testing (frontend) | Vitest + Testing Library + MSW | Vitest 4.x |
+| Linting (backend) | ruff (check + format) | 0.15+ |
+| Linting (frontend) | ESLint 10 (flat config) + Prettier | 10.x |
 | Deploy | Docker Compose | — |
 
 ---
@@ -377,10 +377,10 @@ Five containers on a shared bridge network (`nudge_net`):
 | frontend | `./frontend` Dockerfile (multi-stage) | 80 |
 
 The frontend Dockerfile is multi-stage:
-1. **builder** — Node 22, runs `npm run build`, produces `dist/`
+1. **builder** — Node 24, runs `npm run build`, produces `dist/`
 2. **prod** — nginx:alpine, serves `dist/` and proxies `/api/` to `backend:8000`
 
-The backend Dockerfile uses Python 3.12-slim with a non-root user (`appuser`, uid 1001). `collectstatic` runs at image build time (baked into the image). The entrypoint runs `migrate` and `ensure_admin` before handing off to Gunicorn.
+The backend Dockerfile uses Python 3.13-slim with a non-root user (`appuser`, uid 1001). `collectstatic` runs at image build time (baked into the image). The entrypoint runs `migrate` and `ensure_admin` before handing off to Gunicorn.
 
 ### Development (`dev/docker-compose.yml`)
 
@@ -429,9 +429,9 @@ docker compose -f dev/docker-compose.yml exec backend ruff check .
 docker compose -f dev/docker-compose.yml exec backend ruff format --check .
 ```
 
-### Frontend — ESLint 9 + Prettier
+### Frontend — ESLint 10 + Prettier
 
-ESLint 9 with flat config (`frontend/eslint.config.js`):
+ESLint 10 with flat config (`frontend/eslint.config.js`):
 
 - Plugins: `react-hooks` (recommended rules), `react-refresh`
 - Browser globals enabled
@@ -457,8 +457,8 @@ bash scripts/install-hooks.sh   # one-time setup
 
 ### `ci.yml` — runs on every push to `main`, every PR, and on release
 
-1. **test-backend** — Python 3.12, spins up PostgreSQL 17 + Redis 8 as services, runs ruff (check + format), then `python manage.py test` with coverage. Uploads report to Codecov (flag: `backend`).
-2. **test-frontend** — Node 22, runs ESLint (`--max-warnings 0`), Prettier check, then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
+1. **test-backend** — Python 3.13, spins up PostgreSQL 17 + Redis 8 as services, runs ruff (check + format), then `python manage.py test` with coverage. Uploads report to Codecov (flag: `backend`).
+2. **test-frontend** — Node 24, runs ESLint (`--max-warnings 0`), Prettier check, then `npm run test:coverage`. Uploads coverage to Codecov (flag: `frontend`).
 3. **build-backend** — Docker multi-arch build (`linux/amd64` + `linux/arm64`), pushed to `cibrandocampo/nudge-backend`. Requires both test jobs to pass.
 4. **build-frontend** — Same, pushed to `cibrandocampo/nudge-frontend`.
 

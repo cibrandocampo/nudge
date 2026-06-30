@@ -1,6 +1,29 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Tailwind 4 CSS-first theme (ported from the old tailwind.config.mjs).
+   `--color-*` / `--font-*` tokens generate the matching utilities
+   (bg-brand, text-nudge-500, font-sans, font-mono, …). Dark mode is
+   media-based by default in Tailwind 4 — no config needed. */
+@theme {
+  /* Brand yellow — notification-dot accent. Used sparingly for highlights. */
+  --color-brand: #fcd34d;
+
+  /* Royal-blue scale anchored on the app's `--c-shared` (#4A56A1). */
+  --color-nudge-50: #f1f2f8;
+  --color-nudge-100: #dde0ec;
+  --color-nudge-300: #8d96bf;
+  --color-nudge-500: #4a56a1;
+  --color-nudge-600: #3d4787;
+  --color-nudge-700: #34396a;
+  --color-nudge-800: #2a2e54;
+  --color-nudge-900: #1f2340;
+  --color-nudge-950: #14162a;
+
+  --font-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
 
 /* Smooth anchor scrolling for the hero CTAs. */
 html {

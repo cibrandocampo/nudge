@@ -156,9 +156,7 @@ describe('AuthContext', () => {
 
   it('loginStart rejects with disposable_email on 400 with that body', async () => {
     server.use(
-      http.post(`${BASE}/auth/login/start/`, () =>
-        HttpResponse.json({ error: 'disposable_email' }, { status: 400 }),
-      ),
+      http.post(`${BASE}/auth/login/start/`, () => HttpResponse.json({ error: 'disposable_email' }, { status: 400 })),
     )
     const { result } = renderHook(() => useAuth(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -175,9 +173,7 @@ describe('AuthContext', () => {
     // a 400 with any other shape gets wrapped as login_start_failed +
     // status=400 so the caller can branch on the status field.
     server.use(
-      http.post(`${BASE}/auth/login/start/`, () =>
-        HttpResponse.json({ error: 'something_else' }, { status: 400 }),
-      ),
+      http.post(`${BASE}/auth/login/start/`, () => HttpResponse.json({ error: 'something_else' }, { status: 400 })),
     )
     const { result } = renderHook(() => useAuth(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))

@@ -1,12 +1,15 @@
 django~=5.2
-djangorestframework~=3.16
-django-cors-headers~=4.3
+djangorestframework~=3.17
+django-cors-headers~=4.9
 psycopg2-binary~=2.9
-gunicorn~=23.0
-whitenoise~=6.11
-celery[redis]~=5.5
-redis~=5.0
-pywebpush~=2.0
+gunicorn~=26.0
+whitenoise~=6.12
+celery[redis]~=5.6
+# redis-py is only used as Celery's broker client; kombu caps it at <6.5
+# (`redis<6.5`), so pin to the 6.4.x patch line — the newest usable release,
+# not 8.x. `~=6.4.0` == >=6.4.0,<6.5.0, matching kombu's ceiling exactly.
+redis~=6.4.0
+pywebpush~=2.3
 djangorestframework-simplejwt~=5.5
-django-environ~=0.11
+django-environ~=0.14
 drf-flex-fields~=1.0

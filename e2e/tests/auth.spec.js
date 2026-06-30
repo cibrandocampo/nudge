@@ -5,13 +5,15 @@ test.describe('Auth', () => {
   test('login page loads', async ({ page }) => {
     await page.goto('/login')
     await expect(page.getByAltText('Nudge')).toBeVisible()
-    await expect(page.getByPlaceholder('Username')).toBeVisible()
-    await expect(page.getByPlaceholder('Password')).toBeVisible()
+    // Email-based wizard (T193+): step 1 is the email field + Continue.
+    await expect(page.getByPlaceholder('Email')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
   })
 
   test('wrong credentials shows error', async ({ page }) => {
     await page.goto('/login')
-    await page.getByPlaceholder('Username').fill(SEED.admin.username)
+    await page.getByPlaceholder('Email').fill(SEED.admin.email)
+    await page.getByRole('button', { name: 'Continue' }).click()
     await page.getByPlaceholder('Password').fill('wrong-password')
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page.getByText(/invalid/i)).toBeVisible()
