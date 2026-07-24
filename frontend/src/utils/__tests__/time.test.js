@@ -86,15 +86,25 @@ describe('formatRelativeTime', () => {
 
   it('rounds the half-day case up — 60h overdue → "Overdue by 3 days"', () => {
     // 60h / 24 = 2.5. Math.round(2.5) === 3 in JS — the rounding rule is
-    // explicit: nearest integer, ties round up.
+    // explicit: nearest integer, ties round up. Freeze the clock so the
+    // diff is EXACTLY 2.5 days: with the real clock, the µs of latency
+    // between capturing Date.now() and formatRelativeTime's own new Date()
+    // drops it to 2.4999… → rounds to 2 → flaky (fails under CI latency).
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const overdue60h = new Date(Date.now() - 60 * 3600000).toISOString()
     expect(formatRelativeTime(overdue60h)).toMatch(/Overdue by 3 days/)
+    vi.useRealTimers()
   })
 
   it('rounds non-integer days to integer in the future direction too', () => {
-    // 36h / 24 = 1.5 → Math.round = 2 → "In 2 days".
+    // 36h / 24 = 1.5 → Math.round = 2 → "In 2 days". Freeze the clock so the
+    // diff lands EXACTLY on 1.5 (see the 60h case above for why).
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     const inOneAndAHalfDays = new Date(Date.now() + 36 * 3600000).toISOString()
     expect(formatRelativeTime(inOneAndAHalfDays)).toMatch(/In 2 days/)
+    vi.useRealTimers()
   })
 })
 

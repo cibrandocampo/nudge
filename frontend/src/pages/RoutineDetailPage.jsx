@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import ConfirmModal from '../components/ConfirmModal'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
+import LogDateModal from '../components/LogDateModal'
 import LotSelectionModal from '../components/LotSelectionModal'
 import QueryHandler from '../components/QueryHandler'
 import SharedWithChips from '../components/SharedWithChips'
@@ -57,11 +58,19 @@ export default function RoutineDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false)
   const [lotModal, setLotModal] = useState(null)
+  // Which action row opened the date picker ('due' | 'advance' | null). Both
+  // rows ultimately call markDone(iso); the value only records the origin.
+  const [dateModalMode, setDateModalMode] = useState(null)
 
-  const runLog = async (lotSelections) => {
+  const runLog = async (lotSelections, clientCreatedAt) => {
     setCompleting(true)
     try {
-      await logMutation.mutateAsync({ routineId: Number(id), routineName: routine?.name, lotSelections })
+      await logMutation.mutateAsync({
+        routineId: Number(id),
+        routineName: routine?.name,
+        lotSelections,
+        clientCreatedAt,
+      })
     } catch (err) {
       showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
@@ -69,7 +78,11 @@ export default function RoutineDetailPage() {
     }
   }
 
-  const markDone = async () => {
+  // `clientCreatedAt` (ISO string) back-dates the completion to the moment the
+  // user actually did the routine; omitted → the mutation stamps `now`. The
+  // audit `created_at` stays server-assigned either way. The timestamp is
+  // carried through the lot-selection detour so it survives LotSelectionModal.
+  const markDone = async (clientCreatedAt) => {
     if (routine?.requires_lot_selection) {
       const stock = findCachedStock(queryClient, routine?.stock)
       const lots = lotsForSelection(stock)
@@ -77,15 +90,26 @@ export default function RoutineDetailPage() {
         showToast({ type: 'error', message: t('common.actionError') })
         return
       }
-      setLotModal({ lots })
+      setLotModal({ lots, clientCreatedAt })
       return
     }
-    await runLog()
+    await runLog(undefined, clientCreatedAt)
   }
 
   const handleLotConfirm = async (lotSelections) => {
+    const clientCreatedAt = lotModal?.clientCreatedAt
     setLotModal(null)
-    await runLog(lotSelections)
+    await runLog(lotSelections, clientCreatedAt)
+  }
+
+  // Opens the date picker, mirroring the stock-depleted guard the primary
+  // buttons apply before logging.
+  const openDateModal = (mode) => {
+    if (routineStockDepleted) {
+      showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+      return
+    }
+    setDateModalMode(mode)
   }
 
   // Auto-log when opened from a push notification "Mark as done" action.
@@ -154,7 +178,14 @@ export default function RoutineDetailPage() {
   // (`stock_quantity_available` drops to 0) but the `['stock']` cache may
   // still hold the previous severity ('low') for a few hundred ms — leaving
   // the dot orange while the rest of the row reads "0 × <stock>".
-  const stockSeverity = findCachedStock(queryClient, routine?.stock)?.stock_severity
+  // The stock cache only holds stocks the viewer can access. A routine shared
+  // with the viewer may reference a stock that isn't shared with them: its name
+  // still shows (it comes from the routine payload) but the detail page would
+  // 404. Gate the "open stock" chevron on the stock being in the accessible
+  // cache so the link never leads to a not-found.
+  const linkedStock = findCachedStock(queryClient, routine?.stock)
+  const stockDetailPath = routine?.stock && linkedStock ? `/inventory/${routine.stock}` : null
+  const stockSeverity = linkedStock?.stock_severity
   const stockDotClass = routineStockDepleted
     ? shared.dotDanger
     : stockSeverity === 'critical'
@@ -278,6 +309,17 @@ export default function RoutineDetailPage() {
                       qty: routine.stock_quantity,
                       name: routine.stock_name,
                     })}
+                    {stockDetailPath && (
+                      <Link
+                        to={stockDetailPath}
+                        className={s.stockLink}
+                        aria-label={t('common.openDetail')}
+                        title={t('common.openDetail')}
+                        data-testid="stock-detail-link"
+                      >
+                        <Icon name="chevron-right" size="sm" />
+                      </Link>
+                    )}
                   </span>
                 </div>
                 {hasPendingLog && (
@@ -336,49 +378,85 @@ export default function RoutineDetailPage() {
           )}
 
           {routine.is_due && (
-            <button
-              className={cx(
-                shared.btn,
-                shared.btnPrimary,
-                s.primaryAction,
-                (completing || routineStockDepleted) && shared.disabled,
-              )}
-              onClick={() => {
-                if (routineStockDepleted) {
-                  showToast({ type: 'error', message: t('routine.detail.noStockToast') })
-                  return
-                }
-                markDone()
-              }}
-              disabled={completing}
-              aria-disabled={routineStockDepleted ? 'true' : undefined}
-              title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
-            >
-              {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
-            </button>
+            <div className={s.actionRow}>
+              <button
+                className={cx(
+                  shared.btn,
+                  shared.btnPrimary,
+                  s.primaryAction,
+                  (completing || routineStockDepleted) && shared.disabled,
+                )}
+                onClick={() => {
+                  if (routineStockDepleted) {
+                    showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                    return
+                  }
+                  markDone()
+                }}
+                disabled={completing}
+                aria-disabled={routineStockDepleted ? 'true' : undefined}
+                title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
+              >
+                {completing ? t('routine.detail.logging') : t('routine.detail.markDone')}
+              </button>
+              <button
+                type="button"
+                className={cx(
+                  shared.btn,
+                  shared.btnPrimary,
+                  s.pickTimeBtn,
+                  (completing || routineStockDepleted) && shared.disabled,
+                )}
+                onClick={() => openDateModal('due')}
+                disabled={completing}
+                aria-label={t('routine.detail.pickTimeAria')}
+                title={t('routine.detail.pickTimeAria')}
+                data-testid="pick-time-due"
+              >
+                <Icon name="history" size="sm" />
+              </button>
+            </div>
           )}
 
           {!routine.is_due && routine.is_active && (
-            <button
-              className={cx(
-                shared.btn,
-                shared.btnPrimary,
-                s.primaryAction,
-                (completing || routineStockDepleted) && shared.disabled,
-              )}
-              onClick={() => {
-                if (routineStockDepleted) {
-                  showToast({ type: 'error', message: t('routine.detail.noStockToast') })
-                  return
-                }
-                setShowAdvanceConfirm(true)
-              }}
-              disabled={completing}
-              aria-disabled={routineStockDepleted ? 'true' : undefined}
-              title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
-            >
-              {t('routine.detail.advance')}
-            </button>
+            <div className={s.actionRow}>
+              <button
+                className={cx(
+                  shared.btn,
+                  shared.btnPrimary,
+                  s.primaryAction,
+                  (completing || routineStockDepleted) && shared.disabled,
+                )}
+                onClick={() => {
+                  if (routineStockDepleted) {
+                    showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                    return
+                  }
+                  setShowAdvanceConfirm(true)
+                }}
+                disabled={completing}
+                aria-disabled={routineStockDepleted ? 'true' : undefined}
+                title={routineStockDepleted ? t('routine.detail.noStockToast') : undefined}
+              >
+                {t('routine.detail.advance')}
+              </button>
+              <button
+                type="button"
+                className={cx(
+                  shared.btn,
+                  shared.btnPrimary,
+                  s.pickTimeBtn,
+                  (completing || routineStockDepleted) && shared.disabled,
+                )}
+                onClick={() => openDateModal('advance')}
+                disabled={completing}
+                aria-label={t('routine.detail.pickTimeAria')}
+                title={t('routine.detail.pickTimeAria')}
+                data-testid="pick-time-advance"
+              >
+                <Icon name="history" size="sm" />
+              </button>
+            </div>
           )}
 
           {entries.length > 0 && (
@@ -424,6 +502,15 @@ export default function RoutineDetailPage() {
               lots={lotModal.lots}
               onConfirm={handleLotConfirm}
               onCancel={() => setLotModal(null)}
+            />
+          )}
+          {dateModalMode && (
+            <LogDateModal
+              onConfirm={(iso) => {
+                setDateModalMode(null)
+                markDone(iso)
+              }}
+              onCancel={() => setDateModalMode(null)}
             />
           )}
         </div>

@@ -411,6 +411,59 @@ describe('useLogRoutine — branches', () => {
     // Nothing was set before; the optimistic update returns prev (undefined).
     expect(qc.getQueryData(['routine', 9])).toBeUndefined()
   })
+
+  it('forwards an explicit clientCreatedAt as client_created_at (back-dating)', async () => {
+    let body = null
+    server.use(
+      http.post(`${BASE}/routines/5/log/`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { result } = renderWith(() => useLogRoutine())
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5, clientCreatedAt: '2026-07-24T09:00:00.000Z' })
+    })
+    expect(body.client_created_at).toBe('2026-07-24T09:00:00.000Z')
+  })
+
+  it('defaults client_created_at to a now-ish ISO string when none is passed', async () => {
+    let body = null
+    server.use(
+      http.post(`${BASE}/routines/5/log/`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const before = Date.now()
+    const { result } = renderWith(() => useLogRoutine())
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5 })
+    })
+    const stamped = new Date(body.client_created_at).getTime()
+    expect(stamped).toBeGreaterThanOrEqual(before)
+    expect(stamped).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('bases the optimistic next-due on an explicit backdated clientCreatedAt', async () => {
+    server.use(http.post(`${BASE}/routines/9/log/`, () => HttpResponse.json({ id: 1 }, { status: 201 })))
+    const { result, qc } = renderWith(() => useLogRoutine())
+    qc.setQueryData(['dashboard'], {
+      due: [{ id: 9, name: 'Meds', interval_hours: 48, is_due: true, is_overdue: true }],
+      upcoming: [],
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 9, clientCreatedAt: '2026-07-24T09:00:00.000Z' })
+    })
+
+    const moved = qc.getQueryData(['dashboard']).upcoming[0]
+    // last_entry_at reflects the chosen time; next_due_at = chosen + 48h.
+    expect(moved.last_entry_at).toBe('2026-07-24T09:00:00.000Z')
+    expect(moved.next_due_at).toBe('2026-07-26T09:00:00.000Z')
+  })
 })
 
 describe('useConsumeStock — applyConsumption branches', () => {

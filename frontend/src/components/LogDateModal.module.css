@@ -1,0 +1,28 @@
+.hint {
+  margin: 0 0 1rem;
+  color: var(--c-text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+  margin-bottom: 1.5rem;
+  /* iOS Safari renders datetime-local with its own intrinsic height,
+   * ignoring padding. Force it to respect the shared input sizing while
+   * still opening the native picker on tap (mirrors the type=time fix). */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
