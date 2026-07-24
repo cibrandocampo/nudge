@@ -37,9 +37,12 @@ registerRollback('logRoutine', (qc, { routineId }) => {
  *
  * Records a routine completion. If `lotSelections` is provided the backend
  * consumes exactly those lots; otherwise FEFO picks lots automatically. The
- * `client_created_at` is stamped at the time the user presses the button so
+ * `client_created_at` defaults to the moment the user presses the button so
  * an offline entry synced hours later still reflects the real action time
- * (server supports this since T021).
+ * (server supports this since T021). A caller may also pass an explicit
+ * `clientCreatedAt` (ISO string) to back-date the completion — e.g. the user
+ * took the medication earlier and only logs it now. `created_at` stays the
+ * server's audit timestamp regardless.
  *
  * Optimistic (T112): moves the routine from `dashboard.due` to
  * `dashboard.upcoming` with `next_due_at = now + interval_hours h`,
@@ -61,25 +64,28 @@ export function useLogRoutine() {
       args: { name: routineName ?? '?' },
     }),
     rollback: ({ routineId }) => ({ type: 'logRoutine', args: { routineId } }),
-    request: ({ routineId, notes, lotSelections }) => ({
+    request: ({ routineId, notes, lotSelections, clientCreatedAt }) => ({
       method: 'POST',
       path: `/routines/${routineId}/log/`,
       body: {
         notes: notes ?? '',
         lot_selections: lotSelections,
-        client_created_at: new Date().toISOString(),
+        client_created_at: clientCreatedAt ?? new Date().toISOString(),
       },
     }),
-    optimistic: (client, { routineId }) => {
+    optimistic: (client, { routineId, clientCreatedAt }) => {
       const id = Number(routineId)
       const snap = snapshotKeys(client, [['dashboard'], ['routine', id]])
+      // Base the optimistic next-due / last-entry on the chosen completion
+      // time (back-dated) when provided, so the offline approximation matches
+      // what the server will compute; otherwise fall back to the wall clock.
+      const now = clientCreatedAt ? new Date(clientCreatedAt).getTime() : Date.now()
       client.setQueryData(['dashboard'], (prev) => {
         if (!prev) return prev
         const due = prev.due ?? []
         const upcoming = prev.upcoming ?? []
         const routine = due.find((r) => r.id === id)
         if (!routine) return prev
-        const now = Date.now()
         const intervalHours = routine.interval_hours ?? 0
         const nextDueAt = new Date(now + intervalHours * 3600 * 1000).toISOString()
         const moved = {
@@ -98,7 +104,7 @@ export function useLogRoutine() {
       })
       client.setQueryData(['routine', id], (prev) => {
         if (!prev) return prev
-        return { ...prev, is_due: false, is_overdue: false, last_entry_at: new Date().toISOString() }
+        return { ...prev, is_due: false, is_overdue: false, last_entry_at: new Date(now).toISOString() }
       })
       return () => restoreKeys(client, snap)
     },

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { clear, list } from '../../offline/queue'
@@ -683,8 +683,10 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     renderDetail()
     // The button is *not* `disabled` (so click can fire and surface the
     // toast); the no-stock state is communicated via `aria-disabled` and
-    // the title attribute. Matches the dashboard card pattern.
-    const button = await screen.findByRole('button', { name: /Mark as done/i })
+    // the title attribute. Matches the dashboard card pattern. Exact name so
+    // it targets the primary button, not the 🕐 pick-time button whose
+    // aria-label ("Mark as done at a specific time") also contains the phrase.
+    const button = await screen.findByRole('button', { name: 'Mark as done' })
     expect(button).toHaveAttribute('aria-disabled', 'true')
     expect(button.getAttribute('title')).toMatch(/no stock/i)
   })
@@ -733,7 +735,7 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
       ),
     )
     const { user } = renderDetail()
-    const button = await screen.findByRole('button', { name: /Mark as done/i })
+    const button = await screen.findByRole('button', { name: 'Mark as done' })
     await user.click(button)
     expect(await screen.findByText(/no stock available/i)).toBeInTheDocument()
     expect(logCalls).toHaveLength(0)
@@ -856,5 +858,168 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
       })
       expect(value).toHaveTextContent('Every 8 hours, respects quiet hours')
     })
+  })
+})
+
+describe('RoutineDetailPage — back-date completion (pick-time button)', () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json(routine)),
+      http.get(`${BASE}/routines/1/entries/`, () => HttpResponse.json([])),
+    )
+  })
+
+  it('logs with the chosen client_created_at when using the pick-time button (due)', async () => {
+    let logBody = null
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('pick-time-due'))
+    const input = await screen.findByTestId('log-date-input')
+    fireEvent.change(input, { target: { value: '2026-07-24T09:00' } })
+    await user.click(screen.getByTestId('log-date-confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    // The audit created_at is server-assigned; only client_created_at carries
+    // the user's chosen (back-dated) instant.
+    expect(new Date(logBody.client_created_at).getTime()).toBe(new Date('2026-07-24T09:00').getTime())
+  })
+
+  it('carries the chosen time through lot selection (requires_lot_selection)', async () => {
+    let logBody = null
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, requires_lot_selection: true })),
+      stockListHandler,
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        logBody = await request.json()
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user, queryClient } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
+
+    await user.click(screen.getByTestId('pick-time-due'))
+    fireEvent.change(await screen.findByTestId('log-date-input'), { target: { value: '2026-07-24T09:00' } })
+    await user.click(screen.getByTestId('log-date-confirm'))
+
+    // Date modal closed → lot selection modal takes over, still holding the time.
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+    await user.click(screen.getByText('LOT-A'))
+    await user.click(screen.getByText('Confirm'))
+
+    await waitFor(() => expect(logBody).not.toBeNull())
+    expect(logBody.lot_selections).toEqual([{ lot_id: 1, quantity: 1 }])
+    expect(new Date(logBody.client_created_at).getTime()).toBe(new Date('2026-07-24T09:00').getTime())
+  })
+
+  it('shows the no-stock toast and no modal when clicking pick-time on depleted stock', async () => {
+    const logCalls = []
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalls.push(true)
+        return new HttpResponse(null, { status: 201 })
+      }),
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({
+          ...routine,
+          is_due: true,
+          is_overdue: true,
+          stock: 9,
+          stock_name: 'Descaler tablets',
+          stock_quantity: 0,
+          stock_quantity_available: 0,
+          stock_usage: 1,
+        }),
+      ),
+    )
+    const { user } = renderDetail()
+    const pick = await screen.findByTestId('pick-time-due')
+    await user.click(pick)
+    expect(await screen.findByText(/no stock available/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('log-date-input')).not.toBeInTheDocument()
+    expect(logCalls).toHaveLength(0)
+  })
+
+  it('opens the date picker directly from the advance pick-time button (no advance confirm)', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({ ...routine, is_due: false, is_overdue: false, hours_until_due: 12 }),
+      ),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Do it now')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('pick-time-advance'))
+    expect(await screen.findByTestId('log-date-input')).toBeInTheDocument()
+    // The explicit date choice replaces the "ahead of schedule" confirmation.
+    expect(screen.queryByText('Log this routine ahead of schedule?')).not.toBeInTheDocument()
+  })
+
+  it('closes the date picker without logging when cancelled', async () => {
+    const logCalls = []
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalls.push(true)
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('pick-time-due'))
+    expect(await screen.findByTestId('log-date-input')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByTestId('log-date-input')).not.toBeInTheDocument()
+    expect(logCalls).toHaveLength(0)
+  })
+})
+
+describe('RoutineDetailPage — stock detail link', () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json(routine)),
+      http.get(`${BASE}/routines/1/entries/`, () => HttpResponse.json([])),
+    )
+  })
+
+  it('renders a chevron link to the stock detail when the linked stock is accessible', async () => {
+    server.use(stockListHandler)
+    const { queryClient } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
+
+    const link = await screen.findByTestId('stock-detail-link')
+    // routine.stock === 1 → /inventory/1.
+    expect(link).toHaveAttribute('href', '/inventory/1')
+  })
+
+  it('hides the stock chevron link when the linked stock is not accessible (not in cache)', async () => {
+    // Empty stock list → findCachedStock returns undefined → no link, even
+    // though stock_name still renders from the routine payload.
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([])))
+    const { queryClient } = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toEqual([]))
+
+    expect(screen.getByTestId('stock-row-value')).toBeInTheDocument()
+    expect(screen.queryByTestId('stock-detail-link')).not.toBeInTheDocument()
+  })
+
+  it('hides the stock chevron link when the routine has no linked stock', async () => {
+    server.use(
+      http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, stock: null, stock_name: null })),
+      stockListHandler,
+    )
+    renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    expect(screen.queryByTestId('stock-detail-link')).not.toBeInTheDocument()
   })
 })

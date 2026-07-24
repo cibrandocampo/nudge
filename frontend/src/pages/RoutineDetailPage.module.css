@@ -57,6 +57,20 @@
   justify-content: flex-end;
 }
 
+/* Subtle inline chevron that opens the linked stock's detail page. Lighter
+ * than the 32x32 card-action btnIcon since it sits inline with the value. */
+.stockLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--c-text-3);
+  margin-left: 0.1rem;
+  transition: color var(--transition);
+}
+
+.stockLink:hover {
+  color: var(--c-primary);
+}
+
 .metaValuePending {
   color: var(--c-text-3);
   text-decoration: line-through;
@@ -80,12 +94,28 @@
   font-weight: 400;
 }
 
+/* Action row: primary button (fills the row) + narrow pick-time button. */
+.actionRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
 .primaryAction {
-  width: 100%;
+  flex: 1;
   padding: 0.75rem;
   font-size: 0.875rem;
   font-weight: 600;
-  margin-bottom: 1.5rem;
+}
+
+/* Narrow companion button (history icon) that opens the back-date picker. */
+.pickTimeBtn {
+  flex: 0 0 auto;
+  width: 3rem;
+  padding: 0.75rem 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .section {
