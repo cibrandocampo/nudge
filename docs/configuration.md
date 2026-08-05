@@ -131,7 +131,7 @@ regardless of the env value so test code can assert on
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ALLOW_SELF_SIGNUP` | `False` | When `True`, an unknown email on `POST /api/auth/login/start/` creates a new `is_active=False` user with `auth_method='otp'` and triggers a welcome email containing the OTP. When `False`, unknown emails return `404 user_not_found` — only admin-created accounts can log in. |
-| `BLOCK_DISPOSABLE_EMAIL` | `True` in production (`DJANGO_DEBUG=False`), `False` in development | Reject self-signup attempts from disposable / throwaway mailbox providers (yopmail, mailinator, guerrillamail, 10minutemail, …). The blocklist is bundled at `backend/apps/users/disposable_email_domains.txt`. Only applies to **new** signups — existing users with such an email keep their account. The frontend wizard surfaces the rejection as a localised "use a permanent email address" error. |
+| `BLOCK_DISPOSABLE_EMAIL` | `True` in production (`DJANGO_DEBUG=False`), `False` in development | Reject self-signup attempts from disposable / throwaway mailbox providers (yopmail, mailinator, guerrillamail, 10minutemail, …). The blocklist is bundled at `backend/apps/users/disposable_email_domains.txt` plus the hand-curated `disposable_email_domains.local.txt` alongside it (see below). Only applies to **new** signups — existing users with such an email keep their account. The frontend wizard surfaces the rejection as a localised "use a permanent email address" error. |
 | `DISPOSABLE_EMAIL_EXTRA_DOMAINS` | _empty_ | Comma-separated list of additional domains to block on top of the bundled file. Useful for blocking providers spotted in the wild without forking the bundled list. Example: `throwaway.example,burner.test`. |
 | `DISPOSABLE_EMAIL_ALLOW_DOMAINS` | _empty_ | Comma-separated list of domains to remove from the effective blocklist. Useful when a bundled entry is too aggressive for your deployment. Example: `mailinator.com`. |
 
@@ -139,17 +139,28 @@ Leave `ALLOW_SELF_SIGNUP` at the default (`False`) until ready to open
 registration. The admin can flip it on temporarily (e.g. during an
 onboarding window) and back off later without restarting any data.
 
-The bundled disposable list is a curated subset of the excellent
+The bundled disposable list is a mirror of the excellent
 community-maintained
 [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains)
-project (CC0-1.0) — thanks to its maintainers for keeping the upstream
-list current. A scheduled GitHub Actions workflow
+project (CC0-1.0, ~8200 entries) — thanks to its maintainers for keeping
+the upstream list current. A scheduled GitHub Actions workflow
 (`.github/workflows/sync-disposable-email-domains.yml`) opens a PR every
-Monday when upstream changes, so new throwaway providers are picked up
-automatically with a human review step in between. For full
-~4500-entry coverage right now without waiting for the next sync,
-replace the bundled file with upstream's
-`disposable_email_blocklist.conf` manually.
+Sunday when upstream changes, so new throwaway providers are picked up
+automatically with a human review step in between.
+
+Two files are loaded and unioned at import time:
+
+| File | Maintained by | Edit by hand? |
+|------|---------------|---------------|
+| `disposable_email_domains.txt` | The weekly sync, replaced wholesale | **No** — the next sync overwrites it |
+| `disposable_email_domains.local.txt` | You | Yes — the sync never touches it |
+
+The local file exists because the sync replaces the upstream mirror
+entirely, so any domain upstream drops (or never carried) would silently
+stop being blocked. It currently holds the 19 entries from Nudge's
+original curated list that upstream lacks. Add to it whenever you want a
+domain blocked for **every** deployment; use the env vars above when the
+change is specific to **one** deployment.
 
 ## Branding
 

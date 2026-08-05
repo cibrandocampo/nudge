@@ -52,6 +52,11 @@ jobs:
         run: |
           set -euo pipefail
           target=backend/apps/users/disposable_email_domains.txt
+          # Only this file is regenerated. Its sibling
+          # `disposable_email_domains.local.txt` holds hand-curated
+          # entries upstream lacks and is deliberately left alone —
+          # `email_validation.py` unions the two at import time, so the
+          # diff reviewed here stays purely upstream.
           # Preserved header — attribution + operational notes. The body
           # below is replaced wholesale with the upstream content.
           cat > "$target" <<'HEADER'

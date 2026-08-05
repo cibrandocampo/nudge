@@ -1,0 +1,39 @@
+# Locally curated disposable-domain entries, layered ON TOP of the
+# auto-synced `disposable_email_domains.txt`. Both files are loaded and
+# unioned at import time by `email_validation.py`.
+#
+# This file exists because the weekly sync replaces the bundled file
+# wholesale from upstream, so anything upstream drops (or never had)
+# would silently stop being blocked. Entries kept here survive every
+# sync — the sync workflow never touches this file.
+#
+# The initial contents are the 19 domains that were in Nudge's original
+# curated list but are absent from upstream, which the first full sync
+# (PR #71) would otherwise have unblocked.
+#
+# Safe to edit by hand. One domain per line, lower-case. Duplicates with
+# the upstream file are harmless (it's a set union).
+#
+# For per-deployment tweaks that should NOT be committed, prefer the
+# DISPOSABLE_EMAIL_EXTRA_DOMAINS / DISPOSABLE_EMAIL_ALLOW_DOMAINS env
+# vars instead (see docs/configuration.md#self-signup).
+#
+10minutemail.org
+chronicmail.com
+correo.blogos.net
+disposablemail.com
+emkei.cz
+fake-mail.net
+fakermail.com
+hour-mail.com
+luxusmail.org
+mailbox007.com
+mailcuk.com
+mailtemporanea.com
+mintmail.com
+spamgourmet.com
+temp-mail.io
+tempmail.com
+tempmail.io
+tempmailaddress.com
+throwaway.email

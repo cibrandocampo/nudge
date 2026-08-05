@@ -364,6 +364,7 @@ class DisposableEmailValidatorTest(TestCase):
         self.assertFalse(is_disposable_email(""))
         self.assertFalse(is_disposable_email("not-an-email"))
         self.assertFalse(is_disposable_email("@no-local-part.com"))
+        self.assertFalse(is_disposable_email("no-domain@"))
 
     @override_settings(DISPOSABLE_EMAIL_EXTRA_DOMAINS=["evil-corp.example"])
     def test_extra_domains_env_var_extends_blacklist(self):
@@ -378,6 +379,45 @@ class DisposableEmailValidatorTest(TestCase):
         from .email_validation import is_disposable_email
 
         self.assertFalse(is_disposable_email("u@yopmail.com"))
+
+    def test_locally_curated_domain_absent_from_upstream_is_blocked(self):
+        # These two are in the local file but NOT in the upstream list,
+        # so they are only blocked if the local file is loaded too.
+        from .email_validation import is_disposable_email
+
+        self.assertTrue(is_disposable_email("u@tempmail.com"))
+        self.assertTrue(is_disposable_email("u@throwaway.email"))
+
+    def test_every_locally_curated_entry_is_loaded(self):
+        # Guards the union wiring as a whole: if the local file is ever
+        # dropped, emptied or stops being read, this fails instead of
+        # silently unblocking every domain it holds.
+        from .email_validation import _DOMAINS_DIR, disposable_domains
+
+        local_file = _DOMAINS_DIR / "disposable_email_domains.local.txt"
+        entries = {
+            line.strip().lower()
+            for line in local_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+        self.assertTrue(entries, "the locally curated domain file is empty")
+        self.assertLessEqual(entries, disposable_domains())
+
+    def test_missing_domain_file_is_skipped(self):
+        # An image or deployment that ships only one of the two files
+        # must still load the one it has, not crash on the absent one.
+        from . import email_validation
+
+        present, _ = email_validation._DOMAINS_FILES
+        with patch.object(
+            email_validation,
+            "_DOMAINS_FILES",
+            (present, email_validation._DOMAINS_DIR / "does-not-exist.txt"),
+        ):
+            loaded = email_validation._load_bundled_domains()
+
+        self.assertIn("mailinator.com", loaded)
 
 
 class BeatScheduleTest(TestCase):

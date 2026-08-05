@@ -1,29 +1,41 @@
 """Disposable / throwaway email blacklist for self-signup.
 
-Loaded once at module import — the static file is ~80 entries so the
-`set` lookup is O(1) and the cost negligible. Env vars
-`DISPOSABLE_EMAIL_EXTRA_DOMAINS` (additive) and
-`DISPOSABLE_EMAIL_ALLOW_DOMAINS` (counter-allow list for false
-positives) are layered on top of the bundled file via settings.
+Loaded once at module import — ~8k entries, so the `set` lookup is O(1)
+and the cost negligible. Env vars `DISPOSABLE_EMAIL_EXTRA_DOMAINS`
+(additive) and `DISPOSABLE_EMAIL_ALLOW_DOMAINS` (counter-allow list for
+false positives) are layered on top of the bundled files via settings.
+
+Two files are unioned:
+
+* `disposable_email_domains.txt` — auto-synced from upstream weekly and
+  replaced wholesale, so it must not carry local edits.
+* `disposable_email_domains.local.txt` — hand-curated, never touched by
+  the sync. Holds entries upstream lacks, which would otherwise be
+  silently unblocked the next time the sync runs.
 """
 
 from pathlib import Path
 
 from django.conf import settings
 
-_DOMAINS_FILE = Path(__file__).resolve().parent / "disposable_email_domains.txt"
+_DOMAINS_DIR = Path(__file__).resolve().parent
+_DOMAINS_FILES = (
+    _DOMAINS_DIR / "disposable_email_domains.txt",
+    _DOMAINS_DIR / "disposable_email_domains.local.txt",
+)
 
 
 def _load_bundled_domains() -> frozenset[str]:
-    if not _DOMAINS_FILE.is_file():
-        return frozenset()
     out: set[str] = set()
-    with _DOMAINS_FILE.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            line = raw.strip().lower()
-            if not line or line.startswith("#"):
-                continue
-            out.add(line)
+    for path in _DOMAINS_FILES:
+        if not path.is_file():
+            continue
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip().lower()
+                if not line or line.startswith("#"):
+                    continue
+                out.add(line)
     return frozenset(out)
 
 
