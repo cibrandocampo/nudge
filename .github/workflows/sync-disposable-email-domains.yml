@@ -105,4 +105,8 @@ jobs:
           labels: |
             dependencies
             automated
+          # Assigning the repo owner is what actually produces a
+          # notification — assignment always notifies, regardless of the
+          # account's watch settings for the repo.
+          assignees: cibrandocampo
           delete-branch: true
