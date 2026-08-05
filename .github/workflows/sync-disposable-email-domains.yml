@@ -80,7 +80,7 @@ jobs:
           cat /tmp/upstream.txt >> "$target"
 
       - name: Open PR if the bundled file changed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/sync-disposable-email-domains
           commit-message: 'chore: sync disposable email domains from upstream'
