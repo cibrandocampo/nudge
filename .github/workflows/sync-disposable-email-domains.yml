@@ -14,9 +14,12 @@ name: Sync disposable email domains list
 
 on:
   schedule:
-    # Monday 06:30 UTC — 30 minutes after `weekly-rebuild.yml` to avoid
-    # contention on the runner pool.
-    - cron: '30 6 * * 1'
+    # Sunday 06:30 UTC — a day ahead of `weekly-rebuild.yml` (Monday
+    # 06:00), so the sync PR can be reviewed and merged before the weekly
+    # rebuild rather than landing half an hour after it and missing the
+    # train for a week. Merging the PR publishes the image on its own via
+    # `ci.yml`; the head start is review time, not delivery time.
+    - cron: '30 6 * * 0'
   workflow_dispatch: {}
 
 permissions:
@@ -105,4 +108,8 @@ jobs:
           labels: |
             dependencies
             automated
+          # Assigning the repo owner is what actually produces a
+          # notification — assignment always notifies, regardless of the
+          # account's watch settings for the repo.
+          assignees: cibrandocampo
           delete-branch: true
