@@ -64,7 +64,9 @@ describe('StockFormPage — create', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
-    expect(stockBody).toEqual({ name: 'Paracetamol', group: null })
+    // Product identity travels with every create; blank is the "not known yet"
+    // state the serializer expects.
+    expect(stockBody).toEqual({ name: 'Paracetamol', group: null, gtin: '', default_lot_quantity: null })
     expect(lotCalls).toBe(0)
   })
 
@@ -338,6 +340,185 @@ describe('StockFormPage — batch uid fallback', () => {
   })
 })
 
+describe('StockFormPage — product identity', () => {
+  // Real GTIN-14 from a scanned pack. The leading zero is the whole point.
+  const GTIN = '05705244020856'
+
+  const mockCreate = (onBody) =>
+    server.use(
+      http.post(`${BASE}/stock/`, async ({ request }) => {
+        onBody(await request.json())
+        return HttpResponse.json(
+          { id: 42, name: 'X', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' },
+          { status: 201 },
+        )
+      }),
+      http.post(`${BASE}/stock/42/lots/`, () => HttpResponse.json({}, { status: 201 })),
+      http.get(`${BASE}/stock/42/`, () =>
+        HttpResponse.json({ id: 42, name: 'X', lots: [], quantity: 0, updated_at: '2026-04-22T10:00:00Z' }),
+      ),
+    )
+
+  const fillName = async (user, name = 'Metformin') => {
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), name)
+  }
+
+  it('sends both fields when the user fills them', async () => {
+    let body = null
+    mockCreate((b) => (body = b))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    await user.type(screen.getByPlaceholderText('14 digits from the barcode'), GTIN)
+    await user.type(screen.getByRole('spinbutton', { name: /Default quantity per lot/i }), '5')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.gtin).toBe(GTIN)
+    expect(body.default_lot_quantity).toBe(5)
+  })
+
+  it('keeps the GTIN a string so its leading zero survives', async () => {
+    let body = null
+    mockCreate((b) => (body = b))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    await user.type(screen.getByPlaceholderText('14 digits from the barcode'), GTIN)
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(typeof body.gtin).toBe('string')
+    expect(body.gtin).toBe(GTIN)
+  })
+
+  it('blocks submit on an invalid check digit', async () => {
+    let called = false
+    mockCreate(() => (called = true))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    // Last digit altered, so the mod-10 check fails.
+    await user.type(screen.getByPlaceholderText('14 digits from the barcode'), '05705244020857')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/not a valid GTIN/i)).toBeInTheDocument()
+    expect(called).toBe(false)
+  })
+
+  it('blocks submit on a default quantity of 0', async () => {
+    let called = false
+    mockCreate(() => (called = true))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    await user.type(screen.getByRole('spinbutton', { name: /Default quantity per lot/i }), '0')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/at least 1/i)).toBeInTheDocument()
+    expect(called).toBe(false)
+  })
+
+  it('adopts the first batch quantity when the default was left blank', async () => {
+    let body = null
+    mockCreate((b) => (body = b))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.type(screen.getByRole('spinbutton', { name: /Batch 1 quantity/i }), '10')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.default_lot_quantity).toBe(10)
+  })
+
+  it('keeps the typed default and never prompts, even when a batch disagrees', async () => {
+    // Product creation is exempt from the confirmation modal: both numbers were
+    // typed on this screen seconds apart, so there is no stored value to defend.
+    let body = null
+    mockCreate((b) => (body = b))
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await fillName(user)
+    await user.type(screen.getByRole('spinbutton', { name: /Default quantity per lot/i }), '5')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    const batchQty = screen.getByRole('spinbutton', { name: /Batch 1 quantity/i })
+    await user.clear(batchQty)
+    await user.type(batchQty, '3')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.default_lot_quantity).toBe(5)
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('starts a new batch row at the typed default quantity', async () => {
+    mockGroups()
+    mockContacts()
+
+    const { user } = renderCreate()
+    await user.type(screen.getByRole('spinbutton', { name: /Default quantity per lot/i }), '5')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    expect(screen.getByRole('spinbutton', { name: /Batch 1 quantity/i })).toHaveValue(5)
+  })
+
+  it('prefills both fields when editing a stock that already has them', async () => {
+    mockStock({
+      id: 1,
+      name: 'Metformin',
+      group: null,
+      shared_with: [],
+      gtin: GTIN,
+      default_lot_quantity: 5,
+      updated_at: '2026-04-22T10:00:00Z',
+    })
+    mockGroups()
+    mockContacts()
+
+    renderEdit()
+
+    expect(await screen.findByDisplayValue(GTIN)).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: /Default quantity per lot/i })).toHaveValue(5)
+  })
+
+  it('hides both fields from a guest, who cannot write them', async () => {
+    // The API restricts every stock write to its owner (T029), so offering the
+    // inputs would promise something the save cannot deliver.
+    mockStock({
+      id: 1,
+      name: 'Shared item',
+      group: null,
+      shared_with: [],
+      is_owner: false,
+      gtin: GTIN,
+      default_lot_quantity: 5,
+      updated_at: '2026-04-22T10:00:00Z',
+    })
+    mockGroups()
+    mockContacts()
+
+    renderEdit()
+
+    await screen.findByDisplayValue('Shared item')
+    expect(screen.queryByPlaceholderText('14 digits from the barcode')).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: /Default quantity per lot/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('StockFormPage — edit', () => {
   it('prefills the form and PATCHes on submit without showing the batches section', async () => {
     mockStock({
@@ -366,7 +547,13 @@ describe('StockFormPage — edit', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
-    expect(patchBody).toEqual({ name: 'Vitamin D3', group: 5, shared_with: [] })
+    expect(patchBody).toEqual({
+      name: 'Vitamin D3',
+      group: 5,
+      shared_with: [],
+      gtin: '',
+      default_lot_quantity: null,
+    })
   })
 
   it('surfaces a generic error when the PATCH returns 412', async () => {

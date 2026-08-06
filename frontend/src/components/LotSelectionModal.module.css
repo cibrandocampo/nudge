@@ -47,6 +47,18 @@
   background: color-mix(in srgb, var(--c-primary) 8%, transparent);
 }
 
+/* Non-interactive row: the group's unidentified units, shown for context when
+   the user is choosing between identified packs. */
+.itemStatic {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed var(--c-border);
+  border-radius: var(--radius-lg);
+  color: var(--c-text-2);
+}
+
 .radio {
   width: 1.75rem;
   height: 1.75rem;
@@ -164,4 +176,11 @@
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
+}
+
+/* A serial is a machine code read character by character against the printed
+   box, so it gets the same monospace treatment as everywhere else it appears. */
+.packSerial {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
 }

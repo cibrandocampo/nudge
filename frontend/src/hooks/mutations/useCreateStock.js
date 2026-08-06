@@ -5,10 +5,17 @@ export function useCreateStock() {
   const qc = useQueryClient()
   return useOfflineMutation({
     queueable: false,
-    request: ({ name, group }) => ({
+    request: ({ name, group, gtin, defaultLotQuantity }) => ({
       method: 'POST',
       path: '/stock/',
-      body: { name, group: group ?? null },
+      body: {
+        name,
+        group: group ?? null,
+        // Optional product identity. `''` and `null` are what the serializer
+        // treats as "not known yet", so an untouched form sends exactly that.
+        gtin: gtin ?? '',
+        default_lot_quantity: defaultLotQuantity ?? null,
+      },
     }),
     onSuccess: (data) => {
       if (data && !data.__queued) {

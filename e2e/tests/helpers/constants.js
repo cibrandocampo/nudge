@@ -47,11 +47,11 @@ export const SEED = {
     birthControlPills: 'Birth control pills',
   },
   lots: {
-    // Hidroferol — multi-lot (2 SN + 1 no-SN). HID-A is the FEFO front.
+    // Hidroferol — multi-lot (2 with a lot number + 1 without). HID-A is the FEFO front.
     HIDROFEROL_NEAR: 'HID-A',
     HIDROFEROL_FAR: 'HID-B',
     HIDROFEROL_NO_SN_EXPIRY_DAYS: 60,
-    // Ebastine — 3 SN lots, FEFO order.
+    // Ebastine — 3 lots, FEFO order.
     EBASTINE_LOTS: ['EBA-1', 'EBA-2', 'EBA-3'],
     // Single-lot stocks.
     GLUCOSE_SENSOR: 'SEN-OLD',

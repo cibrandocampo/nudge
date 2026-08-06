@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import serializers
@@ -34,13 +35,18 @@ def make_stock(user, name="Filter"):
     return Stock.objects.create(user=user, name=name)
 
 
-def make_lot(stock, quantity=10, expiry_date=None, lot_number=""):
-    """Create a StockLot for a given stock."""
+def make_lot(stock, quantity=10, expiry_date=None, lot_number="", serial_number=""):
+    """Create a StockLot for a given stock.
+
+    A non-empty `serial_number` makes it a serialized pack: unique within the
+    stock and never merged (see `StockLot`).
+    """
     return StockLot.objects.create(
         stock=stock,
         quantity=quantity,
         expiry_date=expiry_date,
         lot_number=lot_number,
+        serial_number=serial_number,
     )
 
 
@@ -1335,6 +1341,312 @@ class StockLotViewSetTest(APITestCase):
         self.assertEqual(res2.data["quantity"], 8)
 
 
+# ── Serialized lots (T022) ───────────────────────────────────────────────────
+
+
+class StockLotSerialTest(APITestCase):
+    """A lot carrying a GS1 serial identifies one physical pack.
+
+    It is unique within its stock and is never merged into — nor used as the
+    merge target of — another lot.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+        self.other_stock = make_stock(self.user, name="Other")
+
+    def test_create_lot_stores_serial_and_raw_scan(self):
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {
+                "quantity": 1,
+                "lot_number": "2G3F41A",
+                "expiry_date": "2028-04-30",
+                "serial_number": "987654321098",
+                "raw_scan": "010950600013437617280430102G3F41A",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["serial_number"], "987654321098")
+        lot = self.stock.lots.get()
+        self.assertEqual(lot.serial_number, "987654321098")
+        self.assertEqual(lot.raw_scan, "010950600013437617280430102G3F41A")
+
+    def test_duplicate_serial_in_same_stock_returns_400(self):
+        payload = {"quantity": 1, "serial_number": "SN-DUP"}
+        first = self.client.post(f"/api/stock/{self.stock.id}/lots/", payload)
+        self.assertEqual(first.status_code, 201)
+
+        second = self.client.post(f"/api/stock/{self.stock.id}/lots/", payload)
+        self.assertEqual(second.status_code, 400)
+        self.assertIn("serial_number", second.data)
+        self.assertEqual(self.stock.lots.count(), 1)
+
+    def test_same_serial_in_different_stock_is_allowed(self):
+        payload = {"quantity": 1, "serial_number": "SN-1"}
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", payload)
+        response = self.client.post(f"/api/stock/{self.other_stock.id}/lots/", payload)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.other_stock.lots.count(), 1)
+
+    def test_two_serials_same_lot_and_expiry_create_two_rows(self):
+        """The regression: scanning the second box of a lot must not merge."""
+        base = {"quantity": 1, "lot_number": "LOT-A", "expiry_date": "2028-06-01"}
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "serial_number": "SN-1"})
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "serial_number": "SN-2"})
+
+        self.assertEqual(self.stock.lots.count(), 2)
+        self.assertEqual(
+            sorted(self.stock.lots.values_list("serial_number", flat=True)),
+            ["SN-1", "SN-2"],
+        )
+        for lot in self.stock.lots.all():
+            self.assertEqual(lot.quantity, 1)
+
+    def test_serialized_lot_is_never_a_merge_target(self):
+        """An unserialized POST must not be absorbed by an existing pack."""
+        base = {"quantity": 1, "lot_number": "LOT-A", "expiry_date": "2028-06-01"}
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "serial_number": "SN-1"})
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "quantity": 4})
+
+        self.assertEqual(self.stock.lots.count(), 2)
+        pack = self.stock.lots.get(serial_number="SN-1")
+        self.assertEqual(pack.quantity, 1)
+        bulk = self.stock.lots.get(serial_number="")
+        self.assertEqual(bulk.quantity, 4)
+
+    def test_unserialized_lots_still_merge(self):
+        """The pre-existing dedup for hand-typed lots must not regress."""
+        base = {"lot_number": "LOT-B", "expiry_date": "2028-06-01"}
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "quantity": 5})
+        self.client.post(f"/api/stock/{self.stock.id}/lots/", {**base, "quantity": 3})
+
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.get().quantity, 8)
+
+    def test_stock_payload_carries_serial_but_not_raw_scan(self):
+        """Clients need the serial to group packs; the raw payload is forensic."""
+        StockLot.objects.create(
+            stock=self.stock,
+            quantity=1,
+            serial_number="SN-P",
+            raw_scan="010950600013437617280430",
+        )
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(response.status_code, 200)
+        lot = response.data["lots"][0]
+        self.assertEqual(lot["serial_number"], "SN-P")
+        self.assertNotIn("raw_scan", lot)
+
+    def test_db_constraint_rejects_duplicate_serial(self):
+        StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-X")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-X")
+
+    def test_db_constraint_allows_many_empty_serials(self):
+        make_lot(self.stock, quantity=1)
+        make_lot(self.stock, quantity=2)
+        self.assertEqual(self.stock.lots.filter(serial_number="").count(), 2)
+
+
+# ── Stock product identity (GTIN + default lot quantity) ─────────────────────
+
+
+class StockProductIdentityTest(APITestCase):
+    """`Stock.gtin` and `Stock.default_lot_quantity` (T029).
+
+    A GS1 DataMatrix does not carry how many units a box holds, so the app
+    learns it from the user and stores it on the product. Both fields are
+    optional, writable, and validated.
+    """
+
+    # Real GTIN-14 from a scanned pack. The leading zero is the point: it is
+    # significant, so the value must survive as a string end to end.
+    VALID_GTIN = "05705244020856"
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+
+    def test_defaults_are_empty_when_not_provided(self):
+        response = self.client.post("/api/stock/", {"name": "Plain item"})
+        self.assertEqual(response.status_code, 201)
+        stock = Stock.objects.get(name="Plain item")
+        self.assertEqual(stock.gtin, "")
+        self.assertIsNone(stock.default_lot_quantity)
+
+    def test_serializes_both_fields_for_an_untouched_stock(self):
+        stock = make_stock(self.user, name="Untouched")
+        response = self.client.get(f"/api/stock/{stock.id}/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["gtin"], "")
+        self.assertIsNone(data["default_lot_quantity"])
+
+    def test_patch_persists_gtin_with_its_leading_zero(self):
+        stock = make_stock(self.user, name="Scanned item")
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"gtin": self.VALID_GTIN},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        stock.refresh_from_db()
+        self.assertEqual(stock.gtin, self.VALID_GTIN)
+
+        # Round-trip through the API: still a string, zero intact, never a number.
+        read_back = self.client.get(f"/api/stock/{stock.id}/").json()["gtin"]
+        self.assertIsInstance(read_back, str)
+        self.assertEqual(read_back, self.VALID_GTIN)
+        self.assertTrue(read_back.startswith("0"))
+
+    def test_patch_rejects_a_bad_check_digit(self):
+        stock = make_stock(self.user, name="Item")
+        # Last digit altered, so the mod-10 check fails.
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"gtin": "05705244020857"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("gtin", response.json())
+        stock.refresh_from_db()
+        self.assertEqual(stock.gtin, "")
+
+    def test_patch_rejects_a_gtin_that_is_not_14_digits(self):
+        stock = make_stock(self.user, name="Item")
+        for bad in ("123", "0570524402085X"):
+            with self.subTest(gtin=bad):
+                response = self.client.patch(
+                    f"/api/stock/{stock.id}/",
+                    {"gtin": bad},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_patch_accepts_clearing_the_gtin(self):
+        stock = make_stock(self.user, name="Item")
+        stock.gtin = self.VALID_GTIN
+        stock.save(update_fields=["gtin"])
+        response = self.client.patch(f"/api/stock/{stock.id}/", {"gtin": ""}, format="json")
+        self.assertEqual(response.status_code, 200)
+        stock.refresh_from_db()
+        self.assertEqual(stock.gtin, "")
+
+    def test_patch_persists_default_lot_quantity(self):
+        stock = make_stock(self.user, name="Item")
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"default_lot_quantity": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        stock.refresh_from_db()
+        self.assertEqual(stock.default_lot_quantity, 5)
+
+    def test_patch_rejects_a_zero_default_lot_quantity(self):
+        stock = make_stock(self.user, name="Item")
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"default_lot_quantity": 0},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("default_lot_quantity", response.json())
+        stock.refresh_from_db()
+        self.assertIsNone(stock.default_lot_quantity)
+
+    def test_patch_can_clear_the_default_lot_quantity(self):
+        stock = make_stock(self.user, name="Item")
+        stock.default_lot_quantity = 5
+        stock.save(update_fields=["default_lot_quantity"])
+        response = self.client.patch(
+            f"/api/stock/{stock.id}/",
+            {"default_lot_quantity": None},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        stock.refresh_from_db()
+        self.assertIsNone(stock.default_lot_quantity)
+
+    def test_create_accepts_both_fields(self):
+        response = self.client.post(
+            "/api/stock/",
+            {"name": "Known item", "gtin": self.VALID_GTIN, "default_lot_quantity": 10},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        stock = Stock.objects.get(name="Known item")
+        self.assertEqual(stock.gtin, self.VALID_GTIN)
+        self.assertEqual(stock.default_lot_quantity, 10)
+
+    def test_two_stocks_may_share_a_gtin(self):
+        """No uniqueness: this is user data, not a product catalogue."""
+        for name in ("First", "Second"):
+            response = self.client.post(
+                "/api/stock/",
+                {"name": name, "gtin": self.VALID_GTIN},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+        self.assertEqual(Stock.objects.filter(gtin=self.VALID_GTIN).count(), 2)
+
+
+class SharedStockProductIdentityTest(APITestCase):
+    """Only the owner writes the product values.
+
+    `StockViewSet.get_permissions` restricts every write on a stock to its
+    owner (`IsOwner`), a boundary that predates this feature: a shared user
+    reads and consumes, but never edits. These two fields are no exception, so
+    the learning flow is offered to the owner only — clients gate on the
+    `is_owner` field the serializer already exposes.
+    """
+
+    def setUp(self):
+        self.alice = make_user(username="alice")
+        self.bob = make_user(username="bob")
+        self.stock = make_stock(self.alice, name="Shared item")
+        self.stock.shared_with.add(self.bob)
+
+    def test_shared_non_owner_cannot_write_the_product_values(self):
+        self.client.force_authenticate(user=self.bob)
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/",
+            {"gtin": "08470007285144", "default_lot_quantity": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.gtin, "")
+        self.assertIsNone(self.stock.default_lot_quantity)
+
+    def test_shared_non_owner_still_reads_them(self):
+        """Reading is what makes the quantity prefill work for guests."""
+        self.stock.gtin = "08470007285144"
+        self.stock.default_lot_quantity = 5
+        self.stock.save(update_fields=["gtin", "default_lot_quantity"])
+        self.client.force_authenticate(user=self.bob)
+        response = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["gtin"], "08470007285144")
+        self.assertEqual(data["default_lot_quantity"], 5)
+        self.assertFalse(data["is_owner"])
+
+    def test_owner_can_write_them(self):
+        self.client.force_authenticate(user=self.alice)
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/",
+            {"gtin": "08470007285144", "default_lot_quantity": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.default_lot_quantity, 5)
+
+
 # ── Stock consume ────────────────────────────────────────────────────────────
 
 
@@ -1959,6 +2271,136 @@ class RoutineEntryViewSetTest(APITestCase):
         # get_queryset scopes to (own routines OR shared-with). Stranger
         # can't see the entry at all → 404.
         self.assertEqual(response.status_code, 404)
+
+
+# ── Serialized lots: consumption snapshot + undo (T023) ──────────────────────
+
+
+class SerializedLotUndoTest(APITestCase):
+    """Undo must restore the exact pack it consumed.
+
+    Several serialized packs of the same lot and expiry are indistinguishable
+    by `(lot_number, expiry_date)`, so matching on that alone would merge two
+    physical boxes into one row.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+        self.expiry = date.today() + timedelta(days=90)
+        self.routine = make_routine(self.user, stock=self.stock)
+        self.routine.stock_usage = 1
+        self.routine.save()
+
+    def _log(self, lot_selections=None):
+        body = {} if lot_selections is None else {"lot_selections": lot_selections}
+        response = self.client.post(f"/api/routines/{self.routine.id}/log/", body, format="json")
+        self.assertEqual(response.status_code, 201)
+        return response.json()
+
+    def test_snapshot_carries_serial(self):
+        make_lot(self.stock, quantity=1, lot_number="LOT-A", expiry_date=self.expiry, serial_number="SN-1")
+        data = self._log()
+        self.assertEqual(data["consumed_lots"][0]["serial_number"], "SN-1")
+
+    def test_snapshot_serial_is_none_for_unserialized_lot(self):
+        make_lot(self.stock, quantity=5, lot_number="LOT-A", expiry_date=self.expiry)
+        data = self._log()
+        self.assertIsNone(data["consumed_lots"][0]["serial_number"])
+
+    def test_undo_keeps_two_packs_of_the_same_lot_separate(self):
+        """The regression: restoring must not fold pack A into pack B."""
+        make_lot(self.stock, quantity=1, lot_number="LOT-A", expiry_date=self.expiry, serial_number="SN-1")
+        make_lot(self.stock, quantity=1, lot_number="LOT-A", expiry_date=self.expiry, serial_number="SN-2")
+        entry = self._log()
+        # One pack was consumed and auto-deleted by `delete_empty_lot`.
+        self.assertEqual(self.stock.lots.count(), 1)
+
+        response = self.client.delete(f"/api/entries/{entry['id']}/")
+        self.assertEqual(response.status_code, 204)
+
+        self.assertEqual(self.stock.lots.count(), 2)
+        self.assertEqual(
+            sorted(self.stock.lots.values_list("serial_number", flat=True)),
+            ["SN-1", "SN-2"],
+        )
+        for lot in self.stock.lots.all():
+            self.assertEqual(lot.quantity, 1)
+
+    def test_undo_recreates_wiped_pack_with_its_serial(self):
+        make_lot(self.stock, quantity=1, lot_number="ONLY", expiry_date=self.expiry, serial_number="SN-ONLY")
+        entry = self._log()
+        self.assertEqual(self.stock.lots.count(), 0)
+
+        response = self.client.delete(f"/api/entries/{entry['id']}/")
+        self.assertEqual(response.status_code, 204)
+
+        restored = self.stock.lots.get()
+        self.assertEqual(restored.serial_number, "SN-ONLY")
+        self.assertEqual(restored.lot_number, "ONLY")
+        self.assertEqual(restored.quantity, 1)
+
+    def test_undo_of_unserialized_lot_does_not_touch_a_pack(self):
+        """A snapshot with no serial must only ever match unserialized rows."""
+        pack = make_lot(self.stock, quantity=1, lot_number="LOT-A", expiry_date=self.expiry, serial_number="SN-1")
+        bulk = make_lot(self.stock, quantity=5, lot_number="LOT-A", expiry_date=self.expiry)
+        entry = self._log(lot_selections=[{"lot_id": bulk.id, "quantity": 1}])
+        bulk.refresh_from_db()
+        self.assertEqual(bulk.quantity, 4)
+
+        response = self.client.delete(f"/api/entries/{entry['id']}/")
+        self.assertEqual(response.status_code, 204)
+
+        bulk.refresh_from_db()
+        pack.refresh_from_db()
+        self.assertEqual(bulk.quantity, 5)
+        self.assertEqual(pack.quantity, 1)
+
+    def test_undo_of_legacy_snapshot_without_serial_key(self):
+        """Entries written before T023 have no `serial_number` key at all."""
+        lot = make_lot(self.stock, quantity=3, lot_number="OLD", expiry_date=self.expiry)
+        entry = make_entry(self.routine)
+        entry.consumed_lots = [{"lot_number": "OLD", "expiry_date": self.expiry.isoformat(), "quantity": 2}]
+        entry.save(update_fields=["consumed_lots"])
+
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+        self.assertEqual(response.status_code, 204)
+
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 5)
+
+    def test_undo_skips_zero_quantity_snapshot_rows(self):
+        """A snapshot row of quantity 0 restores nothing."""
+        lot = make_lot(self.stock, quantity=3, lot_number="ZERO", expiry_date=self.expiry)
+        entry = make_entry(self.routine)
+        entry.consumed_lots = [
+            {
+                "lot_number": "ZERO",
+                "expiry_date": self.expiry.isoformat(),
+                "serial_number": None,
+                "quantity": 0,
+            }
+        ]
+        entry.save(update_fields=["consumed_lots"])
+
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+        self.assertEqual(response.status_code, 204)
+
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 3)
+
+    def test_shared_user_cannot_undo_owners_entry(self):
+        """A recipient sees the entry but may not reverse the owner's action."""
+        recipient = make_user(username="recipient")
+        self.routine.shared_with.add(recipient)
+        entry = make_entry(self.routine)
+
+        self.client.force_authenticate(user=recipient)
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(RoutineEntry.objects.filter(pk=entry.pk).exists())
 
 
 # ── Dashboard view ────────────────────────────────────────────────────────────

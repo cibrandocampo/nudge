@@ -15,12 +15,13 @@ import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
+import { isValidGtin } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
 import { effectiveGroupId } from '../utils/stockGroup'
 import shared from '../styles/shared.module.css'
 import s from './StockFormPage.module.css'
 
-const EMPTY_FORM = { name: '', group: '' }
+const EMPTY_FORM = { name: '', group: '', gtin: '', default_lot_quantity: '' }
 // `crypto.randomUUID` requires a secure context (HTTPS or localhost).
 // Production may run over plain HTTP on a LAN (Synology) and e2e hits
 // `host.docker.internal`, where the API is unavailable. The fallback
@@ -33,7 +34,10 @@ const newBatchUid = () => {
   nextBatchUid += 1
   return `batch-${Date.now()}-${nextBatchUid}`
 }
-const EMPTY_BATCH = () => ({ uid: newBatchUid(), quantity: '', expiry_date: '', lot_number: '' })
+// A new batch row starts at the product's default quantity when the user has
+// typed one, so adding three boxes of the same product is three clicks rather
+// than three clicks and three numbers.
+const EMPTY_BATCH = (quantity = '') => ({ uid: newBatchUid(), quantity, expiry_date: '', lot_number: '' })
 
 export default function StockFormPage() {
   const { id } = useParams()
@@ -61,13 +65,18 @@ export default function StockFormPage() {
 
   useEffect(() => {
     if (!isEditing || !stock) return
-    setForm({ name: stock.name ?? '', group: effectiveGroupId(stock) ?? '' })
+    setForm({
+      name: stock.name ?? '',
+      group: effectiveGroupId(stock) ?? '',
+      gtin: stock.gtin ?? '',
+      default_lot_quantity: stock.default_lot_quantity ?? '',
+    })
     setSharedWith(Array.isArray(stock.shared_with) ? stock.shared_with : [])
   }, [isEditing, stock])
 
   const field = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
-  const addBatch = () => setBatches((prev) => [...prev, EMPTY_BATCH()])
+  const addBatch = () => setBatches((prev) => [...prev, EMPTY_BATCH(form.default_lot_quantity)])
   const removeBatch = (uid) => setBatches((prev) => prev.filter((b) => b.uid !== uid))
   const updateBatch = (uid, key, value) =>
     setBatches((prev) => prev.map((b) => (b.uid === uid ? { ...b, [key]: value } : b)))
@@ -75,11 +84,34 @@ export default function StockFormPage() {
   const validate = () => {
     const err = {}
     if (isOwner && !form.name.trim()) err.name = t('stockForm.errorNameRequired')
+    // Mirrors the serializer (`is_valid_gtin` in serializers.py): both must
+    // agree, or a code the scanner accepts would be refused on save.
+    const gtin = form.gtin.trim()
+    if (isOwner && gtin && !isValidGtin(gtin)) err.gtin = t('stockForm.errorGtin')
+    const quantity = String(form.default_lot_quantity).trim()
+    if (isOwner && quantity && parseIntSafe(quantity, 0) < 1) {
+      err.default_lot_quantity = t('stockForm.errorDefaultLotQuantity')
+    }
     if (!isEditing && batches.length > 0) {
       const badIndex = batches.findIndex((b) => parseIntSafe(b.quantity, -1) <= 0)
       if (badIndex !== -1) err.batches = t('stockForm.errorLotQuantity')
     }
     return err
+  }
+
+  /**
+   * The default quantity to store on the product.
+   *
+   * Typed value wins. When it was left blank, the first batch row stands in —
+   * the user is telling us how many units a box holds by entering one. Product
+   * creation never prompts about a mismatch: both numbers were typed on this
+   * same screen seconds apart, so there is no pre-existing value to defend.
+   */
+  const resolvedDefaultLotQuantity = () => {
+    const typed = parseIntSafe(String(form.default_lot_quantity).trim(), 0)
+    if (typed > 0) return typed
+    const firstBatch = parseIntSafe(batches[0]?.quantity, 0)
+    return firstBatch > 0 ? firstBatch : null
   }
 
   const groupValue = form.group === '' || form.group === null ? null : Number(form.group)
@@ -102,7 +134,13 @@ export default function StockFormPage() {
           await updateStock.mutateAsync({
             stockId,
             stockName: form.name.trim() || stock?.name,
-            patch: { name: form.name.trim(), group: groupValue, shared_with: sharedWith },
+            patch: {
+              name: form.name.trim(),
+              group: groupValue,
+              shared_with: sharedWith,
+              gtin: form.gtin.trim(),
+              default_lot_quantity: parseIntSafe(String(form.default_lot_quantity).trim(), 0) || null,
+            },
             updatedAt: stock?.updated_at,
           })
         }
@@ -110,7 +148,12 @@ export default function StockFormPage() {
         return
       }
 
-      const created = await createStock.mutateAsync({ name: form.name.trim(), group: groupValue })
+      const created = await createStock.mutateAsync({
+        name: form.name.trim(),
+        group: groupValue,
+        gtin: form.gtin.trim(),
+        defaultLotQuantity: resolvedDefaultLotQuantity(),
+      })
       const newStockId = created?.id
       if (!newStockId) {
         setErrors({ submit: t('common.actionError') })
@@ -212,6 +255,45 @@ export default function StockFormPage() {
                 ))}
               </select>
             </FormField>
+
+            {/* Product identity. Both optional and learned from scans over time,
+                but typed here by anyone who already knows them. Owner-only, like
+                the name: the API restricts every stock write to its owner. */}
+            {isOwner && (
+              <>
+                <FormField label={t('stockForm.gtinLabel')} error={errors.gtin} hint={t('routine.form.optional')}>
+                  <input
+                    // Never `type="number"`: a GTIN's leading zero is
+                    // significant and a numeric input would drop it.
+                    type="text"
+                    inputMode="numeric"
+                    className={shared.input}
+                    value={form.gtin}
+                    onChange={field('gtin')}
+                    placeholder={t('stockForm.gtinPlaceholder')}
+                    maxLength={14}
+                  />
+                </FormField>
+
+                <FormField
+                  label={t('stockForm.defaultLotQuantityLabel')}
+                  error={errors.default_lot_quantity}
+                  hint={t('routine.form.optional')}
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    className={shared.input}
+                    value={form.default_lot_quantity}
+                    onChange={field('default_lot_quantity')}
+                    // `FormField` renders the label as a sibling, not a wrapper
+                    // (see its docstring), so the accessible name has to come
+                    // from here or the control has none.
+                    aria-label={t('stockForm.defaultLotQuantityLabel')}
+                  />
+                </FormField>
+              </>
+            )}
           </section>
 
           {isOwner && (

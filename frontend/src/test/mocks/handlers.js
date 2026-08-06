@@ -90,6 +90,10 @@ export const handlers = [
       lots: [],
       stock_severity: 'ok',
       expiry_severity: 'ok',
+      // Product identity: blank by default, which is the state every stock
+      // starts in until a scan or the product form fills it.
+      gtin: '',
+      default_lot_quantity: null,
       shared_with: [],
       shared_with_details: [],
       is_owner: true,
@@ -240,7 +244,7 @@ export const handlers = [
   http.delete(`${BASE}/stock/:id/`, () => new HttpResponse(null, { status: 204 })),
 
   http.post(`${BASE}/stock/:stockId/lots/`, () =>
-    HttpResponse.json({ id: 10, quantity: 5, expiry_date: null, lot_number: '' }, { status: 201 }),
+    HttpResponse.json({ id: 10, quantity: 5, expiry_date: null, lot_number: '', serial_number: '' }, { status: 201 }),
   ),
 
   http.delete(`${BASE}/stock/:stockId/lots/:lotId/`, () => new HttpResponse(null, { status: 204 })),
@@ -280,7 +284,7 @@ export const handlers = [
       group_name: null,
       my_group: null,
       my_group_name: null,
-      lots: [{ id: 100, quantity: 4, expiry_date: null, lot_number: '' }],
+      lots: [{ id: 100, quantity: 4, expiry_date: null, lot_number: '', serial_number: '' }],
       stock_severity: 'ok',
       expiry_severity: 'ok',
       requires_lot_selection: false,

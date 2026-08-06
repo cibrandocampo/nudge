@@ -245,6 +245,7 @@ class SeedCommandTest(TestCase):
         "Glucose monitor sensors",
         "Ibuprofen 600mg",
         "Paracetamol 1g",
+        "Metformin 850mg",
         "Ebastine",
         "Biodramina",
         "Brita filter cartridges",
@@ -266,10 +267,13 @@ class SeedCommandTest(TestCase):
         # 3 demo users (cibran/maria/laura) plus the seeded admin = 4 total.
         self.assertEqual(User.objects.filter(is_superuser=False).count(), 3)
         self.assertEqual(Routine.objects.count(), 10)
-        self.assertEqual(Stock.objects.count(), 11)
-        self.assertEqual(StockLot.objects.count(), 16)
+        self.assertEqual(Stock.objects.count(), 12)
+        # 22 = 21 + MET-C, the pack scanned from a code carrying no serial.
+        self.assertEqual(StockLot.objects.count(), 22)
         self.assertEqual(RoutineEntry.objects.count(), 50)
-        self.assertEqual(StockConsumption.objects.count(), 6)
+        # 8 = 6 + the two Metformin consumptions that give history a serialised
+        # snapshot and a pre-serial one.
+        self.assertEqual(StockConsumption.objects.count(), 8)
 
         cibran = User.objects.get(username="cibran")
         maria = User.objects.get(username="maria")
@@ -307,6 +311,103 @@ class SeedCommandTest(TestCase):
         bcp_routine = Routine.objects.get(name="Take birth control pill")
         self.assertEqual(bcp_routine.user, maria)
         self.assertEqual(bcp_routine.shared_with.count(), 0)
+
+    def test_metformin_seeds_scanned_packs(self):
+        """The fixture must exercise what serials unlock, not just store them.
+
+        Three identified boxes of one batch (so the UI has a group to collapse
+        and expand), an anonymous count in the same batch (a mixed group), and
+        a lone pack in another batch.
+        """
+        call_command("seed")
+        metformin = Stock.objects.get(name="Metformin 850mg")
+
+        packs = metformin.lots.exclude(serial_number="")
+        self.assertEqual(packs.count(), 4)
+        self.assertEqual(len(set(packs.values_list("serial_number", flat=True))), 4)
+        for pack in packs:
+            self.assertEqual(pack.quantity, 1)
+            self.assertTrue(pack.raw_scan)
+
+        lot_a = metformin.lots.filter(lot_number="MET-A")
+        self.assertEqual(lot_a.exclude(serial_number="").count(), 3)
+        self.assertEqual(lot_a.filter(serial_number="").count(), 1)
+        # One batch, one expiry — otherwise the rows would not group.
+        self.assertEqual(len(set(lot_a.values_list("expiry_date", flat=True))), 1)
+
+    def test_seeded_raw_scan_matches_its_lot(self):
+        """A `raw_scan` that disagreed with its row would be a lying fixture."""
+        call_command("seed")
+        for lot in StockLot.objects.exclude(raw_scan=""):
+            self.assertIn(f"17{lot.expiry_date:%y%m%d}", lot.raw_scan)
+            if lot.serial_number:
+                # AI 10 is variable-length, so it is GS-terminated before AI 21.
+                self.assertIn(f"10{lot.lot_number}\x1d", lot.raw_scan)
+                self.assertIn(f"21{lot.serial_number}", lot.raw_scan)
+            else:
+                # No serial: the batch is the last element, so it runs to the
+                # end of the payload with no separator and no AI 21 at all.
+                self.assertTrue(lot.raw_scan.endswith(f"10{lot.lot_number}"))
+                self.assertNotIn("\x1d", lot.raw_scan)
+                self.assertNotIn("21", lot.raw_scan[lot.raw_scan.index(f"10{lot.lot_number}") :])
+
+    def test_seed_includes_a_scanned_pack_without_a_serial(self):
+        """A real shape: a code with no AI 21 still stores its payload.
+
+        Two of the three packs photographed while designing the feature carried
+        no serial. Without one in the fixture, the "scanned but unserialised"
+        path exists only in tests.
+        """
+        call_command("seed")
+        unserialised = StockLot.objects.exclude(raw_scan="").filter(serial_number="")
+        self.assertEqual(unserialised.count(), 1)
+        self.assertEqual(unserialised.first().lot_number, "MET-C")
+
+    def test_seed_covers_every_history_snapshot_shape(self):
+        """History must exercise all three shapes `HistoryEntryCard` renders.
+
+        Without fixtures for each, the card's serial handling is only ever
+        proven by unit tests against hand-written objects.
+        """
+        call_command("seed")
+
+        # 1. Routine entries carrying a lot number and no serial.
+        with_lots = RoutineEntry.objects.exclude(consumed_lots=[])
+        self.assertGreater(with_lots.count(), 0)
+        sample = with_lots.first().consumed_lots[0]
+        self.assertEqual(sample["lot_number"], "EBA-1")
+        self.assertIsNone(sample["serial_number"])
+
+        snapshots = [c.consumed_lots[0] for c in StockConsumption.objects.exclude(consumed_lots=[])]
+
+        # 2. An identified box: lot number AND serial.
+        serialised = [s for s in snapshots if s.get("serial_number")]
+        self.assertEqual(len(serialised), 1)
+        self.assertEqual(serialised[0]["lot_number"], "MET-A")
+
+        # 3. The pre-serial legacy shape: the key is absent, not null. Readers
+        # must treat a missing key as "no serial" (see `Stock.consume_lots`).
+        legacy = [s for s in snapshots if "serial_number" not in s]
+        self.assertEqual(len(legacy), 1)
+        self.assertEqual(legacy[0]["lot_number"], "MET-OLD")
+
+    def test_seed_covers_every_product_identity_state(self):
+        """Fully known, half known and unknown — reconciliation is field by field."""
+        call_command("seed")
+
+        metformin = Stock.objects.get(name="Metformin 850mg")
+        self.assertNotEqual(metformin.gtin, "")
+        self.assertIsNotNone(metformin.default_lot_quantity)
+
+        # Half known: a code but no default quantity, so adding a lot fills the
+        # blank silently while the matching code stays quiet.
+        ibuprofen = Stock.objects.get(name="Ibuprofen 600mg")
+        self.assertNotEqual(ibuprofen.gtin, "")
+        self.assertIsNone(ibuprofen.default_lot_quantity)
+
+        # And most stocks know nothing yet, which is the state every product
+        # starts in.
+        self.assertGreater(Stock.objects.filter(gtin="", default_lot_quantity__isnull=True).count(), 0)
 
     def test_routine_and_stock_names_match_spec(self):
         call_command("seed")

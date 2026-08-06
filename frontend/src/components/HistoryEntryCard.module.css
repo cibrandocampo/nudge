@@ -28,8 +28,51 @@
   font-size: 0.875rem;
 }
 
-.consumedLot {
+/* Consumed lots, one block per snapshot entry. A definition list because that
+   is literally what this is: a label and the value it names. */
+.lotList {
+  margin: 0.15rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The stock badge and the lot lines form one block, so they share a size and
+   the same label/value contrast: muted for what names the field, darker for
+   the value itself. Without this the badge sat a step smaller and entirely in
+   the label colour, so "Ebastine" read as less important than "MET-A". */
+.entryStockBadge {
+  font-size: 0.7rem;
+}
+
+.badgeValue {
+  color: var(--c-text-2);
+}
+
+/* Grid rather than a fixed label width: the label column sizes to the longest
+   label in this block, so the values still line up but the gap is never wider
+   than the words need. A hard width would be a magic number that breaks the
+   moment a translation is shorter or longer than the one it was tuned for. */
+.lotBlock {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.5rem;
+  row-gap: 0.05rem;
+  font-size: 0.7rem;
+}
+
+.lotLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   color: var(--c-text-3);
+}
+
+.lotValue {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--c-text-2);
+  overflow-wrap: anywhere;
 }
 
 /* ── Right column (time + author + notes) ────────────────────── */
@@ -81,32 +124,41 @@
  * ``--c-border-inner`` divider so it reads as a continuation of the
  * same card.
  */
+/* `0.75rem` matches `.cardHeader`'s horizontal padding, so the note starts
+   flush with the title and the lot lines above it rather than a few pixels in.
+   It used to sit further right because `.notesView` added its own padding to
+   be a touch target — that button is gone, and so is the offset. */
 .notesRow {
+  display: flex;
+  /* Centred, not top-aligned: the edit button is taller than a line of text,
+     so anchoring to the top left it hanging below the note instead of sharing
+     its band. */
+  align-items: center;
+  gap: 0.4rem;
   padding: 0 0.75rem 0.5rem;
 }
 
+.notesIcon {
+  flex: none;
+  color: var(--c-text-3);
+}
+
 .notesView {
-  display: block;
-  width: 100%;
-  background: none;
-  border: none;
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  padding: 0.4rem 0.5rem;
   font-size: 0.8rem;
   color: var(--c-text-2);
-  text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.4;
-  border-radius: var(--radius);
 }
 
-.notesViewEditable {
-  cursor: pointer;
-  transition: background var(--transition);
-}
-.notesViewEditable:hover {
-  background: var(--c-border-inner);
+/* Sits with the note rather than in the card header: the action belongs beside
+   the thing it edits, and the header slot is taken by "add a note" only while
+   there is nothing to edit. */
+.notesEdit {
+  flex: none;
 }
 
 .notesInput {
@@ -180,4 +232,14 @@
   font-weight: 600;
   color: var(--c-text-3);
   flex-shrink: 0;
+}
+
+/* Input and save button move together: the click-outside guard wraps this, so
+   pressing save is never mistaken for clicking away. */
+.notesEditor {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
 }

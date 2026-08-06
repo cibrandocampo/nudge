@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
@@ -244,6 +244,27 @@ describe('StockCard', () => {
     })
     const rows = screen.getAllByTestId('card-lot-row')
     expect(rows).toHaveLength(2)
+  })
+
+  it('collapses several boxes of one batch into a single row with the total', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        lots: [
+          { id: 20, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-1' },
+          { id: 21, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-2' },
+          { id: 22, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-3' },
+          { id: 23, quantity: 4, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: '' },
+          { id: 24, quantity: 1, expiry_date: '2028-02-17', lot_number: 'MET-B', serial_number: 'SN-4' },
+        ],
+      },
+    })
+    const rows = screen.getAllByTestId('card-lot-row')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText(/^7 /)).toBeInTheDocument()
+    expect(within(rows[0]).getByText('MET-A')).toBeInTheDocument()
+    expect(within(rows[1]).getByText(/^1 /)).toBeInTheDocument()
+    expect(within(rows[1]).getByText('MET-B')).toBeInTheDocument()
   })
 
   it('hides the lots block when stock has no lots', () => {

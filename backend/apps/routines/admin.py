@@ -13,7 +13,7 @@ class RoutineEntryInline(admin.TabularInline):
 class StockLotInline(admin.TabularInline):
     model = StockLot
     extra = 1
-    fields = ["lot_number", "quantity", "expiry_date", "created_at"]
+    fields = ["lot_number", "serial_number", "quantity", "expiry_date", "created_at"]
     readonly_fields = ["created_at"]
     ordering = ["expiry_date", "created_at"]
 
@@ -35,9 +35,11 @@ class StockConsumptionInline(admin.TabularInline):
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
-    list_display = ["name", "user", "group", "total_quantity", "updated_at"]
+    list_display = ["name", "user", "group", "gtin", "total_quantity", "updated_at"]
     list_filter = ["user", "group"]
-    search_fields = ["name"]
+    # A GTIN is exactly what an admin arrives with when chasing "which stock is
+    # this box", so it is worth searching by.
+    search_fields = ["name", "gtin"]
     readonly_fields = ["updated_at"]
     filter_horizontal = ["shared_with"]
     inlines = [StockLotInline, StockConsumptionInline]

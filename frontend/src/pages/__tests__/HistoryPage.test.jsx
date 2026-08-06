@@ -285,9 +285,11 @@ describe('HistoryPage — consumption entries display', () => {
     setupHandlers({ consumptions: [] })
     const { container } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(getEntryNames(container)).toContain('Take vitamins'))
-    // Take vitamins consumed 1 unit of Vitamin D from LOT-V1
-    expect(screen.getByText(/1 × Vitamin D/)).toBeInTheDocument()
-    expect(screen.getByText(/LOT-V1/)).toBeInTheDocument()
+    // Take vitamins consumed 1 unit of Vitamin D from LOT-V1. The stock name
+    // sits in its own element so it can carry the value styling, so assert
+    // across the badge's children rather than on a single text node.
+    expect(screen.getByTestId('entry-stock-badge')).toHaveTextContent('1 × Vitamin D')
+    expect(screen.getByText('LOT-V1')).toBeInTheDocument()
   })
 
   it('merged list sorted by created_at descending', async () => {
@@ -343,7 +345,7 @@ describe('HistoryPage — notes editing', () => {
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
   })
 
-  it('edit notes on routine entry via click and blur', async () => {
+  it('edits a routine entry note and saves it from the button', async () => {
     let patchCalled = false
     server.use(
       http.patch(`${BASE}/entries/:id/`, async ({ request }) => {
@@ -364,13 +366,15 @@ describe('HistoryPage — notes editing', () => {
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
 
     // Click notes to enter edit mode
-    await user.click(screen.getByText('morning dose'))
+    // The note is plain text now; editing starts from the pencil beside it.
+    await user.click(screen.getByTestId('edit-note'))
 
     // Should now have an input
     const input = screen.getByDisplayValue('morning dose')
     await user.clear(input)
     await user.type(input, 'updated note')
-    input.blur()
+    // Saving is explicit now: the check button, not blur.
+    await user.click(screen.getByTestId('save-note'))
 
     await waitFor(() => expect(patchCalled).toBe(true))
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument())
@@ -396,7 +400,8 @@ describe('HistoryPage — notes editing', () => {
     const { user } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
 
-    await user.click(screen.getByText('morning dose'))
+    // The note is plain text now; editing starts from the pencil beside it.
+    await user.click(screen.getByTestId('edit-note'))
     const input = screen.getByDisplayValue('morning dose')
     await user.clear(input)
     await user.type(input, 'enter note{Enter}')
@@ -432,7 +437,8 @@ describe('HistoryPage — notes editing', () => {
 
     const input = screen.getByPlaceholderText('Add a note…')
     await user.type(input, 'my consumption note')
-    input.blur()
+    // Saving is explicit now: the check button, not blur.
+    await user.click(screen.getByTestId('save-note'))
 
     await waitFor(() => expect(patchCalled).toBe(true))
   })
@@ -469,7 +475,8 @@ describe('HistoryPage — note editing edge cases', () => {
     const { user } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
 
-    await user.click(screen.getByText('morning dose'))
+    // The note is plain text now; editing starts from the pencil beside it.
+    await user.click(screen.getByTestId('edit-note'))
     const input = screen.getByDisplayValue('morning dose')
     await user.keyboard('{Escape}')
 
@@ -488,11 +495,13 @@ describe('HistoryPage — note editing edge cases', () => {
     const { user } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
 
-    await user.click(screen.getByText('morning dose'))
+    // The note is plain text now; editing starts from the pencil beside it.
+    await user.click(screen.getByTestId('edit-note'))
     const input = screen.getByDisplayValue('morning dose')
     await user.clear(input)
     await user.type(input, 'queued note')
-    input.blur()
+    // Saving is explicit now: the check button, not blur.
+    await user.click(screen.getByTestId('save-note'))
 
     await waitFor(async () => expect(await list()).toHaveLength(1))
   })
@@ -503,11 +512,13 @@ describe('HistoryPage — note editing edge cases', () => {
     const { user } = renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('morning dose')).toBeInTheDocument())
 
-    await user.click(screen.getByText('morning dose'))
+    // The note is plain text now; editing starts from the pencil beside it.
+    await user.click(screen.getByTestId('edit-note'))
     const input = screen.getByDisplayValue('morning dose')
     await user.clear(input)
     await user.type(input, 'fail note')
-    input.blur()
+    // Saving is explicit now: the check button, not blur.
+    await user.click(screen.getByTestId('save-note'))
 
     // "Saved" should NOT appear since API returned 500
     await waitFor(() => expect(screen.queryByText('Saved')).not.toBeInTheDocument())

@@ -1,0 +1,62 @@
+.intro {
+  margin: 0 0 1rem;
+  color: var(--c-text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.list {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Wraps on a narrow screen rather than squeezing the values: a GTIN is 14
+   characters and must stay readable in full. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--c-border-inner);
+}
+
+.field {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}
+
+.values {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.current {
+  color: var(--c-text-3);
+  text-decoration: line-through;
+}
+
+.arrow {
+  color: var(--c-text-3);
+}
+
+.next {
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}

@@ -88,6 +88,93 @@
   grid-column: 4;
 }
 
+/* Individual boxes of a lot, revealed by the group expander. Indented and
+   quieter than the group row: the group is the unit of reading, a pack row is
+   the detail you asked for. */
+.packRow {
+  padding-left: 1.25rem;
+  background: color-mix(in srgb, var(--c-text) 3%, transparent);
+}
+
+.packSerial {
+  grid-column: 2 / 4;
+  font-size: 0.8rem;
+  color: var(--c-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* Only the serial itself is monospaced — it is a machine code read character by
+   character against the printed box. The "unidentified units" fallback is a
+   sentence and stays in the body face. */
+.packSerialCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* How many boxes the group holds, shown as a bare digit against the chevron
+   instead of a "· N packs" caption inside the lot pill — the row has to fit a
+   phone width, and the chevron already carries the "expandable" meaning. */
+.groupExpander {
+  width: auto;
+  min-width: 32px;
+  gap: 0.2rem;
+  padding: 0 0.35rem;
+}
+
+.packCount {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.scanBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+/* The serial is read from the box, never typed, so it shows as a chip with a
+   way to drop it rather than as an editable field. */
+.serialChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  font-size: 0.8rem;
+}
+
+.serialLabel {
+  color: var(--c-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+}
+
+.serialValue {
+  color: var(--c-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.serialClear {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  display: flex;
+  padding: 0.1rem;
+}
+
+.serialClear:hover {
+  color: var(--c-text);
+}
+
 .addLotForm {
   display: flex;
   flex-direction: column;
@@ -198,4 +285,11 @@
   flex-direction: column;
   /* Same breathing-room pattern as HistoryPage + RoutineDetailPage. */
   margin-top: 0.5rem;
+}
+
+/* `shared.topBar` carries its own `margin-bottom` for pages whose container
+   does not space children itself. This one does (`.container` has a gap), so
+   the two stacked into ~2.75rem of dead space above the first card. */
+.container > .topBarFlush {
+  margin-bottom: 0;
 }
