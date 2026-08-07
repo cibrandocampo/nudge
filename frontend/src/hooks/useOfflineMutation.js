@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { OfflineError } from '../api/errors'
 import { enqueue } from '../offline/queue'
+import { randomUuid } from '../utils/uuid'
 
 /**
  * TanStack Query mutation wrapper that can:
@@ -127,7 +128,7 @@ export function useOfflineMutation({
       callerOnSettled?.(data, error, vars, ctx?.userCtx)
     },
     mutationFn: async (vars) => {
-      const idempotencyKey = crypto.randomUUID()
+      const idempotencyKey = randomUuid()
       const descriptor = request(vars, { idempotencyKey })
       const { method, path, body, ifUnmodifiedSince = null } = descriptor
       const m = method.toLowerCase()

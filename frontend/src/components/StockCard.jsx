@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
+import { groupLots } from '../utils/lotsForSelection'
 import { borderTokensFromStock, iconClassForLot, lotExpirySeverity } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
@@ -21,6 +22,10 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
   const tokens = borderTokensFromStock(stock)
   // UTC-midnight today for lot expiry comparison; mirrors StockDetailPage.
   const today = new Date(new Date().toISOString().slice(0, 10))
+  // Same grouping as the detail page and the consumption modals: a batch is
+  // one line, however many boxes of it there are. `minQuantity: 0` shows
+  // exactly what the server sent (an emptied lot kept alive by bulk_create).
+  const lotGroups = groupLots(stock.lots ?? [], { minQuantity: 0 })
 
   const goDetail = () => navigate(`/inventory/${stock.id}`)
   const stop = (e) => e.stopPropagation()
@@ -102,16 +107,19 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
        * header's total qty (single lot with no expiry and no lot_number).
        * To revert to "always show when there's at least one lot", replace
        * the next line with `stock.lots && stock.lots.length > 0 && (`. */}
-      {(stock.lots?.length > 1 || Boolean(stock.lots?.[0]?.expiry_date) || Boolean(stock.lots?.[0]?.lot_number)) && (
+      {(lotGroups.length > 1 || Boolean(lotGroups[0]?.expiry_date) || Boolean(lotGroups[0]?.lot_number)) && (
         <div className={shared.cardLotsBlock} data-with-pills={stock.lots.some((l) => l.lot_number) || undefined}>
-          {stock.lots.map((lot) => {
-            const sev = lotExpirySeverity(lot, today)
+          {/* One row per batch, not per database row: several scanned boxes of
+              the same batch are one line here. The individual serials live in
+              the stock detail, where they can be expanded. */}
+          {lotGroups.map((group) => {
+            const sev = lotExpirySeverity(group, today)
             return (
-              <div key={lot.id} className={shared.cardLotRow} data-testid="card-lot-row" data-expiring={sev}>
+              <div key={group.key} className={shared.cardLotRow} data-testid="card-lot-row" data-expiring={sev}>
                 <div className={shared.cardLotMain}>
-                  <Icon name="package" size="sm" className={cx(shared.cardLotIcon, iconClassForLot(lot, today))} />
+                  <Icon name="package" size="sm" className={cx(shared.cardLotIcon, iconClassForLot(group, today))} />
                   <span className={cx(shared.cardLotQty, sev === 'reached' && shared.cardLotQtyExpired)}>
-                    {lot.quantity} {t('common.unit')}
+                    {group.quantity} {t('common.unit')}
                   </span>
                 </div>
                 <div className={shared.cardLotMeta}>
@@ -119,14 +127,14 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
                       a 3-col grid; cardLotMeta has display:contents, so these
                       spans land directly in the parent grid). DOM order is
                       irrelevant — column placement is via grid-column. */}
-                  {lot.expiry_date && (
-                    <span className={cx(shared.cardLotExpiry, iconClassForLot(lot, today))}>
+                  {group.expiry_date && (
+                    <span className={cx(shared.cardLotExpiry, iconClassForLot(group, today))}>
                       {t('inventory.lotExpiryDate', {
-                        date: formatShortDate(lot.expiry_date),
+                        date: formatShortDate(group.expiry_date),
                       })}
                     </span>
                   )}
-                  {lot.lot_number && <span className={shared.cardLotNumberPill}>{lot.lot_number}</span>}
+                  {group.lot_number && <span className={shared.cardLotNumberPill}>{group.lot_number}</span>}
                 </div>
               </div>
             )

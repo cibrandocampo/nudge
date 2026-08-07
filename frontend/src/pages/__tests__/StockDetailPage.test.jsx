@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, vi } from 'vitest'
@@ -11,6 +11,33 @@ import StockDetailPage from '../StockDetailPage'
 const reachableRef = { current: true }
 vi.mock('../../hooks/useServerReachable', () => ({
   useServerReachable: () => reachableRef.current,
+}))
+
+const scannerAvailableRef = { current: true }
+vi.mock('../../hooks/useScannerAvailable', () => ({
+  useScannerAvailable: () => scannerAvailableRef.current,
+}))
+
+// Stub for the camera modal: jsdom has no camera and no WebAssembly decoder,
+// so the payload is injected instead. It honours the real contract — a read
+// the page rejects (`false`) leaves the scanner open — so the "stays open"
+// test means something.
+const payloadRef = { current: '' }
+vi.mock('../../components/BarcodeScannerModal', () => ({
+  default: ({ onDecoded, onClose, notice }) => (
+    <div data-testid="scanner">
+      {notice && <span data-testid="scan-notice">{notice}</span>}
+      <button
+        type="button"
+        data-testid="stub-decode"
+        onClick={() => {
+          if (onDecoded(payloadRef.current) !== false) onClose()
+        }}
+      >
+        decode
+      </button>
+    </div>
+  ),
 }))
 
 const BASE = 'http://localhost/api'
@@ -59,6 +86,8 @@ function renderDetail() {
 describe('StockDetailPage', () => {
   beforeEach(() => {
     reachableRef.current = true
+    scannerAvailableRef.current = true
+    payloadRef.current = ''
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)),
       http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [] })),
@@ -645,6 +674,612 @@ describe('StockDetailPage', () => {
     expect(within(block).getByText('Shared with')).toBeInTheDocument()
     // Post-T197: read-only chips render the display label (fullName).
     expect(within(block).getByText('Bob Smith')).toBeInTheDocument()
+  })
+
+  // ── Grouped lot list (T027) ───────────────────────────────────────────────
+
+  const serializedStock = (overrides = {}) => ({
+    ...stock,
+    lots: [
+      {
+        id: 200,
+        quantity: 1,
+        expiry_date: daysFromNow(120),
+        lot_number: 'LOT-S',
+        serial_number: 'SN-1',
+        created_at: '2026-04-17T10:00:00Z',
+        updated_at: '2026-04-17T10:00:00Z',
+      },
+      {
+        id: 201,
+        quantity: 1,
+        expiry_date: daysFromNow(120),
+        lot_number: 'LOT-S',
+        serial_number: 'SN-2',
+        created_at: '2026-04-17T11:00:00Z',
+        updated_at: '2026-04-17T11:00:00Z',
+      },
+    ],
+    ...overrides,
+  })
+
+  const useStockResponse = (payload) => server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(payload)))
+
+  it('collapses lots sharing lot number and expiry into one row with the summed quantity', async () => {
+    useStockResponse(serializedStock())
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    const rows = screen.getAllByTestId('lot-row')
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0]).getByText(/2 u/)).toBeInTheDocument()
+    // The box count lives on the expander, not as a caption in the lot pill.
+    expect(within(within(rows[0]).getByTestId('group-expander')).getByText('2')).toBeInTheDocument()
+  })
+
+  it('expands a group to show each box by its serial', async () => {
+    useStockResponse(serializedStock())
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.queryByTestId('pack-row')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('group-expander'))
+
+    const packs = screen.getAllByTestId('pack-row')
+    expect(packs).toHaveLength(2)
+    // The expanded rows list packs, so the serial stands alone — no prefix.
+    expect(screen.getByText('SN-1')).toBeInTheDocument()
+    expect(screen.getByText('SN-2')).toBeInTheDocument()
+  })
+
+  it('deletes the box the user picked, not the first of the group', async () => {
+    let deletedId = null
+    useStockResponse(serializedStock())
+    server.use(
+      http.delete(`${BASE}/stock/1/lots/:lotId/`, ({ params }) => {
+        deletedId = params.lotId
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const secondPack = screen.getAllByTestId('pack-row')[1]
+    await user.click(within(secondPack).getByLabelText('Delete'))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(deletedId).toBe('201'))
+  })
+
+  it('names the pack in the delete confirmation', async () => {
+    useStockResponse(serializedStock())
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const firstPack = screen.getAllByTestId('pack-row')[0]
+    await user.click(within(firstPack).getByLabelText('Delete'))
+    // Scoped to the dialog: the pack row on the page also mentions the serial.
+    expect(within(screen.getByRole('dialog')).getByText(/serial SN-1/i)).toBeInTheDocument()
+  })
+
+  it('keeps lots with the same lot number but different expiry as separate rows', async () => {
+    useStockResponse(
+      serializedStock({
+        lots: [
+          { id: 300, quantity: 1, expiry_date: daysFromNow(60), lot_number: 'LOT-X', updated_at: 'x' },
+          { id: 301, quantity: 1, expiry_date: daysFromNow(120), lot_number: 'LOT-X', updated_at: 'x' },
+        ],
+      }),
+    )
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.getAllByTestId('lot-row')).toHaveLength(2)
+    expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
+  })
+
+  it('renders a single unserialized lot exactly as before, with its own delete button', async () => {
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    // The default fixture has two distinct lots, neither grouped nor split.
+    expect(screen.getAllByTestId('lot-row')).toHaveLength(2)
+    expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText('Delete')).toHaveLength(2)
+  })
+
+  // ── Consume one unit from the header card ────────────────────────────────
+
+  it('offers a consume button on the stock card', async () => {
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.getByTestId('consume-one')).toBeInTheDocument()
+  })
+
+  it('hides the consume button when there is nothing left to consume', async () => {
+    // A button that could only fail is worse than no button.
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, quantity: 0, quantity_available: 0, lots: [] })),
+    )
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.queryByTestId('consume-one')).not.toBeInTheDocument()
+  })
+
+  it('opens the pack picker instead of consuming blindly', async () => {
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+
+    // LotPickerModal asks which lot first — the fixture has two. Scope the
+    // lookup to the dialog: "LOT-A" also labels a row in the page behind it.
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('LOT-A')).toBeInTheDocument()
+  })
+
+  it('surfaces the offline toast instead of opening the picker', async () => {
+    reachableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  // ── Scan to prefill (T028) ────────────────────────────────────────────────
+
+  const GS = '\u001d'
+  const GTIN = '09506000134376'
+  const yymmdd = (iso) => iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10)
+  const futureIso = daysFromNow(200)
+  const pastIso = daysFromNow(-30)
+  const fullPayload = `01${GTIN}17${yymmdd(futureIso)}10LOT-SCAN${GS}21SN-NEW`
+
+  const openScanner = async (user) => {
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(await screen.findByTestId('stub-decode'))
+  }
+
+  const captureCreateLot = () => {
+    const captured = { body: null, calls: 0 }
+    server.use(
+      http.post(`${BASE}/stock/1/lots/`, async ({ request }) => {
+        captured.calls += 1
+        captured.body = await request.json()
+        return HttpResponse.json({ id: 900, quantity: 1 }, { status: 201 })
+      }),
+    )
+    return captured
+  }
+
+  it('does not offer the camera when the scanner cannot work', async () => {
+    scannerAvailableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+
+    expect(screen.queryByTestId('scan-lot')).not.toBeInTheDocument()
+  })
+
+  it('fills quantity, expiry, lot number and the serial chip from a scan', async () => {
+    payloadRef.current = fullPayload
+    const { user } = renderDetail()
+    await openScanner(user)
+
+    expect(screen.getByPlaceholderText('0')).toHaveValue(1)
+    expect(screen.getByDisplayValue(futureIso)).toBeInTheDocument()
+    expect(screen.getByDisplayValue('LOT-SCAN')).toBeInTheDocument()
+    expect(within(screen.getByTestId('serial-chip')).getByText('SN-NEW')).toBeInTheDocument()
+    // An accepted read closes the camera.
+    expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
+  })
+
+  it('posts the serial and the raw payload when the scan is confirmed', async () => {
+    payloadRef.current = fullPayload
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(captured.body).not.toBeNull())
+    expect(captured.body).toMatchObject({
+      quantity: 1,
+      lot_number: 'LOT-SCAN',
+      expiry_date: futureIso,
+      serial_number: 'SN-NEW',
+      raw_scan: fullPayload,
+    })
+  })
+
+  it('drops the serial from the submitted body when the chip is cleared', async () => {
+    payloadRef.current = fullPayload
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByTestId('serial-clear'))
+    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(captured.body).not.toBeNull())
+    expect(captured.body.serial_number).toBe('')
+    // The payload survives: clearing the chip says "do not track this as one
+    // physical pack", not "forget the scan". The GTIN inside is the only
+    // record of which product this is.
+    expect(captured.body.raw_scan).toBe(fullPayload)
+  })
+
+  // ── Product identity reconciliation (T033) ────────────────────────────────
+
+  const noSerialPayload = `01${GTIN}17${yymmdd(futureIso)}10LOT-NOSER`
+
+  const capturePatch = () => {
+    const captured = { body: null, calls: 0 }
+    server.use(
+      http.patch(`${BASE}/stock/1/`, async ({ request }) => {
+        captured.calls += 1
+        captured.body = await request.json()
+        return HttpResponse.json({ ...stock, ...captured.body })
+      }),
+    )
+    return captured
+  }
+
+  const stockWith = (extra) => server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, ...extra })))
+
+  it('stores the payload of a scanned code that carries no serial', async () => {
+    // The regression this fixes: `rawScan` used to be sent only when the code
+    // had an AI 21, so a serial-less pack lost its GTIN forever.
+    payloadRef.current = noSerialPayload
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(captured.body).not.toBeNull())
+    expect(captured.body.serial_number).toBe('')
+    expect(captured.body.raw_scan).toBe(noSerialPayload)
+  })
+
+  it('sends an empty payload for a hand-typed lot', async () => {
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.type(screen.getByPlaceholderText('0'), '3')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(captured.body).not.toBeNull())
+    expect(captured.body.raw_scan).toBe('')
+  })
+
+  it('prefills the quantity from the product default, and leaves it empty without one', async () => {
+    stockWith({ default_lot_quantity: 5 })
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    expect(screen.getByPlaceholderText('0')).toHaveValue(5)
+  })
+
+  it('does not let a scan overwrite the prefilled quantity', async () => {
+    stockWith({ default_lot_quantity: 5 })
+    payloadRef.current = fullPayload
+    const { user } = renderDetail()
+    await openScanner(user)
+
+    // Without a default the scan sets 1; with one, the preference wins.
+    expect(screen.getByPlaceholderText('0')).toHaveValue(5)
+  })
+
+  it('assigns both values with no prompt when the product knows nothing', async () => {
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    expect(patch.body).toEqual({ gtin: GTIN, default_lot_quantity: 1 })
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+    expect(lot.calls).toBe(1)
+  })
+
+  it('issues no PATCH at all when everything already matches', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 5 })
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(lot.calls).toBe(1))
+    expect(patch.calls).toBe(0)
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('asks before redefining a differing quantity, and writes it when accepted', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 10 })
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    expect(await screen.findByTestId('stock-values-confirm')).toBeInTheDocument()
+    expect(lot.calls).toBe(0)
+    await user.click(screen.getByTestId('stock-values-update'))
+
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    expect(patch.body).toEqual({ default_lot_quantity: 6 })
+    expect(lot.calls).toBe(1)
+  })
+
+  it('creates the lot and writes nothing when the change is declined', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 10 })
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await user.click(await screen.findByTestId('stock-values-keep'))
+
+    await waitFor(() => expect(lot.calls).toBe(1))
+    expect(patch.calls).toBe(0)
+  })
+
+  it('reconciles a hand-typed lot too, without touching the stored GTIN', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 10 })
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await user.click(await screen.findByTestId('stock-values-update'))
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    // Only the quantity: a typed lot carries no product code.
+    expect(patch.body).toEqual({ default_lot_quantity: 6 })
+    expect(lot.calls).toBe(1)
+  })
+
+  it('fills a blank field silently while a set one matches', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: null })
+    payloadRef.current = fullPayload
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    expect(patch.body).toEqual({ default_lot_quantity: 1 })
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('creates the lot even when the product update is rejected', async () => {
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    server.use(http.patch(`${BASE}/stock/1/`, () => HttpResponse.json({ detail: 'nope' }, { status: 500 })))
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(lot.calls).toBe(1))
+  })
+
+  it('never offers the product update to a guest', async () => {
+    stockWith({ is_owner: false, gtin: GTIN, default_lot_quantity: 10 })
+    payloadRef.current = fullPayload
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(lot.calls).toBe(1))
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+    expect(patch.calls).toBe(0)
+  })
+
+  it('keeps the camera open and explains an unrecognised code', async () => {
+    payloadRef.current = 'this is not a barcode'
+    const { user } = renderDetail()
+    await openScanner(user)
+
+    expect(screen.getByTestId('scanner')).toBeInTheDocument()
+    expect(screen.getByTestId('scan-notice')).toHaveTextContent('Code not recognised')
+    // The form was left exactly as it was.
+    expect(screen.getByPlaceholderText('0')).toHaveValue(null)
+  })
+
+  it('refuses to add an expired pack', async () => {
+    payloadRef.current = `01${GTIN}17${yymmdd(pastIso)}10OLD-LOT${GS}21SN-OLD`
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await openScanner(user)
+
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    expect(captured.calls).toBe(0)
+  })
+
+  it('refuses to add a pack whose serial is already in the stock', async () => {
+    useStockResponse(serializedStock())
+    payloadRef.current = `01${GTIN}17${yymmdd(futureIso)}10LOT-S${GS}21SN-1`
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await openScanner(user)
+
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/already registered/i)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    expect(captured.calls).toBe(0)
+  })
+
+  it('fills only what a partial payload carries, leaving the rest alone', async () => {
+    payloadRef.current = `10LOT-ONLY`
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+
+    // An expiry the user typed before scanning must survive a code that says
+    // nothing about it.
+    const expiryInput = document.querySelector('input[type="date"]')
+    fireEvent.change(expiryInput, { target: { value: futureIso } })
+
+    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(await screen.findByTestId('stub-decode'))
+
+    expect(screen.getByDisplayValue('LOT-ONLY')).toBeInTheDocument()
+    expect(expiryInput).toHaveValue(futureIso)
+    expect(screen.getByPlaceholderText('0')).toHaveValue(1)
+    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
+  })
+
+  // ── Offline and empty-state guards ───────────────────────────────────────
+
+  it('refuses to open the picker for a stock the server says has no lots', async () => {
+    useStockResponse({ ...stock, lots: [] })
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+
+    expect(await screen.findAllByText(/went wrong/i)).not.toHaveLength(0)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('refuses to add a lot when the network drops with the form already open', async () => {
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    // Opening the form has its own guard, so the only way to reach the one
+    // inside the submit handler is to lose the network while it is open.
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    reachableRef.current = false
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '2' } })
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    expect(captured.calls).toBe(0)
+  })
+
+  it('marks the pack delete button unavailable offline and refuses the click', async () => {
+    useStockResponse(serializedStock())
+    reachableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const del = within(screen.getAllByTestId('pack-row')[0]).getByRole('button')
+    expect(del).toHaveAttribute('aria-disabled', 'true')
+    expect(del).toHaveAttribute('title', 'This section is not available offline.')
+    await user.click(del)
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    // No confirmation either: the action never got far enough to ask.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('collapses an expanded group when the expander is pressed again', async () => {
+    useStockResponse(serializedStock())
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.getAllByTestId('pack-row')).toHaveLength(2)
+
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.queryAllByTestId('pack-row')).toHaveLength(0)
+  })
+
+  it('labels a box with no serial inside an expanded group', async () => {
+    useStockResponse({
+      ...stock,
+      lots: [
+        {
+          id: 300,
+          quantity: 1,
+          expiry_date: daysFromNow(90),
+          lot_number: 'LOT-X',
+          serial_number: 'SN-X',
+          updated_at: '2026-04-17T10:00:00Z',
+        },
+        {
+          id: 301,
+          quantity: 3,
+          expiry_date: daysFromNow(90),
+          lot_number: 'LOT-X',
+          serial_number: '',
+          updated_at: '2026-04-17T10:00:00Z',
+        },
+      ],
+    })
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const rows = screen.getAllByTestId('pack-row')
+    expect(within(rows[0]).getByText('SN-X')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Unidentified units')).toBeInTheDocument()
+  })
+
+  it('keeps an expiry blocker when the serial chip is cleared', async () => {
+    payloadRef.current = `01${GTIN}17${yymmdd(pastIso)}10OLD-LOT${GS}21SN-OLD`
+    const { user } = renderDetail()
+    await openScanner(user)
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
+
+    // Clearing the serial only answers the duplicate-serial objection. The
+    // pack is still out of date, so the blocker must survive.
+    await user.click(screen.getByTestId('serial-clear'))
+    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
+  })
+
+  it('reads zero when the payload carries neither quantity field', async () => {
+    useStockResponse({ ...stock, quantity: undefined, quantity_available: undefined })
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.getByText(/0 total/)).toBeInTheDocument()
+    expect(screen.queryByTestId('consume-one')).not.toBeInTheDocument()
+  })
+
+  it('marks the depletion date as an estimate when the server says so', async () => {
+    useStockResponse({
+      ...stock,
+      estimated_depletion_date: daysFromNow(45),
+      depletion_is_estimated: true,
+    })
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    const span = screen.getByTestId('depletion-date')
+    expect(span).toHaveAttribute('title', 'Estimated from past usage')
+    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).not.toBeNull()
   })
 
   it('cancel in the add-lot form closes it and clears the qty input', async () => {

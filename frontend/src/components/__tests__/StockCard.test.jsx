@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
@@ -246,6 +246,27 @@ describe('StockCard', () => {
     expect(rows).toHaveLength(2)
   })
 
+  it('collapses several boxes of one batch into a single row with the total', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        lots: [
+          { id: 20, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-1' },
+          { id: 21, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-2' },
+          { id: 22, quantity: 1, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: 'SN-3' },
+          { id: 23, quantity: 4, expiry_date: '2027-06-02', lot_number: 'MET-A', serial_number: '' },
+          { id: 24, quantity: 1, expiry_date: '2028-02-17', lot_number: 'MET-B', serial_number: 'SN-4' },
+        ],
+      },
+    })
+    const rows = screen.getAllByTestId('card-lot-row')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText(/^7 /)).toBeInTheDocument()
+    expect(within(rows[0]).getByText('MET-A')).toBeInTheDocument()
+    expect(within(rows[1]).getByText(/^1 /)).toBeInTheDocument()
+    expect(within(rows[1]).getByText('MET-B')).toBeInTheDocument()
+  })
+
   it('hides the lots block when stock has no lots', () => {
     renderCard({ stock: { ...baseStock, lots: [] } })
     expect(screen.queryByTestId('card-lot-row')).not.toBeInTheDocument()
@@ -435,5 +456,47 @@ describe('StockCard — combined severity and per-lot indicators', () => {
     const qtySpan = reachedRow.querySelector('[class*="cardLotQty"]')
     expect(qtySpan).not.toBeNull()
     expect(qtySpan.getAttribute('class')).toContain('cardLotQtyExpired')
+  })
+
+  // The card reads its count from `quantity_available`, the server's
+  // own-share figure. The list endpoint always sends it; the offline queue's
+  // optimistic rows and the cache seeded from a create response do not, so
+  // every consumer of that number falls back to `quantity`, then to 0.
+
+  it('reads zero when neither count is present, hiding consume and showing the depleted footer', () => {
+    renderCard({
+      // `daily_consumption_own` is what renders the footer's row at all.
+      stock: { ...baseStock, quantity: undefined, quantity_available: undefined, daily_consumption_own: 1 },
+    })
+    expect(screen.getByText('0 u.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
+    expect(screen.getByTestId('out-of-stock-footer')).toBeInTheDocument()
+  })
+
+  it('renders a stock with no lots array at all', () => {
+    renderCard({ stock: { ...baseStock, lots: undefined } })
+    expect(screen.getByText('Water filter')).toBeInTheDocument()
+    expect(screen.queryAllByTestId('card-lot-row')).toHaveLength(0)
+  })
+
+  it('labels the shared badge for a recipient whose owner has no display name', () => {
+    renderCard({
+      stock: { ...baseStock, is_owner: false, owner_display_name: undefined, shared_with: [2] },
+    })
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge.getAttribute('data-variant')).toBe('recipient')
+    expect(badge.getAttribute('aria-label')).toBe('Shared with you by ')
+  })
+
+  it('marks the depletion date as danger at critical severity', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        estimated_depletion_date: '2026-06-01',
+        daily_consumption_own: 1,
+        stock_severity: 'critical',
+      },
+    })
+    expect(screen.getByTestId('depletion-date').getAttribute('class')).toContain('stockDepletionDanger')
   })
 })

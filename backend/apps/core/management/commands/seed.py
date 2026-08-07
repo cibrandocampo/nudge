@@ -7,7 +7,12 @@ fixture is shaped to:
    upcoming / blocked routines · out / low / ok stock severities ·
    reached / soon / ok expiry severities · owner-only / shared-by-me /
    shared-with-me / private sharing modes · multi-lot FEFO · bulk_create
-   to bypass `delete_empty_lot` · mixed lot SN/no-SN/no-expiry shapes.
+   to bypass `delete_empty_lot` · mixed lot-number/no-lot-number/no-expiry
+   shapes · GS1-serialised packs (scanned boxes) next to anonymous counts ·
+   a scanned pack whose code carries no serial · consumed-lot snapshots in
+   history with a serial, without one, and in the pre-serial legacy shape ·
+   product identity (GTIN / default lot quantity) fully known, half known
+   and unknown.
 
 2. Read like a real person's life rather than a QA matrix. The chosen
    protagonist is `cibran` (the maintainer): type-1 diabetes management
@@ -50,6 +55,34 @@ from apps.routines.models import (
 )
 
 User = get_user_model()
+
+# A GS1 DataMatrix as printed on an EU medicine box: AI 01 (GTIN, check digit
+# valid), AI 17 (expiry YYMMDD), AI 10 (batch), AI 21 (serial). The batch is
+# variable-length so it is terminated by GS (ASCII 29) before the serial —
+# exactly the shape `utils/gs1.js` parses.
+_DEMO_GTIN = "09506000134376"
+
+
+def _gs1_payload(lot_number, expiry_date, serial_number=None):
+    """The decoded payload of a scanned pack.
+
+    `serial_number=None` reproduces a real and common shape: a box whose code
+    carries no AI 21 at all. Two of the three packs photographed while designing
+    this feature were like that, so the demo data must contain one — the app
+    still stores the payload for its GTIN, and the lot ends up unserialised.
+    """
+    payload = f"01{_DEMO_GTIN}17{expiry_date:%y%m%d}10{lot_number}"
+    return payload if serial_number is None else f"{payload}\x1d21{serial_number}"
+
+
+def _consumed(lot_number, expiry_date, quantity, serial_number=None):
+    """A `consumed_lots` snapshot entry, shaped like `_lot_consumed_dict`."""
+    return {
+        "lot_number": lot_number,
+        "expiry_date": expiry_date.isoformat() if expiry_date else None,
+        "serial_number": serial_number,
+        "quantity": quantity,
+    }
 
 
 class Command(BaseCommand):
@@ -187,12 +220,13 @@ class Command(BaseCommand):
 
         # ── Cibran — Diabetes ───────────────────────────────────────────────
 
-        # Hidroferol drops — three lots (two with SN + one without) so the
+        # Hidroferol drops — three lots (two with a lot number + one without)
+        # so the
         # E2E suite can exercise FEFO ordering and lot-dedup paths
-        # (`stock-expiry.spec.js` asserts merge-by-(SN+expiry),
-        # merge-by-(no-SN+expiry), and "different SN/expiry creates a new
-        # row"). HID-A is the FEFO front (closest expiry, still valid);
-        # HID-B is far; the third lot has no SN and a mid-range expiry.
+        # (`stock-expiry.spec.js` asserts merge-by-(lot+expiry),
+        # merge-by-(no-lot+expiry), and "a different lot or expiry creates a
+        # new row"). HID-A is the FEFO front (closest expiry, still valid);
+        # HID-B is far; the third lot has no lot number and a mid-range expiry.
         # Demo readout: `expiry_severity=soon` because HID-A expires in
         # 7 days.
         stocks["hidroferol"] = Stock.objects.create(
@@ -257,11 +291,16 @@ class Command(BaseCommand):
         # ── Cibran — Medicine cabinet ───────────────────────────────────────
 
         # Ibuprofen — multi-lot same SKU, exercises FEFO ordering when picked
-        # from the lot-selection modal.
+        # from the lot-selection modal. Product identity is deliberately HALF
+        # known: a code but no default quantity. Reconciliation is field by
+        # field, so adding a lot here fills the blank silently while a matching
+        # code stays quiet — the mixed case that an all-or-nothing
+        # implementation gets wrong.
         stocks["ibuprofen"] = Stock.objects.create(
             user=cibran,
             name="Ibuprofen 600mg",
             group=groups[("cibran", "Medicine cabinet")],
+            gtin="08470007285144",
         )
         StockLot.objects.create(
             stock=stocks["ibuprofen"],
@@ -276,7 +315,66 @@ class Command(BaseCommand):
             lot_number="IBU-2",
         )
 
-        # Paracetamol — single lot with SN.
+        # Metformin — the scanned-pack fixture. Every lot here carries a GS1
+        # serial, as if it had been read off the box with the camera, so the
+        # demo data actually exercises what serials unlock:
+        #   - MET-A ×3: three physical boxes of one batch. The detail list
+        #     collapses them into a single row reading "3 packs" and expands to
+        #     show each serial; the consumption modals ask which box.
+        #   - MET-A also holds an unserialized row, making it a MIXED group:
+        #     identified boxes alongside an anonymous count.
+        #   - MET-B: a lone pack, so a single-box group is on screen too.
+        #   - MET-C: scanned from a code with NO serial (no AI 21). Real boxes
+        #     like that exist — the payload is stored for its GTIN, but the lot
+        #     is unserialised and behaves like an anonymous count.
+        # Re-scanning any of these serials must be refused as a duplicate.
+        #
+        # `gtin` and `default_lot_quantity` are the product identity the app
+        # learns from scans: this stock arrives already knowing both, so the
+        # add-lot form prefills the quantity and a matching scan asks nothing.
+        stocks["metformin"] = Stock.objects.create(
+            user=cibran,
+            name="Metformin 850mg",
+            group=groups[("cibran", "Medicine cabinet")],
+            gtin=_DEMO_GTIN,
+            default_lot_quantity=1,
+        )
+        met_a_expiry = today + timedelta(days=300)
+        for serial in ("A9F3K2M7QX", "A9F3K2M8RT", "A9F3K2M9SV"):
+            StockLot.objects.create(
+                stock=stocks["metformin"],
+                quantity=1,
+                expiry_date=met_a_expiry,
+                lot_number="MET-A",
+                serial_number=serial,
+                raw_scan=_gs1_payload("MET-A", met_a_expiry, serial),
+            )
+        StockLot.objects.create(
+            stock=stocks["metformin"],
+            quantity=4,
+            expiry_date=met_a_expiry,
+            lot_number="MET-A",
+        )
+        met_b_expiry = today + timedelta(days=560)
+        StockLot.objects.create(
+            stock=stocks["metformin"],
+            quantity=1,
+            expiry_date=met_b_expiry,
+            lot_number="MET-B",
+            serial_number="B4T8L1N6WZ",
+            raw_scan=_gs1_payload("MET-B", met_b_expiry, "B4T8L1N6WZ"),
+        )
+        # Scanned, but the code carried no AI 21: payload kept, no serial.
+        met_c_expiry = today + timedelta(days=610)
+        StockLot.objects.create(
+            stock=stocks["metformin"],
+            quantity=10,
+            expiry_date=met_c_expiry,
+            lot_number="MET-C",
+            raw_scan=_gs1_payload("MET-C", met_c_expiry),
+        )
+
+        # Paracetamol — single lot, identified by lot number only.
         stocks["paracetamol"] = Stock.objects.create(
             user=cibran,
             name="Paracetamol 1g",
@@ -290,9 +388,9 @@ class Command(BaseCommand):
         )
 
         # Ebastine — backs the `Take antihistamine` routine (daily).
-        # Three lots with SN so the FEFO modal has something to pick from
-        # and `offline-read.spec.js` can iterate the SNs visible in the
-        # cached lot list. EBA-1 is the FEFO front.
+        # Three lots with lot numbers so the FEFO modal has something to pick
+        # from and `offline-read.spec.js` can iterate the labels visible in
+        # the cached lot list. EBA-1 is the FEFO front.
         # Name kept dose-free ("Ebastine" instead of "Ebastine 10mg") so
         # `readNumericValue(stockCard)` in `routine-completion.spec.js`
         # captures the aggregate quantity, not a digit from the SKU name.
@@ -520,6 +618,9 @@ class Command(BaseCommand):
 
         cibran, maria = users["cibran"], users["maria"]
         now = timezone.now()
+        # Snapshots quote the expiry of the lot they came from, so this has to
+        # match the anchor `_create_stocks` used.
+        today = timezone.localdate()
 
         schedules = [
             (routines["take_vitamin_d"], cibran, "overdue", 6),
@@ -543,9 +644,28 @@ class Command(BaseCommand):
             routines["take_antihistamine"]: ("morning dose", 3),
         }
 
+        # `consumed_lots` snapshots make the history show *which* lot each
+        # completion took from — and, for a scanned pack, which physical box.
+        # Three shapes coexist on purpose, because `HistoryEntryCard` renders
+        # each differently and all three exist in real data:
+        #
+        #   1. lot number, no serial      → "EBA-1"        (anonymous count)
+        #   2. lot number + serial        → "MET-A · A9F…" (identified box)
+        #   3. no snapshot at all         → nothing        (routine with no stock)
+        #
+        # A fourth, legacy shape — a snapshot written before serials existed,
+        # with **no `serial_number` key at all** — is seeded further down as a
+        # direct consumption. The model documents that readers must treat a
+        # missing key as "no serial", and only real data proves they do.
+        eba_1_expiry = today + timedelta(days=220)
+        lots_pattern = {
+            routines["take_antihistamine"]: [_consumed("EBA-1", eba_1_expiry, 1)],
+        }
+
         for routine, completed_by, status, count in schedules:
             latest = self._latest_offset(routine, status, now)
             note_text, note_every = notes_pattern.get(routine, ("", 1))
+            consumed = lots_pattern.get(routine, [])
             for i in range(count):
                 offset = latest + timedelta(hours=routine.interval_hours * i)
                 timestamp = now - offset
@@ -555,6 +675,7 @@ class Command(BaseCommand):
                     created_at=timestamp,
                     client_created_at=timestamp,
                     notes=note_text if (note_text and i % note_every == 0) else "",
+                    consumed_lots=consumed,
                 )
 
         # Direct StockConsumption rows surface a "consumption"-typed row in
@@ -579,6 +700,36 @@ class Command(BaseCommand):
                 created_at=consumed_at,
                 client_created_at=consumed_at,
             )
+
+        # Metformin — the two history shapes that only serialised stock can
+        # produce. Both consume a box that is NOT in `stocks` any more, which is
+        # the normal end state: `delete_empty_lot` removes a lot once it hits
+        # zero, and the snapshot is all that survives of it.
+        #
+        #   1. An identified box: renders as "MET-A · A9F3K2M0PP".
+        #   2. A pre-serial snapshot with **no `serial_number` key at all**,
+        #      exactly as rows written before T023 look. Readers must treat the
+        #      missing key as "no serial" (see `Stock.consume_lots`), and this
+        #      is the only fixture that proves they do.
+        met_a_expiry_iso = (today + timedelta(days=300)).isoformat()
+        serialised_consumed_at = now - timedelta(days=2, hours=5)
+        StockConsumption.objects.create(
+            stock=stocks["metformin"],
+            consumed_by=cibran,
+            quantity=1,
+            consumed_lots=[_consumed("MET-A", today + timedelta(days=300), 1, "A9F3K2M0PP")],
+            created_at=serialised_consumed_at,
+            client_created_at=serialised_consumed_at,
+        )
+        legacy_consumed_at = now - timedelta(days=11, hours=3)
+        StockConsumption.objects.create(
+            stock=stocks["metformin"],
+            consumed_by=cibran,
+            quantity=2,
+            consumed_lots=[{"lot_number": "MET-OLD", "expiry_date": met_a_expiry_iso, "quantity": 2}],
+            created_at=legacy_consumed_at,
+            client_created_at=legacy_consumed_at,
+        )
 
         # Ibuprofen — 3 direct consumptions (no linked routine) so the demo
         # exercises the "estimated from past usage" branch added in T141:

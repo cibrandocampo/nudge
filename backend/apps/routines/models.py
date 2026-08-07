@@ -61,6 +61,23 @@ class Stock(models.Model):
         on_delete=models.SET_NULL,
         related_name="stocks",
     )
+    # Deliberately a string: leading zeros are significant in a GTIN
+    # (`05705244020856`), so any numeric coercion corrupts it. No uniqueness
+    # and no index — two stocks may legitimately carry the same code, and this
+    # is user data rather than a product catalogue.
+    gtin = models.CharField(
+        max_length=14,
+        blank=True,
+        help_text="GS1 AI 01 — product code read from the pack. Empty when unknown.",
+    )
+    # `null` means "never set", which is what allows a first lot to fill it in
+    # silently. It is distinct from a stored value that happens to be low.
+    default_lot_quantity = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text="Quantity to prefill when adding a lot. Null when not yet known.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -110,7 +127,10 @@ class Stock(models.Model):
                 until `quantity` reached or lots exhausted.
 
         Returns: list of consumed_lot dicts
-            [{"lot_number", "expiry_date", "quantity"}, ...]
+            [{"lot_number", "expiry_date", "serial_number", "quantity"}, ...]
+            `serial_number` is None for lots that carry no serial. Snapshots
+            written before T023 have no such key at all — readers must treat a
+            missing key as "no serial".
 
         Raises:
             rest_framework.serializers.ValidationError on bad input.
@@ -163,6 +183,7 @@ def _lot_consumed_dict(lot, qty):
     return {
         "lot_number": lot.lot_number or None,
         "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None,
+        "serial_number": lot.serial_number or None,
         "quantity": qty,
     }
 
@@ -202,6 +223,12 @@ class StockLot(models.Model):
     A single batch/lot of a Stock item with its own quantity and optional expiry.
     FEFO ordering: lots with sooner expiry_date are consumed first.
     Lots without expiry_date are ordered last (treated as far future).
+
+    A lot carrying a `serial_number` identifies **one physical pack** (read from
+    the GS1 DataMatrix printed on the box). Such a lot is never merged,
+    compacted or incremented: it is matched by its exact serial, or a new row is
+    created. Its quantity may still decrease through consumption — that is the
+    pack being used up, not two packs being conflated.
     """
 
     stock = models.ForeignKey(
@@ -212,6 +239,15 @@ class StockLot(models.Model):
     quantity = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     expiry_date = models.DateField(null=True, blank=True)
     lot_number = models.CharField(max_length=100, blank=True)
+    serial_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="GS1 AI 21 — serial of the physical pack. Empty for hand-entered lots.",
+    )
+    raw_scan = models.TextField(
+        blank=True,
+        help_text=("Raw decoded barcode payload. Kept for traceability and as the source of product identity (GTIN)."),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -219,6 +255,13 @@ class StockLot(models.Model):
         ordering = [F("expiry_date").asc(nulls_last=True), "created_at"]
         constraints = [
             models.CheckConstraint(condition=models.Q(quantity__gte=0), name="stocklot_qty_gte_0"),
+            # Partial: only non-empty serials are unique, so the constraint is
+            # inert for every hand-entered lot (no data migration needed).
+            models.UniqueConstraint(
+                fields=["stock", "serial_number"],
+                condition=~models.Q(serial_number=""),
+                name="unique_serial_per_stock",
+            ),
         ]
 
     def __str__(self):

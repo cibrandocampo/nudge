@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { discard, enqueue, remove } from '../offline/queue'
 import { forceSync } from '../offline/sync'
+import { randomUuid } from '../utils/uuid'
 import ConflictModal from './ConflictModal'
 
 /**
@@ -48,7 +49,7 @@ export default function ConflictOrchestrator() {
     const newUpdatedAt = conflict.conflictCurrent?.updated_at ?? conflict.conflictCurrent?.settings_updated_at ?? null
     await remove(conflict.id)
     await enqueue({
-      id: crypto.randomUUID(),
+      id: randomUuid(),
       method: conflict.method,
       endpoint: conflict.endpoint,
       body: conflict.body,

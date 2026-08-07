@@ -1,6 +1,7 @@
 import { publishRemoteVersion } from '../contexts/appVersionBridge'
 import { noteServerError, setReachable } from '../offline/reachability'
 import { ConflictError, OfflineError } from './errors'
+import { randomUuid } from '../utils/uuid'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -139,7 +140,7 @@ async function doRefresh() {
 }
 
 function makeMutationOptions(method, body, opts) {
-  const idempotencyKey = opts.idempotencyKey ?? opts.headers?.['Idempotency-Key'] ?? crypto.randomUUID()
+  const idempotencyKey = opts.idempotencyKey ?? opts.headers?.['Idempotency-Key'] ?? randomUuid()
   return {
     ...opts,
     method,

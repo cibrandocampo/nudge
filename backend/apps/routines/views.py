@@ -195,11 +195,18 @@ class StockLotViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         stock = self._get_stock_for_create()
         data = serializer.validated_data
-        existing = StockLot.objects.filter(
-            stock=stock,
-            lot_number=data.get("lot_number", ""),
-            expiry_date=data.get("expiry_date"),
-        ).first()
+        # No-merge invariant: a lot carrying a serial identifies one physical
+        # pack. An incoming serial never merges, and a serialized row is never a
+        # merge target — otherwise the second box of a lot would be absorbed by
+        # the first and its serial silently dropped.
+        existing = None
+        if not data.get("serial_number", ""):
+            existing = StockLot.objects.filter(
+                stock=stock,
+                lot_number=data.get("lot_number", ""),
+                expiry_date=data.get("expiry_date"),
+                serial_number="",
+            ).first()
         if existing:
             existing.quantity = F("quantity") + data["quantity"]
             existing.save(update_fields=["quantity"])
@@ -403,10 +410,19 @@ class RoutineEntryViewSet(
         Used by the Undo flow after "Mark done" (T036): clicking the
         toast's Undo button within its lifetime must fully reverse the
         action. For each lot listed in `entry.consumed_lots` we look
-        up the matching StockLot (by lot_number + expiry_date) and
-        increment its quantity — or re-create the lot if the
-        `delete_empty_lot` signal wiped it when the last unit was
-        consumed.
+        up the matching StockLot and increment its quantity — or
+        re-create the lot if the `delete_empty_lot` signal wiped it when
+        the last unit was consumed.
+
+        Matching honours the no-merge invariant (T023). A snapshot that
+        carries a `serial_number` identifies one physical pack, so it
+        matches **only** that exact serial and is recreated with it. A
+        snapshot without one matches only unserialized rows, so it can
+        never land on someone else's box — several packs of the same lot
+        and expiry are indistinguishable by `(lot_number, expiry_date)`
+        alone, and merging them would conflate two physical boxes into a
+        single row. Snapshots written before T023 have no such key;
+        `.get()` returning None is treated as "no serial".
         """
         entry = self.get_object()
         # Only the owner can delete history entries. Shared users can see
@@ -426,11 +442,16 @@ class RoutineEntryViewSet(
                         continue
                     lot_number = lot_data.get("lot_number") or ""
                     expiry_date = lot_data.get("expiry_date")
-                    lot = (
-                        StockLot.objects.select_for_update()
-                        .filter(stock=stock, lot_number=lot_number, expiry_date=expiry_date)
-                        .first()
-                    )
+                    serial_number = lot_data.get("serial_number") or ""
+                    if serial_number:
+                        lookup = {"serial_number": serial_number}
+                    else:
+                        lookup = {
+                            "lot_number": lot_number,
+                            "expiry_date": expiry_date,
+                            "serial_number": "",
+                        }
+                    lot = StockLot.objects.select_for_update().filter(stock=stock, **lookup).first()
                     if lot is not None:
                         lot.quantity += qty
                         lot.save(update_fields=["quantity"])
@@ -439,6 +460,7 @@ class RoutineEntryViewSet(
                             stock=stock,
                             lot_number=lot_number,
                             expiry_date=expiry_date,
+                            serial_number=serial_number,
                             quantity=qty,
                         )
             entry.delete()

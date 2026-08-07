@@ -14,6 +14,21 @@ from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, 
 User = get_user_model()
 
 
+def is_valid_gtin(value):
+    """
+    Validate a GTIN-14 and its mod-10 check digit.
+
+    From the right of the first 13 digits, multiply alternately by 3 and 1
+    starting with 3; the check digit completes the sum to the next multiple of
+    ten. Mirrors `isValidGtin` in `frontend/src/utils/gs1.js` — the two must
+    agree, or a code the scanner accepts would be refused on save.
+    """
+    if len(value) != 14 or not value.isdigit():
+        return False
+    total = sum(int(value[12 - i]) * (3 if i % 2 == 0 else 1) for i in range(13))
+    return (10 - total % 10) % 10 == int(value[13])
+
+
 def validate_client_created_at(value):
     """
     Validator for client-provided action timestamps.
@@ -48,12 +63,42 @@ class ClientTimestampInputSerializer(serializers.Serializer):
 class StockLotSerializer(FlexFieldsModelSerializer):
     class Meta:
         model = StockLot
-        fields = ["id", "quantity", "expiry_date", "lot_number", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "quantity",
+            "expiry_date",
+            "lot_number",
+            "serial_number",
+            "raw_scan",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_quantity(self, value):
         if value < 0:
             raise serializers.ValidationError("Quantity cannot be negative.")
+        return value
+
+    def validate_serial_number(self, value):
+        """Turn a duplicate serial into a 400 instead of an IntegrityError 500.
+
+        The DB constraint (`unique_serial_per_stock`) remains the real
+        guarantee; this only makes the failure legible to the client. The stock
+        is not on the serializer at validation time — the viewset injects it on
+        `save()` — so it is read from the nested-route kwargs.
+        """
+        if not value:
+            return value
+        view = self.context.get("view")
+        stock_pk = view.kwargs.get("stock_pk") if view else None
+        if stock_pk is None:
+            return value
+        qs = StockLot.objects.filter(stock_id=stock_pk, serial_number=value)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This pack is already registered in this stock.")
         return value
 
     def validate_expiry_date(self, value):
@@ -97,7 +142,9 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
       so the client must let the user pick which to consume before any decrement.
     """
 
-    lots = StockLotSerializer(many=True, read_only=True)
+    # `raw_scan` is forensic data: useful on the lot endpoint, dead weight on
+    # every inventory fetch (this list prefetches all lots of all stocks).
+    lots = StockLotSerializer(many=True, read_only=True, omit=["raw_scan"])
     quantity = serializers.SerializerMethodField()
     quantity_available = serializers.SerializerMethodField()
     quantity_soon = serializers.SerializerMethodField()
@@ -152,6 +199,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "owner_id",
             "owner_display_name",
             "user_timezone",
+            "gtin",
+            "default_lot_quantity",
             "updated_at",
         ]
         read_only_fields = [
@@ -179,6 +228,23 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "user_timezone",
             "updated_at",
         ]
+
+    def validate_gtin(self, value):
+        """Reject a corrupt product code before it can be stored.
+
+        Empty is the normal state — the field is optional and only ever filled
+        from a scan or by hand — so only a non-empty value is checked.
+        """
+        if not value:
+            return value
+        if not is_valid_gtin(value):
+            raise serializers.ValidationError("Invalid GTIN: it must be 14 digits with a valid check digit.")
+        return value
+
+    # `default_lot_quantity` needs no `validate_` hook: the model's
+    # `MinValueValidator(1)` becomes `min_value=1` on the generated field, so
+    # DRF rejects 0 before any hook would run. `None` still clears the value
+    # back to "not known yet", which is the only other state worth expressing.
 
     def validate_group(self, value):
         request = self.context.get("request")

@@ -2,7 +2,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
-import { NetworkFirst } from 'workbox-strategies'
+import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 
 // Remove caches from older Workbox versions that are no longer needed.
 cleanupOutdatedCaches()
@@ -78,6 +78,25 @@ registerRoute(
         maxAgeSeconds: 7 * 24 * 60 * 60,
       }),
     ],
+  }),
+)
+
+// ── Runtime caching for the barcode decoder (T026) ──────────────────────────
+// The scanner's WebAssembly binary is ~1 MB and most users never open the
+// scanner, so it is deliberately NOT in the precache manifest: paying for it at
+// install time for everyone is the wrong trade. Instead it is cached the first
+// time a scan actually happens, which is what `useScannerAvailable` probes for
+// before offering the button offline.
+//
+// CacheFirst because the file is immutable — its name carries a build hash, so
+// a new release produces a new URL rather than new content at the same one.
+// That is also why `maxEntries` is tiny: without it, every release would leave
+// its predecessor's binary behind forever.
+registerRoute(
+  ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith('.wasm'),
+  new CacheFirst({
+    cacheName: 'nudge-wasm-cache',
+    plugins: [new CacheableResponsePlugin({ statuses: [200] }), new ExpirationPlugin({ maxEntries: 2 })],
   }),
 )
 

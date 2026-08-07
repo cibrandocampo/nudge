@@ -35,7 +35,8 @@
     "workbox-expiration": "~7.4",
     "workbox-precaching": "~7.4",
     "workbox-routing": "~7.4",
-    "workbox-strategies": "~7.4"
+    "workbox-strategies": "~7.4",
+    "zxing-wasm": "~3.1"
   },
   "devDependencies": {
     "@eslint/js": "~10.0",

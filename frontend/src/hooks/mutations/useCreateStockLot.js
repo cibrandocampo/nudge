@@ -31,16 +31,18 @@ export function useCreateStockLot() {
       args: { stockName: stockName ?? '?', qty: quantity },
     }),
     rollback: ({ stockId }) => ({ type: 'createStockLot', args: { stockId } }),
-    request: ({ stockId, quantity, expiryDate, lotNumber }) => ({
+    request: ({ stockId, quantity, expiryDate, lotNumber, serialNumber, rawScan }) => ({
       method: 'POST',
       path: `/stock/${stockId}/lots/`,
       body: {
         quantity,
         expiry_date: expiryDate || null,
         lot_number: lotNumber || '',
+        serial_number: serialNumber || '',
+        raw_scan: rawScan || '',
       },
     }),
-    optimistic: (client, { stockId, quantity, expiryDate, lotNumber }) => {
+    optimistic: (client, { stockId, quantity, expiryDate, lotNumber, serialNumber }) => {
       const id = Number(stockId)
       const snap = snapshotKeys(client, [['stock'], ['stock', id]])
       const tempLot = {
@@ -48,6 +50,9 @@ export function useCreateStockLot() {
         quantity: Number(quantity) || 0,
         expiry_date: expiryDate || null,
         lot_number: lotNumber || '',
+        // Carried so the grouped list and the duplicate-serial guard see the
+        // pending box before the server has confirmed it.
+        serial_number: serialNumber || '',
         created_at: new Date().toISOString(),
       }
       const addLot = (stock) => {
