@@ -631,3 +631,46 @@ describe('StockFormPage — edit as recipient (shared stock)', () => {
     expect(genericPatchCalled).toBe(false)
   })
 })
+
+describe('StockFormPage — guards', () => {
+  it('refuses to save a stock with no name', async () => {
+    mockGroups()
+    mockContacts()
+    const { user } = renderCreate()
+    await user.click(await screen.findByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('Name is required.')).toBeInTheDocument()
+  })
+
+  it('blocks creating a stock while the server is unreachable', async () => {
+    reachableRef.current = false
+    try {
+      mockGroups()
+      mockContacts()
+      renderCreate()
+      // Creating needs the server: there is no id to hang an offline queue
+      // entry off, so the form says so instead of silently failing later.
+      expect(await screen.findByText('Requires connection')).toBeInTheDocument()
+      const submit = screen.getByRole('button', { name: 'Create' })
+      expect(submit).toBeDisabled()
+      expect(submit).toHaveAttribute('title', 'Requires connection')
+    } finally {
+      reachableRef.current = true
+    }
+  })
+
+  it('renders a shared stock whose payload omits shared_with entirely', async () => {
+    // The recipient serializer does not send the field at all — reading it as
+    // an array regardless would put `undefined` into the share list.
+    mockStock({
+      id: 1,
+      name: 'Ownerless payload',
+      group: null,
+      is_owner: false,
+      updated_at: '2026-04-22T10:00:00Z',
+    })
+    mockGroups()
+    mockContacts()
+    renderEdit()
+    expect(await screen.findByDisplayValue('Ownerless payload')).toBeInTheDocument()
+  })
+})

@@ -457,4 +457,46 @@ describe('StockCard — combined severity and per-lot indicators', () => {
     expect(qtySpan).not.toBeNull()
     expect(qtySpan.getAttribute('class')).toContain('cardLotQtyExpired')
   })
+
+  // The card reads its count from `quantity_available`, the server's
+  // own-share figure. The list endpoint always sends it; the offline queue's
+  // optimistic rows and the cache seeded from a create response do not, so
+  // every consumer of that number falls back to `quantity`, then to 0.
+
+  it('reads zero when neither count is present, hiding consume and showing the depleted footer', () => {
+    renderCard({
+      // `daily_consumption_own` is what renders the footer's row at all.
+      stock: { ...baseStock, quantity: undefined, quantity_available: undefined, daily_consumption_own: 1 },
+    })
+    expect(screen.getByText('0 u.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Consume 1 unit')).not.toBeInTheDocument()
+    expect(screen.getByTestId('out-of-stock-footer')).toBeInTheDocument()
+  })
+
+  it('renders a stock with no lots array at all', () => {
+    renderCard({ stock: { ...baseStock, lots: undefined } })
+    expect(screen.getByText('Water filter')).toBeInTheDocument()
+    expect(screen.queryAllByTestId('card-lot-row')).toHaveLength(0)
+  })
+
+  it('labels the shared badge for a recipient whose owner has no display name', () => {
+    renderCard({
+      stock: { ...baseStock, is_owner: false, owner_display_name: undefined, shared_with: [2] },
+    })
+    const badge = screen.getByTestId('shared-badge')
+    expect(badge.getAttribute('data-variant')).toBe('recipient')
+    expect(badge.getAttribute('aria-label')).toBe('Shared with you by ')
+  })
+
+  it('marks the depletion date as danger at critical severity', () => {
+    renderCard({
+      stock: {
+        ...baseStock,
+        estimated_depletion_date: '2026-06-01',
+        daily_consumption_own: 1,
+        stock_severity: 'critical',
+      },
+    })
+    expect(screen.getByTestId('depletion-date').getAttribute('class')).toContain('stockDepletionDanger')
+  })
 })

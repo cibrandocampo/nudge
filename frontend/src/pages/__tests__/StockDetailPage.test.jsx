@@ -1160,6 +1160,128 @@ describe('StockDetailPage', () => {
     expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
   })
 
+  // ── Offline and empty-state guards ───────────────────────────────────────
+
+  it('refuses to open the picker for a stock the server says has no lots', async () => {
+    useStockResponse({ ...stock, lots: [] })
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+
+    expect(await screen.findAllByText(/went wrong/i)).not.toHaveLength(0)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('refuses to add a lot when the network drops with the form already open', async () => {
+    const captured = captureCreateLot()
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    // Opening the form has its own guard, so the only way to reach the one
+    // inside the submit handler is to lose the network while it is open.
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    reachableRef.current = false
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '2' } })
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    expect(captured.calls).toBe(0)
+  })
+
+  it('marks the pack delete button unavailable offline and refuses the click', async () => {
+    useStockResponse(serializedStock())
+    reachableRef.current = false
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const del = within(screen.getAllByTestId('pack-row')[0]).getByRole('button')
+    expect(del).toHaveAttribute('aria-disabled', 'true')
+    expect(del).toHaveAttribute('title', 'This section is not available offline.')
+    await user.click(del)
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    // No confirmation either: the action never got far enough to ask.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('collapses an expanded group when the expander is pressed again', async () => {
+    useStockResponse(serializedStock())
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.getAllByTestId('pack-row')).toHaveLength(2)
+
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.queryAllByTestId('pack-row')).toHaveLength(0)
+  })
+
+  it('labels a box with no serial inside an expanded group', async () => {
+    useStockResponse({
+      ...stock,
+      lots: [
+        {
+          id: 300,
+          quantity: 1,
+          expiry_date: daysFromNow(90),
+          lot_number: 'LOT-X',
+          serial_number: 'SN-X',
+          updated_at: '2026-04-17T10:00:00Z',
+        },
+        {
+          id: 301,
+          quantity: 3,
+          expiry_date: daysFromNow(90),
+          lot_number: 'LOT-X',
+          serial_number: '',
+          updated_at: '2026-04-17T10:00:00Z',
+        },
+      ],
+    })
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('group-expander'))
+
+    const rows = screen.getAllByTestId('pack-row')
+    expect(within(rows[0]).getByText('SN-X')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Unidentified units')).toBeInTheDocument()
+  })
+
+  it('keeps an expiry blocker when the serial chip is cleared', async () => {
+    payloadRef.current = `01${GTIN}17${yymmdd(pastIso)}10OLD-LOT${GS}21SN-OLD`
+    const { user } = renderDetail()
+    await openScanner(user)
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
+
+    // Clearing the serial only answers the duplicate-serial objection. The
+    // pack is still out of date, so the blocker must survive.
+    await user.click(screen.getByTestId('serial-clear'))
+    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
+  })
+
+  it('reads zero when the payload carries neither quantity field', async () => {
+    useStockResponse({ ...stock, quantity: undefined, quantity_available: undefined })
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    expect(screen.getByText(/0 total/)).toBeInTheDocument()
+    expect(screen.queryByTestId('consume-one')).not.toBeInTheDocument()
+  })
+
+  it('marks the depletion date as an estimate when the server says so', async () => {
+    useStockResponse({
+      ...stock,
+      estimated_depletion_date: daysFromNow(45),
+      depletion_is_estimated: true,
+    })
+    renderDetail()
+    await screen.findByText('Water filter')
+
+    const span = screen.getByTestId('depletion-date')
+    expect(span).toHaveAttribute('title', 'Estimated from past usage')
+    expect(span.querySelector('svg use[href="#i-equal-approximately"]')).not.toBeNull()
+  })
+
   it('cancel in the add-lot form closes it and clears the qty input', async () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')

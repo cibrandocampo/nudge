@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConsumeStock } from '../hooks/mutations/useConsumeStock'
-import { OfflineError } from '../api/errors'
 import { allocateFromGroup, bulkQuantity, lotsForSelection } from '../utils/lotsForSelection'
 import cx from '../utils/cx'
 import ModalFrame from './ModalFrame'
@@ -47,8 +46,11 @@ export default function LotPickerModal({ stock, onClose, onConsumed }) {
       })
       onConsumed?.()
       onClose()
-    } catch (err) {
-      setError(err instanceof OfflineError ? t('offline.actionUnavailable') : t('lotPicker.errorGeneric'))
+    } catch {
+      // Never an OfflineError: `useConsumeStock` is queueable, so losing the
+      // network enqueues the consume and resolves instead of throwing. What
+      // reaches here is a real server refusal.
+      setError(t('lotPicker.errorGeneric'))
       setSubmitting(false)
     }
   }

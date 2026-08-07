@@ -438,4 +438,113 @@ describe('BarcodeScannerModal', () => {
     await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2))
     expect(navigator.mediaDevices.getUserMedia.mock.calls[1][0].video.deviceId).toEqual({ exact: 'id-2' })
   })
+
+  it('returns to the working lens and says so when the switch is refused', async () => {
+    const stream = mockCamera({ activeDeviceId: 'id-0' })
+    mockDevices([
+      { deviceId: 'id-0', label: 'camera 0, facing back' },
+      { deviceId: 'id-2', label: 'camera 2, facing back' },
+    ])
+    const { user } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await screen.findByTestId('scan-camera')
+    expect(screen.getByTestId('scan-camera-hint')).toHaveTextContent('If it will not focus')
+
+    // The second lens will not open. A dead modal would be the worst outcome:
+    // the first lens still works, so go back to it and explain.
+    const refused = new Error('OverconstrainedError')
+    refused.name = 'OverconstrainedError'
+    navigator.mediaDevices.getUserMedia = vi.fn().mockRejectedValueOnce(refused).mockResolvedValue(stream)
+    await user.click(screen.getByTestId('scan-camera'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('scan-camera-hint')).toHaveTextContent('would not release the other camera'),
+    )
+    expect(screen.queryByTestId('scan-error')).not.toBeInTheDocument()
+    const lastCall = navigator.mediaDevices.getUserMedia.mock.calls.at(-1)
+    expect(lastCall[0].video.deviceId).toEqual({ exact: 'id-0' })
+  })
+
+  it('copes with a track that reports neither capabilities nor settings', async () => {
+    // Not every implementation ships the whole MediaStreamTrack surface, and
+    // a missing method must not read as "no torch, no camera".
+    tracks = [{ stop: vi.fn(), applyConstraints: vi.fn().mockResolvedValue(undefined) }]
+    const stream = { getTracks: () => tracks, getVideoTracks: () => tracks }
+    navigator.mediaDevices = { getUserMedia: vi.fn().mockResolvedValue(stream) }
+    mockDevices([{ deviceId: 'id-0', label: 'camera 0, facing back' }])
+    readBarcodes.mockResolvedValue([{ text: '0109506000134376' }])
+    const onDecoded = vi.fn()
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={onDecoded} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(onDecoded).toHaveBeenCalledWith('0109506000134376'))
+    expect(screen.queryByTestId('scan-torch')).not.toBeInTheDocument()
+  })
+
+  it('says the scanner could not load when the decoder module fails', async () => {
+    mockCamera()
+    prepareZXingModule.mockImplementationOnce(() => {
+      throw new Error('wasm fetch failed')
+    })
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    expect(await screen.findByText('Could not load the scanner. Check your connection.')).toBeInTheDocument()
+  })
+
+  it('never samples a frame when the canvas has no 2D context', async () => {
+    mockCamera()
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => null)
+    readBarcodes.mockResolvedValue([{ text: '0109506000134376' }])
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await screen.findByTestId('scan-video')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(readBarcodes).not.toHaveBeenCalled()
+  })
+
+  it('waits for the video to report a size before decoding', async () => {
+    mockCamera()
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, value: undefined })
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, value: undefined })
+    readBarcodes.mockResolvedValue([{ text: '0109506000134376' }])
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await screen.findByTestId('scan-video')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(readBarcodes).not.toHaveBeenCalled()
+  })
+
+  it('picks the largest sensor even when it is listed first', async () => {
+    mockCamera({ activeDeviceId: 'big' })
+    mockDevices([
+      { deviceId: 'big', label: 'back lens', getCapabilities: () => ({ width: { max: 4000 }, height: { max: 3000 } }) },
+      { deviceId: 'small', label: 'back lens', getCapabilities: () => ({ width: { max: 640 }, height: { max: 480 } }) },
+    ])
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled())
+    expect(navigator.mediaDevices.getUserMedia.mock.calls[0][0].video.deviceId).toEqual({ exact: 'big' })
+  })
+
+  it('releases a camera that arrives after the modal is gone', async () => {
+    const stream = mockCamera()
+    let release
+    navigator.mediaDevices.getUserMedia = vi.fn(() => new Promise((r) => (release = () => r(stream))))
+    mockDevices([{ deviceId: 'id-0', label: 'camera 0, facing back' }])
+
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await screen.findByTestId('scan-video')
+    unmount()
+    await act(async () => {
+      release()
+      await Promise.resolve()
+    })
+
+    // Nothing is left holding the lens: the stream that landed late is stopped
+    // rather than leaked, which is what makes reopening the scanner work.
+    await waitFor(() => expect(tracks[0].stop).toHaveBeenCalled())
+  })
 })

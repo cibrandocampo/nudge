@@ -134,11 +134,14 @@ export function bulkQuantity(group) {
   return group.bulk.reduce((sum, row) => sum + row.quantity, 0)
 }
 
+// Only ever called on the groups `groupLots` builds, whose `created_at` is
+// normalised to a string there — no nullish guard needed, and one that could
+// never fire would only suggest the invariant is weaker than it is.
 function fefoCompare(a, b) {
   const aDate = a.expiry_date ?? '9999-12-31'
   const bDate = b.expiry_date ?? '9999-12-31'
   if (aDate !== bDate) return aDate.localeCompare(bDate)
-  return (a.created_at ?? '').localeCompare(b.created_at ?? '')
+  return a.created_at.localeCompare(b.created_at)
 }
 
 /**

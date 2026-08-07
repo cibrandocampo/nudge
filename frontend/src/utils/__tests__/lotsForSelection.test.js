@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
-import { allocateFromGroup, bulkQuantity, findCachedStock, lotsForSelection } from '../lotsForSelection'
+import { allocateFromGroup, bulkQuantity, findCachedStock, groupLots, lotsForSelection } from '../lotsForSelection'
 
 const ids = (groups) => groups.map((g) => g.key)
 
@@ -141,6 +141,38 @@ describe('lotsForSelection', () => {
     }
     const [group] = lotsForSelection(stock)
     expect(group.packs.map((p) => p.serial_number)).toEqual(['SN-EARLY', 'SN-LATE'])
+  })
+})
+
+// `groupLots` is also called directly by the stock detail page, with
+// `minQuantity: 0` so a depleted lot is still listed for deletion. That entry
+// point reaches inputs `lotsForSelection` filters out first.
+describe('groupLots', () => {
+  it('returns an empty array when handed something that is not an array', () => {
+    expect(groupLots(null)).toEqual([])
+    expect(groupLots(undefined)).toEqual([])
+    expect(groupLots({ 0: { quantity: 1 } })).toEqual([])
+  })
+
+  it('counts a lot with no quantity as zero when minQuantity allows it through', () => {
+    const groups = groupLots(
+      [
+        { id: 1, lot_number: 'L', quantity: null },
+        { id: 2, lot_number: 'L', quantity: 2 },
+      ],
+      {
+        minQuantity: 0,
+      },
+    )
+    expect(groups).toHaveLength(1)
+    expect(groups[0].quantity).toBe(2)
+    expect(groups[0].rows).toHaveLength(2)
+  })
+
+  it('keeps depleted lots at minQuantity 0 and drops them at the default', () => {
+    const lots = [{ id: 1, lot_number: 'L', quantity: 0 }]
+    expect(groupLots(lots, { minQuantity: 0 })).toHaveLength(1)
+    expect(groupLots(lots)).toEqual([])
   })
 })
 

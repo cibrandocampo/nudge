@@ -422,4 +422,118 @@ describe('LotSelectionModal — pack step', () => {
       { lot_id: 32, quantity: 1 },
     ])
   })
+
+  it('goes back from the second pack step to the first, not to the lot list', async () => {
+    const twoLots = groupsFrom([
+      { id: 31, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A1' },
+      { id: 33, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A2' },
+      { id: 32, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B1' },
+      { id: 34, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B2' },
+    ])
+    const { user } = renderWithProviders(
+      <LotSelectionModal
+        routine={{ name: 'R', stock_usage: 3, stock_name: 'S' }}
+        lots={twoLots}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    await user.click(screen.getByTestId('pack-confirm'))
+    expect(screen.getByText('SN-B1')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Back'))
+    // One step back is LOT-A's pack step. Going straight to the lot list would
+    // throw away a choice the user did not ask to undo.
+    expect(screen.getByText('SN-A1')).toBeInTheDocument()
+    expect(screen.queryByText('SN-B1')).not.toBeInTheDocument()
+  })
+
+  it('ignores a pack picked beyond the number of units being consumed', async () => {
+    const threePacks = groupsFrom([
+      { id: 71, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 72, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
+      { id: 73, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-3' },
+    ])
+    const { user } = renderWithProviders(
+      <LotSelectionModal
+        routine={{ name: 'R', stock_usage: 2, stock_name: 'S' }}
+        lots={threePacks}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    expect(screen.getByText('2/2')).toBeInTheDocument()
+
+    // The first two are preselected; the third has nowhere to go. Deselecting
+    // one first is the way to swap — silently dropping an earlier choice would
+    // be the modal picking for the user.
+    await user.click(screen.getByText('SN-3'))
+    expect(screen.getByText('2/2')).toBeInTheDocument()
+    await user.click(screen.getByTestId('pack-confirm'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      { lot_id: 71, quantity: 1 },
+      { lot_id: 72, quantity: 1 },
+    ])
+  })
+
+  it('toggles a pack with Enter, and ignores other keys', async () => {
+    const twoPacksLot = groupsFrom([
+      { id: 81, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-X' },
+      { id: 82, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-Y' },
+    ])
+    const { user } = renderWithProviders(
+      <LotSelectionModal routine={singleRoutine} lots={twoPacksLot} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    const [, second] = screen.getAllByTestId('pack-row')
+    second.focus()
+    await user.keyboard('{Enter}')
+    expect(second).toHaveAttribute('aria-checked', 'true')
+
+    await user.keyboard('a')
+    expect(second).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('selects the unidentified units with Enter when one unit is consumed', async () => {
+    const mixed = groupsFrom([
+      { id: 91, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-M1' },
+      { id: 92, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-M2' },
+      { id: 93, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 4, serial_number: '' },
+    ])
+    const { user } = renderWithProviders(
+      <LotSelectionModal routine={singleRoutine} lots={mixed} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    const bulk = screen.getByTestId('bulk-row')
+    bulk.focus()
+    await user.keyboard('{Enter}')
+    expect(bulk).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByTestId('pack-confirm'))
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 93, quantity: 1 }])
+  })
+
+  it('shows the unidentified units as read-only when several units are consumed', async () => {
+    const mixed = groupsFrom([
+      { id: 94, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-N1' },
+      { id: 95, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-N2' },
+      { id: 96, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 4, serial_number: '' },
+    ])
+    const { user } = renderWithProviders(
+      <LotSelectionModal
+        routine={{ name: 'R', stock_usage: 2, stock_name: 'S' }}
+        lots={mixed}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    const bulk = screen.getByTestId('bulk-row')
+    // Informational: the shortfall is taken from here automatically, so there
+    // is nothing to click and no checked state to report.
+    expect(bulk).not.toHaveAttribute('role')
+    expect(bulk).not.toHaveAttribute('aria-checked')
+    expect(bulk).toHaveTextContent('4 available')
+  })
 })

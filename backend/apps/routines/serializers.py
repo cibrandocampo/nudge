@@ -241,12 +241,10 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             raise serializers.ValidationError("Invalid GTIN: it must be 14 digits with a valid check digit.")
         return value
 
-    def validate_default_lot_quantity(self, value):
-        # `None` clears the value back to "not known yet"; zero would be a
-        # stored default that prefills nothing, which is not worth expressing.
-        if value is not None and value < 1:
-            raise serializers.ValidationError("Default lot quantity must be at least 1.")
-        return value
+    # `default_lot_quantity` needs no `validate_` hook: the model's
+    # `MinValueValidator(1)` becomes `min_value=1` on the generated field, so
+    # DRF rejects 0 before any hook would run. `None` still clears the value
+    # back to "not known yet", which is the only other state worth expressing.
 
     def validate_group(self, value):
         request = self.context.get("request")

@@ -1450,6 +1450,62 @@ class StockLotSerialTest(APITestCase):
         make_lot(self.stock, quantity=2)
         self.assertEqual(self.stock.lots.filter(serial_number="").count(), 2)
 
+    def test_a_lot_may_be_posted_with_an_empty_serial(self):
+        """The duplicate check must not fire on "no serial at all".
+
+        Empty is the normal state for a hand-typed lot, and the DB constraint
+        deliberately allows any number of them, so the serializer has to skip
+        the lookup rather than treat "" as a value that can collide.
+        """
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 3, "lot_number": "LOT-E", "serial_number": ""},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.stock.lots.get(lot_number="LOT-E").serial_number, "")
+
+    def test_patching_a_pack_does_not_flag_its_own_serial_as_duplicate(self):
+        """A lot is not a duplicate of itself.
+
+        Without the `exclude(pk=...)`, editing a pack's quantity while its
+        serial rides along in the payload would be rejected as already
+        registered — the row it collides with is the row being edited.
+        """
+        pack = StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-SELF")
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/lots/{pack.id}/",
+            {"quantity": 2, "serial_number": "SN-SELF"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        pack.refresh_from_db()
+        self.assertEqual(pack.quantity, 2)
+        self.assertEqual(pack.serial_number, "SN-SELF")
+
+    def test_patching_a_pack_still_rejects_another_packs_serial(self):
+        StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-TAKEN")
+        mine = StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-MINE")
+        response = self.client.patch(
+            f"/api/stock/{self.stock.id}/lots/{mine.id}/",
+            {"serial_number": "SN-TAKEN"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("serial_number", response.json())
+
+    def test_serializer_used_without_the_nested_route_skips_the_lookup(self):
+        """The stock is only knowable from the URL.
+
+        `StockLotSerializer` reads `stock_pk` off the view kwargs because the
+        viewset injects the stock on `save()`, not at validation time. Used
+        standalone there is no stock to scope the query to, so checking
+        uniqueness would mean scanning every stock in the database — a wrong
+        answer, not a stricter one.
+        """
+        StockLot.objects.create(stock=self.stock, quantity=1, serial_number="SN-ELSEWHERE")
+        serializer = StockLotSerializer(data={"quantity": 1, "serial_number": "SN-ELSEWHERE"})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
 
 # ── Stock product identity (GTIN + default lot quantity) ─────────────────────
 
