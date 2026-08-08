@@ -1045,6 +1045,26 @@ describe('StockDetailPage', () => {
     expect(patch.calls).toBe(0)
   })
 
+  it('hands the form back with everything in it when the lot fails after the prompt', async () => {
+    // The prompt holds the form's submit promise open until the user answers.
+    // If the save then fails, rejecting is what keeps the typed values on
+    // screen — resolving would clear a form whose lot was never created.
+    stockWith({ gtin: GTIN, default_lot_quantity: 10 })
+    payloadRef.current = fullPayload
+    server.use(http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })))
+    const { user } = renderDetail()
+    await openScanner(user)
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await user.click(await screen.findByTestId('stock-values-update'))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
+    expect(screen.getByPlaceholderText('0')).toHaveValue(6)
+  })
+
   it('reconciles a hand-typed lot too, without touching the stored GTIN', async () => {
     stockWith({ gtin: GTIN, default_lot_quantity: 10 })
     const lot = captureCreateLot()
