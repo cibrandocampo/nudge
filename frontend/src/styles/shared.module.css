@@ -850,7 +850,7 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 /* Convention:
  *   .modalBox       → default ~360px (short confirms, small pickers)
  *   .modalBoxMd     → ~420px (ShareModal, GroupPickerModal, ConflictModal)
- *   .modalBoxLg     → ~500px (LotSelectionModal, ChangePasswordModal)
+ *   .modalBoxLg     → ~500px (LotConsumeModal, ChangePasswordModal)
  *   .modalBoxFramed → bare frame (header/body/footer layout with
  *                    internal scroll) — used by ConflictModal.
  */

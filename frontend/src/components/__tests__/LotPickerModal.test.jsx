@@ -3,6 +3,8 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
+import { lotsForSelection } from '../../utils/lotsForSelection'
+import LotConsumeModal from '../LotConsumeModal'
 import LotPickerModal from '../LotPickerModal'
 
 const BASE = 'http://localhost/api'
@@ -272,5 +274,46 @@ describe('LotPickerModal', () => {
 
     await user.keyboard('{Escape}')
     expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+// The picker and a one-unit routine confirmation are the same flow reached from
+// two places. This is what "the same flow" has to mean concretely: identical
+// batches and identical clicks produce byte-identical `lot_selections`. A
+// divergence here would be the two entry points drifting apart again.
+describe('LotPickerModal — parity with the routine entry point', () => {
+  const mixedBatch = [
+    { id: 30, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-1' },
+    { id: 31, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-2' },
+    { id: 32, quantity: 4, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: '' },
+  ]
+
+  it('sends what the routine flow would confirm for the same single unit', async () => {
+    const stock = buildStock({ lots: mixedBatch })
+    let receivedBody = null
+    server.use(
+      http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
+        receivedBody = await request.json()
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+
+    const picker = renderWithProviders(<LotPickerModal stock={stock} onClose={() => {}} onConsumed={() => {}} />)
+    await picker.user.click(screen.getByRole('button', { name: /consume 1/i }))
+    await picker.user.click(screen.getByText('SN-2'))
+    await picker.user.click(screen.getByTestId('pack-confirm'))
+    await waitFor(() => expect(receivedBody).not.toBeNull())
+    picker.unmount()
+
+    const onConfirm = vi.fn()
+    const routine = renderWithProviders(
+      <LotConsumeModal groups={lotsForSelection(stock)} needed={1} onConfirm={onConfirm} onCancel={() => {}} />,
+    )
+    await routine.user.click(screen.getByText('Confirm'))
+    await routine.user.click(screen.getByText('SN-2'))
+    await routine.user.click(screen.getByTestId('pack-confirm'))
+
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 31, quantity: 1 }])
+    expect(onConfirm).toHaveBeenCalledWith(receivedBody.lot_selections)
   })
 })

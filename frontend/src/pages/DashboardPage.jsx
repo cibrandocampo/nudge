@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import EmptyCard from '../components/EmptyCard'
 import Icon from '../components/Icon'
-import LotSelectionModal from '../components/LotSelectionModal'
+import LotConsumeModal from '../components/LotConsumeModal'
 import RoutineCard from '../components/RoutineCard'
 import Spinner from '../components/Spinner'
 import { useToast } from '../components/useToast'
@@ -143,9 +143,9 @@ export default function DashboardPage() {
       />
       <Section title={t('dashboard.upcoming')} routines={upcomingList} onMarkDone={markDone} completing={completing} />
       {lotModal && (
-        <LotSelectionModal
-          routine={lotModal.routine}
-          lots={lotModal.lots}
+        <LotConsumeModal
+          groups={lotModal.lots}
+          needed={lotModal.routine.stock_usage}
           onConfirm={handleLotConfirm}
           onCancel={() => setLotModal(null)}
         />

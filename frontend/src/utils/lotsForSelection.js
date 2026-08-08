@@ -134,6 +134,19 @@ export function bulkQuantity(group) {
   return group.bulk.reduce((sum, row) => sum + row.quantity, 0)
 }
 
+/**
+ * Whether consuming from this group needs the user to say *which* box.
+ *
+ * A pack step only earns its place when there is a real choice to make: a group
+ * holding a single identified pack has no ambiguity, so it is taken
+ * automatically however many units come out of it. The rule lives here, next to
+ * the grouping that builds `packs`, because every consumption entry point must
+ * skip on the same condition — two copies of it would drift apart silently.
+ */
+export function needsPackChoice(group) {
+  return group.packs.length > 1
+}
+
 // Only ever called on the groups `groupLots` builds, whose `created_at` is
 // normalised to a string there — no nullish guard needed, and one that could
 // never fire would only suggest the invariant is weaker than it is.

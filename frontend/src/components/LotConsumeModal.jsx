@@ -1,32 +1,53 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ModalFrame from './ModalFrame'
-import { allocateFromGroup, bulkQuantity } from '../utils/lotsForSelection'
+import { allocateFromGroup, bulkQuantity, needsPackChoice } from '../utils/lotsForSelection'
 import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
-import s from './LotSelectionModal.module.css'
+import s from './LotConsumeModal.module.css'
 
 /**
- * Modal for selecting specific lots to consume when confirming a routine.
+ * The one flow for choosing which units of a stock to consume.
  *
  * Selection happens in up to two steps:
  *   1. pick the lot — one row per group from `lotsForSelection()`;
- *   2. pick the pack — only for a chosen group that holds serialized packs,
- *      since those are individually identified boxes. Groups without serials
- *      skip this step entirely and behave exactly as before.
+ *   2. pick the pack — only for a chosen group that holds several serialized
+ *      packs, since those are individually identified boxes. Groups that leave
+ *      nothing to choose skip this step entirely (see `needsPackChoice`).
  *
  * Whatever the path, `onConfirm` receives the same wire format as always:
  * `[{lot_id, quantity}]`. The API is untouched.
  *
+ * Both entry points share this component: a routine confirmation allocating
+ * `stock_usage` units, and the inventory −1 button allocating exactly one. The
+ * single-unit case is not a second flow, it is this one with `needed = 1` —
+ * the group step collapses to a radio list.
+ *
  * Props:
- *   routine  — object with { name, stock_usage, stock_name }
- *   lots     — grouped lot list (FEFO order) from `lotsForSelection()`
+ *   groups   — grouped lot list (FEFO order) from `lotsForSelection()`
+ *   needed   — units to allocate
+ *   title / subtitle — group-step copy; each entry point keeps its own wording
+ *   confirmLabel / cancelLabel — action copy, same reason
+ *   emptyMessage — shown in place of the list when there is nothing to consume
+ *   error    — a failure owned by the caller, e.g. a rejected mutation
+ *   busy     — a mutation is in flight: the actions are held
  *   onConfirm(lotSelections) — called with [{lot_id, quantity}]
  *   onCancel
  */
-export default function LotSelectionModal({ routine, lots: groups, onConfirm, onCancel }) {
+export default function LotConsumeModal({
+  groups,
+  needed,
+  title,
+  subtitle,
+  confirmLabel,
+  cancelLabel,
+  emptyMessage,
+  error: callerError = null,
+  busy = false,
+  onConfirm,
+  onCancel,
+}) {
   const { t } = useTranslation()
-  const needed = routine.stock_usage
   const isSingle = needed === 1
 
   const [step, setStep] = useState('groups')
@@ -46,13 +67,26 @@ export default function LotSelectionModal({ routine, lots: groups, onConfirm, on
   const [pendingIndex, setPendingIndex] = useState(0)
   const [error, setError] = useState(null)
 
+  // Copy defaults to the routine-confirmation wording; an entry point with its
+  // own vocabulary passes its own rather than repeating this conditional.
+  const heading = title ?? t('lot.modal.title')
+  const subheading =
+    subtitle ?? (isSingle ? t('lot.modal.subtitleSingle') : t('lot.modal.subtitleMulti', { count: needed }))
+  const confirmText = confirmLabel ?? t('lot.modal.confirm')
+  const cancelText = cancelLabel ?? t('common.cancel')
+
+  // A validation error is about what the user just did, so it wins over the
+  // caller's — which stands until the next submit clears it.
+  const shownError = error ?? callerError
+
+  // An entry point that supplies copy for "nothing to consume" shows it in
+  // place of the list; with no list there is nothing to confirm either.
+  const showingEmpty = groups.length === 0 && emptyMessage != null
+
   const allocatedFor = (group) => (isSingle ? (selectedKey === group.key ? 1 : 0) : (quantities[group.key] ?? 0))
   const total = groups.reduce((sum, group) => sum + allocatedFor(group), 0)
 
-  // The pack step only earns its place when there is something to choose
-  // between: a lot holding a single identified box has no ambiguity, so it is
-  // taken automatically however many units come out of it.
-  const pendingGroups = groups.filter((group) => allocatedFor(group) > 0 && group.packs.length > 1)
+  const pendingGroups = groups.filter((group) => allocatedFor(group) > 0 && needsPackChoice(group))
   const currentGroup = pendingGroups[pendingIndex] ?? null
 
   const preselectPacks = (group) => group.packs.slice(0, allocatedFor(group)).map((pack) => pack.lot_id)
@@ -143,7 +177,13 @@ export default function LotSelectionModal({ routine, lots: groups, onConfirm, on
           {groupLabel(currentGroup)} · {t('lot.modal.packCount', { count: currentGroup.packs.length })}
         </p>
 
-        <ul className={s.list} role="group" aria-label={t('lot.modal.pickPack')}>
+        <ul
+          className={s.list}
+          // One unit means the rows are mutually exclusive; several means each
+          // box is picked or not on its own.
+          role={allocated === 1 ? 'radiogroup' : 'group'}
+          aria-label={t('lot.modal.pickPack')}
+        >
           {currentGroup.packs.map((pack) => {
             const selected = chosen.includes(pack.lot_id)
             return (
@@ -205,14 +245,14 @@ export default function LotSelectionModal({ routine, lots: groups, onConfirm, on
           </p>
         )}
 
-        {error && <p className={s.error}>{error}</p>}
+        {shownError && <p className={s.error}>{shownError}</p>}
 
         <div className={s.actions}>
-          <button className={shared.btnCancel} onClick={handleBack}>
+          <button className={shared.btnCancel} onClick={handleBack} disabled={busy}>
             {t('lot.modal.back')}
           </button>
-          <button className={shared.btnConfirm} onClick={handlePacksConfirm} data-testid="pack-confirm">
-            {t('lot.modal.confirm')}
+          <button className={shared.btnConfirm} onClick={handlePacksConfirm} disabled={busy} data-testid="pack-confirm">
+            {confirmText}
           </button>
         </div>
       </ModalFrame>
@@ -221,65 +261,67 @@ export default function LotSelectionModal({ routine, lots: groups, onConfirm, on
 
   return (
     <ModalFrame onClose={onCancel} size="lg">
-      <h2 className={s.title}>{t('lot.modal.title')}</h2>
-      <p className={s.subtitle}>
-        {isSingle ? t('lot.modal.subtitleSingle') : t('lot.modal.subtitleMulti', { count: needed })}
-      </p>
+      <h2 className={s.title}>{heading}</h2>
+      <p className={s.subtitle}>{subheading}</p>
 
-      <ul className={s.list}>
-        {groups.map((group) =>
-          isSingle ? (
-            <li
-              key={group.key}
-              className={`${s.item} ${selectedKey === group.key ? s.itemSelected : ''}`}
-              onClick={() => handleSelectRadio(group.key)}
-              role="radio"
-              aria-checked={selectedKey === group.key}
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleSelectRadio(group.key)}
-              data-testid="lot-group-row"
-            >
-              <span className={s.radio}>{selectedKey === group.key ? '●' : ''}</span>
-              <span className={s.label}>{groupLabel(group)}</span>
-              <span className={s.available}>
-                {group.quantity} {t('lot.modal.available')}
-              </span>
-              {group.expiry_date && <span className={s.expiry}>{group.expiry_date}</span>}
-            </li>
-          ) : (
-            <li key={group.key} className={s.itemMulti} data-testid="lot-group-row">
-              <div className={s.lotHeader}>
+      {showingEmpty ? (
+        <p className={s.error}>{emptyMessage}</p>
+      ) : (
+        <ul className={s.list} role={isSingle ? 'radiogroup' : undefined} aria-label={isSingle ? heading : undefined}>
+          {groups.map((group) =>
+            isSingle ? (
+              <li
+                key={group.key}
+                className={`${s.item} ${selectedKey === group.key ? s.itemSelected : ''}`}
+                onClick={() => handleSelectRadio(group.key)}
+                role="radio"
+                aria-checked={selectedKey === group.key}
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleSelectRadio(group.key)}
+                data-testid="lot-group-row"
+              >
+                <span className={s.radio}>{selectedKey === group.key ? '●' : ''}</span>
                 <span className={s.label}>{groupLabel(group)}</span>
                 <span className={s.available}>
                   {group.quantity} {t('lot.modal.available')}
                 </span>
                 {group.expiry_date && <span className={s.expiry}>{group.expiry_date}</span>}
-              </div>
-              <div className={s.qtyRow}>
-                <button
-                  type="button"
-                  className={s.stepBtn}
-                  disabled={quantities[group.key] <= 0}
-                  onClick={() => handleStep(group.key, group.quantity, -1)}
-                  aria-label="Decrease"
-                >
-                  -
-                </button>
-                <span className={s.qtyValue}>{quantities[group.key]}</span>
-                <button
-                  type="button"
-                  className={s.stepBtn}
-                  disabled={quantities[group.key] >= group.quantity}
-                  onClick={() => handleStep(group.key, group.quantity, 1)}
-                  aria-label="Increase"
-                >
-                  +
-                </button>
-              </div>
-            </li>
-          ),
-        )}
-      </ul>
+              </li>
+            ) : (
+              <li key={group.key} className={s.itemMulti} data-testid="lot-group-row">
+                <div className={s.lotHeader}>
+                  <span className={s.label}>{groupLabel(group)}</span>
+                  <span className={s.available}>
+                    {group.quantity} {t('lot.modal.available')}
+                  </span>
+                  {group.expiry_date && <span className={s.expiry}>{group.expiry_date}</span>}
+                </div>
+                <div className={s.qtyRow}>
+                  <button
+                    type="button"
+                    className={s.stepBtn}
+                    disabled={quantities[group.key] <= 0}
+                    onClick={() => handleStep(group.key, group.quantity, -1)}
+                    aria-label="Decrease"
+                  >
+                    -
+                  </button>
+                  <span className={s.qtyValue}>{quantities[group.key]}</span>
+                  <button
+                    type="button"
+                    className={s.stepBtn}
+                    disabled={quantities[group.key] >= group.quantity}
+                    onClick={() => handleStep(group.key, group.quantity, 1)}
+                    aria-label="Increase"
+                  >
+                    +
+                  </button>
+                </div>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
 
       {!isSingle && (
         <p className={s.totalRow}>
@@ -290,14 +332,18 @@ export default function LotSelectionModal({ routine, lots: groups, onConfirm, on
         </p>
       )}
 
-      {error && <p className={s.error}>{error}</p>}
+      {shownError && <p className={s.error}>{shownError}</p>}
 
       <div className={s.actions}>
-        <button className={shared.btnCancel} onClick={onCancel}>
-          {t('common.cancel')}
+        <button className={shared.btnCancel} onClick={onCancel} disabled={busy}>
+          {cancelText}
         </button>
-        <button className={shared.btnConfirm} onClick={handleGroupsConfirm} disabled={!isSingle && total !== needed}>
-          {t('lot.modal.confirm')}
+        <button
+          className={shared.btnConfirm}
+          onClick={handleGroupsConfirm}
+          disabled={busy || showingEmpty || (!isSingle && total !== needed)}
+        >
+          {confirmText}
         </button>
       </div>
     </ModalFrame>

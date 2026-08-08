@@ -6,7 +6,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import LogDateModal from '../components/LogDateModal'
-import LotSelectionModal from '../components/LotSelectionModal'
+import LotConsumeModal from '../components/LotConsumeModal'
 import QueryHandler from '../components/QueryHandler'
 import SharedWithChips from '../components/SharedWithChips'
 import SyncStatusBadge from '../components/SyncStatusBadge'
@@ -81,7 +81,7 @@ export default function RoutineDetailPage() {
   // `clientCreatedAt` (ISO string) back-dates the completion to the moment the
   // user actually did the routine; omitted → the mutation stamps `now`. The
   // audit `created_at` stays server-assigned either way. The timestamp is
-  // carried through the lot-selection detour so it survives LotSelectionModal.
+  // carried through the lot-selection detour so it survives LotConsumeModal.
   const markDone = async (clientCreatedAt) => {
     if (routine?.requires_lot_selection) {
       const stock = findCachedStock(queryClient, routine?.stock)
@@ -497,9 +497,9 @@ export default function RoutineDetailPage() {
             />
           )}
           {lotModal && (
-            <LotSelectionModal
-              routine={routine}
-              lots={lotModal.lots}
+            <LotConsumeModal
+              groups={lotModal.lots}
+              needed={routine.stock_usage}
               onConfirm={handleLotConfirm}
               onCancel={() => setLotModal(null)}
             />

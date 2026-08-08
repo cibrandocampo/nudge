@@ -1,6 +1,13 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
-import { allocateFromGroup, bulkQuantity, findCachedStock, groupLots, lotsForSelection } from '../lotsForSelection'
+import {
+  allocateFromGroup,
+  bulkQuantity,
+  findCachedStock,
+  groupLots,
+  lotsForSelection,
+  needsPackChoice,
+} from '../lotsForSelection'
 
 const ids = (groups) => groups.map((g) => g.key)
 
@@ -267,5 +274,37 @@ describe('findCachedStock', () => {
     const qc = new QueryClient()
     qc.setQueryData(['stock'], { not: 'array' })
     expect(findCachedStock(qc, 1)).toBeUndefined()
+  })
+})
+
+describe('needsPackChoice', () => {
+  const groupOf = (lots) => lotsForSelection({ lots })[0]
+
+  it('asks when the batch holds several identified boxes', () => {
+    const group = groupOf([
+      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 2, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
+    ])
+    expect(needsPackChoice(group)).toBe(true)
+  })
+
+  it('does not ask for a single identified box, however many units it holds', () => {
+    const group = groupOf([
+      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 10, serial_number: 'SN-ONLY' },
+    ])
+    expect(needsPackChoice(group)).toBe(false)
+  })
+
+  it('does not ask when the single box sits alongside unidentified units', () => {
+    const group = groupOf([
+      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 2, serial_number: 'SN-SOLO' },
+      { id: 2, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 5, serial_number: '' },
+    ])
+    expect(needsPackChoice(group)).toBe(false)
+  })
+
+  it('does not ask for a batch with no serials at all', () => {
+    const group = groupOf([{ id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 3 }])
+    expect(needsPackChoice(group)).toBe(false)
   })
 })
