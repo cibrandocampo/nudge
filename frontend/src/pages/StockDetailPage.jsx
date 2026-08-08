@@ -148,11 +148,15 @@ export default function StockDetailPage() {
    * Resolve the confirmation: `accept` adopts the disputed values too.
    * Either answer saves the lot — the question is which product values to
    * write, not whether to create it — and settles the form's pending promise.
+   *
+   * Only ever called from the two handlers rendered under `{pendingReconcile &&`,
+   * whose closures therefore hold a non-null one — no nullish guard needed, and
+   * one that could never fire would only suggest the invariant is weaker than
+   * it is.
    */
   const resolveReconcile = async (accept) => {
     const pending = pendingReconcile
     setPendingReconcile(null)
-    if (!pending) return
     const extra = accept ? Object.fromEntries(pending.discrepant.map((d) => [d.field, d.next])) : {}
     try {
       await submitLot(pending.payload, { ...pending.silent, ...extra })
