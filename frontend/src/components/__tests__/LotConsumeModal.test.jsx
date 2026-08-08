@@ -392,6 +392,33 @@ describe('LotConsumeModal — pack step', () => {
     ])
   })
 
+  // The other half of the rule above: deselecting first is what makes room, so
+  // swapping one box for another has to work. Nothing exercised the branch that
+  // adds a pack while the selection is short of the allocation.
+  it('swaps a pack when one is deselected to make room', async () => {
+    const threePacks = groupsFrom([
+      { id: 71, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 72, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
+      { id: 73, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-3' },
+    ])
+    const { user } = renderWithProviders(
+      <LotConsumeModal needed={2} groups={threePacks} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+
+    await user.click(screen.getByText('SN-1')) // drop the first: 1 of 2
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    await user.click(screen.getByText('SN-3')) // and take the third instead
+    expect(screen.getByText('2/2')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('pack-confirm'))
+    // Allocation order follows the group, not the order they were picked.
+    expect(onConfirm).toHaveBeenCalledWith([
+      { lot_id: 72, quantity: 1 },
+      { lot_id: 73, quantity: 1 },
+    ])
+  })
+
   it('toggles a pack with Enter, and ignores other keys', async () => {
     const twoPacksLot = groupsFrom([
       { id: 81, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-X' },
