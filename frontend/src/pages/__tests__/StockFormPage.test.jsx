@@ -674,3 +674,165 @@ describe('StockFormPage — guards', () => {
     expect(await screen.findByDisplayValue('Ownerless payload')).toBeInTheDocument()
   })
 })
+
+// ── Serial per batch row, folded like the detail form (T053) ────────────────
+// A product created from scanned boxes used to lose the one identifier that
+// makes a box traceable: the rows carried no serial at all.
+
+describe('StockFormPage — batch serials', () => {
+  const createdStock = { id: 9, name: 'X', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' }
+
+  // Captures every lot POST body so a test can assert what reached the API.
+  const captureLots = () => {
+    const bodies = []
+    server.use(
+      http.post(`${BASE}/stock/`, () => HttpResponse.json(createdStock, { status: 201 })),
+      http.post(`${BASE}/stock/9/lots/`, async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ id: bodies.length }, { status: 201 })
+      }),
+    )
+    return bodies
+  }
+
+  const addRows = async (user, n) => {
+    const btn = screen.getByRole('button', { name: 'Add batch' })
+    for (let i = 0; i < n; i += 1) await user.click(btn)
+  }
+
+  beforeEach(() => {
+    mockGroups()
+    mockContacts()
+  })
+
+  it('shows quantity and expiry only, until the fields are revealed', async () => {
+    const { user } = renderCreate()
+    await addRows(user, 1)
+
+    expect(screen.getByLabelText(/Batch 1 quantity/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Batch 1 expiry/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Batch 1 lot number/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Batch 1 serial/)).not.toBeInTheDocument()
+  })
+
+  it('reveals both fields and drops the control', async () => {
+    const { user } = renderCreate()
+    await addRows(user, 1)
+
+    await user.click(screen.getByTestId('more-fields'))
+
+    expect(screen.getByLabelText(/Batch 1 lot number/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Batch 1 serial/)).toBeInTheDocument()
+    expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
+  })
+
+  // The decision this task had to make: one press opens the field on every row,
+  // because registering six scanned boxes should not mean six presses.
+  it('reveals the fields on every row at once, not row by row', async () => {
+    const { user } = renderCreate()
+    await addRows(user, 3)
+
+    await user.click(screen.getByTestId('more-fields'))
+
+    expect(screen.getAllByLabelText(/Batch \d+ serial/)).toHaveLength(3)
+  })
+
+  it('keeps the fields revealed for a row added afterwards', async () => {
+    const { user } = renderCreate()
+    await addRows(user, 1)
+    await user.click(screen.getByTestId('more-fields'))
+
+    await addRows(user, 1)
+
+    expect(screen.getAllByLabelText(/Batch \d+ serial/)).toHaveLength(2)
+  })
+
+  it('sends each row its own serial', async () => {
+    const bodies = captureLots()
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Ibuprofen')
+    await addRows(user, 2)
+    await user.click(screen.getByTestId('more-fields'))
+
+    const qty = screen.getAllByLabelText(/Batch \d+ quantity/)
+    await user.type(qty[0], '1')
+    await user.type(qty[1], '1')
+    const serials = screen.getAllByLabelText(/Batch \d+ serial/)
+    await user.type(serials[0], 'SN-ONE')
+    await user.type(serials[1], 'SN-TWO')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies.map((b) => b.serial_number).sort()).toEqual(['SN-ONE', 'SN-TWO'])
+  })
+
+  // The rows go out in parallel, so a shared serial would race into the unique
+  // constraint and come back as a partial failure that names no row.
+  it('refuses two rows sharing a serial, and creates nothing', async () => {
+    const bodies = captureLots()
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Ibuprofen')
+    await addRows(user, 2)
+    await user.click(screen.getByTestId('more-fields'))
+
+    const qty = screen.getAllByLabelText(/Batch \d+ quantity/)
+    await user.type(qty[0], '1')
+    await user.type(qty[1], '1')
+    const serials = screen.getAllByLabelText(/Batch \d+ serial/)
+    await user.type(serials[0], 'SN-SAME')
+    await user.type(serials[1], 'SN-SAME')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/share a serial number/i)).toBeInTheDocument()
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('lets any number of rows carry no serial at all', async () => {
+    const bodies = captureLots()
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Ibuprofen')
+    await addRows(user, 2)
+    await user.click(screen.getByTestId('more-fields'))
+
+    const qty = screen.getAllByLabelText(/Batch \d+ quantity/)
+    await user.type(qty[0], '1')
+    await user.type(qty[1], '1')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies.every((b) => b.serial_number === '')).toBe(true)
+  })
+
+  // GS1 AI 21 is case-sensitive, so these are two different boxes — but
+  // surrounding whitespace is not part of the code.
+  it('ignores surrounding spaces but respects case when comparing', async () => {
+    const bodies = captureLots()
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Ibuprofen')
+    await addRows(user, 2)
+    await user.click(screen.getByTestId('more-fields'))
+
+    const qty = screen.getAllByLabelText(/Batch \d+ quantity/)
+    await user.type(qty[0], '1')
+    await user.type(qty[1], '1')
+    const serials = screen.getAllByLabelText(/Batch \d+ serial/)
+    await user.type(serials[0], 'ab1')
+    await user.type(serials[1], 'AB1')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    // Different case, different boxes: both go through.
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies.map((b) => b.serial_number).sort()).toEqual(['AB1', 'ab1'])
+  })
+
+  it('caps a batch serial at twenty characters', async () => {
+    const { user } = renderCreate()
+    await addRows(user, 1)
+    await user.click(screen.getByTestId('more-fields'))
+
+    const serial = screen.getByLabelText(/Batch 1 serial/)
+    expect(serial).toHaveAttribute('maxLength', '20')
+    await user.type(serial, 'A'.repeat(30))
+    expect(serial).toHaveValue('A'.repeat(20))
+  })
+})

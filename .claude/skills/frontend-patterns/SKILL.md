@@ -28,12 +28,16 @@ is a true page-specific one-off.
 1. **Design tokens** — `src/index.css` (`--c-*`, `--shadow-*`, `--radius-*`,
    `--transition`). Never hardcode a color, shadow, radius, or transition
    that maps to an existing token.
-2. **Shared CSS classes** — `src/styles/shared.module.css`. Covers buttons
-   (`.btn*`, `.btnIcon*`, `.btnAdd*`, `.btnCancel`, `.btnConfirm`,
-   `.btnIconMd/Lg`), inputs, cards, overlays, modal boxes, forms
-   (`.formSection*`, `.formChip*`, `.formToggle*`, `.formFooter`), status
-   dots, typography (`.pageTitle`, `.sectionTitle`, `.helpText`, `.muted`,
-   `.error`).
+2. **Shared CSS classes** — `src/styles/{buttons,cards,forms,layout}.module.css`,
+   one file per family (T045 split the old `shared.module.css`; no class was
+   renamed). Buttons (`.btn*`, `.btnIcon*`, `.btnAdd*`, `.btnCancel`,
+   `.btnConfirm`, `.btnIconMd/Lg`), cards and status dots, forms (`.input`,
+   `.formSection*`, `.formChip*`, `.formToggle*`, `.formFooter`,
+   `.lockedInput`, `.error`), layout (overlays, modal boxes, typography:
+   `.pageTitle`, `.sectionTitle`, `.helpText`, `.muted`).
+   `src/test/cssModuleReferences.test.js` fails the build if a component
+   references a class its stylesheet does not define — moving a class
+   between these files is otherwise a silent, unstyled failure.
 3. **Shared components** — `src/components/`. Notable primitives:
    `ModalFrame`, `Icon`, `AlertBanner`, `OfflineBanner`, `Toast`,
    `SharePopover`, `ShareWithSection`, `IntervalPicker`, `DateRangePicker`,
@@ -81,9 +85,14 @@ has proven itself and the abstraction earns its keep.
 - **`formatShortDate`** (`utils/time.js`) — consolidates the
   `formatDepletionDate` that used to be triple-copied across `StockCard`,
   `StockDetailPage`, `InventoryPage`.
-- **`.btnCancel` / `.btnConfirm`** (`shared.module.css`) — a single source
-  of truth for modal action buttons; previously each modal defined its
-  own local `.cancelBtn` / `.confirmBtn`.
+- **`useFieldDisclosure`** (`hooks/`) — the "quantity and expiry always,
+  batch and serial behind `+ campos`" rule, owned once and reused by
+  `AddLotForm` and `StockFormPage`'s batch rows. `+ campos` reveals
+  *whatever is folded at that moment*, one field or two, read at press
+  time. A second copy of this state machine is the thing to avoid.
+- **`.btnCancel` / `.btnConfirm`** (`styles/buttons.module.css`) — a single
+  source of truth for modal action buttons; previously each modal defined
+  its own local `.cancelBtn` / `.confirmBtn`.
 - **`.btnIcon` / `.btnIconMd` / `.btnIconLg`** — 32 / 36 / 40 px icon
   button variants with documented convention (in-card / form-level /
   top-bar triggers). No more hardcoded `width: 36px; height: 36px;` in
@@ -126,9 +135,9 @@ const res = await api.delete('/push/unsubscribe/', { endpoint })
 ## CSS conventions
 
 - Use CSS Modules: `import s from './MyComponent.module.css'`
-- Shared styles in `src/styles/shared.module.css`
+- Shared styles in `src/styles/{buttons,cards,forms,layout}.module.css`
 - Design tokens as CSS custom properties in `src/index.css`:
-  - `--c-primary: #6366f1` (indigo)
+  - `--c-primary: #454961` (navy — the standard action colour)
   - `--c-text`, `--c-text-2`, `--c-text-3` (grays)
   - `--c-muted` (secondary text)
   - `--c-danger`, `--c-success`, `--c-warning`

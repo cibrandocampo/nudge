@@ -193,3 +193,64 @@ describe('StockLotsList', () => {
     expect(withoutPills.querySelector('[data-with-pills]')).toBeNull()
   })
 })
+
+// ── The last identified box is still readable (T052) ────────────────────────
+// A group of one serialized pack used to show the delete button as its trailing
+// control, so its serial had nowhere to appear: "if I need to look up the serial
+// of a product it would be impossible if it is the last one". Observed on a real
+// box during T028's manual verification.
+
+describe('StockLotsList — a single identified box', () => {
+  const oneSerialized = [lot({ id: 20, quantity: 1, lot_number: 'LOT-S', serial_number: 'SN-LAST' })]
+
+  it('offers the expander even though there is nothing to collapse', () => {
+    renderList({ lots: oneSerialized })
+    expect(screen.getByTestId('group-expander')).toBeInTheDocument()
+  })
+
+  it('shows the serial once expanded', async () => {
+    const user = userEvent.setup()
+    renderList({ lots: oneSerialized })
+
+    await user.click(screen.getByTestId('group-expander'))
+
+    expect(screen.getByTestId('pack-row')).toHaveTextContent('SN-LAST')
+  })
+
+  it('counts the single pack as one', () => {
+    renderList({ lots: oneSerialized })
+    expect(within(screen.getByTestId('group-expander')).getByText('1')).toBeInTheDocument()
+  })
+
+  // The price of consistency with multi-pack groups: delete moves inside. That
+  // path has always existed but had never run with a single row.
+  it('deletes the only pack from inside the expanded row', async () => {
+    const user = userEvent.setup()
+    const onRemoveLot = vi.fn()
+    renderList({ lots: oneSerialized, onRemoveLot })
+
+    await user.click(screen.getByTestId('group-expander'))
+    const pack = screen.getByTestId('pack-row')
+    await user.click(within(pack).getByRole('button', { name: /delete/i }))
+
+    expect(onRemoveLot).toHaveBeenCalledWith(expect.objectContaining({ id: 20, serial_number: 'SN-LAST' }))
+  })
+
+  // The unchanged case: no serial, one row, trailing delete exactly as before.
+  it('leaves a single unserialized group exactly as it was', () => {
+    renderList({ lots: [lot({ id: 21, quantity: 4, lot_number: 'LOT-P', serial_number: '' })] })
+
+    expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('lot-row')).getByRole('button', { name: /delete/i })).toBeInTheDocument()
+  })
+
+  it('leaves a multi-row group unaffected', () => {
+    renderList({
+      lots: [
+        lot({ id: 22, quantity: 1, lot_number: 'LOT-M', expiry_date: '2027-01-01' }),
+        lot({ id: 23, quantity: 1, lot_number: 'LOT-M', expiry_date: '2027-01-01' }),
+      ],
+    })
+    expect(within(screen.getByTestId('group-expander')).getByText('2')).toBeInTheDocument()
+  })
+})
