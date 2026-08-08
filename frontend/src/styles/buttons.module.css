@@ -1,0 +1,327 @@
+/* Button primitives — text buttons, icon buttons, add buttons, modal actions.
+ *
+ * Split out of `shared.module.css` in T045. No class was renamed: these are
+ * the same rules, in the same order, in a file scoped to one role. */
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+
+.disabled {
+  opacity: 0.6;
+}
+
+/* POC tokens (docs/design-poc.html lines 151–165) */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition);
+  line-height: 1.25;
+}
+
+/* A disabled button has to look disabled. Every `.btn` variant kept its full
+   colour while refusing to do anything — the add-lot button under a scan
+   blocker was the case that surfaced it, but it was true app-wide. Same
+   treatment `.btnConfirm:disabled` already used, applied to the base so no
+   variant can forget it. */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnSm {
+  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+}
+
+.btnPrimary {
+  background: var(--c-primary);
+  color: var(--c-surface);
+  border-color: var(--c-primary);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--c-primary-hover);
+}
+
+.btnSecondary {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-color: var(--c-border);
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: var(--c-border-inner);
+}
+
+/* Uniform 128×36 box for the three secondary actions (Share with /
+   Add batch / Cancel) so they line up identically across the page.
+   `.btn` alone leaves height to content — with the icons + font
+   stack each button rounds to a slightly different pixel count. */
+
+.formSecondaryBtn {
+  height: 36px;
+  min-width: 128px;
+  padding-top: 0;
+  padding-bottom: 0;
+  justify-content: center;
+}
+
+.btnGhost {
+  background: transparent;
+  color: var(--c-text-2);
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: var(--c-border-inner);
+}
+
+.btnDanger {
+  background: transparent;
+  color: var(--c-delete);
+  border-color: var(--c-border);
+}
+
+.btnDanger:hover:not(:disabled) {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--c-border-danger);
+}
+
+/* ── Icon buttons (32×32 base + variants) ────────────────────── */
+
+.btnIcon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius);
+  background: var(--c-border-inner);
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btnIcon:hover {
+  background: var(--c-border);
+  color: var(--c-text-2);
+}
+
+.btnIcon:active {
+  opacity: 0.7;
+}
+
+.btnIconAction {
+  color: var(--c-text-3);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.btnIconAction:hover {
+  color: var(--c-text-2);
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.btnIconDone {
+  color: var(--c-surface);
+  background: var(--c-primary);
+}
+
+.btnIconDone:hover {
+  background: var(--c-primary-hover);
+}
+
+.btnIconConsume {
+  position: relative;
+  color: var(--c-surface);
+  background: var(--c-primary);
+}
+
+.btnIconConsume:hover {
+  background: var(--c-primary-hover);
+}
+
+.consumeBox {
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+}
+
+.consumeArrow {
+  width: 11px;
+  height: 11px;
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  stroke-width: 2.5;
+  color: var(--c-brand);
+}
+
+.btnIconShare {
+  color: var(--c-shared-light);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.btnIconShare:hover {
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.btnIconShared {
+  color: var(--c-shared);
+  background: rgba(37, 99, 235, 0.14);
+  cursor: default;
+}
+
+.btnIconSharedRecipient {
+  color: var(--c-shared);
+  background: transparent;
+  border: 1px solid var(--c-shared-light);
+  cursor: default;
+}
+
+.btnIconDelete {
+  color: var(--c-delete);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.btnIconDelete:hover {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.btnAdd {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background: var(--c-primary);
+  border: none;
+  color: var(--c-surface);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.btnAdd:hover {
+  background: var(--c-primary-hover);
+}
+
+.btnAddSecondary {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+}
+
+.btnAddSecondary:hover {
+  background: var(--c-border-inner);
+}
+
+/* Destructive twin of .btnAddSecondary — used for top-bar Delete affordances
+ * that must match the 40×40 size of .btnAdd while reading as danger. */
+
+.btnAddDanger {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-delete);
+}
+
+.btnAddDanger:hover {
+  color: var(--c-delete-hover);
+  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--c-border-danger);
+}
+
+/* Positive twin of .btnAddSecondary — used for top-bar affordances that
+ * trigger an enabling/activating action (pair with the destructive variant
+ * above so toggle pairs read as red ↔ green). */
+
+.btnAddSuccess {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-success);
+}
+
+.btnAddSuccess:hover {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: var(--c-border-success);
+}
+
+/* ── Modal action buttons ─────────────────────────────────────── */
+
+.btnCancel {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.btnCancel:hover {
+  background: var(--c-border-inner);
+}
+
+.btnConfirm {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: var(--c-primary);
+  color: var(--c-surface);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.btnConfirm:hover {
+  background: var(--c-primary-hover);
+}
+
+.btnConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnConfirmDanger {
+  background: var(--c-danger);
+}
+
+.btnConfirmDanger:hover {
+  background: var(--c-danger);
+  filter: brightness(0.92);
+}
+
+/* ── Icon-button size variants ────────────────────────────────── */
+
+/* Convention:
+ *   .btnIcon    → 32x32 (in-card actions)
+ *   .btnIconMd  → 36x36 (form-level)
+ *   .btnIconLg  → 40x40 (top-bar triggers, primary affordances)
+ */
+
+.btnIconMd {
+  width: 36px;
+  height: 36px;
+}
+
+.btnIconLg {
+  width: 40px;
+  height: 40px;
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import s from './PasswordInput.module.css'
 
 export default function PasswordInput({ className, ...props }) {
@@ -12,7 +12,7 @@ export default function PasswordInput({ className, ...props }) {
       <input
         {...props}
         type={visible ? 'text' : 'password'}
-        className={`${shared.input} ${s.input} ${className ?? ''}`}
+        className={`${forms.input} ${s.input} ${className ?? ''}`}
       />
       <button
         type="button"

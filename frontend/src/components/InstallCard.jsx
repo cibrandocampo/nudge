@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
 import InstallSheet from './InstallSheet'
 import s from './InstallCard.module.css'
 
@@ -41,7 +41,7 @@ export default function InstallCard() {
         </div>
         <p className={s.slogan}>{t('pwa.install.cardSlogan')}</p>
         <p className={s.why}>{t('pwa.install.cardWhy')}</p>
-        <button type="button" className={cx(shared.btn, shared.btnPrimary, s.cta)} onClick={handleClick}>
+        <button type="button" className={cx(buttons.btn, buttons.btnPrimary, s.cta)} onClick={handleClick}>
           {ctaLabel}
         </button>
       </div>

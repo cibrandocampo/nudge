@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UNIT_KEYS, clampValue, hoursToHuman, toHours } from '../utils/interval'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import s from './IntervalPicker.module.css'
 
 /**
@@ -58,7 +58,7 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          className={cx(shared.input, s.amountInput)}
+          className={cx(forms.input, s.amountInput)}
           value={displayValue}
           onFocus={() => setDraft('')}
           onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
@@ -73,7 +73,7 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
         />
 
         <select
-          className={cx(shared.input, s.unitSelect)}
+          className={cx(forms.input, s.unitSelect)}
           value={unit}
           onChange={(e) => handleUnit(e.target.value)}
           aria-label={t('routine.form.unit')}
@@ -86,7 +86,7 @@ export default function IntervalPicker({ valueHours, onChange, error }) {
         </select>
       </div>
 
-      {error && <p className={shared.error}>{error}</p>}
+      {error && <p className={forms.error}>{error}</p>}
     </div>
   )
 }

@@ -25,7 +25,10 @@ import { errorToastMessage } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './RoutineDetailPage.module.css'
 
 export default function RoutineDetailPage() {
@@ -163,12 +166,12 @@ export default function RoutineDetailPage() {
     (c) => routine?.is_owner !== false || c.id !== user?.id,
   )
   const borderClass = routineStockDepleted
-    ? shared.cardBorderDanger
+    ? cards.cardBorderDanger
     : !routine?.is_due
-      ? shared.cardBorderSuccess
+      ? cards.cardBorderSuccess
       : routine.is_overdue
-        ? shared.cardBorderDanger
-        : shared.cardBorderWarning
+        ? cards.cardBorderDanger
+        : cards.cardBorderWarning
 
   // Severity contract is the post-T164 3-tier ('critical' | 'low' | 'ok').
   // Anything else (null when stock isn't cached yet) renders no dot.
@@ -187,13 +190,13 @@ export default function RoutineDetailPage() {
   const stockDetailPath = routine?.stock && linkedStock ? `/inventory/${routine.stock}` : null
   const stockSeverity = linkedStock?.stock_severity
   const stockDotClass = routineStockDepleted
-    ? shared.dotDanger
+    ? cards.dotDanger
     : stockSeverity === 'critical'
-      ? shared.dotDanger
+      ? cards.dotDanger
       : stockSeverity === 'low'
-        ? shared.dotWarning
+        ? cards.dotWarning
         : stockSeverity === 'ok'
-          ? shared.dotSuccess
+          ? cards.dotSuccess
           : null
 
   return (
@@ -207,14 +210,14 @@ export default function RoutineDetailPage() {
     >
       {routine && (
         <div>
-          <div className={shared.topBar}>
+          <div className={layout.topBar}>
             <Link to="/" className={s.back}>
               {t('common.backToRoutines')}
             </Link>
             <div className={s.topActions}>
               <Link
                 to={`/history?type=routines&routine=${routine.id}`}
-                className={cx(shared.btnAdd, shared.btnAddSecondary)}
+                className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
                 aria-label={t('routine.detail.viewAll')}
                 title={t('routine.detail.viewAll')}
               >
@@ -224,7 +227,7 @@ export default function RoutineDetailPage() {
                 <>
                   <button
                     type="button"
-                    className={cx(shared.btnAdd, routine.is_active ? shared.btnAddDanger : shared.btnAddSuccess)}
+                    className={cx(buttons.btnAdd, routine.is_active ? buttons.btnAddDanger : buttons.btnAddSuccess)}
                     onClick={toggleActive}
                     aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
                     title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
@@ -233,7 +236,7 @@ export default function RoutineDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className={cx(shared.btnAdd, shared.btnAddDanger)}
+                    className={cx(buttons.btnAdd, buttons.btnAddDanger)}
                     onClick={() => setShowDeleteConfirm(true)}
                     aria-label={t('routine.detail.delete')}
                     title={t('routine.detail.delete')}
@@ -242,7 +245,7 @@ export default function RoutineDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className={cx(shared.btnAdd, !reachable && shared.disabled)}
+                    className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
                     onClick={() => {
                       if (!reachable) {
                         showToast({ type: 'error', message: t('offline.pageUnavailable') })
@@ -267,7 +270,7 @@ export default function RoutineDetailPage() {
           </h1>
           {routine.description && <p className={s.description}>{routine.description}</p>}
 
-          <div className={cx(shared.card, borderClass, s.meta)}>
+          <div className={cx(cards.card, borderClass, s.meta)}>
             <div className={s.metaRow}>
               <span className={s.metaLabel}>{t('routine.detail.interval')}</span>
               <span className={s.metaValue}>{formatInterval(routine.interval_hours, t)}</span>
@@ -281,7 +284,7 @@ export default function RoutineDetailPage() {
             <div className={s.metaRow}>
               <span className={s.metaLabel}>{t('routine.detail.status')}</span>
               <span className={cx(s.metaValue, s.statusValue)}>
-                <span className={cx(shared.dot, routine.is_active ? shared.dotSuccess : shared.dotDanger)} />
+                <span className={cx(cards.dot, routine.is_active ? cards.dotSuccess : cards.dotDanger)} />
                 {routine.is_active ? t('routine.detail.active') : t('routine.detail.inactive')}
               </span>
             </div>
@@ -302,7 +305,7 @@ export default function RoutineDetailPage() {
                     data-testid="stock-row-value"
                   >
                     {stockDotClass && !hasPendingLog && (
-                      <span className={cx(shared.dot, stockDotClass)} data-testid="stock-severity-dot" />
+                      <span className={cx(cards.dot, stockDotClass)} data-testid="stock-severity-dot" />
                     )}
                     {hasPendingLog && <Icon name="clock" size="sm" />}
                     {t('routine.detail.stockValue', {
@@ -343,13 +346,13 @@ export default function RoutineDetailPage() {
               labels under one frame keeps the relationship clear without
               the visual noise of two stacked cards. */}
           {routine.is_owner === false && routine.owner_display_name && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="people-info">
               <div className={s.peopleSplit}>
                 <div className={s.peopleColumn} data-testid="owner-info">
-                  <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
-                  <div className={shared.formChipsRow}>
-                    <span className={shared.formChip}>
-                      <span className={shared.formChipAvatar} aria-hidden="true">
+                  <span className={forms.formSectionTitle}>{t('sharing.owner')}</span>
+                  <div className={forms.formChipsRow}>
+                    <span className={forms.formChip}>
+                      <span className={forms.formChipAvatar} aria-hidden="true">
                         {avatarInitial({ first_name: routine.owner_display_name })}
                       </span>
                       <span>{routine.owner_display_name}</span>
@@ -358,7 +361,7 @@ export default function RoutineDetailPage() {
                 </div>
                 {otherRecipients.length > 0 && (
                   <div className={s.peopleColumn} data-testid="shared-with-info">
-                    <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+                    <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
                     <SharedWithChips contacts={otherRecipients} />
                   </div>
                 )}
@@ -369,9 +372,9 @@ export default function RoutineDetailPage() {
           {/* Owner viewer keeps the standalone "Shared with" card — they
               don't need to see themselves chipped under "Propietario". */}
           {routine.is_owner !== false && otherRecipients.length > 0 && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="shared-with-info">
+              <div className={forms.formSectionHeader}>
+                <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
               <SharedWithChips contacts={otherRecipients} />
             </section>
@@ -381,10 +384,10 @@ export default function RoutineDetailPage() {
             <div className={s.actionRow}>
               <button
                 className={cx(
-                  shared.btn,
-                  shared.btnPrimary,
+                  buttons.btn,
+                  buttons.btnPrimary,
                   s.primaryAction,
-                  (completing || routineStockDepleted) && shared.disabled,
+                  (completing || routineStockDepleted) && buttons.disabled,
                 )}
                 onClick={() => {
                   if (routineStockDepleted) {
@@ -402,10 +405,10 @@ export default function RoutineDetailPage() {
               <button
                 type="button"
                 className={cx(
-                  shared.btn,
-                  shared.btnPrimary,
+                  buttons.btn,
+                  buttons.btnPrimary,
                   s.pickTimeBtn,
-                  (completing || routineStockDepleted) && shared.disabled,
+                  (completing || routineStockDepleted) && buttons.disabled,
                 )}
                 onClick={() => openDateModal('due')}
                 disabled={completing}
@@ -422,10 +425,10 @@ export default function RoutineDetailPage() {
             <div className={s.actionRow}>
               <button
                 className={cx(
-                  shared.btn,
-                  shared.btnPrimary,
+                  buttons.btn,
+                  buttons.btnPrimary,
                   s.primaryAction,
-                  (completing || routineStockDepleted) && shared.disabled,
+                  (completing || routineStockDepleted) && buttons.disabled,
                 )}
                 onClick={() => {
                   if (routineStockDepleted) {
@@ -443,10 +446,10 @@ export default function RoutineDetailPage() {
               <button
                 type="button"
                 className={cx(
-                  shared.btn,
-                  shared.btnPrimary,
+                  buttons.btn,
+                  buttons.btnPrimary,
                   s.pickTimeBtn,
-                  (completing || routineStockDepleted) && shared.disabled,
+                  (completing || routineStockDepleted) && buttons.disabled,
                 )}
                 onClick={() => openDateModal('advance')}
                 disabled={completing}
@@ -461,7 +464,7 @@ export default function RoutineDetailPage() {
 
           {entries.length > 0 && (
             <section className={s.section}>
-              <h3 className={shared.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
+              <h3 className={layout.sectionTitle}>{t('routine.detail.recentHistory')}</h3>
               <div className={s.entryList}>
                 {groupEntriesByDate(entries.map((e) => ({ ...e, _type: 'routine' }))).map(({ dateLabel, items }) => (
                   <section key={dateLabel} className={s.dayGroup}>

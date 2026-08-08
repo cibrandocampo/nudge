@@ -184,3 +184,14 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
 }
+
+/* The serial of a group's only identified pack, on the group row. Same
+   monospace reading as `.packSerial`, but sized and coloured as metadata like
+   `.available` and `.expiry`: on a pack row the serial IS the row's identity,
+   whereas here the lot number is, and the serial says which box is inside. */
+.groupSerial {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}

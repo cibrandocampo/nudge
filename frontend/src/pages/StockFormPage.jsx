@@ -18,7 +18,9 @@ import { errorToastMessage } from '../utils/errors'
 import { isValidGtin } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
 import { effectiveGroupId } from '../utils/stockGroup'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './StockFormPage.module.css'
 
 const EMPTY_FORM = { name: '', group: '', gtin: '', default_lot_quantity: '' }
@@ -222,15 +224,15 @@ export default function StockFormPage() {
           <button type="button" className={s.back} onClick={() => navigate(-1)}>
             {t('common.backToInventory')}
           </button>
-          <h1 className={shared.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
+          <h1 className={layout.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
         </div>
 
         <form onSubmit={handleSubmit} className={s.form} noValidate>
-          <section className={shared.formSection}>
+          <section className={forms.formSection}>
             <FormField label={t('stockForm.nameLabel')} error={errors.name}>
               <div className={isOwner ? undefined : s.lockedInput}>
                 <input
-                  className={shared.input}
+                  className={forms.input}
                   value={form.name}
                   onChange={field('name')}
                   placeholder={t('stockForm.namePlaceholder')}
@@ -246,7 +248,7 @@ export default function StockFormPage() {
             </FormField>
 
             <FormField label={t('stockForm.groupLabel')}>
-              <select className={shared.input} value={form.group ?? ''} onChange={field('group')}>
+              <select className={forms.input} value={form.group ?? ''} onChange={field('group')}>
                 <option value="">{t('stockForm.groupNone')}</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -267,7 +269,7 @@ export default function StockFormPage() {
                     // significant and a numeric input would drop it.
                     type="text"
                     inputMode="numeric"
-                    className={shared.input}
+                    className={forms.input}
                     value={form.gtin}
                     onChange={field('gtin')}
                     placeholder={t('stockForm.gtinPlaceholder')}
@@ -283,7 +285,7 @@ export default function StockFormPage() {
                   <input
                     type="number"
                     min={1}
-                    className={shared.input}
+                    className={forms.input}
                     value={form.default_lot_quantity}
                     onChange={field('default_lot_quantity')}
                     // `FormField` renders the label as a sibling, not a wrapper
@@ -306,12 +308,12 @@ export default function StockFormPage() {
           )}
 
           {!isEditing && (
-            <section className={shared.formSection}>
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('stockForm.batchesLabel')}</span>
+            <section className={forms.formSection}>
+              <div className={forms.formSectionHeader}>
+                <span className={forms.formSectionTitle}>{t('stockForm.batchesLabel')}</span>
                 <button
                   type="button"
-                  className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+                  className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
                   onClick={addBatch}
                 >
                   <Icon name="plus" size="sm" />
@@ -319,7 +321,7 @@ export default function StockFormPage() {
                 </button>
               </div>
               {batches.length === 0 ? (
-                <p className={shared.helpText}>{t('stockForm.batchesEmpty')}</p>
+                <p className={forms.helpText}>{t('stockForm.batchesEmpty')}</p>
               ) : (
                 <ul className={s.batchesList}>
                   {batches.map((b, idx) => (
@@ -328,7 +330,7 @@ export default function StockFormPage() {
                         <label className={s.batchField}>
                           <span className={s.batchFieldLabel}>{t('stockForm.lotQuantity')}</span>
                           <input
-                            className={cx(shared.input, s.batchInputQty)}
+                            className={cx(forms.input, s.batchInputQty)}
                             type="number"
                             min={1}
                             value={b.quantity}
@@ -339,7 +341,7 @@ export default function StockFormPage() {
                         <label className={s.batchField}>
                           <span className={s.batchFieldLabel}>{t('stockForm.lotExpiry')}</span>
                           <input
-                            className={shared.input}
+                            className={forms.input}
                             type="date"
                             value={b.expiry_date}
                             onChange={(e) => updateBatch(b.uid, 'expiry_date', e.target.value)}
@@ -349,7 +351,7 @@ export default function StockFormPage() {
                         <label className={cx(s.batchField, s.batchFieldFlex)}>
                           <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
                           <input
-                            className={shared.input}
+                            className={forms.input}
                             type="text"
                             value={b.lot_number}
                             onChange={(e) => updateBatch(b.uid, 'lot_number', e.target.value)}
@@ -359,7 +361,7 @@ export default function StockFormPage() {
                       </div>
                       <button
                         type="button"
-                        className={cx(shared.btnIcon, shared.btnIconDelete, s.batchRemove)}
+                        className={cx(buttons.btnIcon, buttons.btnIconDelete, s.batchRemove)}
                         onClick={() => removeBatch(b.uid)}
                         aria-label={t('stockForm.removeBatch', { index: idx + 1 })}
                         title={t('stockForm.removeBatch', { index: idx + 1 })}
@@ -370,17 +372,17 @@ export default function StockFormPage() {
                   ))}
                 </ul>
               )}
-              {errors.batches && <p className={shared.error}>{errors.batches}</p>}
+              {errors.batches && <p className={forms.error}>{errors.batches}</p>}
             </section>
           )}
 
-          {errors.submit && <p className={shared.error}>{errors.submit}</p>}
-          {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
+          {errors.submit && <p className={forms.error}>{errors.submit}</p>}
+          {disabledCreate && <p className={forms.helpText}>{t('offline.requiresConnection')}</p>}
 
-          <div className={shared.formFooter}>
+          <div className={forms.formFooter}>
             <button
               type="submit"
-              className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.btnPrimary, buttons.formSecondaryBtn, s.submitBtn)}
               disabled={submitting || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
@@ -388,7 +390,7 @@ export default function StockFormPage() {
             </button>
             <button
               type="button"
-              className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+              className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
               onClick={() => navigate(-1)}
             >
               {t('stockForm.cancel')}

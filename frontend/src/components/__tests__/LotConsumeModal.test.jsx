@@ -392,6 +392,33 @@ describe('LotConsumeModal — pack step', () => {
     ])
   })
 
+  // The other half of the rule above: deselecting first is what makes room, so
+  // swapping one box for another has to work. Nothing exercised the branch that
+  // adds a pack while the selection is short of the allocation.
+  it('swaps a pack when one is deselected to make room', async () => {
+    const threePacks = groupsFrom([
+      { id: 71, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 72, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
+      { id: 73, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-3' },
+    ])
+    const { user } = renderWithProviders(
+      <LotConsumeModal needed={2} groups={threePacks} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+
+    await user.click(screen.getByText('SN-1')) // drop the first: 1 of 2
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    await user.click(screen.getByText('SN-3')) // and take the third instead
+    expect(screen.getByText('2/2')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('pack-confirm'))
+    // Allocation order follows the group, not the order they were picked.
+    expect(onConfirm).toHaveBeenCalledWith([
+      { lot_id: 72, quantity: 1 },
+      { lot_id: 73, quantity: 1 },
+    ])
+  })
+
   it('toggles a pack with Enter, and ignores other keys', async () => {
     const twoPacksLot = groupsFrom([
       { id: 81, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-X' },
@@ -444,5 +471,70 @@ describe('LotConsumeModal — pack step', () => {
     expect(bulk).not.toHaveAttribute('role')
     expect(bulk).not.toHaveAttribute('aria-checked')
     expect(bulk).toHaveTextContent('4 available')
+  })
+})
+
+// The pack step is skipped when a group holds one identified pack — there is
+// nothing to choose. That left the user consuming a named box without ever
+// being told which one, so the group row shows it instead (T042). Informing,
+// not asking: no step is added.
+describe('LotConsumeModal — the solo pack is named on the group row', () => {
+  const onConfirm = vi.fn()
+  const onCancel = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const render1 = (groups, needed = 1) =>
+    renderWithProviders(<LotConsumeModal needed={needed} groups={groups} onConfirm={onConfirm} onCancel={onCancel} />)
+
+  it('shows the serial when the group holds exactly one identified pack', () => {
+    const onePack = groupsFrom([
+      { id: 41, lot_number: 'LOT-1', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-ONLY' },
+    ])
+    render1(onePack)
+    expect(screen.getByTestId('group-serial')).toHaveTextContent('SN-ONLY')
+  })
+
+  it('shows no serial on the group row when several packs are on offer', () => {
+    const twoPacksLot = groupsFrom([
+      { id: 11, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 12, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-2' },
+    ])
+    render1(twoPacksLot)
+    // Choosing between them is what the pack step is for; naming one here
+    // would claim a box the user has not picked yet.
+    expect(screen.queryByTestId('group-serial')).not.toBeInTheDocument()
+    expect(screen.queryByText('SN-1')).not.toBeInTheDocument()
+  })
+
+  it('leaves a group with no identified packs unchanged', () => {
+    render1(mockGroups)
+    expect(screen.queryByTestId('group-serial')).not.toBeInTheDocument()
+  })
+
+  it('names the solo pack of a mixed group, which is what comes out first', () => {
+    const mixedOnePack = groupsFrom([
+      { id: 51, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 2, serial_number: 'SN-SOLO' },
+      { id: 52, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 5, serial_number: '' },
+    ])
+    render1(mixedOnePack)
+    // `allocateFromGroup` takes chosen packs before bulk, so a single unit
+    // consumed from this group is SN-SOLO.
+    expect(screen.getByTestId('group-serial')).toHaveTextContent('SN-SOLO')
+  })
+
+  // The regression guard for the whole task: this adds information, not a
+  // different allocation.
+  it('confirms a single-pack group with the same lotSelections as before', async () => {
+    const onePack = groupsFrom([
+      { id: 41, lot_number: 'LOT-1', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-ONLY' },
+    ])
+    const { user } = render1(onePack)
+    await user.click(screen.getByText('Confirm'))
+
+    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 41, quantity: 1 }])
   })
 })

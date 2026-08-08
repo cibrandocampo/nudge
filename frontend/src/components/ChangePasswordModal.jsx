@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import ModalFrame from './ModalFrame'
 import PasswordInput from './PasswordInput'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
 import s from './ChangePasswordModal.module.css'
 
 export default function ChangePasswordModal({ onClose }) {
@@ -57,12 +58,12 @@ export default function ChangePasswordModal({ onClose }) {
             onChange={set('confirm')}
             required
           />
-          {error && <p className={shared.error}>{error}</p>}
+          {error && <p className={forms.error}>{error}</p>}
           <div className={s.actions}>
-            <button type="button" className={shared.btnCancel} onClick={onClose}>
+            <button type="button" className={buttons.btnCancel} onClick={onClose}>
               {t('common.cancel')}
             </button>
-            <button type="submit" className={shared.btnConfirm} disabled={saving}>
+            <button type="submit" className={buttons.btnConfirm} disabled={saving}>
               {saving ? t('header.saving') : t('header.save')}
             </button>
           </div>

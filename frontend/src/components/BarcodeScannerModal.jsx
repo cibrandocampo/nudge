@@ -5,7 +5,8 @@ import Icon from './Icon'
 import cx from '../utils/cx'
 import { ZXING_WASM_URL } from '../utils/wasmAsset'
 import { readScannerCamera, rememberScannerCamera } from '../utils/scannerCamera'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
 import s from './BarcodeScannerModal.module.css'
 
 // Fraction of the shorter video side used as the decode region. A pharmacy
@@ -489,7 +490,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
   return (
     <ModalFrame onClose={onClose} title={t('scan.title')} size="lg">
       {errorMessage ? (
-        <p className={shared.error} data-testid="scan-error">
+        <p className={forms.error} data-testid="scan-error">
           {errorMessage}
         </p>
       ) : (
@@ -499,14 +500,14 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
             <div className={s.reticle} aria-hidden="true" />
           </div>
           {notice ? (
-            <p className={cx(shared.error, s.notice)} data-testid="scan-notice">
+            <p className={cx(forms.error, s.notice)} data-testid="scan-notice">
               {notice}
             </p>
           ) : (
             <p className={s.hint}>{t('scan.hint')}</p>
           )}
           {cameras.length > 1 && (
-            <p className={cx(s.cameraHint, switchRefused && shared.error)} data-testid="scan-camera-hint">
+            <p className={cx(s.cameraHint, switchRefused && forms.error)} data-testid="scan-camera-hint">
               {switchRefused ? t('scan.cameraRefused') : t('scan.cameraHint')}
             </p>
           )}
@@ -515,7 +516,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
               {torchAvailable && (
                 <button
                   type="button"
-                  className={cx(shared.btn, shared.btnSecondary, s.controlBtn)}
+                  className={cx(buttons.btn, buttons.btnSecondary, s.controlBtn)}
                   onClick={toggleTorch}
                   aria-pressed={torchOn}
                   data-testid="scan-torch"
@@ -527,7 +528,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
               {cameras.length > 1 && (
                 <button
                   type="button"
-                  className={cx(shared.btn, shared.btnSecondary, s.controlBtn, s.cameraBtn)}
+                  className={cx(buttons.btn, buttons.btnSecondary, s.controlBtn, s.cameraBtn)}
                   onClick={switchCamera}
                   aria-label={t('scan.camera')}
                   title={t('scan.camera')}

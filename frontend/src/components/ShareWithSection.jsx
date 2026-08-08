@@ -4,7 +4,8 @@ import Icon from './Icon'
 import ShareModal from './ShareModal'
 import SharedWithChips from './SharedWithChips'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
 import s from './ShareWithSection.module.css'
 
 /**
@@ -42,12 +43,12 @@ export default function ShareWithSection({ value = [], onChange, contacts = [], 
   const remove = (contactId) => onChange(value.filter((x) => x !== contactId))
 
   return (
-    <section className={shared.formSection}>
-      <div className={shared.formSectionHeader}>
-        <span className={shared.formSectionTitle}>{label}</span>
+    <section className={forms.formSection}>
+      <div className={forms.formSectionHeader}>
+        <span className={forms.formSectionTitle}>{label}</span>
         <button
           type="button"
-          className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn, s.shareBtn)}
+          className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn, s.shareBtn)}
           onClick={() => setOpen(true)}
           disabled={buttonDisabled}
           title={noContacts ? t('stockForm.sharedNoContacts') : undefined}
@@ -58,7 +59,7 @@ export default function ShareWithSection({ value = [], onChange, contacts = [], 
       </div>
 
       {selected.length === 0 ? (
-        <p className={shared.helpText}>{noContacts ? t('stockForm.sharedNoContacts') : t('stockForm.sharedEmpty')}</p>
+        <p className={forms.helpText}>{noContacts ? t('stockForm.sharedNoContacts') : t('stockForm.sharedEmpty')}</p>
       ) : (
         <SharedWithChips contacts={selected} onRemove={remove} />
       )}

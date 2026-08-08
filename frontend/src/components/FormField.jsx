@@ -1,5 +1,5 @@
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import s from './FormField.module.css'
 
 /**
@@ -18,13 +18,13 @@ export default function FormField({ label, children, error, hint }) {
   return (
     <div className={s.field}>
       {label && (
-        <label className={cx(shared.inputLabel, s.label)}>
+        <label className={cx(forms.inputLabel, s.label)}>
           {label}
           {hint && <span className={s.hint}> · {hint}</span>}
         </label>
       )}
       {children}
-      {error && <p className={shared.error}>{error}</p>}
+      {error && <p className={forms.error}>{error}</p>}
     </div>
   )
 }

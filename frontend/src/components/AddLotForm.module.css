@@ -19,13 +19,6 @@
   font-size: 0.8rem;
 }
 
-.serialLabel {
-  color: var(--c-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 0.7rem;
-}
-
 .serialValue {
   color: var(--c-text);
   font-weight: 600;

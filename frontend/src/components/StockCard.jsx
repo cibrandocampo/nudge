@@ -7,7 +7,8 @@ import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
 import LotRow, { LotRowList } from './LotRow'
 import SyncStatusBadge from './SyncStatusBadge'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
 import s from './StockCard.module.css'
 
 const MONTHLY_FACTOR = 30
@@ -43,32 +44,32 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
   const totalRate = ownRate + sharedRate
 
   return (
-    <div className={cx(shared.card, shared.cardClickable, tokens.border)} data-testid="product-card" onClick={goDetail}>
-      <div className={cx(shared.cardHeader, s.compactHeader)}>
-        <div className={shared.cardMeta}>
-          <span className={cx(shared.cardTitle, shared.cardTitleFlex)}>
-            <span className={cx(shared.dot, tokens.dot)} />
+    <div className={cx(cards.card, cards.cardClickable, tokens.border)} data-testid="product-card" onClick={goDetail}>
+      <div className={cx(cards.cardHeader, s.compactHeader)}>
+        <div className={cards.cardMeta}>
+          <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
+            <span className={cx(cards.dot, tokens.dot)} />
             <span>{stock.name}</span>
             <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
           </span>
-          <span className={shared.cardSubtitle}>
-            <span className={cx(shared.stockQty, flashing && s.stockQtyFlash)}>
+          <span className={cards.cardSubtitle}>
+            <span className={cx(cards.stockQty, flashing && s.stockQtyFlash)}>
               {stock.quantity_available ?? stock.quantity ?? 0} {t('common.unit')}
             </span>
             {(stock.quantity_expired ?? 0) > 0 && (
-              <span className={shared.stockQtyExpired}>
+              <span className={cards.stockQtyExpired}>
                 {' '}
                 ({t('inventory.expiredCount', { count: stock.quantity_expired })})
               </span>
             )}
           </span>
         </div>
-        <div className={shared.cardActions} onClick={stop}>
+        <div className={cards.cardActions} onClick={stop}>
           {isShared && (
             <span
               className={cx(
-                shared.btnIcon,
-                isOwnerOfShare ? shared.btnIconShared : shared.btnIconSharedRecipient,
+                buttons.btnIcon,
+                isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient,
                 s.sharedBadge,
               )}
               aria-label={sharedBadgeAria}
@@ -82,19 +83,19 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
           {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
             <button
               type="button"
-              className={cx(shared.btnIcon, shared.btnIconConsume, consuming && shared.disabled)}
+              className={cx(buttons.btnIcon, buttons.btnIconConsume, consuming && buttons.disabled)}
               onClick={() => onConsume(stock)}
               disabled={consuming}
               aria-label={t('inventory.consumeTooltip')}
               title={t('inventory.consumeTooltip')}
             >
-              <Icon name="package" className={shared.consumeBox} />
-              <Icon name="arrow-down" className={shared.consumeArrow} />
+              <Icon name="package" className={buttons.consumeBox} />
+              <Icon name="arrow-down" className={buttons.consumeArrow} />
             </button>
           )}
           <button
             type="button"
-            className={cx(shared.btnIcon, shared.btnIconAction)}
+            className={cx(buttons.btnIcon, buttons.btnIconAction)}
             onClick={goDetail}
             aria-label={t('common.openDetail')}
             title={t('common.openDetail')}
@@ -122,14 +123,14 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
 
       {totalRate > 0 && (
         <div
-          className={shared.consumptionRow}
+          className={cards.consumptionRow}
           data-testid="consumption-row"
           title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
           onClick={stop}
         >
           {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" data-testid="estimated-icon" />}
           {ownRate > 0 && (
-            <span className={shared.consumptionOwn}>
+            <span className={cards.consumptionOwn}>
               {t('inventory.consumptionPerMonth', { rate: toMonthly(ownRate) })}
             </span>
           )}
@@ -137,16 +138,16 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
           {sharedRate > 0 && <span>{t('inventory.consumptionShared', { rate: toMonthly(sharedRate) })}</span>}
 
           {(stock.quantity_available ?? stock.quantity ?? 0) === 0 ? (
-            <span className={cx(shared.depletionEnd, shared.stockDepletionDanger)} data-testid="out-of-stock-footer">
+            <span className={cx(cards.depletionEnd, cards.stockDepletionDanger)} data-testid="out-of-stock-footer">
               {t('inventory.outOfStockFooter')}
             </span>
           ) : (
             stock.estimated_depletion_date && (
               <span
                 className={cx(
-                  shared.depletionEnd,
-                  stock.stock_severity === 'low' && shared.stockDepletionWarn,
-                  stock.stock_severity === 'critical' && shared.stockDepletionDanger,
+                  cards.depletionEnd,
+                  stock.stock_severity === 'low' && cards.stockDepletionWarn,
+                  stock.stock_severity === 'critical' && cards.stockDepletionDanger,
                 )}
                 data-testid="depletion-date"
               >

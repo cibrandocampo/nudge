@@ -1,0 +1,315 @@
+/* Card primitives — the card shell, status dots, and the stock/group
+ * elements that live inside cards.
+ *
+ * Split out of `shared.module.css` in T045. No class was renamed: these are
+ * the same rules, in the same order, in a file scoped to one role. */
+
+/* ═══════════════════════════════════════════════════════════════
+   New design system (T031)
+   Consumed by T026 (offline UX) and T027–T029 (page migrations).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Status dot ──────────────────────────────────────────────── */
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotSuccess {
+  background: var(--c-success);
+}
+
+.dotWarning {
+  background: var(--c-warning);
+}
+
+.dotDanger {
+  background: var(--c-danger);
+}
+
+.dotBrand {
+  background: var(--c-brand);
+}
+
+/* Inline icon tints — declarations live further down (after .cardLotIcon)
+ * so source order makes them win. <Icon> uses currentColor; these classes
+ * recolour just the glyph without touching sibling text. */
+
+/* ── Card ────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.cardBorderSuccess {
+  border-left-color: var(--c-border-success);
+}
+
+.cardBorderWarning {
+  border-left-color: var(--c-border-warning);
+}
+
+.cardBorderDanger {
+  border-left-color: var(--c-border-danger);
+}
+
+.cardClickable {
+  cursor: pointer;
+}
+
+.cardClickable:hover {
+  background: #fdfdfd;
+}
+
+.cardHeader {
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 72px;
+}
+
+.cardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardTitleFlex {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cardSubtitle {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.cardActions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.cardStockBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--c-text-3);
+  margin-top: 0.1rem;
+}
+
+/* Pill that sits inline at the right end of `.cardSubtitle` to label
+ * the stock's category (group). Same visual register as `.lotNumberPill`
+ * in card lot rows, but uses default sans-serif since this is plain
+ * text, not a code/identifier. */
+
+.cardCategoryPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--c-text-3);
+  background: var(--c-border-inner);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* When a stock badge sits right under the card title (the InventoryPage
+ * alert blocks: Sin stock, Stock bajo, etc.), give it a touch of top
+ * margin so the title isn't cramped against the first item. */
+
+.cardTitle + .cardStockBadge {
+  margin-top: 0.4rem;
+}
+
+/* ── Status text ─────────────────────────────────────────────── */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.statusDue {
+  color: var(--c-warning);
+}
+
+.statusOverdue {
+  color: var(--c-danger);
+}
+
+.statusOk {
+  color: var(--c-success);
+}
+
+/* ── Stock — specific elements within cards ──────────────────── */
+
+.stockQty {
+  color: var(--c-text);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.stockQtyExpired {
+  color: var(--c-text-3);
+  font-weight: 400;
+}
+
+.stockDepletion {
+  color: var(--c-text-3);
+}
+
+.stockDepletionWarn {
+  color: var(--c-warning);
+}
+
+.stockDepletionDanger {
+  color: var(--c-danger);
+}
+
+.depletionEnd {
+  margin-left: auto;
+  font-weight: 500;
+}
+
+/* ── Card lot rows ────────────────────────────────────────────
+ * Used by StockCard list and StockDetailPage detail. The
+ * data-expiring attribute on rows is data-only; severity is
+ * surfaced via the lot icon's className (iconWarning / iconDanger)
+ * — see utils/stockSeverity.js. */
+
+/* The lot row and its grid contract moved to `components/LotRow.module.css`
+ * (T039): every class that laid one out had exactly two consumers, and both
+ * now render through that component. `.cardLotsBlock`'s skin went to
+ * `StockCard.module.css`, the only card that draws it. */
+
+.consumptionRow {
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid var(--c-border-inner);
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.consumptionOwn {
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+
+/* ── Alerts section ──────────────────────────────────────────── */
+
+.alertsSection {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* ── Group (left rail connecting cards) ──────────────────────── */
+
+.group {
+  margin-bottom: 1.25rem;
+  position: relative;
+}
+
+.group::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--c-primary);
+  border-radius: var(--radius-sm);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--c-primary);
+}
+
+.groupName {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.groupCount {
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+}
+
+/* ── Inline icon tints ────────────────────────────────────────────
+ * These set `color` on an element whose default colour comes from
+ * another class composed onto it via `cx()` — `cardLotIcon` and
+ * `cardLotExpiry` in `components/LotRow.module.css`:
+ *
+ *     <Icon className={cx(s.cardLotIcon, tint)} />
+ *
+ * Both are single-class selectors on the same element, so the winner
+ * used to be whichever the bundler emitted last. That worked while
+ * every competitor lived in this file below a "KEEP AT END OF FILE"
+ * marker, and stopped working in T039 when the lot-row classes moved
+ * to their own stylesheet: `cardLotIcon` began landing later in the
+ * bundle and the tint has been silently losing ever since.
+ *
+ * The class is doubled so specificity, not source order, decides.
+ * That is the only tiebreaker that survives a class being moved to
+ * another file — which is precisely what T045 does to this block.
+ *
+ * Consumers (T165+): `<Icon>` and the per-lot expiry text, both via
+ * iconClassForLot() / iconClassForStock() in utils/stockSeverity.js. */
+
+.iconSuccess.iconSuccess {
+  color: var(--c-success);
+}
+
+.iconWarning.iconWarning {
+  color: var(--c-warning);
+}
+
+.iconDanger.iconDanger {
+  color: var(--c-danger);
+}

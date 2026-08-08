@@ -12,7 +12,9 @@ import { useDeleteStockGroup } from '../hooks/mutations/useDeleteStockGroup'
 import { useUpdateStockGroup } from '../hooks/mutations/useUpdateStockGroup'
 import { useServerReachable } from '../hooks/useServerReachable'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './StockGroupsPage.module.css'
 
 export default function StockGroupsPage() {
@@ -120,11 +122,11 @@ export default function StockGroupsPage() {
 
   return (
     <div>
-      <div className={shared.topBar}>
+      <div className={layout.topBar}>
         <button type="button" className={s.back} onClick={() => navigate('/inventory')}>
           {t('common.backToInventory')}
         </button>
-        <h1 className={shared.pageTitle}>{t('stockGroups.title')}</h1>
+        <h1 className={layout.pageTitle}>{t('stockGroups.title')}</h1>
       </div>
 
       {!reachable && (
@@ -174,7 +176,7 @@ export default function StockGroupsPage() {
                 }}
               >
                 <span
-                  className={cx(s.dragHandle, !reachable && shared.disabled)}
+                  className={cx(s.dragHandle, !reachable && buttons.disabled)}
                   aria-label={t('stockGroups.dragHandle')}
                   title={!reachable ? t('offline.requiresConnection') : t('stockGroups.dragHandle')}
                 >
@@ -182,7 +184,7 @@ export default function StockGroupsPage() {
                 </span>
                 {editing?.id === group.id ? (
                   <input
-                    className={cx(shared.input, s.nameInput)}
+                    className={cx(forms.input, s.nameInput)}
                     defaultValue={group.name}
                     autoFocus
                     aria-label={t('stockGroups.rename')}
@@ -197,7 +199,7 @@ export default function StockGroupsPage() {
                 <div className={s.actions}>
                   <button
                     type="button"
-                    className={cx(shared.btnAdd, shared.btnAddDanger)}
+                    className={cx(buttons.btnAdd, buttons.btnAddDanger)}
                     onClick={() => setConfirmDelete({ id: group.id, name: group.name })}
                     disabled={!reachable}
                     aria-label={t('stockGroups.delete')}
@@ -207,7 +209,7 @@ export default function StockGroupsPage() {
                   </button>
                   <button
                     type="button"
-                    className={shared.btnAdd}
+                    className={buttons.btnAdd}
                     onClick={() => setEditing({ id: group.id })}
                     disabled={!reachable || editing?.id === group.id}
                     aria-label={t('stockGroups.rename')}
@@ -224,7 +226,7 @@ export default function StockGroupsPage() {
 
       <form onSubmit={handleCreate} className={s.createForm}>
         <input
-          className={cx(shared.input, s.createInput)}
+          className={cx(forms.input, s.createInput)}
           placeholder={t('stockGroups.createPlaceholder')}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
@@ -233,7 +235,7 @@ export default function StockGroupsPage() {
         />
         <button
           type="submit"
-          className={shared.btnAdd}
+          className={buttons.btnAdd}
           disabled={createGroup.isPending || !reachable || !newName.trim()}
           aria-label={t('stockGroups.createButton')}
           title={!reachable ? t('offline.requiresConnection') : t('stockGroups.createButton')}
@@ -242,7 +244,7 @@ export default function StockGroupsPage() {
         </button>
       </form>
 
-      {actionError && <p className={cx(shared.error, s.error)}>{actionError}</p>}
+      {actionError && <p className={cx(forms.error, s.error)}>{actionError}</p>}
 
       {confirmDelete && (
         <ConfirmModal

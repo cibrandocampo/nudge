@@ -7,7 +7,8 @@ import { findCachedStock } from '../utils/lotsForSelection'
 import { iconClassForStock } from '../utils/stockSeverity'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
 import s from './RoutineCard.module.css'
 
 function statusTokens(routine, { stockDepleted } = {}) {
@@ -17,15 +18,15 @@ function statusTokens(routine, { stockDepleted } = {}) {
   // identical to one in perfect shape — the user only finds out when they try
   // to log and the backend 422s with `insufficient_stock`.
   if (stockDepleted) {
-    return { border: shared.cardBorderDanger, dot: shared.dotDanger, text: shared.statusOverdue }
+    return { border: cards.cardBorderDanger, dot: cards.dotDanger, text: cards.statusOverdue }
   }
   if (!routine.is_due) {
-    return { border: shared.cardBorderSuccess, dot: shared.dotSuccess, text: shared.statusOk }
+    return { border: cards.cardBorderSuccess, dot: cards.dotSuccess, text: cards.statusOk }
   }
   if (routine.is_overdue) {
-    return { border: shared.cardBorderDanger, dot: shared.dotDanger, text: shared.statusOverdue }
+    return { border: cards.cardBorderDanger, dot: cards.dotDanger, text: cards.statusOverdue }
   }
-  return { border: shared.cardBorderWarning, dot: shared.dotWarning, text: shared.statusDue }
+  return { border: cards.cardBorderWarning, dot: cards.dotWarning, text: cards.statusDue }
 }
 
 export default function RoutineCard({ routine, onMarkDone, completing }) {
@@ -51,7 +52,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name ?? '' })
   const sharedBadge = isShared && (
     <span
-      className={cx(shared.btnIcon, isOwnerOfShare ? shared.btnIconShared : shared.btnIconSharedRecipient)}
+      className={cx(buttons.btnIcon, isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient)}
       aria-label={sharedBadgeAria}
       title={sharedBadgeAria}
       data-testid="shared-badge"
@@ -78,7 +79,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   const doneButton = routine.is_due && (
     <button
       type="button"
-      className={cx(shared.btnIcon, shared.btnIconDone, doneDisabled && shared.disabled)}
+      className={cx(buttons.btnIcon, buttons.btnIconDone, doneDisabled && buttons.disabled)}
       onClick={(e) => {
         e.stopPropagation()
         onMarkDone(routine.id)
@@ -92,32 +93,32 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   )
 
   const chevronButton = (
-    <span className={cx(shared.btnIcon, shared.btnIconAction)} aria-hidden="true">
+    <span className={cx(buttons.btnIcon, buttons.btnIconAction)} aria-hidden="true">
       <Icon name="chevron-right" size="sm" />
     </span>
   )
 
   const body = (
-    <div className={shared.cardHeader}>
-      <div className={shared.cardMeta}>
-        <span className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+    <div className={cards.cardHeader}>
+      <div className={cards.cardMeta}>
+        <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
           <span>{routine.name}</span>
           <SyncStatusBadge resourceKey={resourceKey} className={s.syncBadge} />
         </span>
-        <span className={shared.cardSubtitle}>
-          <span className={cx(shared.status, tokens.text)}>
-            <span className={cx(shared.dot, tokens.dot)} />
+        <span className={cards.cardSubtitle}>
+          <span className={cx(cards.status, tokens.text)}>
+            <span className={cx(cards.dot, tokens.dot)} />
             {timeLabel}
           </span>
         </span>
         {routine.stock_name && (
-          <span className={shared.cardStockBadge}>
+          <span className={cards.cardStockBadge}>
             <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
             {routine.stock_usage ?? 1} × {routine.stock_name}
           </span>
         )}
       </div>
-      <div className={shared.cardActions}>
+      <div className={cards.cardActions}>
         {sharedBadge}
         {doneButton}
         {chevronButton}
@@ -125,7 +126,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
     </div>
   )
 
-  const cardClass = cx(shared.card, shared.cardClickable, tokens.border)
+  const cardClass = cx(cards.card, cards.cardClickable, tokens.border)
 
   if (!routine.is_due) {
     return (
