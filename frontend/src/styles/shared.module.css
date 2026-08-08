@@ -558,134 +558,11 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
  * surfaced via the lot icon's className (iconWarning / iconDanger)
  * — see utils/stockSeverity.js. */
 
-.cardLotsBlock {
-  padding: 0.4rem 0.75rem;
-  border-top: 1px dashed var(--c-border-inner);
-  display: flex;
-  flex-direction: column;
-}
+/* The lot row and its grid contract moved to `components/LotRow.module.css`
+ * (T039): every class that laid one out had exactly two consumers, and both
+ * now render through that component. `.cardLotsBlock`'s skin went to
+ * `StockCard.module.css`, the only card that draws it. */
 
-.cardLotRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
-  font-size: 0.78rem;
-  color: var(--c-text-2);
-}
-.cardLotRow + .cardLotRow {
-  border-top: 1px solid var(--c-border-inner);
-}
-
-/* When the parent container carries `data-with-pills` (set by the JSX when
- * at least one lot in the stock has a lot_number), switch to CSS Grid so
- * dates align in a stable column across rows regardless of which rows have
- * a pill. The grid lives on the parent (cardLotsBlock here, or s.lotsList
- * in StockDetailPage). cardLotRow uses CSS Subgrid to inherit the parent's
- * columns — keeping the row as a layout element preserves the existing
- * `cardLotRow + cardLotRow { border-top }` separator (full-width line, no
- * gaps). cardLotMeta uses display:contents so its date + pill children
- * become direct subgrid items. Each item carries an explicit grid-column
- * so position is independent of DOM order or sibling presence. */
-.cardLotsBlock[data-with-pills] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  /* Padding under data-with-pills:
-   *   - top/bottom: 0 so the first/last rows match the middle rows'
-   *     vertical rhythm (each row's own 0.3rem top/bottom is the half-gap).
-   *   - left: 0 — the visual inset lives on `[data-with-pills] .cardLotMain`
-   *     (`padding-left: 0.75rem`) so the row separator can reach the
-   *     block's left edge.
-   *   - right: 0.75rem to match `.cardHeader`'s right padding so the
-   *     rightmost item (pill or trash) lines up vertically with the chevron
-   *     in the card header. The row separator stops 0.75rem before the
-   *     right edge — same as the header's content rectangle. */
-  padding: 0 0.75rem 0 0;
-  /* row separator continues to be `cardLotRow + cardLotRow { border-top }`. */
-}
-
-[data-with-pills] .cardLotRow {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-  align-items: center;
-  column-gap: 0.5rem;
-  /* Normalize row height across rows: the pill (padding 0.15rem ×2 + font)
-   * naturally renders ~1.4rem tall, while rows without a pill collapse to
-   * ~1rem (font line-height). Setting a min-height keeps the visual rhythm
-   * consistent regardless of pill presence per row. */
-  min-height: 1.6rem;
-}
-[data-with-pills] .cardLotMeta {
-  display: contents;
-}
-[data-with-pills] .cardLotMain {
-  grid-column: 1;
-  /* Left inset previously on cardLotsBlock — moved here so border-top on
-   * cardLotRow can reach the block's left edge. */
-  padding-left: 0.75rem;
-}
-[data-with-pills] .cardLotExpiry {
-  grid-column: 2;
-  text-align: right;
-}
-[data-with-pills] .cardLotNumberPill {
-  grid-column: 3;
-  /* width: 100% + text-align: center makes every pill fill its grid cell so
-   * all pills in the stock share the same visual width (the cell auto-sizes
-   * to the longest pill across rows) and the lot_number is centered inside.
-   * Right breathing room lives on the parent block's `padding-right`. */
-  width: 100%;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-.cardLotMain {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-/* margin-left: auto pushes meta (expiry + lot pill) to the right edge.
- * In rows with a trailing trash button (StockDetailPage), meta sits
- * next to the button. In rows without one (StockCard list), meta is
- * flush right. */
-.cardLotMeta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.cardLotIcon {
-  color: var(--c-text-2);
-  flex-shrink: 0;
-}
-
-.cardLotQty {
-  color: var(--c-text);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.cardLotQtyExpired {
-  text-decoration: line-through;
-}
-
-.cardLotExpiry {
-  color: var(--c-text-3);
-  font-size: 0.75rem;
-}
-
-.cardLotNumberPill {
-  font-size: 0.78rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--c-text-3);
-  background: var(--c-border-inner);
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-}
 .consumptionRow {
   padding: 0.35rem 0.75rem;
   border-top: 1px solid var(--c-border-inner);
@@ -973,7 +850,7 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 /* Convention:
  *   .modalBox       → default ~360px (short confirms, small pickers)
  *   .modalBoxMd     → ~420px (ShareModal, GroupPickerModal, ConflictModal)
- *   .modalBoxLg     → ~500px (LotSelectionModal, ChangePasswordModal)
+ *   .modalBoxLg     → ~500px (LotConsumeModal, ChangePasswordModal)
  *   .modalBoxFramed → bare frame (header/body/footer layout with
  *                    internal scroll) — used by ConflictModal.
  */

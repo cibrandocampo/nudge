@@ -25,3 +25,10 @@
   min-height: auto;
   padding: 0.5rem 0.75rem;
 }
+
+/* Separates the lot list from the card body. The layout of the rows inside
+   belongs to `LotRow.module.css`; this is only the block's own skin. */
+.lotsBlock {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px dashed var(--c-border-inner);
+}
