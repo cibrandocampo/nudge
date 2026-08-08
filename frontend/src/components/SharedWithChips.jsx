@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { avatarInitial, displayLabel } from '../utils/displayName'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import Icon from './Icon'
 
 /**
@@ -17,19 +17,19 @@ export default function SharedWithChips({ contacts = [], onRemove }) {
   const { t } = useTranslation()
   if (!contacts || contacts.length === 0) return null
   return (
-    <div className={shared.formChipsRow}>
+    <div className={forms.formChipsRow}>
       {contacts.map((c) => {
         const label = displayLabel(c)
         return (
-          <span key={c.id} className={shared.formChip}>
-            <span className={shared.formChipAvatar} aria-hidden="true">
+          <span key={c.id} className={forms.formChip}>
+            <span className={forms.formChipAvatar} aria-hidden="true">
               {avatarInitial(c)}
             </span>
             <span>{label}</span>
             {onRemove && (
               <button
                 type="button"
-                className={shared.formChipRemove}
+                className={forms.formChipRemove}
                 onClick={() => onRemove(c.id)}
                 aria-label={t('stockForm.removeShare', { name: label })}
               >

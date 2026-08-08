@@ -22,7 +22,10 @@ import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
 import { avatarInitial, fullName } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './SettingsPage.module.css'
 
 const TIMEZONES = Intl.supportedValuesOf('timeZone')
@@ -275,7 +278,7 @@ export default function SettingsPage() {
 
   return (
     <div className={s.container}>
-      <h1 className={shared.pageTitle}>{t('settings.title')}</h1>
+      <h1 className={layout.pageTitle}>{t('settings.title')}</h1>
 
       {!reachable && (
         <AlertBanner variant="warning" icon="wifi-off">
@@ -293,11 +296,11 @@ export default function SettingsPage() {
              * secondary metadata. `username` is internal-only and never
              * surfaces in the UI. */}
             <h2 className={s.displayName}>{fullName(user)}</h2>
-            {user?.email && <p className={shared.helpText}>{user.email}</p>}
+            {user?.email && <p className={forms.helpText}>{user.email}</p>}
           </div>
           <button
             type="button"
-            className={shared.btnAdd}
+            className={buttons.btnAdd}
             onClick={() => setShowPwModal(true)}
             aria-label={t('header.changePassword')}
             title={t('header.changePassword')}
@@ -317,11 +320,11 @@ export default function SettingsPage() {
                 </span>
                 <span className={s.contactName}>
                   {fullName(c)}
-                  {(c.first_name || c.last_name) && c.email && <span className={shared.helpText}> ({c.email})</span>}
+                  {(c.first_name || c.last_name) && c.email && <span className={forms.helpText}> ({c.email})</span>}
                 </span>
                 <button
                   type="button"
-                  className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
+                  className={cx(buttons.btnIcon, buttons.btnIconDelete, !reachable && buttons.disabled)}
                   onClick={() => setContactToRemove({ id: c.id, name: fullName(c) })}
                   title={!reachable ? t('offline.requiresConnection') : t('settings.removeContact')}
                   aria-label={t('settings.removeContact')}
@@ -333,12 +336,12 @@ export default function SettingsPage() {
             ))}
           </ul>
         ) : (
-          <p className={shared.helpText}>{t('settings.noContacts')}</p>
+          <p className={forms.helpText}>{t('settings.noContacts')}</p>
         )}
 
         <form className={s.addContactForm} onSubmit={handleAddContact} noValidate>
           <input
-            className={cx(shared.input, contactEmailInvalid && s.inputInvalid)}
+            className={cx(forms.input, contactEmailInvalid && s.inputInvalid)}
             type="email"
             placeholder={t('settings.addContact.email')}
             value={contactEmail}
@@ -351,7 +354,7 @@ export default function SettingsPage() {
           />
           <button
             type="submit"
-            className={cx(shared.btnAdd, (!reachable || !contactEmail.trim()) && shared.disabled)}
+            className={cx(buttons.btnAdd, (!reachable || !contactEmail.trim()) && buttons.disabled)}
             disabled={!reachable || !contactEmail.trim()}
             data-testid="add-contact-submit"
             aria-label={t('settings.addContact.add')}
@@ -382,15 +385,15 @@ export default function SettingsPage() {
           />
           <span className={s.quietHoursToggleLabel}>{t('settings.quietHoursEnable')}</span>
         </div>
-        <p className={shared.helpText}>{t('settings.quietHoursHint')}</p>
+        <p className={forms.helpText}>{t('settings.quietHoursHint')}</p>
         <div
           className={cx(s.quietHoursRange, !form.quiet_hours_enabled && s.quietHoursRangeDisabled)}
           data-testid="quiet-hours-range"
         >
           <label className={s.quietHoursField}>
-            <span className={shared.helpText}>{t('settings.quietHoursStart')}</span>
+            <span className={forms.helpText}>{t('settings.quietHoursStart')}</span>
             <input
-              className={shared.input}
+              className={forms.input}
               type="time"
               value={form.quiet_hours_start}
               disabled={!form.quiet_hours_enabled || !reachable}
@@ -399,9 +402,9 @@ export default function SettingsPage() {
             />
           </label>
           <label className={s.quietHoursField}>
-            <span className={shared.helpText}>{t('settings.quietHoursEnd')}</span>
+            <span className={forms.helpText}>{t('settings.quietHoursEnd')}</span>
             <input
-              className={shared.input}
+              className={forms.input}
               type="time"
               value={form.quiet_hours_end}
               disabled={!form.quiet_hours_enabled || !reachable}
@@ -415,16 +418,16 @@ export default function SettingsPage() {
           <span>{t('settings.quietHoursHintExtra')}</span>
         </p>
         {dailyInQuietHours && (
-          <p className={cx(shared.helpText, s.error)} data-testid="quiet-hours-overlap-error">
+          <p className={cx(forms.helpText, s.error)} data-testid="quiet-hours-overlap-error">
             {t('settings.quietHoursOverlapError')}
           </p>
         )}
       </Section>
 
       <Section title={t('settings.dailyTime')}>
-        <p className={shared.helpText}>{t('settings.dailyTimeHint')}</p>
+        <p className={forms.helpText}>{t('settings.dailyTimeHint')}</p>
         <input
-          className={cx(shared.input, dailyInQuietHours && s.inputError)}
+          className={cx(forms.input, dailyInQuietHours && s.inputError)}
           type="time"
           value={form.daily_notification_time}
           onChange={(e) => {
@@ -453,7 +456,7 @@ export default function SettingsPage() {
             <button
               key={code}
               type="button"
-              className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && shared.disabled)}
+              className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && buttons.disabled)}
               onClick={() => changeLanguage(code)}
               disabled={!reachable}
             >
@@ -465,7 +468,7 @@ export default function SettingsPage() {
 
       <Section title={t('settings.timezone')}>
         {form.timezone !== user?.timezone && user?.timezone === 'UTC' && (
-          <p className={shared.helpText}>{t('settings.timezoneDetected', { tz: form.timezone })}</p>
+          <p className={forms.helpText}>{t('settings.timezoneDetected', { tz: form.timezone })}</p>
         )}
         <Combobox
           value={form.timezone}
@@ -508,7 +511,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
   const denied = permission === 'denied'
   const canEnable = permission === 'granted' && !subscribed
 
-  const dotClass = active ? shared.dotSuccess : canEnable ? shared.dotWarning : shared.dotDanger
+  const dotClass = active ? cards.dotSuccess : canEnable ? cards.dotWarning : cards.dotDanger
   const labelText = active
     ? t('settings.pushActive')
     : denied
@@ -549,13 +552,13 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
     <div className={s.pushWrap}>
       <div className={s.pushStatusRow}>
         <div className={s.pushRow}>
-          <span className={cx(shared.dot, dotClass)} />
+          <span className={cx(cards.dot, dotClass)} />
           <span className={s.pushLabel}>{labelText}</span>
         </div>
 
         {(canEnable || permission === 'default') && (
           <button
-            className={cx(s.pushBtn, (loading || disabled) && shared.disabled)}
+            className={cx(s.pushBtn, (loading || disabled) && buttons.disabled)}
             type="button"
             onClick={onToggle}
             disabled={loading || disabled}
@@ -566,12 +569,12 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
         )}
       </div>
 
-      {denied && <p className={shared.helpText}>{t('settings.pushHint')}</p>}
+      {denied && <p className={forms.helpText}>{t('settings.pushHint')}</p>}
 
       {active && (
         <>
           <button
-            className={cx(s.pushBtnGhost, (loading || disabled) && shared.disabled)}
+            className={cx(s.pushBtnGhost, (loading || disabled) && buttons.disabled)}
             type="button"
             onClick={onToggle}
             disabled={loading || disabled}
@@ -582,7 +585,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
           <div className={s.troubleshootingSection}>
             <button
               type="button"
-              className={shared.groupHeader}
+              className={cards.groupHeader}
               onClick={() => setShowTroubleshooting((v) => !v)}
               aria-expanded={showTroubleshooting}
               data-testid="push-troubleshooting-toggle"
@@ -592,9 +595,9 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
             </button>
             {showTroubleshooting && (
               <div className={s.troubleshootingBody}>
-                <p className={shared.helpText}>{t('settings.pushTroubleshootingHint')}</p>
+                <p className={forms.helpText}>{t('settings.pushTroubleshootingHint')}</p>
                 <button
-                  className={cx(s.pushBtnGhost, (testLoading || disabled) && shared.disabled)}
+                  className={cx(s.pushBtnGhost, (testLoading || disabled) && buttons.disabled)}
                   type="button"
                   onClick={sendTest}
                   disabled={testLoading || disabled}
@@ -609,7 +612,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
                         : t('settings.pushTestSend')}
                 </button>
                 <button
-                  className={cx(s.pushBtnGhost, (schedLoading || disabled) && shared.disabled)}
+                  className={cx(s.pushBtnGhost, (schedLoading || disabled) && buttons.disabled)}
                   type="button"
                   onClick={scheduleTest}
                   disabled={schedLoading || disabled}
@@ -635,7 +638,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
 function Section({ id, title, children, flash = false }) {
   return (
     <div id={id} className={cx(s.section, flash && s.flash)}>
-      <p className={shared.sectionTitle}>{title}</p>
+      <p className={layout.sectionTitle}>{title}</p>
       {children}
     </div>
   )
@@ -643,7 +646,7 @@ function Section({ id, title, children, flash = false }) {
 
 function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
   return (
-    <label className={shared.formToggleSwitch}>
+    <label className={forms.formToggleSwitch}>
       <input
         type="checkbox"
         role="switch"
@@ -652,8 +655,8 @@ function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
         disabled={disabled}
         aria-label={ariaLabel}
       />
-      <span className={shared.formToggleTrack}>
-        <span className={shared.formToggleThumb} />
+      <span className={forms.formToggleTrack}>
+        <span className={forms.formToggleThumb} />
       </span>
     </label>
   )

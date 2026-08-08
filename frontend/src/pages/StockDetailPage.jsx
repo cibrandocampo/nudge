@@ -28,7 +28,10 @@ import { effectiveGroupId } from '../utils/stockGroup'
 import { reconcileStockFromLot } from '../utils/stockScanReconcile'
 import { borderTokensFromStock } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './StockDetailPage.module.css'
 
 export default function StockDetailPage() {
@@ -221,14 +224,14 @@ export default function StockDetailPage() {
     >
       {stock && (
         <div className={s.container}>
-          <div className={cx(shared.topBar, s.topBarFlush)}>
+          <div className={cx(layout.topBar, s.topBarFlush)}>
             <Link to="/inventory" className={s.backLink} aria-label={t('common.backToInventory')}>
               <span>{t('common.backToInventory')}</span>
             </Link>
             <div className={s.topActions}>
               <Link
                 to={`/history?type=consumptions&stock=${stockId}`}
-                className={cx(shared.btnAdd, shared.btnAddSecondary)}
+                className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
                 aria-label={t('stockDetail.viewAll')}
                 title={t('stockDetail.viewAll')}
               >
@@ -237,7 +240,7 @@ export default function StockDetailPage() {
               {isOwner && (
                 <button
                   type="button"
-                  className={cx(shared.btnAdd, shared.btnAddDanger, !reachable && shared.disabled)}
+                  className={cx(buttons.btnAdd, buttons.btnAddDanger, !reachable && buttons.disabled)}
                   onClick={() => {
                     if (!reachable) {
                       showToast({ type: 'error', message: t('offline.pageUnavailable') })
@@ -254,7 +257,7 @@ export default function StockDetailPage() {
               )}
               <button
                 type="button"
-                className={cx(shared.btnAdd, !reachable && shared.disabled)}
+                className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
                 onClick={() => {
                   if (!reachable) {
                     showToast({ type: 'error', message: t('offline.pageUnavailable') })
@@ -271,29 +274,29 @@ export default function StockDetailPage() {
             </div>
           </div>
 
-          <div className={cx(shared.card, tokens.border)}>
-            <div className={shared.cardHeader}>
-              <div className={shared.cardMeta}>
-                <span className={cx(shared.cardTitle, shared.cardTitleFlex)}>
+          <div className={cx(cards.card, tokens.border)}>
+            <div className={cards.cardHeader}>
+              <div className={cards.cardMeta}>
+                <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
                   <span>{stock.name}</span>
                   <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
                 </span>
-                <span className={shared.cardSubtitle}>
-                  <span className={cx(shared.dot, tokens.dot)} />
-                  <span className={shared.stockQty}>
+                <span className={cards.cardSubtitle}>
+                  <span className={cx(cards.dot, tokens.dot)} />
+                  <span className={cards.stockQty}>
                     {stock.quantity_available ?? stock.quantity ?? 0} {t('common.total')}
                   </span>
                   {(stock.quantity_expired ?? 0) > 0 && (
-                    <span className={shared.stockQtyExpired}>
+                    <span className={cards.stockQtyExpired}>
                       ({t('inventory.expiredCount', { count: stock.quantity_expired })})
                     </span>
                   )}
                   {stock.estimated_depletion_date && (
                     <span
                       className={cx(
-                        shared.stockDepletion,
-                        stock.stock_severity === 'low' && shared.stockDepletionWarn,
-                        stock.stock_severity === 'critical' && shared.stockDepletionDanger,
+                        cards.stockDepletion,
+                        stock.stock_severity === 'low' && cards.stockDepletionWarn,
+                        stock.stock_severity === 'critical' && cards.stockDepletionDanger,
                       )}
                       data-testid="depletion-date"
                       title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
@@ -312,7 +315,7 @@ export default function StockDetailPage() {
                   button it inherits `cardHeader`'s vertical centring, so the
                   two line up. */}
               {groupName && (
-                <span className={shared.cardCategoryPill}>
+                <span className={cards.cardCategoryPill}>
                   <Icon name="tag" size="sm" />
                   {groupName}
                 </span>
@@ -325,15 +328,15 @@ export default function StockDetailPage() {
               {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
                 <button
                   type="button"
-                  className={cx(shared.btnIcon, shared.btnIconConsume, !reachable && shared.disabled)}
+                  className={cx(buttons.btnIcon, buttons.btnIconConsume, !reachable && buttons.disabled)}
                   onClick={handleConsume}
                   aria-disabled={!reachable}
                   aria-label={t('inventory.consumeTooltip')}
                   title={!reachable ? t('offline.pageUnavailable') : t('inventory.consumeTooltip')}
                   data-testid="consume-one"
                 >
-                  <Icon name="package" className={shared.consumeBox} />
-                  <Icon name="arrow-down" className={shared.consumeArrow} />
+                  <Icon name="package" className={buttons.consumeBox} />
+                  <Icon name="arrow-down" className={buttons.consumeArrow} />
                 </button>
               )}
             </div>
@@ -343,13 +346,13 @@ export default function StockDetailPage() {
               and (if any) the other recipients on the right. Mirrors
               RoutineDetailPage. */}
           {stock.is_owner === false && stock.owner_display_name && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="people-info">
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="people-info">
               <div className={s.peopleSplit}>
                 <div className={s.peopleColumn} data-testid="owner-info">
-                  <span className={shared.formSectionTitle}>{t('sharing.owner')}</span>
-                  <div className={shared.formChipsRow}>
-                    <span className={shared.formChip}>
-                      <span className={shared.formChipAvatar} aria-hidden="true">
+                  <span className={forms.formSectionTitle}>{t('sharing.owner')}</span>
+                  <div className={forms.formChipsRow}>
+                    <span className={forms.formChip}>
+                      <span className={forms.formChipAvatar} aria-hidden="true">
                         {avatarInitial({ first_name: stock.owner_display_name })}
                       </span>
                       <span>{stock.owner_display_name}</span>
@@ -358,7 +361,7 @@ export default function StockDetailPage() {
                 </div>
                 {otherStockRecipients.length > 0 && (
                   <div className={s.peopleColumn} data-testid="shared-with-info">
-                    <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+                    <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
                     <SharedWithChips contacts={otherStockRecipients} />
                   </div>
                 )}
@@ -368,16 +371,16 @@ export default function StockDetailPage() {
 
           {/* Owner viewer keeps the standalone "Shared with" card. */}
           {isOwner && otherStockRecipients.length > 0 && (
-            <section className={cx(shared.formSection, s.sharedBlock)} data-testid="shared-with-info">
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('sharing.sharedWith')}</span>
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="shared-with-info">
+              <div className={forms.formSectionHeader}>
+                <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
               </div>
               <SharedWithChips contacts={otherStockRecipients} />
             </section>
           )}
 
           <section className={s.section}>
-            <p className={shared.sectionTitle}>{t('stockDetail.lots')}</p>
+            <p className={layout.sectionTitle}>{t('stockDetail.lots')}</p>
             <div className={s.lotsCard}>
               <StockLotsList lots={stock.lots ?? []} today={today} reachable={reachable} onRemoveLot={askRemoveLot} />
 
@@ -387,7 +390,7 @@ export default function StockDetailPage() {
 
           {consumptions.length > 0 && (
             <section className={s.section}>
-              <p className={shared.sectionTitle}>{t('stockDetail.recentConsumption')}</p>
+              <p className={layout.sectionTitle}>{t('stockDetail.recentConsumption')}</p>
               <div className={s.entryList}>
                 {groupEntriesByDate(consumptions.slice(0, 5).map((c) => ({ ...c, _type: 'consumption' }))).map(
                   ({ dateLabel, items }) => (

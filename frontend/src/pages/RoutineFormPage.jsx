@@ -21,7 +21,9 @@ import { errorToastMessage } from '../utils/errors'
 import { findCachedStock } from '../utils/lotsForSelection'
 import { hoursToHuman } from '../utils/interval'
 import { parseIntSafe } from '../utils/number'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './RoutineFormPage.module.css'
 
 function toLocalDateTimeString(date) {
@@ -253,19 +255,19 @@ export default function RoutineFormPage() {
       notFoundKey="routine.detail.notFound"
     >
       <div>
-        <div className={shared.topBar}>
+        <div className={layout.topBar}>
           <button type="button" className={s.back} onClick={() => navigate(-1)}>
             {t('common.backToRoutines')}
           </button>
-          <h1 className={shared.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
+          <h1 className={layout.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
         </div>
 
         <form onSubmit={handleSubmit} className={s.form} noValidate>
           {/* Basics */}
-          <section className={shared.formSection}>
+          <section className={forms.formSection}>
             <FormField label={t('routine.form.name')} error={errors.name}>
               <input
-                className={shared.input}
+                className={forms.input}
                 value={form.name}
                 onChange={field('name')}
                 placeholder={t('routine.form.placeholder')}
@@ -274,7 +276,7 @@ export default function RoutineFormPage() {
             </FormField>
             <FormField label={t('routine.form.description')} hint={t('routine.form.optional')}>
               <textarea
-                className={cx(shared.input, s.textarea)}
+                className={cx(forms.input, s.textarea)}
                 value={form.description}
                 onChange={field('description')}
                 rows={2}
@@ -285,9 +287,9 @@ export default function RoutineFormPage() {
           {/* Schedule — a single progressive editor: one interval row by
               default; "Add interval" turns it into a multi-phase sequence
               where every row but the last repeats a fixed number of times. */}
-          <section className={shared.formSection}>
-            <div className={shared.formSectionHeader}>
-              <span className={shared.inputLabel}>{t('routine.form.interval')}</span>
+          <section className={forms.formSection}>
+            <div className={forms.formSectionHeader}>
+              <span className={forms.inputLabel}>{t('routine.form.interval')}</span>
               <div className={s.intervalHeaderActions}>
                 <button
                   type="button"
@@ -301,7 +303,7 @@ export default function RoutineFormPage() {
                 </button>
                 <button
                   type="button"
-                  className={shared.btnAdd}
+                  className={buttons.btnAdd}
                   onClick={() =>
                     setForm((f) => {
                       const cur =
@@ -366,7 +368,7 @@ export default function RoutineFormPage() {
                                     interval_phases: updatePhase(f.interval_phases, i, { count }),
                                   }))
                                 }}
-                                className={cx(shared.input, s.phaseCountInput)}
+                                className={cx(forms.input, s.phaseCountInput)}
                               />
                               <span className={s.phaseDuringLabel}>{t('routine.form.phaseCount')}</span>
                             </span>
@@ -377,7 +379,7 @@ export default function RoutineFormPage() {
                           {multi && (
                             <button
                               type="button"
-                              className={cx(shared.btnIcon, shared.btnIconDelete, s.intervalRemove)}
+                              className={cx(buttons.btnIcon, buttons.btnIconDelete, s.intervalRemove)}
                               onClick={() =>
                                 setForm((f) => {
                                   const next = f.interval_phases.filter((_, idx) => idx !== i)
@@ -401,7 +403,7 @@ export default function RoutineFormPage() {
                       </div>
                     )
                   })}
-                  {errors.interval_hours && <p className={shared.error}>{errors.interval_hours}</p>}
+                  {errors.interval_hours && <p className={forms.error}>{errors.interval_hours}</p>}
 
                   <div className={s.intervalSummary}>
                     {(() => {
@@ -430,9 +432,9 @@ export default function RoutineFormPage() {
           </section>
 
           {/* Stock tracking — header con toggle iOS-style */}
-          <section className={shared.formSection}>
-            <div className={shared.formSectionHeader}>
-              <span className={shared.formSectionTitle}>{t('routine.form.stockTrackingTitle')}</span>
+          <section className={forms.formSection}>
+            <div className={forms.formSectionHeader}>
+              <span className={forms.formSectionTitle}>{t('routine.form.stockTrackingTitle')}</span>
               <ToggleSwitch
                 checked={usesStock}
                 onChange={handleToggleStock}
@@ -443,7 +445,7 @@ export default function RoutineFormPage() {
               <>
                 <FormField label={t('routine.form.stockItem')}>
                   <select
-                    className={shared.input}
+                    className={forms.input}
                     value={form.stock}
                     onChange={field('stock')}
                     aria-label={t('routine.form.stockItem')}
@@ -464,7 +466,7 @@ export default function RoutineFormPage() {
                 </FormField>
                 <FormField label={t('routine.form.unitsPerLog')}>
                   <input
-                    className={cx(shared.input, s.inputStock)}
+                    className={cx(forms.input, s.inputStock)}
                     type="number"
                     min={1}
                     value={form.stock_usage}
@@ -485,9 +487,9 @@ export default function RoutineFormPage() {
 
           {/* First completion — create only, header con toggle */}
           {!isEditing && (
-            <section className={shared.formSection}>
-              <div className={shared.formSectionHeader}>
-                <span className={shared.formSectionTitle}>{t('routine.form.firstCompletionTitle')}</span>
+            <section className={forms.formSection}>
+              <div className={forms.formSectionHeader}>
+                <span className={forms.formSectionTitle}>{t('routine.form.firstCompletionTitle')}</span>
                 <ToggleSwitch
                   checked={lastDoneEnabled}
                   onChange={handleToggleLastDone}
@@ -497,7 +499,7 @@ export default function RoutineFormPage() {
               {lastDoneEnabled && (
                 <FormField label={t('routine.form.firstCompletionWhen')}>
                   <input
-                    className={cx(shared.input, s.lastDoneInput)}
+                    className={cx(forms.input, s.lastDoneInput)}
                     type="datetime-local"
                     value={lastDoneAt}
                     max={toLocalDateTimeString(new Date())}
@@ -511,7 +513,7 @@ export default function RoutineFormPage() {
           {/* Notifications — mode + (conditional) interval + respect toggle.
               Last block: Daily is the default; choosing Intensive reveals the
               repeat-interval picker + quiet-hours toggle. */}
-          <section className={shared.formSection}>
+          <section className={forms.formSection}>
             <FormField label={t('routine.form.reminderMode')}>
               <div className={s.modeOptions} role="radiogroup" aria-label={t('routine.form.reminderMode')}>
                 {['daily', 'intensive'].map((mode) => (
@@ -564,10 +566,10 @@ export default function RoutineFormPage() {
                   </div>
                 </FormField>
 
-                <div className={cx(shared.formSectionHeader, s.quietHoursRow)}>
+                <div className={cx(forms.formSectionHeader, s.quietHoursRow)}>
                   <div className={s.respectInfo}>
-                    <span className={shared.formSectionTitle}>{t('routine.form.respectQuietHours')}</span>
-                    <p className={shared.helpText}>{t('routine.form.respectQuietHoursHint')}</p>
+                    <span className={forms.formSectionTitle}>{t('routine.form.respectQuietHours')}</span>
+                    <p className={forms.helpText}>{t('routine.form.respectQuietHoursHint')}</p>
                   </div>
                   <ToggleSwitch
                     checked={form.respect_quiet_hours}
@@ -579,13 +581,13 @@ export default function RoutineFormPage() {
             )}
           </section>
 
-          {errors.submit && <p className={shared.error}>{errors.submit}</p>}
-          {disabledCreate && <p className={shared.helpText}>{t('offline.requiresConnection')}</p>}
+          {errors.submit && <p className={forms.error}>{errors.submit}</p>}
+          {disabledCreate && <p className={forms.helpText}>{t('offline.requiresConnection')}</p>}
 
-          <div className={shared.formFooter}>
+          <div className={forms.formFooter}>
             <button
               type="submit"
-              className={cx(shared.btn, shared.btnPrimary, shared.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.btnPrimary, buttons.formSecondaryBtn, s.submitBtn)}
               disabled={saving || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
@@ -593,7 +595,7 @@ export default function RoutineFormPage() {
             </button>
             <button
               type="button"
-              className={cx(shared.btn, shared.btnSecondary, shared.formSecondaryBtn)}
+              className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
               onClick={() => navigate(-1)}
             >
               {t('routine.form.cancel')}
@@ -618,7 +620,7 @@ export default function RoutineFormPage() {
 
 function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
   return (
-    <label className={shared.formToggleSwitch}>
+    <label className={forms.formToggleSwitch}>
       <input
         type="checkbox"
         role="switch"
@@ -627,8 +629,8 @@ function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
         disabled={disabled}
         aria-label={ariaLabel}
       />
-      <span className={shared.formToggleTrack}>
-        <span className={shared.formToggleThumb} />
+      <span className={forms.formToggleTrack}>
+        <span className={forms.formToggleThumb} />
       </span>
     </label>
   )

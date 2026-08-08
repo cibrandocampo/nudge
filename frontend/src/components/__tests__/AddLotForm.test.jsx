@@ -254,6 +254,29 @@ describe('AddLotForm', () => {
     )
   })
 
+  // The serial used to carry its label inline inside the chip while quantity,
+  // expiry and lot number all carried theirs above the control — the one field
+  // in this form that read differently from its neighbours. Manual QA on a real
+  // device is what caught it, so it gets an assertion rather than a promise.
+  it('labels the serial above the control, like every other field', async () => {
+    scannerAvailableRef.current = true
+    decodedRef.current = `10LOT-S${GS}21SN-9`
+    const { user } = renderForm()
+    await openForm(user)
+
+    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(await screen.findByRole('button', { name: 'emit' }))
+
+    const labels = ['Quantity *', 'Expiry date', 'Batch ID (optional)', 'Serial'].map((text) =>
+      screen.getByText(text, { selector: 'label' }),
+    )
+    // Same rendering for all four, so none can drift into its own register.
+    const classes = labels.map((el) => el.className)
+    expect(new Set(classes).size).toBe(1)
+    // And the serial's label sits outside the chip, above it.
+    expect(screen.getByTestId('serial-chip')).not.toHaveTextContent('Serial')
+  })
+
   it('blocks a pack already registered in this stock, and unblocks when the serial is dropped', async () => {
     scannerAvailableRef.current = true
     decodedRef.current = `10LOT-A${GS}21SN-DUP`

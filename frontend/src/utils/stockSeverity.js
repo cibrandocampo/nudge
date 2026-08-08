@@ -1,5 +1,4 @@
-import shared from '../styles/shared.module.css'
-
+import cards from '../styles/cards.module.css'
 // Tri-state lot expiry severity derived from the lot's own expiry_date.
 // Used by per-lot icon tint and (after T166/T167) per-lot expiry date tint.
 // Returned values match the data-expiring attribute on lot rows.
@@ -28,20 +27,20 @@ export function lotExpirySeverity(lot, today) {
 export function borderTokensFromStock(stock) {
   switch (stock?.stock_severity) {
     case 'critical':
-      return { border: shared.cardBorderDanger, dot: shared.dotDanger }
+      return { border: cards.cardBorderDanger, dot: cards.dotDanger }
     case 'low':
-      return { border: shared.cardBorderWarning, dot: shared.dotWarning }
+      return { border: cards.cardBorderWarning, dot: cards.dotWarning }
     case 'ok':
-      return { border: shared.cardBorderSuccess, dot: shared.dotSuccess }
+      return { border: cards.cardBorderSuccess, dot: cards.dotSuccess }
     default:
-      return { border: shared.cardBorderDanger, dot: shared.dotDanger }
+      return { border: cards.cardBorderDanger, dot: cards.dotDanger }
   }
 }
 
 export function iconClassForLot(lot, today) {
   const sev = lotExpirySeverity(lot, today)
-  if (sev === 'reached') return shared.iconDanger
-  if (sev === 'soon') return shared.iconWarning
+  if (sev === 'reached') return cards.iconDanger
+  if (sev === 'soon') return cards.iconWarning
   return null
 }
 
@@ -52,11 +51,11 @@ export function iconClassForLot(lot, today) {
 export function iconClassForStock(stock) {
   switch (stock?.stock_severity) {
     case 'critical':
-      return shared.iconDanger
+      return cards.iconDanger
     case 'low':
-      return shared.iconWarning
+      return cards.iconWarning
     case 'ok':
-      return shared.iconSuccess
+      return cards.iconSuccess
     default:
       return null
   }

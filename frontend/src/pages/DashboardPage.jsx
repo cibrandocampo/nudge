@@ -17,7 +17,8 @@ import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
 import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import layout from '../styles/layout.module.css'
 import s from './DashboardPage.module.css'
 
 export default function DashboardPage() {
@@ -105,20 +106,20 @@ export default function DashboardPage() {
   // staleness, and an empty error / loading state is worse UX than
   // last-known-good data the user can still act on.
   if (isLoading && !data) return <Spinner />
-  if (isError && !data) return <p className={shared.muted}>{t('common.error')}</p>
+  if (isError && !data) return <p className={layout.muted}>{t('common.error')}</p>
 
   return (
     <div>
-      <div className={shared.topBar}>
-        <h1 className={shared.pageTitle}>{t('dashboard.title')}</h1>
+      <div className={layout.topBar}>
+        <h1 className={layout.pageTitle}>{t('dashboard.title')}</h1>
         {reachable ? (
-          <Link to="/routines/new" className={shared.btnAdd} aria-label={t('dashboard.newRoutine')}>
+          <Link to="/routines/new" className={buttons.btnAdd} aria-label={t('dashboard.newRoutine')}>
             <Icon name="plus" />
           </Link>
         ) : (
           <button
             type="button"
-            className={cx(shared.btnAdd, shared.disabled)}
+            className={cx(buttons.btnAdd, buttons.disabled)}
             onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
             aria-disabled="true"
             aria-label={t('dashboard.newRoutine')}
@@ -157,7 +158,7 @@ export default function DashboardPage() {
 function Section({ title, routines, onMarkDone, completing, empty }) {
   return (
     <section className={s.section}>
-      <h2 className={shared.sectionTitle}>{title}</h2>
+      <h2 className={layout.sectionTitle}>{title}</h2>
       {routines.length === 0 && empty
         ? empty
         : routines.length > 0 && (

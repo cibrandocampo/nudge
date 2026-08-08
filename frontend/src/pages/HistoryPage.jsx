@@ -13,7 +13,8 @@ import { useUpdateEntry } from '../hooks/mutations/useUpdateEntry'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { groupEntriesByDate, effectiveDate } from '../utils/historyGroups'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './HistoryPage.module.css'
 
 const VALID_TYPES = new Set(['all', 'routines', 'consumptions'])
@@ -60,7 +61,7 @@ export default function HistoryPage() {
   const routineOptions = useMemo(() => [{ id: '', name: t('history.allRoutines') }, ...routines], [routines, t])
   const stockOptions = useMemo(() => [{ id: '', name: t('history.allStocks') }, ...stocks], [stocks, t])
   const selectedRoutine = routineOptions.find((r) => String(r.id) === String(routineFilter)) ?? routineOptions[0]
-  const selectedStock = stockOptions.find((s) => String(s.id) === String(stockFilter)) ?? stockOptions[0]
+  const selectedStock = stockOptions.find((st) => String(st.id) === String(stockFilter)) ?? stockOptions[0]
 
   const entriesFilters = useMemo(
     () => ({
@@ -138,8 +139,8 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <div className={shared.topBar}>
-        <h1 className={shared.pageTitle}>{t('history.title')}</h1>
+      <div className={layout.topBar}>
+        <h1 className={layout.pageTitle}>{t('history.title')}</h1>
         <DateRangePicker
           dateFrom={dateFrom}
           dateTo={dateTo}
@@ -157,7 +158,7 @@ export default function HistoryPage() {
           </label>
           <select
             id="history-filter-type"
-            className={shared.input}
+            className={forms.input}
             value={typeFilter}
             onChange={(e) => handleTypeFilterChange(e.target.value)}
           >
@@ -194,9 +195,9 @@ export default function HistoryPage() {
               id="history-filter-stock"
               options={stockOptions}
               value={selectedStock}
-              onChange={(s) => setStockFilter(String(s.id))}
-              getLabel={(s) => s.name}
-              getKey={(s) => String(s.id)}
+              onChange={(st) => setStockFilter(String(st.id))}
+              getLabel={(st) => st.name}
+              getKey={(st) => String(st.id)}
               placeholder={t('history.searchStock')}
               emptyMessage={t('history.noStocks')}
             />
@@ -207,14 +208,14 @@ export default function HistoryPage() {
       {loading ? (
         <Spinner />
       ) : error ? (
-        <p className={shared.muted}>{t('common.error')}</p>
+        <p className={layout.muted}>{t('common.error')}</p>
       ) : isEmpty ? (
-        <p className={shared.muted}>{t('history.empty')}</p>
+        <p className={layout.muted}>{t('history.empty')}</p>
       ) : (
         <>
           {grouped.map(({ dateLabel, items: dayItems }) => (
             <section key={dateLabel} className={s.group}>
-              <p className={cx(shared.sectionTitle, s.dayHeader)}>{dateLabel}</p>
+              <p className={cx(layout.sectionTitle, s.dayHeader)}>{dateLabel}</p>
               <div className={s.list}>
                 {dayItems.map((e) => {
                   const key = `${e._type}-${e.id}`

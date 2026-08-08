@@ -12,7 +12,8 @@ import Icon from './Icon'
 import InstallBanner from './InstallBanner'
 import OfflineBanner from './OfflineBanner'
 import { useToast } from './useToast'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
 import s from './Layout.module.css'
 
 // Routes that are locked while the backend is unreachable. The route
@@ -48,11 +49,9 @@ export default function Layout() {
     <span className={s.linkInner}>
       <Icon name={icon} size="lg" />
       <span className={s.navLabel}>{label}</span>
-      {to === '/settings' && !active && (
-        <span className={cx(shared.dot, shared.dotBrand, s.badge)} aria-hidden="true" />
-      )}
+      {to === '/settings' && !active && <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />}
       {to === '/' && hasPendingRoutines && (
-        <span className={cx(shared.dot, shared.dotBrand, s.badge)} aria-hidden="true" />
+        <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
       )}
     </span>
   )
@@ -82,7 +81,7 @@ export default function Layout() {
                 aria-label={label}
                 aria-disabled="true"
                 title={t('offline.requiresConnection')}
-                className={cx(s.link, shared.disabled)}
+                className={cx(s.link, buttons.disabled)}
                 onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
               >
                 {renderInner(icon, label, to)}

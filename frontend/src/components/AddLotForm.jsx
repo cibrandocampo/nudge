@@ -10,7 +10,8 @@ import cx from '../utils/cx'
 import { parseGs1 } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
 import { formatShortDate } from '../utils/time'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import forms from '../styles/forms.module.css'
 import s from './AddLotForm.module.css'
 
 // Dynamic: the decoder chunk and its ~1 MB WebAssembly binary must not be
@@ -166,7 +167,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     return (
       <button
         type="button"
-        className={cx(s.addLotToggle, !reachable && shared.disabled)}
+        className={cx(s.addLotToggle, !reachable && buttons.disabled)}
         onClick={() => {
           if (!reachable) {
             showToast({ type: 'error', message: t('offline.pageUnavailable') })
@@ -193,7 +194,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         {scannerAvailable && (
           <button
             type="button"
-            className={cx(shared.btn, shared.btnSecondary, s.scanBtn)}
+            className={cx(buttons.btn, buttons.btnSecondary, s.scanBtn)}
             onClick={() => {
               setScanNotice(null)
               setScannerOpen(true)
@@ -207,7 +208,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         <div className={s.addLotRow}>
           <FormField label={`${t('inventory.lotQty')} *`}>
             <input
-              className={cx(shared.input, s.addLotInput)}
+              className={cx(forms.input, s.addLotInput)}
               type="number"
               min={0}
               placeholder="0"
@@ -218,7 +219,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </FormField>
           <FormField label={t('inventory.lotExpiry')}>
             <input
-              className={cx(shared.input, s.addLotInput)}
+              className={cx(forms.input, s.addLotInput)}
               type="date"
               value={fields.expiry}
               onChange={(e) => setFields((f) => ({ ...f, expiry: e.target.value }))}
@@ -240,33 +241,41 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </FormField>
         </div>
 
+        {/* Labelled above, like every other field in this form. The serial used
+            to carry its label inline inside the chip, which made it the one
+            control here that read differently from its neighbours. */}
         {scanned.serialNumber && (
-          <div className={s.serialChip} data-testid="serial-chip">
-            <span className={s.serialLabel}>{t('inventory.lotSerial')}</span>
-            <span className={s.serialValue}>{scanned.serialNumber}</span>
-            <button
-              type="button"
-              className={s.serialClear}
-              onClick={clearScannedSerial}
-              aria-label={t('common.clear')}
-              data-testid="serial-clear"
-            >
-              <Icon name="x" size="sm" />
-            </button>
-          </div>
+          <FormField label={t('inventory.lotSerial')}>
+            <div className={s.serialChip} data-testid="serial-chip">
+              <span className={s.serialValue}>{scanned.serialNumber}</span>
+              <button
+                type="button"
+                className={s.serialClear}
+                onClick={clearScannedSerial}
+                aria-label={t('common.clear')}
+                data-testid="serial-clear"
+              >
+                <Icon name="x" size="sm" />
+              </button>
+            </div>
+          </FormField>
         )}
 
         {scanBlocker && (
-          <p className={shared.error} data-testid="scan-blocker">
+          <p className={forms.error} data-testid="scan-blocker">
             {t(scanBlocker.key, scanBlocker.args)}
           </p>
         )}
 
         <div className={s.addLotActions}>
-          <button type="button" className={cx(shared.btn, shared.btnSecondary)} onClick={close} disabled={adding}>
+          <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
             {t('common.cancel')}
           </button>
-          <button type="submit" className={cx(shared.btn, shared.btnPrimary)} disabled={adding || Boolean(scanBlocker)}>
+          <button
+            type="submit"
+            className={cx(buttons.btn, buttons.btnPrimary)}
+            disabled={adding || Boolean(scanBlocker)}
+          >
             {adding ? t('inventory.adding') : t('inventory.addLot')}
           </button>
         </div>

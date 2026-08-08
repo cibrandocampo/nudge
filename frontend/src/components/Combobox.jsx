@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import s from './Combobox.module.css'
 
 /**
@@ -125,7 +125,7 @@ export default function Combobox({
     <div className={s.wrap} ref={wrapRef}>
       <input
         type="text"
-        className={cx(shared.input, s.input, inputClassName)}
+        className={cx(forms.input, s.input, inputClassName)}
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}

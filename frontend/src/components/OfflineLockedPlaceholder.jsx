@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
 import s from './OfflineLockedPlaceholder.module.css'
 
 /**
@@ -19,7 +19,7 @@ export default function OfflineLockedPlaceholder() {
       <Icon name="wifi-off" size="lg" />
       <h2 className={s.title}>{t('offline.pageLockedTitle')}</h2>
       <p className={s.body}>{t('offline.pageLockedBody')}</p>
-      <button type="button" className={shared.btn} onClick={() => navigate('/')}>
+      <button type="button" className={buttons.btn} onClick={() => navigate('/')}>
         {t('offline.backHome')}
       </button>
     </div>

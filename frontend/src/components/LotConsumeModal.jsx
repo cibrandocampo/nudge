@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import ModalFrame from './ModalFrame'
 import { allocateFromGroup, bulkQuantity, needsPackChoice } from '../utils/lotsForSelection'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
 import s from './LotConsumeModal.module.css'
 
 /**
@@ -93,6 +93,17 @@ export default function LotConsumeModal({
 
   const choicesFor = (group, choices) =>
     group.packs.length === 1 ? [group.packs[0].lot_id] : (choices[group.key] ?? [])
+
+  /**
+   * The one identified pack of a group, when it has exactly one.
+   *
+   * Such a group skips the pack step — `needsPackChoice` is false, there is
+   * nothing to choose — so the group row is the last place the user can see
+   * *which* box they are about to consume. `allocateFromGroup` takes chosen
+   * packs before bulk, so this box is what comes out first even in a group that
+   * also holds unidentified units.
+   */
+  const soloPack = (group) => (group.packs.length === 1 ? group.packs[0] : null)
 
   const buildSelections = (choices) =>
     groups.flatMap((group) => allocateFromGroup(group, allocatedFor(group), choicesFor(group, choices)))
@@ -248,10 +259,15 @@ export default function LotConsumeModal({
         {shownError && <p className={s.error}>{shownError}</p>}
 
         <div className={s.actions}>
-          <button className={shared.btnCancel} onClick={handleBack} disabled={busy}>
+          <button className={buttons.btnCancel} onClick={handleBack} disabled={busy}>
             {t('lot.modal.back')}
           </button>
-          <button className={shared.btnConfirm} onClick={handlePacksConfirm} disabled={busy} data-testid="pack-confirm">
+          <button
+            className={buttons.btnConfirm}
+            onClick={handlePacksConfirm}
+            disabled={busy}
+            data-testid="pack-confirm"
+          >
             {confirmText}
           </button>
         </div>
@@ -268,8 +284,9 @@ export default function LotConsumeModal({
         <p className={s.error}>{emptyMessage}</p>
       ) : (
         <ul className={s.list} role={isSingle ? 'radiogroup' : undefined} aria-label={isSingle ? heading : undefined}>
-          {groups.map((group) =>
-            isSingle ? (
+          {groups.map((group) => {
+            const solo = soloPack(group)
+            return isSingle ? (
               <li
                 key={group.key}
                 className={`${s.item} ${selectedKey === group.key ? s.itemSelected : ''}`}
@@ -282,6 +299,11 @@ export default function LotConsumeModal({
               >
                 <span className={s.radio}>{selectedKey === group.key ? '●' : ''}</span>
                 <span className={s.label}>{groupLabel(group)}</span>
+                {solo && (
+                  <span className={s.groupSerial} data-testid="group-serial">
+                    {solo.serial_number}
+                  </span>
+                )}
                 <span className={s.available}>
                   {group.quantity} {t('lot.modal.available')}
                 </span>
@@ -291,6 +313,11 @@ export default function LotConsumeModal({
               <li key={group.key} className={s.itemMulti} data-testid="lot-group-row">
                 <div className={s.lotHeader}>
                   <span className={s.label}>{groupLabel(group)}</span>
+                  {solo && (
+                    <span className={s.groupSerial} data-testid="group-serial">
+                      {solo.serial_number}
+                    </span>
+                  )}
                   <span className={s.available}>
                     {group.quantity} {t('lot.modal.available')}
                   </span>
@@ -318,8 +345,8 @@ export default function LotConsumeModal({
                   </button>
                 </div>
               </li>
-            ),
-          )}
+            )
+          })}
         </ul>
       )}
 
@@ -335,11 +362,11 @@ export default function LotConsumeModal({
       {shownError && <p className={s.error}>{shownError}</p>}
 
       <div className={s.actions}>
-        <button className={shared.btnCancel} onClick={onCancel} disabled={busy}>
+        <button className={buttons.btnCancel} onClick={onCancel} disabled={busy}>
           {cancelText}
         </button>
         <button
-          className={shared.btnConfirm}
+          className={buttons.btnConfirm}
           onClick={handleGroupsConfirm}
           disabled={busy || showingEmpty || (!isSingle && total !== needed)}
         >

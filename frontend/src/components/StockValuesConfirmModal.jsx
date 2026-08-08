@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import ModalFrame from './ModalFrame'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
 import s from './StockValuesConfirmModal.module.css'
 
 // Human labels for the fields `reconcileStockFromLot` can report. Keeping the
@@ -58,10 +58,10 @@ export default function StockValuesConfirmModal({ discrepancies, onConfirm, onCa
           ))}
         </ul>
         <div className={s.actions}>
-          <button className={shared.btnCancel} onClick={onCancel} data-testid="stock-values-keep">
+          <button className={buttons.btnCancel} onClick={onCancel} data-testid="stock-values-keep">
             {t('stockValues.keep')}
           </button>
-          <button className={shared.btnConfirm} onClick={onConfirm} data-testid="stock-values-update">
+          <button className={buttons.btnConfirm} onClick={onConfirm} data-testid="stock-values-update">
             {t('stockValues.update')}
           </button>
         </div>

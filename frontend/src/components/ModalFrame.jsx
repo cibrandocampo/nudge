@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import cx from '../utils/cx'
-import shared from '../styles/shared.module.css'
-
+import layout from '../styles/layout.module.css'
 export default function ModalFrame({ onClose, title, size = 'sm', variant = 'box', closeAriaLabel, children }) {
   const { t } = useTranslation()
   useEscapeKey(onClose)
@@ -12,9 +11,9 @@ export default function ModalFrame({ onClose, title, size = 'sm', variant = 'box
 
   if (variant === 'framed') {
     return (
-      <div className={shared.overlay} onClick={onClose}>
+      <div className={layout.overlay} onClick={onClose}>
         <div
-          className={cx(shared.modalBoxFramed, size === 'md' && shared.modalBoxMd, size === 'lg' && shared.modalBoxLg)}
+          className={cx(layout.modalBoxFramed, size === 'md' && layout.modalBoxMd, size === 'lg' && layout.modalBoxLg)}
           role="dialog"
           aria-modal="true"
           aria-label={ariaLabel}
@@ -27,15 +26,15 @@ export default function ModalFrame({ onClose, title, size = 'sm', variant = 'box
   }
 
   return (
-    <div className={shared.overlay} onClick={onClose}>
+    <div className={layout.overlay} onClick={onClose}>
       <div
-        className={cx(shared.modalBox, size === 'md' && shared.modalBoxMd, size === 'lg' && shared.modalBoxLg)}
+        className={cx(layout.modalBox, size === 'md' && layout.modalBoxMd, size === 'lg' && layout.modalBoxLg)}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
         onClick={stopPropagation}
       >
-        {title && <h2 className={shared.modalTitle}>{title}</h2>}
+        {title && <h2 className={layout.modalTitle}>{title}</h2>}
         {children}
       </div>
     </div>

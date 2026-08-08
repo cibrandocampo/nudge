@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import shared from '../styles/shared.module.css'
+import layout from '../styles/layout.module.css'
 import Spinner from './Spinner'
 
 /**
@@ -31,14 +31,14 @@ export default function QueryHandler({
   const { t } = useTranslation()
   if (isLoading) return <Spinner />
   if (isError && error?.status === 404 && notFoundKey) {
-    return <p className={shared.muted}>{t(notFoundKey)}</p>
+    return <p className={layout.muted}>{t(notFoundKey)}</p>
   }
   if (isError && data !== undefined && data !== null) {
     return children
   }
-  if (isError) return <p className={shared.muted}>{t(errorKey)}</p>
+  if (isError) return <p className={layout.muted}>{t(errorKey)}</p>
   if (notFound && notFoundKey) {
-    return <p className={shared.muted}>{t(notFoundKey)}</p>
+    return <p className={layout.muted}>{t(notFoundKey)}</p>
   }
   return children
 }

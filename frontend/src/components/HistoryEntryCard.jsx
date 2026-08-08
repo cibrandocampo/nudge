@@ -7,7 +7,9 @@ import Icon from './Icon'
 import { useAuth } from '../contexts/AuthContext'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useEscapeKey } from '../hooks/useEscapeKey'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
+import cards from '../styles/cards.module.css'
+import forms from '../styles/forms.module.css'
 import s from './HistoryEntryCard.module.css'
 
 /**
@@ -117,7 +119,7 @@ export default function HistoryEntryCard({
 
   if (compact) {
     return (
-      <div className={cx(shared.card, s.compactCard)} data-testid="history-entry" data-entry-type={entry._type}>
+      <div className={cx(cards.card, s.compactCard)} data-testid="history-entry" data-entry-type={entry._type}>
         <div className={s.compactRow}>
           <span className={s.compactLeft}>
             <span className={s.compactTime}>{formatEntryTime(entry)}</span>
@@ -149,20 +151,20 @@ export default function HistoryEntryCard({
   }
 
   return (
-    <div className={cx(shared.card, s.entryCard)} data-testid="history-entry" data-entry-type={entry._type}>
+    <div className={cx(cards.card, s.entryCard)} data-testid="history-entry" data-entry-type={entry._type}>
       {/* Header row: identity (left) + metadata + edit affordance (right).
           Always the same height regardless of notes — keeps the list rhythm
           consistent. Long notes flow into the dedicated full-width row below. */}
-      <div className={cx(shared.cardHeader, s.entryHeader)}>
-        <div className={shared.cardMeta}>
+      <div className={cx(cards.cardHeader, s.entryHeader)}>
+        <div className={cards.cardMeta}>
           {showTitle && (
-            <span className={cx(shared.cardTitle, shared.cardTitleFlex, s.entryName)}>
+            <span className={cx(cards.cardTitle, cards.cardTitleFlex, s.entryName)}>
               <Icon name={isRoutine ? 'badge-check' : 'package'} size="sm" />
               <span>{title}</span>
             </span>
           )}
           {entry.consumed_lots?.length > 0 && (
-            <span className={cx(shared.cardStockBadge, s.entryStockBadge)} data-testid="entry-stock-badge">
+            <span className={cx(cards.cardStockBadge, s.entryStockBadge)} data-testid="entry-stock-badge">
               <Icon name="package" size="sm" />
               {/* The stock name is dropped when the title already carries it —
                   a consumption is titled by its stock, so naming it twice says
@@ -236,7 +238,7 @@ export default function HistoryEntryCard({
           {editable && !entry.notes && (
             <button
               type="button"
-              className={shared.btnIcon}
+              className={buttons.btnIcon}
               onClick={onStartEdit}
               aria-label={t('history.addNote')}
               title={t('history.addNote')}
@@ -260,7 +262,7 @@ export default function HistoryEntryCard({
             // there did the opposite of what the interface promised.
             <div className={s.notesEditor} ref={editorRef}>
               <input
-                className={cx(shared.input, s.notesInput)}
+                className={cx(forms.input, s.notesInput)}
                 autoFocus
                 value={draft}
                 onChange={(ev) => setDraft(ev.target.value)}
@@ -272,7 +274,7 @@ export default function HistoryEntryCard({
               />
               <button
                 type="button"
-                className={cx(shared.btnIcon, s.notesEdit)}
+                className={cx(buttons.btnIcon, s.notesEdit)}
                 onClick={() => onSave(draft)}
                 aria-label={t('common.save')}
                 title={t('common.save')}
@@ -292,7 +294,7 @@ export default function HistoryEntryCard({
               {editable && (
                 <button
                   type="button"
-                  className={cx(shared.btnIcon, s.notesEdit)}
+                  className={cx(buttons.btnIcon, s.notesEdit)}
                   onClick={onStartEdit}
                   aria-label={t('history.editNotes')}
                   title={t('history.editNotes')}

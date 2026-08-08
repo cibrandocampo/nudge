@@ -4,7 +4,7 @@ import Icon from './Icon'
 import LotRow, { LotQty, LotRowList, LotRowShell } from './LotRow'
 import cx from '../utils/cx'
 import { groupLots } from '../utils/lotsForSelection'
-import shared from '../styles/shared.module.css'
+import buttons from '../styles/buttons.module.css'
 import s from './StockLotsList.module.css'
 
 /**
@@ -49,7 +49,7 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
   const deleteButton = (lot) => (
     <button
       type="button"
-      className={cx(shared.btnIcon, shared.btnIconDelete, !reachable && shared.disabled)}
+      className={cx(buttons.btnIcon, buttons.btnIconDelete, !reachable && buttons.disabled)}
       onClick={() => onRemoveLot(lot)}
       aria-disabled={!reachable}
       aria-label={t('inventory.deleteTooltip')}
@@ -73,7 +73,7 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
               {isSplit ? (
                 <button
                   type="button"
-                  className={cx(shared.btnIcon, s.groupExpander)}
+                  className={cx(buttons.btnIcon, s.groupExpander)}
                   onClick={() => toggleGroup(group.key)}
                   aria-expanded={expanded}
                   aria-label={t('stockDetail.togglePacks')}

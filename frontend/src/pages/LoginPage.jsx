@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import PasswordInput from '../components/PasswordInput'
-import shared from '../styles/shared.module.css'
+import forms from '../styles/forms.module.css'
 import s from './LoginPage.module.css'
 
 const RESEND_COOLDOWN_SECONDS = 30
@@ -175,7 +175,7 @@ export default function LoginPage() {
             {allowSelfSignup === true && <h2 className={s.stepTitle}>{t('login.signInOrRegister')}</h2>}
             {allowSelfSignup === false && <h2 className={s.stepTitle}>{t('login.signIn')}</h2>}
             <input
-              className={shared.input}
+              className={forms.input}
               type="email"
               placeholder={t('login.email')}
               value={email}
@@ -183,7 +183,7 @@ export default function LoginPage() {
               required
               autoFocus
             />
-            {error && <p className={shared.error}>{error}</p>}
+            {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading}>
               {loading ? t('login.submitting') : t('login.continue')}
             </button>
@@ -193,7 +193,7 @@ export default function LoginPage() {
         {step === 'otp' && (
           <form onSubmit={handleOtpSubmit} className={s.form}>
             <h2 className={s.stepTitle}>{t('login.checkEmail')}</h2>
-            <p className={shared.helpText}>{t('login.checkEmailHint', { email })}</p>
+            <p className={forms.helpText}>{t('login.checkEmailHint', { email })}</p>
             <div className={s.otpWrap}>
               <input
                 className={s.otpHiddenInput}
@@ -223,8 +223,8 @@ export default function LoginPage() {
                 })}
               </div>
             </div>
-            {error && <p className={shared.error}>{error}</p>}
-            {info && <p className={shared.helpText}>{info}</p>}
+            {error && <p className={forms.error}>{error}</p>}
+            {info && <p className={forms.helpText}>{info}</p>}
             <button className={s.btn} type="submit" disabled={loading || code.length !== 6}>
               {loading ? t('login.submitting') : t('login.verify')}
             </button>
@@ -247,7 +247,7 @@ export default function LoginPage() {
               required
               autoFocus
             />
-            {error && <p className={shared.error}>{error}</p>}
+            {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading || password.length === 0}>
               {loading ? t('login.submitting') : t('login.submit')}
             </button>
@@ -260,9 +260,9 @@ export default function LoginPage() {
         {step === 'name' && (
           <form onSubmit={handleNameSubmit} className={s.form}>
             <h2 className={s.stepTitle}>{t('login.completeProfile')}</h2>
-            <p className={shared.helpText}>{t('login.completeProfileHint')}</p>
+            <p className={forms.helpText}>{t('login.completeProfileHint')}</p>
             <input
-              className={shared.input}
+              className={forms.input}
               type="text"
               placeholder={t('login.firstName')}
               value={firstName}
@@ -271,14 +271,14 @@ export default function LoginPage() {
               autoFocus
             />
             <input
-              className={shared.input}
+              className={forms.input}
               type="text"
               placeholder={t('login.lastName')}
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               required
             />
-            {error && <p className={shared.error}>{error}</p>}
+            {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading || !firstName.trim() || !lastName.trim()}>
               {loading ? t('login.submitting') : t('login.continue')}
             </button>

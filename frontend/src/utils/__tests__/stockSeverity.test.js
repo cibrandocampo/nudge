@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import shared from '../../styles/shared.module.css'
+import cards from '../../styles/cards.module.css'
 import { borderTokensFromStock, iconClassForLot, iconClassForStock, lotExpirySeverity } from '../stockSeverity'
 
 const TODAY = new Date('2026-05-06T00:00:00')
@@ -43,58 +43,58 @@ describe('lotExpirySeverity', () => {
 describe('borderTokensFromStock — 3-tier, stock-only (T165)', () => {
   it('stock_severity=critical → danger', () => {
     expect(borderTokensFromStock({ stock_severity: 'critical' })).toEqual({
-      border: shared.cardBorderDanger,
-      dot: shared.dotDanger,
+      border: cards.cardBorderDanger,
+      dot: cards.dotDanger,
     })
   })
 
   it('stock_severity=low → warning', () => {
     expect(borderTokensFromStock({ stock_severity: 'low' })).toEqual({
-      border: shared.cardBorderWarning,
-      dot: shared.dotWarning,
+      border: cards.cardBorderWarning,
+      dot: cards.dotWarning,
     })
   })
 
   it('stock_severity=ok → success', () => {
     expect(borderTokensFromStock({ stock_severity: 'ok' })).toEqual({
-      border: shared.cardBorderSuccess,
-      dot: shared.dotSuccess,
+      border: cards.cardBorderSuccess,
+      dot: cards.dotSuccess,
     })
   })
 
   it('null stock → danger fallback', () => {
     expect(borderTokensFromStock(null)).toEqual({
-      border: shared.cardBorderDanger,
-      dot: shared.dotDanger,
+      border: cards.cardBorderDanger,
+      dot: cards.dotDanger,
     })
   })
 
   it('undefined stock → danger fallback', () => {
     expect(borderTokensFromStock(undefined)).toEqual({
-      border: shared.cardBorderDanger,
-      dot: shared.dotDanger,
+      border: cards.cardBorderDanger,
+      dot: cards.dotDanger,
     })
   })
 
   it('unknown stock_severity (e.g. cached "out" from old contract) → danger', () => {
     expect(borderTokensFromStock({ stock_severity: 'out' })).toEqual({
-      border: shared.cardBorderDanger,
-      dot: shared.dotDanger,
+      border: cards.cardBorderDanger,
+      dot: cards.dotDanger,
     })
   })
 
   // Documents the no-worst-of-two contract: expiry_severity is ignored.
   it('ignores expiry_severity=soon when stock_severity is ok → still success', () => {
     expect(borderTokensFromStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toEqual({
-      border: shared.cardBorderSuccess,
-      dot: shared.dotSuccess,
+      border: cards.cardBorderSuccess,
+      dot: cards.dotSuccess,
     })
   })
 
   it('ignores expiry_severity=reached when stock_severity is ok → still success', () => {
     expect(borderTokensFromStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toEqual({
-      border: shared.cardBorderSuccess,
-      dot: shared.dotSuccess,
+      border: cards.cardBorderSuccess,
+      dot: cards.dotSuccess,
     })
   })
 })
@@ -105,11 +105,11 @@ describe('iconClassForLot', () => {
   })
 
   it('returns iconDanger for a lot expiring today', () => {
-    expect(iconClassForLot({ expiry_date: daysFromToday(0) }, TODAY)).toBe(shared.iconDanger)
+    expect(iconClassForLot({ expiry_date: daysFromToday(0) }, TODAY)).toBe(cards.iconDanger)
   })
 
   it('returns iconWarning for a lot expiring in 15 days', () => {
-    expect(iconClassForLot({ expiry_date: daysFromToday(15) }, TODAY)).toBe(shared.iconWarning)
+    expect(iconClassForLot({ expiry_date: daysFromToday(15) }, TODAY)).toBe(cards.iconWarning)
   })
 
   it('returns null for a lot expiring in 60 days', () => {
@@ -127,15 +127,15 @@ describe('iconClassForStock — 3-tier, stock-only (T165)', () => {
   })
 
   it('stock_severity=critical → iconDanger', () => {
-    expect(iconClassForStock({ stock_severity: 'critical' })).toBe(shared.iconDanger)
+    expect(iconClassForStock({ stock_severity: 'critical' })).toBe(cards.iconDanger)
   })
 
   it('stock_severity=low → iconWarning', () => {
-    expect(iconClassForStock({ stock_severity: 'low' })).toBe(shared.iconWarning)
+    expect(iconClassForStock({ stock_severity: 'low' })).toBe(cards.iconWarning)
   })
 
   it('stock_severity=ok → iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok' })).toBe(shared.iconSuccess)
+    expect(iconClassForStock({ stock_severity: 'ok' })).toBe(cards.iconSuccess)
   })
 
   it('returns null when stock_severity is missing', () => {
@@ -148,10 +148,10 @@ describe('iconClassForStock — 3-tier, stock-only (T165)', () => {
 
   // Documents the no-worst-of-two contract.
   it('ignores expiry_severity=soon when stock_severity is ok → still iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toBe(shared.iconSuccess)
+    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toBe(cards.iconSuccess)
   })
 
   it('ignores expiry_severity=reached when stock_severity is ok → still iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toBe(shared.iconSuccess)
+    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toBe(cards.iconSuccess)
   })
 })
