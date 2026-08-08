@@ -20,6 +20,12 @@ import s from './Combobox.module.css'
  * `onSelect` fires only when an option is chosen from the list, in addition to
  * `onChange` — a side-channel for callers that need to react to the choice
  * itself rather than to the resulting text.
+ *
+ * `getLabel` is the option's *value*: what filtering matches on and, in
+ * free-text mode, what lands in the input. `renderOption` is what the list
+ * shows, and defaults to the label — separate because an option can carry more
+ * than its value is worth showing, such as a batch number plus the expiry date
+ * picking it would inherit.
  */
 export default function Combobox({
   value,
@@ -28,6 +34,7 @@ export default function Combobox({
   placeholder,
   getLabel = (o) => o,
   getKey = (o) => o,
+  renderOption,
   emptyMessage,
   maxResults = 50,
   id,
@@ -86,7 +93,10 @@ export default function Combobox({
         : ''
 
   const selectOption = (option) => {
-    onChange?.(option)
+    // Free text means the input *is* the value, so `onChange` must receive text
+    // whether it was typed or picked. The option itself goes to `onSelect`, for
+    // callers that need more of it than the text carries.
+    onChange?.(allowFreeText ? String(getLabel(option)) : option)
     onSelect?.(option)
     setOpen(false)
     setQuery('')
@@ -176,7 +186,7 @@ export default function Combobox({
                   }}
                   onMouseEnter={() => setHighlightedIndex(index)}
                 >
-                  {String(getLabel(option))}
+                  {renderOption ? renderOption(option) : String(getLabel(option))}
                 </li>
               )
             })

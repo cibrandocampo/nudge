@@ -249,3 +249,23 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
 }
+
+/* An input the user may read but not change, with a lock badge on the right.
+   Two consumers since T050: a recipient viewing a shared stock's name, and an
+   expiry inherited from the batch that was picked. Moved out of
+   StockFormPage.module.css when the second one arrived. */
+.lockedInput {
+  position: relative;
+}
+.lockedInput input {
+  padding-right: 2rem;
+}
+.lockBadge {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}

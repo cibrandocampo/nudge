@@ -6,39 +6,6 @@
   width: 100%;
 }
 
-/* The serial is read from the box, never typed, so it shows as a chip with a
-   way to drop it rather than as an editable field. */
-.serialChip {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius);
-  background: var(--c-surface);
-  font-size: 0.8rem;
-}
-
-.serialValue {
-  color: var(--c-text);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.serialClear {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  cursor: pointer;
-  display: flex;
-  padding: 0.1rem;
-}
-
-.serialClear:hover {
-  color: var(--c-text);
-}
-
 .addLotForm {
   display: flex;
   flex-direction: column;
@@ -51,6 +18,43 @@
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
+}
+
+/* A suggestion is a batch number plus the expiry picking it would inherit,
+   pushed apart so the date reads as provenance rather than as part of the
+   number. */
+.suggestion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.suggestionExpiry {
+  color: var(--c-text-3);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* The reveal control for the folded fields. Deliberately quieter than the
+   form's real actions — it adds inputs, it does not do anything. */
+.moreFieldsBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0;
+  background: none;
+  border: none;
+  color: var(--c-primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.moreFieldsBtn:hover {
+  text-decoration: underline;
 }
 
 /* Compact override for inputs inside the addLot form (smaller than the

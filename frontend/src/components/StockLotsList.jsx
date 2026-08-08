@@ -65,12 +65,18 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
         // Several rows sharing lot number and expiry are several physical
         // boxes: the group collapses them and expands to show each one by its
         // serial.
-        const isSplit = group.rows.length > 1
+        //
+        // A group of exactly one *identified* box is expandable too, even
+        // though there is nothing to collapse. Otherwise its trailing control
+        // is the delete button and the serial has nowhere to appear — so the
+        // last remaining box of a batch becomes impossible to look up, which
+        // is the opposite of what a serial is for.
+        const isExpandable = group.rows.length > 1 || group.rows.some((row) => row.serial_number)
         const expanded = expandedGroups.includes(group.key)
         return (
           <Fragment key={group.key}>
             <LotRow group={group} today={today} testId="lot-row">
-              {isSplit ? (
+              {isExpandable ? (
                 <button
                   type="button"
                   className={cx(buttons.btnIcon, s.groupExpander)}
@@ -90,7 +96,7 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
                 deleteButton(group.rows[0])
               )}
             </LotRow>
-            {isSplit &&
+            {isExpandable &&
               expanded &&
               group.rows.map((lot) => (
                 <LotRowShell

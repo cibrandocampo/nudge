@@ -7,6 +7,7 @@ import QueryHandler from '../components/QueryHandler'
 import ShareWithSection from '../components/ShareWithSection'
 import { useContacts } from '../hooks/useContacts'
 import { useServerReachable } from '../hooks/useServerReachable'
+import { useFieldDisclosure } from '../hooks/useFieldDisclosure'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useCreateStock } from '../hooks/mutations/useCreateStock'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
@@ -39,7 +40,18 @@ const newBatchUid = () => {
 // A new batch row starts at the product's default quantity when the user has
 // typed one, so adding three boxes of the same product is three clicks rather
 // than three clicks and three numbers.
-const EMPTY_BATCH = (quantity = '') => ({ uid: newBatchUid(), quantity, expiry_date: '', lot_number: '' })
+const EMPTY_BATCH = (quantity = '') => ({
+  uid: newBatchUid(),
+  quantity,
+  expiry_date: '',
+  lot_number: '',
+  serial_number: '',
+})
+
+// Folded until asked for, exactly as in `AddLotForm`. Disclosure is list-wide
+// rather than per row: someone registering six scanned boxes wants the field
+// once, not six times.
+const FOLDABLE = ['lot', 'serial']
 
 export default function StockFormPage() {
   const { id } = useParams()
@@ -64,6 +76,7 @@ export default function StockFormPage() {
   const [batches, setBatches] = useState([])
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const disclosure = useFieldDisclosure(FOLDABLE)
 
   useEffect(() => {
     if (!isEditing || !stock) return
@@ -96,7 +109,20 @@ export default function StockFormPage() {
     }
     if (!isEditing && batches.length > 0) {
       const badIndex = batches.findIndex((b) => parseIntSafe(b.quantity, -1) <= 0)
-      if (badIndex !== -1) err.batches = t('stockForm.errorLotQuantity')
+      if (badIndex !== -1) {
+        err.batches = t('stockForm.errorLotQuantity')
+      } else {
+        // The rows are created in parallel (`Promise.allSettled` below), so two
+        // sharing a serial would race into the unique constraint and surface as
+        // a partial failure that does not say which row lost. Caught here
+        // instead, before anything is created.
+        //
+        // Blank serials are not duplicates of each other: most boxes carry
+        // none. Serials are compared case-sensitively — GS1 AI 21 is a
+        // case-sensitive field, so `ab1` and `AB1` are different boxes.
+        const serials = batches.map((b) => b.serial_number.trim()).filter(Boolean)
+        if (new Set(serials).size !== serials.length) err.batches = t('stockForm.errorDuplicateSerial')
+      }
     }
     return err
   }
@@ -173,6 +199,7 @@ export default function StockFormPage() {
               quantity: parseIntSafe(b.quantity),
               expiryDate: b.expiry_date || null,
               lotNumber: b.lot_number || '',
+              serialNumber: b.serial_number.trim(),
             }),
           ),
         )
@@ -230,7 +257,7 @@ export default function StockFormPage() {
         <form onSubmit={handleSubmit} className={s.form} noValidate>
           <section className={forms.formSection}>
             <FormField label={t('stockForm.nameLabel')} error={errors.name}>
-              <div className={isOwner ? undefined : s.lockedInput}>
+              <div className={isOwner ? undefined : forms.lockedInput}>
                 <input
                   className={forms.input}
                   value={form.name}
@@ -240,7 +267,7 @@ export default function StockFormPage() {
                   disabled={!isOwner}
                 />
                 {!isOwner && (
-                  <span className={s.lockBadge} aria-hidden="true">
+                  <span className={forms.lockBadge} aria-hidden="true">
                     <Icon name="lock" size="sm" />
                   </span>
                 )}
@@ -348,16 +375,33 @@ export default function StockFormPage() {
                             aria-label={t('stockForm.batchExpiryAria', { index: idx + 1 })}
                           />
                         </label>
-                        <label className={cx(s.batchField, s.batchFieldFlex)}>
-                          <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
-                          <input
-                            className={forms.input}
-                            type="text"
-                            value={b.lot_number}
-                            onChange={(e) => updateBatch(b.uid, 'lot_number', e.target.value)}
-                            aria-label={t('stockForm.batchLotAria', { index: idx + 1 })}
-                          />
-                        </label>
+                        {disclosure.isRevealed('lot') && (
+                          <label className={cx(s.batchField, s.batchFieldFlex)}>
+                            <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
+                            <input
+                              className={forms.input}
+                              type="text"
+                              value={b.lot_number}
+                              onChange={(e) => updateBatch(b.uid, 'lot_number', e.target.value)}
+                              aria-label={t('stockForm.batchLotAria', { index: idx + 1 })}
+                            />
+                          </label>
+                        )}
+                        {disclosure.isRevealed('serial') && (
+                          <label className={cx(s.batchField, s.batchFieldFlex)}>
+                            <span className={s.batchFieldLabel}>{t('inventory.lotSerial')}</span>
+                            <input
+                              className={forms.input}
+                              type="text"
+                              // The model caps `serial_number` at 20, the GS1
+                              // AI 21 limit; past it the backend answers 400.
+                              maxLength={20}
+                              value={b.serial_number}
+                              onChange={(e) => updateBatch(b.uid, 'serial_number', e.target.value)}
+                              aria-label={t('stockForm.batchSerialAria', { index: idx + 1 })}
+                            />
+                          </label>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -371,6 +415,17 @@ export default function StockFormPage() {
                     </li>
                   ))}
                 </ul>
+              )}
+              {batches.length > 0 && disclosure.hasHidden && (
+                <button
+                  type="button"
+                  className={s.moreFieldsBtn}
+                  onClick={disclosure.revealAll}
+                  data-testid="more-fields"
+                >
+                  <Icon name="plus" size="sm" />
+                  <span>{t('inventory.moreFields')}</span>
+                </button>
               )}
               {errors.batches && <p className={forms.error}>{errors.batches}</p>}
             </section>

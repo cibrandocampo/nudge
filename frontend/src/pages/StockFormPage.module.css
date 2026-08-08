@@ -93,20 +93,23 @@
   flex: 1;
 }
 
-/* Disabled-name field with a lock badge on the right (recipient editing
-   a shared stock — the name is read-only context, not a form field). */
-.lockedInput {
-  position: relative;
+/* The reveal control for the folded batch fields. One per list, not per row:
+   someone registering six scanned boxes wants the serial field once. Quieter
+   than the form's real actions — it adds inputs, it does not do anything. */
+.moreFieldsBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0;
+  background: none;
+  border: none;
+  color: var(--c-primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
 }
-.lockedInput input {
-  padding-right: 2rem;
-}
-.lockBadge {
-  position: absolute;
-  top: 50%;
-  right: 0.6rem;
-  transform: translateY(-50%);
-  pointer-events: none;
-  font-size: 0.95rem;
-  line-height: 1;
+
+.moreFieldsBtn:hover {
+  text-decoration: underline;
 }
