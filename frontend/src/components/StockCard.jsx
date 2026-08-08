@@ -2,9 +2,10 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
 import { groupLots } from '../utils/lotsForSelection'
-import { borderTokensFromStock, iconClassForLot, lotExpirySeverity } from '../utils/stockSeverity'
+import { borderTokensFromStock } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
+import LotRow, { LotRowList } from './LotRow'
 import SyncStatusBadge from './SyncStatusBadge'
 import shared from '../styles/shared.module.css'
 import s from './StockCard.module.css'
@@ -108,38 +109,15 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
        * To revert to "always show when there's at least one lot", replace
        * the next line with `stock.lots && stock.lots.length > 0 && (`. */}
       {(lotGroups.length > 1 || Boolean(lotGroups[0]?.expiry_date) || Boolean(lotGroups[0]?.lot_number)) && (
-        <div className={shared.cardLotsBlock} data-with-pills={stock.lots.some((l) => l.lot_number) || undefined}>
+        <LotRowList lots={stock.lots} className={s.lotsBlock}>
           {/* One row per batch, not per database row: several scanned boxes of
               the same batch are one line here. The individual serials live in
-              the stock detail, where they can be expanded. */}
-          {lotGroups.map((group) => {
-            const sev = lotExpirySeverity(group, today)
-            return (
-              <div key={group.key} className={shared.cardLotRow} data-testid="card-lot-row" data-expiring={sev}>
-                <div className={shared.cardLotMain}>
-                  <Icon name="package" size="sm" className={cx(shared.cardLotIcon, iconClassForLot(group, today))} />
-                  <span className={cx(shared.cardLotQty, sev === 'reached' && shared.cardLotQtyExpired)}>
-                    {group.quantity} {t('common.unit')}
-                  </span>
-                </div>
-                <div className={shared.cardLotMeta}>
-                  {/* Date and pill render in fixed grid columns (cardLotsBlock is
-                      a 3-col grid; cardLotMeta has display:contents, so these
-                      spans land directly in the parent grid). DOM order is
-                      irrelevant — column placement is via grid-column. */}
-                  {group.expiry_date && (
-                    <span className={cx(shared.cardLotExpiry, iconClassForLot(group, today))}>
-                      {t('inventory.lotExpiryDate', {
-                        date: formatShortDate(group.expiry_date),
-                      })}
-                    </span>
-                  )}
-                  {group.lot_number && <span className={shared.cardLotNumberPill}>{group.lot_number}</span>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              the stock detail, where they can be expanded. No trailing control:
+              this list is read-only, the detail page is where lots are edited. */}
+          {lotGroups.map((group) => (
+            <LotRow key={group.key} group={group} today={today} testId="card-lot-row" />
+          ))}
+        </LotRowList>
       )}
 
       {totalRate > 0 && (

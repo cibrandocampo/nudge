@@ -5,6 +5,22 @@ import cx from '../utils/cx'
 import shared from '../styles/shared.module.css'
 import s from './Combobox.module.css'
 
+/**
+ * A text input with a filtered list of options under it.
+ *
+ * Two modes, because two different things are called a combobox:
+ *
+ * - **Pick one of these** (default). The value is always one of `options`;
+ *   typing only filters, and what was typed is discarded on close. This is what
+ *   choosing a contact or a stock group needs.
+ * - **Free text with suggestions** (`allowFreeText`). The input *is* the value:
+ *   every keystroke reaches `onChange`, and the list is a shortcut, not a
+ *   constraint. A batch number the product has never seen must be typeable.
+ *
+ * `onSelect` fires only when an option is chosen from the list, in addition to
+ * `onChange` — a side-channel for callers that need to react to the choice
+ * itself rather than to the resulting text.
+ */
 export default function Combobox({
   value,
   onChange,
@@ -16,7 +32,11 @@ export default function Combobox({
   maxResults = 50,
   id,
   onInputChange,
+  onSelect,
+  allowFreeText = false,
+  inputClassName,
   disabled = false,
+  ...rest
 }) {
   const reactId = useId()
   const baseId = id || `combobox-${reactId}`
@@ -28,11 +48,14 @@ export default function Combobox({
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const wrapRef = useRef(null)
 
-  const normalizedQuery = query.toLowerCase()
+  // In free-text mode the value itself is what the user typed, so it is also
+  // what filters the list; there is no separate draft to keep.
+  const effectiveQuery = allowFreeText ? String(value ?? '') : query
+  const normalizedQuery = effectiveQuery.trim().toLowerCase()
   // When the consumer provides `onInputChange` it owns the filtering (e.g.
   // results come from a remote search endpoint) — render options as-is.
   const filtered =
-    onInputChange || !query
+    onInputChange || !normalizedQuery
       ? options.slice(0, maxResults)
       : options.filter((o) => String(getLabel(o)).toLowerCase().includes(normalizedQuery)).slice(0, maxResults)
 
@@ -52,12 +75,19 @@ export default function Combobox({
 
   useEffect(() => {
     setHighlightedIndex(0)
-  }, [query, open])
+  }, [effectiveQuery, open])
 
-  const inputValue = open ? query : value != null && value !== '' ? String(getLabel(value)) : ''
+  const inputValue = allowFreeText
+    ? String(value ?? '')
+    : open
+      ? query
+      : value != null && value !== ''
+        ? String(getLabel(value))
+        : ''
 
   const selectOption = (option) => {
     onChange?.(option)
+    onSelect?.(option)
     setOpen(false)
     setQuery('')
   }
@@ -77,6 +107,10 @@ export default function Combobox({
       if (filtered.length === 0) return
       setHighlightedIndex((i) => (i - 1 + filtered.length) % filtered.length)
     } else if (e.key === 'Enter') {
+      // Enter belongs to the list only while the list has something to pick.
+      // Otherwise it must reach the surrounding form — in free-text mode the
+      // whole point is submitting a value that is not in the list, and
+      // swallowing the key would make that impossible.
       if (!open || filtered.length === 0) return
       e.preventDefault()
       const idx = Math.min(highlightedIndex, filtered.length - 1)
@@ -91,7 +125,7 @@ export default function Combobox({
     <div className={s.wrap} ref={wrapRef}>
       <input
         type="text"
-        className={cx(shared.input, s.input)}
+        className={cx(shared.input, s.input, inputClassName)}
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
@@ -101,9 +135,14 @@ export default function Combobox({
         placeholder={placeholder}
         value={inputValue}
         disabled={disabled}
+        {...rest}
         onChange={(e) => {
           const next = e.target.value
-          setQuery(next)
+          // Free text: the keystroke is the value, so it goes straight out.
+          // Otherwise it is only a filter, kept locally until an option is
+          // picked.
+          if (allowFreeText) onChange?.(next)
+          else setQuery(next)
           if (!open) setOpen(true)
           onInputChange?.(next)
         }}

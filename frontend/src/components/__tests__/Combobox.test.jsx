@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import Combobox from '../Combobox'
@@ -178,5 +179,107 @@ describe('Combobox', () => {
     // Options are rendered as-is despite 'z' not matching — local filter is off.
     const labels = screen.getAllByRole('option').map((o) => o.textContent)
     expect(labels).toEqual(['alpha', 'beta'])
+  })
+
+  it('fires onSelect alongside onChange only when an option is picked', async () => {
+    const onSelect = vi.fn()
+    const { user, onChange } = renderCombobox({ onSelect })
+    await user.click(screen.getByRole('combobox'))
+    await user.click(screen.getByText('Cherry'))
+    expect(onChange).toHaveBeenCalledWith('Cherry')
+    expect(onSelect).toHaveBeenCalledWith('Cherry')
+  })
+})
+
+// A batch number the product has never seen must be typeable, so the input is
+// the value rather than a filter over a closed list.
+describe('Combobox — free text', () => {
+  function renderFreeText(props = {}) {
+    const user = userEvent.setup()
+    const onChange = props.onChange ?? vi.fn()
+    const onSubmit = props.onSubmit ?? vi.fn((e) => e.preventDefault())
+    function Harness() {
+      const [value, setValue] = useState(props.value ?? '')
+      return (
+        <form onSubmit={onSubmit}>
+          <Combobox
+            allowFreeText
+            value={value}
+            onChange={(next) => {
+              setValue(next)
+              onChange(next)
+            }}
+            onSelect={props.onSelect}
+            options={props.options ?? ['LOT-A', 'LOT-B']}
+            placeholder="Batch"
+            emptyMessage="No match"
+          />
+        </form>
+      )
+    }
+    const utils = render(<Harness />)
+    return { ...utils, user, onChange, onSubmit }
+  }
+
+  it('reports every keystroke and keeps what was typed after blur', async () => {
+    const { user, onChange } = renderFreeText()
+    const input = screen.getByRole('combobox')
+    await user.click(input)
+    await user.keyboard('NEW-9')
+
+    expect(onChange).toHaveBeenLastCalledWith('NEW-9')
+    await user.tab()
+    // Closing must not discard a value that exists nowhere else.
+    expect(input).toHaveValue('NEW-9')
+  })
+
+  it('filters the suggestions by what is typed', async () => {
+    const { user } = renderFreeText({ options: ['LOT-A', 'LOT-B', 'OTHER'] })
+    await user.click(screen.getByRole('combobox'))
+    await user.keyboard('lot')
+
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['LOT-A', 'LOT-B'])
+  })
+
+  it('fills the input from a picked option, and reports it through both channels', async () => {
+    const onSelect = vi.fn()
+    const { user, onChange } = renderFreeText({ onSelect })
+    await user.click(screen.getByRole('combobox'))
+    await user.click(screen.getByRole('option', { name: 'LOT-B' }))
+
+    expect(screen.getByRole('combobox')).toHaveValue('LOT-B')
+    expect(onChange).toHaveBeenCalledWith('LOT-B')
+    expect(onSelect).toHaveBeenCalledWith('LOT-B')
+  })
+
+  it('picks the highlighted option on Enter without submitting the form', async () => {
+    const { user, onSubmit } = renderFreeText()
+    await user.click(screen.getByRole('combobox'))
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(screen.getByRole('combobox')).toHaveValue('LOT-B')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('lets Enter reach the form once there is nothing to pick', async () => {
+    const { user, onSubmit } = renderFreeText()
+    await user.click(screen.getByRole('combobox'))
+    // A brand-new batch: the list has no match, so Enter is the form's.
+    await user.keyboard('BRAND-NEW')
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+
+    await user.keyboard('{Enter}')
+    expect(onSubmit).toHaveBeenCalled()
+  })
+
+  it('lets Enter reach the form when the list is closed', async () => {
+    const { user, onSubmit } = renderFreeText()
+    const input = screen.getByRole('combobox')
+    await user.click(input)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    await user.keyboard('{Enter}')
+    expect(onSubmit).toHaveBeenCalled()
   })
 })

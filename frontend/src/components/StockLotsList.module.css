@@ -1,0 +1,44 @@
+.lotsList {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0.75rem;
+}
+
+/* Individual boxes of a lot, revealed by the group expander. Indented and
+   quieter than the group row: the group is the unit of reading, a pack row is
+   the detail you asked for. */
+.packRow {
+  padding-left: 1.25rem;
+  background: color-mix(in srgb, var(--c-text) 3%, transparent);
+}
+
+.packSerial {
+  grid-column: 2 / 4;
+  font-size: 0.8rem;
+  color: var(--c-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* Only the serial itself is monospaced — it is a machine code read character by
+   character against the printed box. The "unidentified units" fallback is a
+   sentence and stays in the body face. */
+.packSerialCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* How many boxes the group holds, shown as a bare digit against the chevron
+   instead of a "· N packs" caption inside the lot pill — the row has to fit a
+   phone width, and the chevron already carries the "expandable" meaning. */
+.groupExpander {
+  width: auto;
+  min-width: 32px;
+  gap: 0.2rem;
+  padding: 0 0.35rem;
+}
+
+.packCount {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-3);
+  font-weight: 500;
+}

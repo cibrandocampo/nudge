@@ -1,0 +1,101 @@
+.scanBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+/* The serial is read from the box, never typed, so it shows as a chip with a
+   way to drop it rather than as an editable field. */
+.serialChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  font-size: 0.8rem;
+}
+
+.serialLabel {
+  color: var(--c-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+}
+
+.serialValue {
+  color: var(--c-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.serialClear {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--c-text-3);
+  cursor: pointer;
+  display: flex;
+  padding: 0.1rem;
+}
+
+.serialClear:hover {
+  color: var(--c-text);
+}
+
+.addLotForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem;
+  border-top: 1px solid var(--c-border-inner);
+}
+
+.addLotRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* Compact override for inputs inside the addLot form (smaller than the
+ * default `shared.input` to fit the dense lot-add UX). Applied via
+ * cx(shared.input, s.addLotInput) in JSX. */
+.addLotInput {
+  font-size: 0.8rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.addLotActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.addLotActions > button {
+  flex: 1;
+}
+
+/* The form's resting state: a full-width button under the lot list, sharing
+   the list's card. Not a `shared.btn` — it reads as a row of the card, which
+   is why it carries the card's inner border rather than a button's. */
+.addLotToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--c-border-inner);
+  color: var(--c-text-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+}
+.addLotToggle:hover {
+  background: var(--c-border-inner);
+  color: var(--c-text);
+}

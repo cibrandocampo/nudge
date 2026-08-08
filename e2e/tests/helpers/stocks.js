@@ -47,6 +47,18 @@ export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', 
     await lotInput.press('Escape')
   }
   await page.getByRole('button', { name: 'Add batch' }).click()
+
+  // Saving a lot whose quantity disagrees with what the product has learned
+  // (`default_lot_quantity`) raises the product-values question — the modal
+  // from T031/T033. Either answer creates the lot; it asks which product
+  // values to write, not whether to save. Keeping the stored values is the
+  // neutral answer for callers that are testing lots, not product learning.
+  // Left unanswered, its overlay swallows every later click on the page.
+  const keepValues = page.getByTestId('stock-values-keep')
+  if (await keepValues.isVisible().catch(() => false)) {
+    await keepValues.click()
+  }
+  await expect(page.getByTestId('stock-values-confirm')).toHaveCount(0)
 }
 
 export async function deleteLot(page, stockKeyOrName, lotNumber) {
