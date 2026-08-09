@@ -65,6 +65,10 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const [open, setOpen] = useState(false)
   const [fields, setFields] = useState({ qty: '', expiry: '', lotNumber: '', serialNumber: '' })
   const [adding, setAdding] = useState(false)
+  // Shown under the quantity when it is missing. The browser's own `required`
+  // popup was doing this job, but it speaks in a different register from the
+  // inline errors the other two forms use — same criterion everywhere now.
+  const [qtyError, setQtyError] = useState(null)
   // What the barcode contributed *beyond* the visible fields. The serial is not
   // here: it is a field the user can type, which the scanner merely prefills.
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -75,8 +79,8 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const [expiredBlocker, setExpiredBlocker] = useState(null)
   // Which of the two save buttons was pressed. A ref rather than state because
   // it is read once, inside the submit that the click itself triggers, and must
-  // not cause a render. Both buttons stay `type="submit"`, so the browser still
-  // enforces the required quantity for either.
+  // not cause a render. Both buttons stay `type="submit"`, so either goes
+  // through `handleSubmit` and its validation.
   const keepOpenRef = useRef(false)
   const qtyRef = useRef(null)
   const scannerAvailable = useScannerAvailable()
@@ -189,7 +193,14 @@ export default function AddLotForm({ stock, today, onSubmit }) {
       return
     }
     const quantity = parseIntSafe(fields.qty, -1)
-    if (quantity < 0) return
+    if (quantity < 0) {
+      // Was a bare `return`: with the browser popup gone, an empty quantity
+      // would have failed silently.
+      setQtyError(t('inventory.errorQtyRequired'))
+      qtyRef.current?.focus()
+      return
+    }
+    setQtyError(null)
 
     setAdding(true)
     try {
@@ -265,19 +276,22 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </button>
         )}
         <div className={s.addLotRow}>
-          <FormField label={t('inventory.lotQty')}>
+          <FormField label={t('inventory.lotQty')} required error={qtyError}>
             <input
               ref={qtyRef}
               className={cx(forms.input, s.addLotInput)}
               type="number"
               min={0}
               placeholder="0"
+              data-testid="qty-input"
               value={fields.qty}
-              onChange={(e) => setFields((f) => ({ ...f, qty: e.target.value }))}
-              required
+              onChange={(e) => {
+                setFields((f) => ({ ...f, qty: e.target.value }))
+                setQtyError(null)
+              }}
             />
           </FormField>
-          <FormField label={t('inventory.lotExpiry')} hint={t('routine.form.optional')}>
+          <FormField label={t('inventory.lotExpiry')}>
             {/* Locked while inherited: one batch has one expiry, so a date that
                 came from picking the batch is not the user's to edit. Typing in
                 the batch field unlocks it again. */}
@@ -301,7 +315,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               so nothing unreachable sits in the tab order or the accessibility
               tree. */}
           {disclosure.isRevealed('lot') && (
-            <FormField label={t('inventory.lotNumber')} hint={t('routine.form.optional')}>
+            <FormField label={t('inventory.lotNumber')}>
               {/* Free text with suggestions: a batch this product has never seen
                   must be typeable, and the list is only a shortcut for the ones
                   it has. `Combobox` brings the keyboard navigation and the
@@ -349,7 +363,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               decode, or no camera at all must not stop the user registering the
               box — the backend has accepted a typed serial since day one. */}
           {disclosure.isRevealed('serial') && (
-            <FormField label={t('inventory.lotSerial')} hint={t('routine.form.optional')}>
+            <FormField label={t('inventory.lotSerial')}>
               <input
                 className={cx(forms.input, s.addLotInput)}
                 type="text"

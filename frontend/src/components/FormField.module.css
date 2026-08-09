@@ -12,3 +12,10 @@
   font-weight: 400;
   color: var(--c-muted);
 }
+
+/* Same muted weight as the hint: the asterisk is a marker, not a warning, and
+   colouring it like an error would make every required field look wrong. */
+.required {
+  font-weight: 400;
+  color: var(--c-muted);
+}

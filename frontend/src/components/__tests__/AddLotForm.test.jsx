@@ -275,16 +275,16 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    // One convention across the form: the optional fields say so, the single
-    // required one says nothing, and no label smuggles "(optional)" into its
-    // own text. Quantity used to carry a bare `*` while the batch number wore
-    // "(optional)" baked into the translation — three ways of saying the same
-    // thing in four fields.
+    // One convention across the form: the single required field carries the
+    // asterisk, the optional ones carry nothing, and no label smuggles
+    // "(optional)" into its own text. Before, Quantity had a hand-written `*`
+    // while the batch number wore "(optional)" baked into the translation —
+    // three ways of saying the same thing across four fields.
     // Read the labels directly: the hint is a nested span, so the rendered text
     // is split across nodes and `getByText` would not see it as one string.
     const labels = Array.from(document.querySelectorAll('form label'))
     const texts = labels.map((el) => el.textContent.replace(/\s+/g, ' ').trim())
-    expect(texts).toEqual(['Quantity', 'Expiry date · optional', 'Batch ID · optional', 'Serial · optional'])
+    expect(texts).toEqual(['Quantity *', 'Expiry date', 'Batch ID', 'Serial'])
     // Same rendering for all four, so none can drift into its own register.
     const classes = labels.map((el) => el.className)
     expect(new Set(classes).size).toBe(1)
@@ -305,6 +305,26 @@ describe('AddLotForm', () => {
       const label = input.closest('div').parentElement.querySelector('label')
       expect(label.textContent).not.toContain(placeholder)
     }
+  })
+
+  it('says the quantity is missing instead of failing silently', async () => {
+    // The browser's `required` popup used to cover this. Without it the submit
+    // hit a bare `return`, so an empty quantity would have done nothing at all
+    // and said nothing either. The message now comes from the same place as
+    // every other field error: under the input.
+    const onSubmit = vi.fn()
+    const { user } = renderForm({ onSubmit })
+    await openForm(user)
+
+    await user.clear(screen.getByTestId('qty-input'))
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    expect(await screen.findByText('Enter a quantity')).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    // And it clears the moment the user starts fixing it.
+    await user.type(screen.getByTestId('qty-input'), '2')
+    expect(screen.queryByText('Enter a quantity')).not.toBeInTheDocument()
   })
 
   it('blocks a pack already registered in this stock, and unblocks when the serial is dropped', async () => {
