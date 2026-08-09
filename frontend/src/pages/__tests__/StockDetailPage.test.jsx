@@ -217,7 +217,7 @@ describe('StockDetailPage', () => {
     await user.type(screen.getByPlaceholderText('0'), '7')
     const dateInput = container.querySelector('input[type="date"]')
     await user.type(dateInput, '2027-12-31')
-    await user.type(screen.getByPlaceholderText('Batch ID (optional)'), 'FILT-Z')
+    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'FILT-Z')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
     await waitFor(() => expect(postBody?.quantity).toBe(7))
     expect(postBody.lot_number).toBe('FILT-Z')
@@ -228,7 +228,7 @@ describe('StockDetailPage', () => {
     await screen.findByText('Water filter')
     await user.click(screen.getByTestId('add-lot-toggle'))
     await user.click(screen.getByTestId('more-fields'))
-    const lotInput = screen.getByPlaceholderText('Batch ID (optional)')
+    const lotInput = screen.getByPlaceholderText('e.g. L4021A')
     await user.click(lotInput)
     // The option now reads "LOT-A · <expiry>" — the date rides along so the
     // autofill is visibly sourced — so match the number rather than the whole

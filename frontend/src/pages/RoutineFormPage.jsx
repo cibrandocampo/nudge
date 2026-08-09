@@ -265,7 +265,7 @@ export default function RoutineFormPage() {
         <form onSubmit={handleSubmit} className={s.form} noValidate>
           {/* Basics */}
           <section className={forms.formSection}>
-            <FormField label={t('routine.form.name')} error={errors.name}>
+            <FormField label={t('routine.form.name')} error={errors.name} required>
               <input
                 className={forms.input}
                 value={form.name}
@@ -274,7 +274,7 @@ export default function RoutineFormPage() {
                 autoFocus
               />
             </FormField>
-            <FormField label={t('routine.form.description')} hint={t('routine.form.optional')}>
+            <FormField label={t('routine.form.description')}>
               <textarea
                 className={cx(forms.input, s.textarea)}
                 value={form.description}

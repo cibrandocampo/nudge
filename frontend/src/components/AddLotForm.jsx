@@ -65,6 +65,10 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const [open, setOpen] = useState(false)
   const [fields, setFields] = useState({ qty: '', expiry: '', lotNumber: '', serialNumber: '' })
   const [adding, setAdding] = useState(false)
+  // Shown under the quantity when it is missing. The browser's own `required`
+  // popup was doing this job, but it speaks in a different register from the
+  // inline errors the other two forms use — same criterion everywhere now.
+  const [qtyError, setQtyError] = useState(null)
   // What the barcode contributed *beyond* the visible fields. The serial is not
   // here: it is a field the user can type, which the scanner merely prefills.
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -75,8 +79,8 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const [expiredBlocker, setExpiredBlocker] = useState(null)
   // Which of the two save buttons was pressed. A ref rather than state because
   // it is read once, inside the submit that the click itself triggers, and must
-  // not cause a render. Both buttons stay `type="submit"`, so the browser still
-  // enforces the required quantity for either.
+  // not cause a render. Both buttons stay `type="submit"`, so either goes
+  // through `handleSubmit` and its validation.
   const keepOpenRef = useRef(false)
   const qtyRef = useRef(null)
   const scannerAvailable = useScannerAvailable()
@@ -189,7 +193,14 @@ export default function AddLotForm({ stock, today, onSubmit }) {
       return
     }
     const quantity = parseIntSafe(fields.qty, -1)
-    if (quantity < 0) return
+    if (quantity < 0) {
+      // Was a bare `return`: with the browser popup gone, an empty quantity
+      // would have failed silently.
+      setQtyError(t('inventory.errorQtyRequired'))
+      qtyRef.current?.focus()
+      return
+    }
+    setQtyError(null)
 
     setAdding(true)
     try {
@@ -265,16 +276,19 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </button>
         )}
         <div className={s.addLotRow}>
-          <FormField label={`${t('inventory.lotQty')} *`}>
+          <FormField label={t('inventory.lotQty')} required error={qtyError}>
             <input
               ref={qtyRef}
               className={cx(forms.input, s.addLotInput)}
               type="number"
               min={0}
               placeholder="0"
+              data-testid="qty-input"
               value={fields.qty}
-              onChange={(e) => setFields((f) => ({ ...f, qty: e.target.value }))}
-              required
+              onChange={(e) => {
+                setFields((f) => ({ ...f, qty: e.target.value }))
+                setQtyError(null)
+              }}
             />
           </FormField>
           <FormField label={t('inventory.lotExpiry')}>
@@ -333,8 +347,13 @@ export default function AddLotForm({ stock, today, onSubmit }) {
                     {o.expiry_date && <span className={s.suggestionExpiry}>{formatShortDate(o.expiry_date)}</span>}
                   </span>
                 )}
-                placeholder={t('inventory.lotNumber')}
+                placeholder={t('inventory.lotNumberPlaceholder')}
                 inputClassName={s.addLotInput}
+                // `Combobox` spreads unknown props onto its input. The E2E
+                // helper used to find this field by its placeholder text, which
+                // broke the moment the copy became an example instead of the
+                // label — a testid cannot rot that way.
+                data-testid="lot-input"
               />
             </FormField>
           )}
@@ -351,7 +370,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
                 // The model caps `serial_number` at 20, which is the GS1 AI 21
                 // limit. Without the cap the backend answers 400.
                 maxLength={20}
-                placeholder={t('inventory.lotSerial')}
+                placeholder={t('inventory.lotSerialPlaceholder')}
                 value={fields.serialNumber}
                 onChange={(e) => setFields((f) => ({ ...f, serialNumber: e.target.value }))}
                 data-testid="serial-input"

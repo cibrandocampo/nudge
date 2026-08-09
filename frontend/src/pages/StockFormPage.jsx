@@ -256,7 +256,7 @@ export default function StockFormPage() {
 
         <form onSubmit={handleSubmit} className={s.form} noValidate>
           <section className={forms.formSection}>
-            <FormField label={t('stockForm.nameLabel')} error={errors.name}>
+            <FormField label={t('stockForm.nameLabel')} error={errors.name} required>
               <div className={isOwner ? undefined : forms.lockedInput}>
                 <input
                   className={forms.input}
@@ -290,7 +290,7 @@ export default function StockFormPage() {
                 the name: the API restricts every stock write to its owner. */}
             {isOwner && (
               <>
-                <FormField label={t('stockForm.gtinLabel')} error={errors.gtin} hint={t('routine.form.optional')}>
+                <FormField label={t('stockForm.gtinLabel')} error={errors.gtin}>
                   <input
                     // Never `type="number"`: a GTIN's leading zero is
                     // significant and a numeric input would drop it.
@@ -304,11 +304,7 @@ export default function StockFormPage() {
                   />
                 </FormField>
 
-                <FormField
-                  label={t('stockForm.defaultLotQuantityLabel')}
-                  error={errors.default_lot_quantity}
-                  hint={t('routine.form.optional')}
-                >
+                <FormField label={t('stockForm.defaultLotQuantityLabel')} error={errors.default_lot_quantity}>
                   <input
                     type="number"
                     min={1}
@@ -377,7 +373,7 @@ export default function StockFormPage() {
                         </label>
                         {disclosure.isRevealed('lot') && (
                           <label className={cx(s.batchField, s.batchFieldFlex)}>
-                            <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
+                            <span className={s.batchFieldLabel}>{t('inventory.lotNumber')}</span>
                             <input
                               className={forms.input}
                               type="text"
