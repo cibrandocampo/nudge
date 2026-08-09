@@ -50,9 +50,10 @@ What makes it more than a checklist:
   completion draws it down, lot by lot, First Expired First Out — with expiry
   warnings before anything goes off.
 - **Scan the box.** Point the camera at the DataMatrix on the packaging and the
-  batch, its expiry and the product code fill themselves in. A pack carrying a
-  serial stays one physical box, never merged with another, so "which box did I
-  open?" has an answer.
+  batch, its expiry and the product code fill themselves in — or type them, for
+  the boxes where the print is scratched or there is no camera to hand. A pack
+  carrying a serial stays one physical box, never merged with another, so "which
+  box did I open?" has an answer.
 - **Offline-first, honestly.** Mutations queue in IndexedDB, sync when the
   network returns, and a conflict opens a per-field diff instead of guessing.
   Reads come from the service-worker cache.
