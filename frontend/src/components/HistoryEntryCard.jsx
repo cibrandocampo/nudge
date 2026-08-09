@@ -202,7 +202,7 @@ export default function HistoryEntryCard({
                           rows up with the stock badge above, which has one. */}
                       <dt className={s.lotLabel}>
                         <Icon name="tag" size="sm" />
-                        <span>{t('stockForm.lotNumber')}</span>
+                        <span>{t('inventory.lotNumber')}</span>
                       </dt>
                       <dd className={s.lotValue}>{lotNumber}</dd>
                     </>

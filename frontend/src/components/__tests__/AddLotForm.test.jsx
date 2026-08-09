@@ -89,7 +89,7 @@ describe('AddLotForm', () => {
     // `FormField` renders its label as a sibling, so the date input is reached
     // by type — the same way the page spec does it.
     fireEvent.change(container.querySelector('input[type="date"]'), { target: { value: '2027-01-31' } })
-    fireEvent.change(screen.getByPlaceholderText('Batch ID (optional)'), { target: { value: '  LOT-Z  ' } })
+    fireEvent.change(screen.getByPlaceholderText('e.g. L4021A'), { target: { value: '  LOT-Z  ' } })
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
 
     expect(onSubmit).toHaveBeenCalledWith(
@@ -124,14 +124,14 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '4' } })
-    fireEvent.change(screen.getByPlaceholderText('Batch ID (optional)'), { target: { value: 'LOT-Z' } })
+    fireEvent.change(screen.getByPlaceholderText('e.g. L4021A'), { target: { value: 'LOT-Z' } })
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
 
     // The form is still open, still holding what the user typed, and usable
     // again — the whole point of the promise contract.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add batch' })).toBeEnabled())
     expect(screen.getByPlaceholderText('0')).toHaveValue(4)
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-Z')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-Z')
     expect(screen.queryByTestId('add-lot-toggle')).not.toBeInTheDocument()
   })
 
@@ -190,10 +190,10 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(screen.getByRole('option', { name: 'LOT-A' }))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-A')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-A')
     expect(screen.queryByRole('option')).not.toBeInTheDocument()
   })
 
@@ -202,7 +202,7 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    const lotInput = screen.getByPlaceholderText('Batch ID (optional)')
+    const lotInput = screen.getByPlaceholderText('e.g. L4021A')
     await user.click(lotInput)
     await user.keyboard('{ArrowDown}')
     // The hand-rolled dropdown this replaced had neither of these.
@@ -219,7 +219,7 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1' } })
-    const lotInput = screen.getByPlaceholderText('Batch ID (optional)')
+    const lotInput = screen.getByPlaceholderText('e.g. L4021A')
     await user.click(lotInput)
     await user.keyboard('BRAND-NEW')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
@@ -248,7 +248,7 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-S')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-S')
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-9')
 
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
@@ -275,14 +275,36 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    const labels = ['Quantity *', 'Expiry date', 'Batch ID (optional)', 'Serial'].map((text) =>
-      screen.getByText(text, { selector: 'label' }),
-    )
+    // One convention across the form: the optional fields say so, the single
+    // required one says nothing, and no label smuggles "(optional)" into its
+    // own text. Quantity used to carry a bare `*` while the batch number wore
+    // "(optional)" baked into the translation — three ways of saying the same
+    // thing in four fields.
+    // Read the labels directly: the hint is a nested span, so the rendered text
+    // is split across nodes and `getByText` would not see it as one string.
+    const labels = Array.from(document.querySelectorAll('form label'))
+    const texts = labels.map((el) => el.textContent.replace(/\s+/g, ' ').trim())
+    expect(texts).toEqual(['Quantity', 'Expiry date · optional', 'Batch ID · optional', 'Serial · optional'])
     // Same rendering for all four, so none can drift into its own register.
     const classes = labels.map((el) => el.className)
     expect(new Set(classes).size).toBe(1)
     // And the serial's label sits outside the control, above it.
     expect(screen.getByTestId('serial-input')).not.toHaveAttribute('aria-label', 'Serial')
+  })
+
+  it('offers an example in the placeholders rather than repeating the label', async () => {
+    const { user } = renderForm()
+    await openForm(user)
+    await user.click(screen.getByTestId('more-fields'))
+
+    for (const testid of ['lot-input', 'serial-input']) {
+      const input = screen.getByTestId(testid)
+      const placeholder = input.getAttribute('placeholder')
+      expect(placeholder).toMatch(/^e\.g\. /)
+      // The label is already above the control; repeating it below is noise.
+      const label = input.closest('div').parentElement.querySelector('label')
+      expect(label.textContent).not.toContain(placeholder)
+    }
   })
 
   it('blocks a pack already registered in this stock, and unblocks when the serial is dropped', async () => {
@@ -332,7 +354,7 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.type(screen.getByPlaceholderText('Batch ID (optional)'), 'LOT-Z')
+    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-Z')
     await saveAnother(user)
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ quantity: 3, lotNumber: 'LOT-Z' }))
@@ -344,13 +366,13 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.type(screen.getByPlaceholderText('Batch ID (optional)'), 'LOT-Z')
+    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-Z')
     await user.type(screen.getByTestId('serial-input'), 'SN-Z')
     await saveAnother(user)
 
     // Still open — the toggle would be showing instead if it had closed.
     expect(screen.queryByTestId('add-lot-toggle')).not.toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('')
     expect(screen.getByTestId('serial-input')).toHaveValue('')
   })
 
@@ -376,7 +398,7 @@ describe('AddLotForm', () => {
     await user.type(screen.getByPlaceholderText('0'), '1')
     await saveAnother(user)
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toBeInTheDocument()
     expect(screen.getByTestId('serial-input')).toBeInTheDocument()
     expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
@@ -399,11 +421,11 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     await user.type(screen.getByPlaceholderText('0'), '4')
-    await user.type(screen.getByPlaceholderText('Batch ID (optional)'), 'LOT-KEEP')
+    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-KEEP')
     await saveAnother(user)
 
     expect(screen.getByPlaceholderText('0')).toHaveValue(4)
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-KEEP')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-KEEP')
   })
 
   it('is refused by a blocker exactly as Save is', async () => {
@@ -456,10 +478,10 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-DATED'))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-DATED')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-DATED')
     expect(screen.getByTestId('expiry-input')).toHaveValue('2027-03-01')
     expect(screen.getByTestId('expiry-input')).toHaveAttribute('readonly')
     expect(screen.getByTestId('expiry-lock')).toBeInTheDocument()
@@ -472,7 +494,7 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     fireEvent.change(screen.getByTestId('expiry-input'), { target: { value: '2029-12-31' } })
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-DATED'))
 
     expect(screen.getByTestId('expiry-input')).toHaveValue('2027-03-01')
@@ -483,11 +505,11 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-DATED'))
     expect(screen.getByTestId('expiry-lock')).toBeInTheDocument()
 
-    await user.type(screen.getByPlaceholderText('Batch ID (optional)'), '-B')
+    await user.type(screen.getByPlaceholderText('e.g. L4021A'), '-B')
 
     expect(screen.queryByTestId('expiry-lock')).not.toBeInTheDocument()
     expect(screen.getByTestId('expiry-input')).not.toHaveAttribute('readonly')
@@ -500,10 +522,10 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-BARE'))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-BARE')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-BARE')
     expect(screen.queryByTestId('expiry-lock')).not.toBeInTheDocument()
     expect(screen.getByTestId('expiry-input')).not.toHaveAttribute('readonly')
   })
@@ -529,7 +551,7 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
 
     const dated = (await screen.findByText('LOT-DATED')).closest('[role="option"]')
     expect(dated).toHaveTextContent(/2027/)
@@ -551,7 +573,7 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
 
     expect(await screen.findByText('LOT-OK')).toBeInTheDocument()
     expect(screen.queryByText('LOT-OLD')).not.toBeInTheDocument()
@@ -564,7 +586,7 @@ describe('AddLotForm', () => {
     await revealFields(user)
 
     await user.type(screen.getByPlaceholderText('0'), '2')
-    await user.click(screen.getByPlaceholderText('Batch ID (optional)'))
+    await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-DATED'))
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
 
@@ -583,7 +605,7 @@ describe('AddLotForm', () => {
     expect(screen.getByText('Expiry date', { selector: 'label' })).toBeInTheDocument()
     // Absent from the DOM, not merely invisible: nothing unreachable in the
     // tab order or the accessibility tree.
-    expect(screen.queryByPlaceholderText('Batch ID (optional)')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. L4021A')).not.toBeInTheDocument()
     expect(screen.queryByTestId('serial-input')).not.toBeInTheDocument()
   })
 
@@ -593,7 +615,7 @@ describe('AddLotForm', () => {
 
     await user.click(screen.getByTestId('more-fields'))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toBeInTheDocument()
     expect(screen.getByTestId('serial-input')).toBeInTheDocument()
     expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
@@ -607,7 +629,7 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-ONLY')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-ONLY')
     expect(screen.queryByTestId('serial-input')).not.toBeInTheDocument()
   })
 
@@ -623,7 +645,7 @@ describe('AddLotForm', () => {
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-ONLY')
-    expect(screen.queryByPlaceholderText('Batch ID (optional)')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. L4021A')).not.toBeInTheDocument()
     expect(screen.getByTestId('more-fields')).toBeInTheDocument()
   })
 
@@ -636,7 +658,7 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-S')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-S')
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-9')
     expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
@@ -655,7 +677,7 @@ describe('AddLotForm', () => {
 
     await user.click(screen.getByTestId('more-fields'))
     expect(screen.getByTestId('serial-input')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-ONLY')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-ONLY')
     expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
   })
 
@@ -666,11 +688,11 @@ describe('AddLotForm', () => {
     await openForm(user)
     await revealFields(user)
 
-    const lot = screen.getByPlaceholderText('Batch ID (optional)')
+    const lot = screen.getByPlaceholderText('e.g. L4021A')
     await user.type(lot, 'LOT-X')
     await user.clear(lot)
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toBeInTheDocument()
     expect(screen.getByTestId('serial-input')).toBeInTheDocument()
   })
 
@@ -751,7 +773,7 @@ describe('AddLotForm', () => {
     await user.click(screen.getByTestId('scan-lot'))
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
-    expect(screen.getByPlaceholderText('Batch ID (optional)')).toHaveValue('LOT-NOSERIAL')
+    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-NOSERIAL')
     expect(screen.getByTestId('serial-input')).toHaveValue('TYPED-FIRST')
   })
 

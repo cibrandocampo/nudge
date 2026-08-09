@@ -377,7 +377,7 @@ export default function StockFormPage() {
                         </label>
                         {disclosure.isRevealed('lot') && (
                           <label className={cx(s.batchField, s.batchFieldFlex)}>
-                            <span className={s.batchFieldLabel}>{t('stockForm.lotNumber')}</span>
+                            <span className={s.batchFieldLabel}>{t('inventory.lotNumber')}</span>
                             <input
                               className={forms.input}
                               type="text"

@@ -41,7 +41,7 @@ export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', 
     // disappears once nothing is left folded, so this is a one-time click.
     const moreFields = page.getByTestId('more-fields')
     if (await moreFields.count()) await moreFields.click()
-    const lotInput = page.getByPlaceholder(/batch id/i)
+    const lotInput = page.getByTestId('lot-input')
     await lotInput.fill(lotNumber)
     // The lot-number input opens a custom Combobox listbox on focus
     // (PR #56). The popover is anchored to the input and overlaps the

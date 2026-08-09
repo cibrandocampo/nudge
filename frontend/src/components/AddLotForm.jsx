@@ -265,7 +265,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </button>
         )}
         <div className={s.addLotRow}>
-          <FormField label={`${t('inventory.lotQty')} *`}>
+          <FormField label={t('inventory.lotQty')}>
             <input
               ref={qtyRef}
               className={cx(forms.input, s.addLotInput)}
@@ -277,7 +277,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               required
             />
           </FormField>
-          <FormField label={t('inventory.lotExpiry')}>
+          <FormField label={t('inventory.lotExpiry')} hint={t('routine.form.optional')}>
             {/* Locked while inherited: one batch has one expiry, so a date that
                 came from picking the batch is not the user's to edit. Typing in
                 the batch field unlocks it again. */}
@@ -301,7 +301,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               so nothing unreachable sits in the tab order or the accessibility
               tree. */}
           {disclosure.isRevealed('lot') && (
-            <FormField label={t('inventory.lotNumber')}>
+            <FormField label={t('inventory.lotNumber')} hint={t('routine.form.optional')}>
               {/* Free text with suggestions: a batch this product has never seen
                   must be typeable, and the list is only a shortcut for the ones
                   it has. `Combobox` brings the keyboard navigation and the
@@ -333,8 +333,13 @@ export default function AddLotForm({ stock, today, onSubmit }) {
                     {o.expiry_date && <span className={s.suggestionExpiry}>{formatShortDate(o.expiry_date)}</span>}
                   </span>
                 )}
-                placeholder={t('inventory.lotNumber')}
+                placeholder={t('inventory.lotNumberPlaceholder')}
                 inputClassName={s.addLotInput}
+                // `Combobox` spreads unknown props onto its input. The E2E
+                // helper used to find this field by its placeholder text, which
+                // broke the moment the copy became an example instead of the
+                // label — a testid cannot rot that way.
+                data-testid="lot-input"
               />
             </FormField>
           )}
@@ -344,14 +349,14 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               decode, or no camera at all must not stop the user registering the
               box — the backend has accepted a typed serial since day one. */}
           {disclosure.isRevealed('serial') && (
-            <FormField label={t('inventory.lotSerial')}>
+            <FormField label={t('inventory.lotSerial')} hint={t('routine.form.optional')}>
               <input
                 className={cx(forms.input, s.addLotInput)}
                 type="text"
                 // The model caps `serial_number` at 20, which is the GS1 AI 21
                 // limit. Without the cap the backend answers 400.
                 maxLength={20}
-                placeholder={t('inventory.lotSerial')}
+                placeholder={t('inventory.lotSerialPlaceholder')}
                 value={fields.serialNumber}
                 onChange={(e) => setFields((f) => ({ ...f, serialNumber: e.target.value }))}
                 data-testid="serial-input"
