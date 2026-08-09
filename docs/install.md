@@ -121,10 +121,10 @@ Hub:
 |-------|-----|-----------|
 | `cibrandocampo/nudge-backend` | `latest` | every push to `main` |
 | `cibrandocampo/nudge-frontend` | `latest` | every push to `main` |
-| Both | `stable` + `vX.Y.Z` | on each GitHub release |
+| Both | `stable` + `X.Y.Z` | on each GitHub release |
 
 `docker-compose.yml` defaults to `stable`, which is what you want for a real
-deployment — pin `vX.Y.Z` if you would rather upgrade deliberately. Images are
+deployment — pin `X.Y.Z` if you would rather upgrade deliberately. Images are
 also rebuilt weekly so base-image and dependency security patches land without
 waiting for a release.
 

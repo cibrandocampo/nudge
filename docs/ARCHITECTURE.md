@@ -462,7 +462,7 @@ bash scripts/install-hooks.sh   # one-time setup
 3. **build-backend** — Docker multi-arch build (`linux/amd64` + `linux/arm64`), pushed to `cibrandocampo/nudge-backend`. Requires both test jobs to pass.
 4. **build-frontend** — Same, pushed to `cibrandocampo/nudge-frontend`.
 
-Tags: `latest` on main, `stable` + `vX.Y.Z` on release.
+Tags: `latest` on main, `stable` + `X.Y.Z` on release.
 
 ### `weekly-rebuild.yml` — runs every Monday at 06:00 UTC
 

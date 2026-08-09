@@ -215,7 +215,7 @@ to match its own policy without touching the code.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROJECT_NAME` | `nudge` | Docker Compose project name |
-| `DOCKER_NUDGE_VERSION` | `stable` | Docker image tag (`latest`, `stable`, or `vX.Y.Z`) |
+| `DOCKER_NUDGE_VERSION` | `stable` | Docker image tag (`latest`, `stable`, or `X.Y.Z`) |
 | `DOCKER_POSTGRES_VERSION` | `16-alpine` | PostgreSQL image version |
 | `DOCKER_REDIS_VERSION` | `7-alpine` | Redis image version |
 | `NUDGE_HTTP_PORT` | `80` | Port exposed on the host for the frontend |
