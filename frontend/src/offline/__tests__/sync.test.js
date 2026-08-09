@@ -251,11 +251,17 @@ describe('offline sync worker', () => {
       initSyncWorker(fakeQueryClient())
       // An enqueue then a remove — the remove event should NOT re-register.
       await enqueue(pendingEntry())
-      await new Promise((r) => setTimeout(r, 5))
+      // Wait for the 0 → 1 transition to have registered, rather than sleeping
+      // on it. `handleQueueChange` is async: if it is still in flight when the
+      // spy is cleared, its call lands afterwards and reads as the *removal*
+      // re-registering. Five milliseconds was enough on a laptop and not on a
+      // loaded CI runner, which is how this passed locally and failed there.
+      await vi.waitFor(() => expect(registerSpy).toHaveBeenCalledTimes(1))
       registerSpy.mockClear()
-      const { remove } = await import('../queue')
+
       await remove('k-1')
-      await new Promise((r) => setTimeout(r, 5))
+      // Settle on the observable end state instead of a fixed delay.
+      await vi.waitFor(async () => expect(await list()).toHaveLength(0))
       expect(registerSpy).not.toHaveBeenCalled()
     } finally {
       navigator.serviceWorker = originalSw
