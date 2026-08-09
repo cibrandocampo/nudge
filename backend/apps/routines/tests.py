@@ -1225,13 +1225,20 @@ class StockLotViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_create_lot_other_users_stock_returns_403(self):
+    def test_create_lot_other_users_stock_returns_404(self):
+        """404, not 403: a stock nobody shared with you may as well not exist.
+
+        This asserted 403 while creation demanded ownership. The rule is
+        visibility now (see `SharedStockLotManagementTest`), and a stranger
+        fails the same filter a missing row would — which is also the answer
+        that does not confirm the row is there.
+        """
         other_stock = make_stock(self.other, name="OtherStock")
         response = self.client.post(
             f"/api/stock/{other_stock.id}/lots/",
             {"quantity": 5},
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_partial_update_lot(self):
         lot = make_lot(self.stock, quantity=10)
@@ -1654,10 +1661,13 @@ class SharedStockProductIdentityTest(APITestCase):
     """Only the owner writes the product values.
 
     `StockViewSet.get_permissions` restricts every write on a stock to its
-    owner (`IsOwner`), a boundary that predates this feature: a shared user
-    reads and consumes, but never edits. These two fields are no exception, so
-    the learning flow is offered to the owner only — clients gate on the
+    owner (`IsOwner`): the product's own fields — its name, group, GTIN and
+    default lot quantity — are the owner's to set. These two are no exception,
+    so the learning flow is offered to the owner only, and clients gate on the
     `is_owner` field the serializer already exposes.
+
+    That boundary is about the *product*, not its contents: a shared user
+    manages lots freely — see `SharedStockLotManagementTest`.
     """
 
     def setUp(self):
@@ -4632,3 +4642,90 @@ class UserTimezoneFieldTest(APITestCase):
         response = self.client.get(f"/api/stock/{stock.pk}/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["user_timezone"], "Atlantic/Azores")
+
+
+class SharedStockLotManagementTest(APITestCase):
+    """A shared stock's contents belong to whoever shares it.
+
+    Sharing a consumable means a household shares the box: the recipient uses
+    it up and restocks it. So every lot verb is open to them — create, edit,
+    delete, consume — while the product's own fields stay with the owner
+    (`SharedStockProductIdentityTest`).
+
+    Creation used to be the exception, and only by accident: it resolved the
+    stock with `user=request.user` while every other verb in the viewset used
+    the owner-or-shared filter. The recipient could empty the box and delete
+    the row, but not add the one they had just bought. No test defended it, and
+    the frontend never believed it — `StockDetailPage` renders the add-lot form
+    for guests with a branch of its own. All it produced was a 403 at the end
+    of a form the app had invited the user to fill in.
+    """
+
+    def setUp(self):
+        self.owner = make_user(username="owner")
+        self.guest = make_user(username="guest")
+        self.stranger = make_user(username="stranger")
+        self.stock = make_stock(self.owner, name="Shared item")
+        self.stock.shared_with.add(self.guest)
+        self.client.force_authenticate(user=self.guest)
+
+    def test_guest_can_add_a_lot(self):
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 4, "lot_number": "L-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.stock.lots.count(), 1)
+        self.assertEqual(self.stock.lots.first().quantity, 4)
+
+    def test_guest_can_add_a_serialised_pack(self):
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 1, "lot_number": "L-1", "serial_number": "SN-GUEST-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.stock.lots.get().serial_number, "SN-GUEST-1")
+
+    def test_guest_can_edit_and_delete_a_lot(self):
+        lot = make_lot(self.stock, quantity=10)
+        patched = self.client.patch(
+            f"/api/stock/{self.stock.id}/lots/{lot.id}/",
+            {"quantity": 3},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, 200)
+        deleted = self.client.delete(f"/api/stock/{self.stock.id}/lots/{lot.id}/")
+        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(self.stock.lots.count(), 0)
+
+    def test_guest_can_consume(self):
+        make_lot(self.stock, quantity=5)
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 2},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.stock.lots.get().quantity, 3)
+
+    def test_stranger_gets_404_rather_than_403(self):
+        """A stock you cannot see is indistinguishable from one that is not there.
+
+        The old code answered 403 with the text "Stock item not found." — a
+        status and a message contradicting each other, and a 403 confirms the
+        row exists to someone who should not know that.
+        """
+        self.client.force_authenticate(user=self.stranger)
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/lots/",
+            {"quantity": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.stock.lots.count(), 0)
+
+    def test_missing_stock_is_also_404(self):
+        response = self.client.post("/api/stock/999999/lots/", {"quantity": 1}, format="json")
+        self.assertEqual(response.status_code, 404)
