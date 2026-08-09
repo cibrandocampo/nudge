@@ -4,7 +4,9 @@ One single seed command that replaces both `seed_e2e` and `seed_demo`. The
 fixture is shaped to:
 
 1. Cover every dimension the app models — never-started / due / overdue /
-   upcoming / blocked routines · out / low / ok stock severities ·
+   upcoming / blocked routines · fixed and phase-based schedules ·
+   per-user stock group overrides on a shared stock ·
+   out / low / ok stock severities ·
    reached / soon / ok expiry severities · owner-only / shared-by-me /
    shared-with-me / private sharing modes · multi-lot FEFO · bulk_create
    to bypass `delete_empty_lot` · mixed lot-number/no-lot-number/no-expiry
@@ -52,6 +54,7 @@ from apps.routines.models import (
     StockConsumption,
     StockGroup,
     StockLot,
+    UserStockGroup,
 )
 
 User = get_user_model()
@@ -121,6 +124,9 @@ class Command(BaseCommand):
         NotificationState.objects.all().delete()
         StockLot.objects.all().delete()
         Routine.objects.all().delete()
+        # Before Stock, whose cascade would take these anyway — explicit so the
+        # order stays obvious to the next reader rather than implied.
+        UserStockGroup.objects.all().delete()
         Stock.objects.all().delete()
         StockGroup.objects.all().delete()
         PushSubscription.objects.all().delete()
@@ -206,6 +212,10 @@ class Command(BaseCommand):
             ("cibran", "Travel", 3),
             ("maria", "Home", 0),
             ("maria", "Medicine cabinet", 1),
+            # Maria's own category with no counterpart in cibran's list. It
+            # exists so a shared stock can be filed differently by each side
+            # (see the UserStockGroup override on `brita` in `_create_stocks`).
+            ("maria", "Kitchen", 2),
         ]:
             owner = cibran if owner_username == "cibran" else maria
             groups[(owner_username, name)] = StockGroup.objects.create(user=owner, name=name, display_order=order)
@@ -446,6 +456,16 @@ class Command(BaseCommand):
         )
         stocks["brita"].shared_with.add(maria)
         StockLot.objects.create(stock=stocks["brita"], quantity=1)
+        # Per-user group override: cibran files the cartridges under "Home",
+        # maria under her own "Kitchen". The owner's choice lives on
+        # `Stock.group`; every other viewer's lives here. This is the only
+        # override in the fixture, and it is what makes the two inventories
+        # render the same stock under different headings.
+        UserStockGroup.objects.create(
+            user=maria,
+            stock=stocks["brita"],
+            group=groups[("maria", "Kitchen")],
+        )
 
         # Orchid fertilizer — no SN (single lot without lot_number). Shared
         # with maria.
@@ -575,8 +595,27 @@ class Command(BaseCommand):
         # ── Cibran — aesthetic ──────────────────────────────────────────────
 
         # IPL hair removal — never-started (no entries → is_due() short-
-        # circuits to True regardless of when the seed runs).
-        routines["ipl"] = Routine.objects.create(user=cibran, name="IPL hair removal", interval_hours=336)
+        # circuits to True regardless of when the seed runs) and the fixture's
+        # only phase-based schedule, which is how a real IPL course runs: six
+        # sessions a fortnight apart, then maintenance every couple of months.
+        #
+        # `interval_phases[0].interval_hours` deliberately equals
+        # `interval_hours`, so the routine behaves exactly as it did when it
+        # was a fixed schedule. That matters: four specs
+        # (`routine-completion`, `offline-sync`, `offline-mutations`,
+        # `pendingbadge-mobile-visual`) mark this routine done and assert
+        # where it lands. With one entry the walk picks phase 0, giving the
+        # same +336h as before; the maintenance phase only comes into play
+        # after six completions, which no spec reaches.
+        routines["ipl"] = Routine.objects.create(
+            user=cibran,
+            name="IPL hair removal",
+            interval_hours=336,
+            interval_phases=[
+                {"count": 6, "interval_hours": 336},
+                {"interval_hours": 1344},
+            ],
+        )
 
         # ── Maria — shares with cibran ──────────────────────────────────────
 
