@@ -241,5 +241,89 @@ docs/tasks/                     ← Task files (/dev-2-tasks)
           └── qa/               ← /dev-4-qa evidence
 ```
 
-> `docs/tasks/evidence/` is in `.gitignore` — it is a local working directory.
-> `docs/plans/` and `docs/tasks/*.md` are version-controlled.
+> **All three are in `.gitignore`** — `docs/plans/`, `docs/tasks/` and the
+> evidence directory inside it are local working material, not repository
+> content. Committing one takes an explicit `git add -f`, which is the intended
+> friction: a plan or a task file is scaffolding for building the change, and
+> the change itself is what the repository keeps.
+
+---
+
+## Quality gates
+
+Every change goes through GitHub Actions, and the gates are the same ones the
+commands run locally:
+
+- **Backend** — `ruff check`, `ruff format --check`, and the full Django suite
+  under coverage.
+- **Frontend** — ESLint, Prettier and the Vitest suite. Coverage thresholds are
+  **not uniform**: statements, functions and lines must reach 95 %, branches
+  93 %. CI fails on whichever gate breaks, so read the `ERROR: Coverage for X`
+  line rather than guessing from the exit code.
+- **Coverage reporting** — [Codecov](https://codecov.io/gh/cibrandocampo/nudge)
+  tracks project and patch coverage. The patch gate is a separate check: a pull
+  request that leaves its own touched lines uncovered is flagged before merge.
+- **End-to-end** — Playwright specs covering online and offline flows
+  (dashboard, inventory, history, sharing, i18n, push, plus dedicated offline
+  read / mutations / sync suites). Not wired into CI today; run them locally
+  with `make test-e2e`.
+
+Test counts are deliberately not quoted here — they change every week and a
+stale number is worse than none. `make help` lists the targets that report them.
+
+How to behave when a test fails is not a matter of taste: see
+`.claude/skills/test-discipline/SKILL.md`.
+
+---
+
+## Demo seed
+
+One management command wipes the business tables and rebuilds a deterministic
+fixture, used by both the E2E suite and the public screenshots pipeline:
+
+```bash
+docker compose -f dev/docker-compose.yml exec backend python manage.py seed
+```
+
+It is destructive: every non-superuser account, routine, stock and history row
+goes. The `admin` superuser survives. It refuses to run unless
+`DJANGO_DEBUG=True` (the default in `dev/docker-compose.yml`) **or**
+`E2E_SEED_ALLOWED=true` is exported, and the production `docker-compose.yml`
+hard-sets both to safe values — so it cannot run against a real deployment
+without a deliberate override.
+
+The fixture creates three users, all with `auth_method="password"` and the same
+password (`DEMO_USERS_PASSWORD`, default `change-me`), so you can log in through
+the email wizard without configuring SMTP:
+
+| Email | Display name | Locale | Role |
+|-------|--------------|--------|------|
+| `cibran@nudge.test` | Cibrán Docampo | en | Protagonist of every screenshot. Owns most of the routines. |
+| `maria@nudge.test` | María García | es | Sharing partner: one routine shared with cibran, one private. |
+| `laura@nudge.test` | Laura Vázquez | gl | Third mutual contact with no resources, used by the `unshare` spec. |
+
+The stock side is shaped to exercise the whole model rather than a happy path:
+scanned packs with GS1 serials beside hand-counted lots, a scanned box whose
+code carried no serial, every stock and expiry severity, a phase-based schedule,
+and a shared item each side files under a different category. The full catalogue
+lives in the source, which is the only copy that cannot go stale:
+[`backend/apps/core/management/commands/seed.py`](../backend/apps/core/management/commands/seed.py).
+
+### Regenerating the screenshots
+
+Every image in the README and on the project site comes from that fixture in one
+pass, against the running dev stack:
+
+```bash
+export DEMO_USERS_PASSWORD=change-me   # must match what the seed used
+make screenshots
+```
+
+The scanner scene has no camera to work with inside a container, so it renders
+the fixture's own GS1 DataMatrix, encodes it as a video file and hands it to
+Chromium as a fake capture device. Nothing binary is committed — the clip is
+rebuilt on every run.
+
+Review the output before committing it. A broken scene fails the run loudly; a
+*wrong* one (an empty list, a modal caught mid-animation, a stale date) does
+not.
