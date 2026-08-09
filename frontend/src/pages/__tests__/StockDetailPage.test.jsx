@@ -213,6 +213,7 @@ describe('StockDetailPage', () => {
     const { user, container } = renderDetail()
     await screen.findByText('Water filter')
     await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('more-fields'))
     await user.type(screen.getByPlaceholderText('0'), '7')
     const dateInput = container.querySelector('input[type="date"]')
     await user.type(dateInput, '2027-12-31')
@@ -226,12 +227,16 @@ describe('StockDetailPage', () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')
     await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('more-fields'))
     const lotInput = screen.getByPlaceholderText('Batch ID (optional)')
     await user.click(lotInput)
-    const suggestion = await screen.findByRole('option', { name: 'LOT-A' })
+    // The option now reads "LOT-A · <expiry>" — the date rides along so the
+    // autofill is visibly sourced — so match the number rather than the whole
+    // accessible name.
+    const suggestion = await screen.findByRole('option', { name: /LOT-A/ })
     await user.click(suggestion)
     expect(lotInput).toHaveValue('LOT-A')
-    expect(screen.queryByRole('option', { name: 'LOT-A' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /LOT-A/ })).not.toBeInTheDocument()
   })
 
   it('deletes a lot through the confirm modal', async () => {
@@ -877,7 +882,7 @@ describe('StockDetailPage', () => {
     expect(screen.getByPlaceholderText('0')).toHaveValue(1)
     expect(screen.getByDisplayValue(futureIso)).toBeInTheDocument()
     expect(screen.getByDisplayValue('LOT-SCAN')).toBeInTheDocument()
-    expect(within(screen.getByTestId('serial-chip')).getByText('SN-NEW')).toBeInTheDocument()
+    expect(screen.getByTestId('serial-input')).toHaveValue('SN-NEW')
     // An accepted read closes the camera.
     expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
   })
@@ -904,8 +909,8 @@ describe('StockDetailPage', () => {
     const captured = captureCreateLot()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByTestId('serial-clear'))
-    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    await user.clear(screen.getByTestId('serial-input'))
+    expect(screen.getByTestId('serial-input')).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'Add batch' }))
 
     await waitFor(() => expect(captured.body).not.toBeNull())
@@ -1176,7 +1181,7 @@ describe('StockDetailPage', () => {
     expect(screen.getByDisplayValue('LOT-ONLY')).toBeInTheDocument()
     expect(expiryInput).toHaveValue(futureIso)
     expect(screen.getByPlaceholderText('0')).toHaveValue(1)
-    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('serial-input')).not.toBeInTheDocument()
     expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
   })
 
@@ -1274,8 +1279,8 @@ describe('StockDetailPage', () => {
 
     // Clearing the serial only answers the duplicate-serial objection. The
     // pack is still out of date, so the blocker must survive.
-    await user.click(screen.getByTestId('serial-clear'))
-    expect(screen.queryByTestId('serial-chip')).not.toBeInTheDocument()
+    await user.clear(screen.getByTestId('serial-input'))
+    expect(screen.getByTestId('serial-input')).toHaveValue('')
     expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
   })
 

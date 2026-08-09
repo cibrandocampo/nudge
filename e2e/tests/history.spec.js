@@ -105,20 +105,25 @@ test.describe('History', () => {
   })
 
   test('inline note edit persists across reload', async ({ page }) => {
-    const firstMorningDose = page.getByRole('button', { name: 'morning dose' }).first()
-    await expect(firstMorningDose).toBeVisible()
-    await firstMorningDose.click()
+    // The note stopped being a hidden click target in T035: it renders as plain
+    // text with a pencil beside it, and editing goes through that visible
+    // control. This spec still reached for the old `<button>` and had been
+    // failing deterministically ever since — fixed in T052.
+    const entry = page.getByTestId('history-entry').filter({ hasText: 'morning dose' }).first()
+    await expect(entry).toBeVisible()
+    await entry.getByTestId('edit-note').click()
 
-    // EntryCard swaps the button for an autoFocused input with
-    // class*="notesInput". Enter saves via onKeyDown; Escape cancels.
-    const input = page.locator('input[class*="notesInput"]').first()
+    // Not scoped to `entry`: that locator filters on the note's text, and the
+    // text becomes an input value the moment the editor opens, so re-resolving
+    // it would match nothing. Only one editor can be open at a time.
+    const input = page.getByTestId('note-input')
     await input.fill('updated via e2e')
     await input.press('Enter')
 
-    // Brief "Saved" flash after successful save.
+    // Brief "Saved" toast after a successful save.
     await expect(page.getByText('Saved').first()).toBeVisible({ timeout: 3_000 })
 
     await page.reload()
-    await expect(page.getByRole('button', { name: 'updated via e2e' }).first()).toBeVisible()
+    await expect(page.getByTestId('history-entry').filter({ hasText: 'updated via e2e' }).first()).toBeVisible()
   })
 })

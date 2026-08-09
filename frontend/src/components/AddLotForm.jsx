@@ -1,18 +1,23 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Combobox from './Combobox'
 import FormField from './FormField'
 import Icon from './Icon'
 import { useToast } from './useToast'
+import { useFieldDisclosure } from '../hooks/useFieldDisclosure'
 import { useScannerAvailable } from '../hooks/useScannerAvailable'
 import { useServerReachable } from '../hooks/useServerReachable'
 import cx from '../utils/cx'
 import { parseGs1 } from '../utils/gs1'
+import { lotSuggestions } from '../utils/lotSuggestions'
 import { parseIntSafe } from '../utils/number'
 import { formatShortDate } from '../utils/time'
 import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import s from './AddLotForm.module.css'
+
+// The two fields that start folded. Quantity and expiry are always on screen.
+const FOLDABLE = ['lot', 'serial']
 
 // Dynamic: the decoder chunk and its ~1 MB WebAssembly binary must not be
 // fetched by everyone who opens a stock, only by whoever taps the camera.
@@ -58,34 +63,72 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const reachable = useServerReachable()
 
   const [open, setOpen] = useState(false)
-  const [fields, setFields] = useState({ qty: '', expiry: '', lotNumber: '' })
+  const [fields, setFields] = useState({ qty: '', expiry: '', lotNumber: '', serialNumber: '' })
   const [adding, setAdding] = useState(false)
-  // Scan state: what the barcode contributed to the form beyond the visible
-  // fields, plus the reason (if any) the scanned pack cannot be added.
+  // What the barcode contributed *beyond* the visible fields. The serial is not
+  // here: it is a field the user can type, which the scanner merely prefills.
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scanNotice, setScanNotice] = useState(null)
-  const [scanned, setScanned] = useState({ serialNumber: null, rawScan: '', parsed: null })
-  const [scanBlocker, setScanBlocker] = useState(null)
+  const [scanned, setScanned] = useState({ rawScan: '', parsed: null })
+  // A past expiry is a property of the code that was read, so it is set once by
+  // the scan. The duplicate serial is not — see `duplicateSerial` below.
+  const [expiredBlocker, setExpiredBlocker] = useState(null)
+  // Which of the two save buttons was pressed. A ref rather than state because
+  // it is read once, inside the submit that the click itself triggers, and must
+  // not cause a render. Both buttons stay `type="submit"`, so the browser still
+  // enforces the required quantity for either.
+  const keepOpenRef = useRef(false)
+  const qtyRef = useRef(null)
   const scannerAvailable = useScannerAvailable()
-  // The batch numbers this product already has, offered as suggestions.
+  const disclosure = useFieldDisclosure(FOLDABLE)
+  // The batches this product already has, each carrying the expiry that picking
+  // it would inherit. Expired ones are dropped by the helper — the backend
+  // refuses a past date, so suggesting one would autofill an unsaveable value.
   // Filtering, keyboard navigation and dismissal belong to `Combobox`.
-  const lotSuggestions = Array.from(
-    new Set((stock?.lots || []).map((l) => l.lot_number).filter((n) => n && n.trim().length > 0)),
-  )
+  const suggestions = lotSuggestions(stock, today)
+  // Set only by picking from the list, never by typing and never by a scan.
+  const [expiryInherited, setExpiryInherited] = useState(false)
 
   // The product's learned default, as a form value. Adding a second lot in a
   // row must start from the same place as the first, so `resetForm` restores
   // it rather than blanking the field.
   const defaultQty = stock?.default_lot_quantity ? String(stock.default_lot_quantity) : ''
 
+  // The serial the form currently holds, wherever it came from — typed, scanned,
+  // or scanned and then edited.
+  const serial = fields.serialNumber.trim()
+
+  /**
+   * Whether this serial is already on the product.
+   *
+   * Derived from the field rather than set by the scan handler, so a
+   * hand-typed duplicate is caught before submitting instead of coming back as
+   * a 400, and clearing the field unblocks with no special handling. A blank
+   * serial is never a duplicate: most lots carry none, and `''` would match
+   * every one of them.
+   *
+   * `useCreateStockLot` already appends the pending lot with its serial to
+   * `stock.lots`, so two boxes registered back to back are covered too.
+   */
+  const duplicateSerial = serial !== '' && (stock?.lots ?? []).some((l) => l.serial_number === serial)
+
+  // Expiry first, keeping the precedence the single blocker had: a box that is
+  // both expired and already registered is expired, which is the worse news.
+  const blocker = expiredBlocker ?? (duplicateSerial ? { key: 'scan.errorDuplicate', args: {} } : null)
+
   const resetForm = () => {
-    setFields({ qty: defaultQty, expiry: '', lotNumber: '' })
-    setScanned({ serialNumber: null, rawScan: '', parsed: null })
-    setScanBlocker(null)
+    setFields({ qty: defaultQty, expiry: '', lotNumber: '', serialNumber: '' })
+    setScanned({ rawScan: '', parsed: null })
+    setExpiredBlocker(null)
+    setExpiryInherited(false)
   }
 
   const close = () => {
     resetForm()
+    // Visibility belongs to the open form, not to the values: T051's
+    // save-and-continue clears the fields and keeps the flags, so the reset
+    // lives here rather than in `resetForm`.
+    disclosure.reset()
     setOpen(false)
   }
 
@@ -109,30 +152,38 @@ export default function AddLotForm({ stock, today, onSubmit }) {
       qty: defaultQty || '1',
       expiry: parsed.expiryDate ?? f.expiry,
       lotNumber: parsed.lotNumber ?? f.lotNumber,
+      serialNumber: parsed.serialNumber ?? f.serialNumber,
     }))
-    setScanned({ serialNumber: parsed.serialNumber, rawScan: raw, parsed })
+    setScanned({ rawScan: raw, parsed })
     setScanNotice(null)
+    // The date now comes off the box, not from a batch that was picked. A
+    // misprint or a one-digit misread has to stay correctable.
+    setExpiryInherited(false)
 
-    // Both checks mirror a rule the server enforces anyway; running them here
-    // turns a raw 400 into an explanation, and works offline from cache.
+    // Only what the code actually carried: a payload with no AI 21 leaves the
+    // serial folded.
+    if (parsed.lotNumber) disclosure.reveal('lot')
+    if (parsed.serialNumber) disclosure.reveal('serial')
+
+    // Mirrors a rule the server enforces anyway; running it here turns a raw
+    // 400 into an explanation, and works offline from cache. The duplicate
+    // check is not here — it follows the field, so it catches a typed serial
+    // too and clears itself when the field does.
     if (parsed.expiryDate && new Date(parsed.expiryDate) < today) {
-      setScanBlocker({ key: 'scan.errorExpired', args: { date: formatShortDate(parsed.expiryDate) } })
-    } else if (parsed.serialNumber && (stock?.lots ?? []).some((l) => l.serial_number === parsed.serialNumber)) {
-      setScanBlocker({ key: 'scan.errorDuplicate', args: {} })
+      setExpiredBlocker({ key: 'scan.errorExpired', args: { date: formatShortDate(parsed.expiryDate) } })
     } else {
-      setScanBlocker(null)
+      setExpiredBlocker(null)
     }
     return true
   }
 
-  const clearScannedSerial = () => {
-    setScanned((prev) => ({ ...prev, serialNumber: null }))
-    setScanBlocker((prev) => (prev?.key === 'scan.errorDuplicate' ? null : prev))
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (scanBlocker) return
+    const keepOpen = keepOpenRef.current
+    keepOpenRef.current = false
+    // Gated here as well as on the button: a blocker must not be bypassable by
+    // submitting the form.
+    if (blocker) return
     if (!reachable) {
       showToast({ type: 'error', message: t('offline.pageUnavailable') })
       return
@@ -146,7 +197,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         quantity,
         expiryDate: fields.expiry,
         lotNumber: fields.lotNumber.trim(),
-        serialNumber: scanned.serialNumber ?? '',
+        serialNumber: serial,
         // Sent whenever a scan produced this lot, serial or not. A code with no
         // AI 21 still carries the GTIN, which is the only place it comes from.
         rawScan: scanned.rawScan,
@@ -155,7 +206,15 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         parsed: scanned.parsed,
       })
       setAdding(false)
-      close()
+      if (keepOpen) {
+        // The next box is a different box, so every value clears — but the
+        // fields the user needed for this one stay revealed, which is why the
+        // disclosure reset lives in `close()` and not in `resetForm()`.
+        resetForm()
+        qtyRef.current?.focus()
+      } else {
+        close()
+      }
     } catch {
       // The caller already told the user what went wrong. All this has to do is
       // hand the form back with everything still in it.
@@ -208,6 +267,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         <div className={s.addLotRow}>
           <FormField label={`${t('inventory.lotQty')} *`}>
             <input
+              ref={qtyRef}
               className={cx(forms.input, s.addLotInput)}
               type="number"
               min={0}
@@ -218,52 +278,98 @@ export default function AddLotForm({ stock, today, onSubmit }) {
             />
           </FormField>
           <FormField label={t('inventory.lotExpiry')}>
-            <input
-              className={cx(forms.input, s.addLotInput)}
-              type="date"
-              value={fields.expiry}
-              onChange={(e) => setFields((f) => ({ ...f, expiry: e.target.value }))}
-            />
-          </FormField>
-          <FormField label={t('inventory.lotNumber')}>
-            {/* Free text with suggestions: a batch this product has never seen
-                must be typeable, and the list is only a shortcut for the ones
-                it has. `Combobox` brings the keyboard navigation and the
-                `aria-activedescendant` the hand-rolled dropdown never had. */}
-            <Combobox
-              allowFreeText
-              value={fields.lotNumber}
-              onChange={(next) => setFields((f) => ({ ...f, lotNumber: next }))}
-              options={lotSuggestions}
-              placeholder={t('inventory.lotNumber')}
-              inputClassName={s.addLotInput}
-            />
-          </FormField>
-        </div>
-
-        {/* Labelled above, like every other field in this form. The serial used
-            to carry its label inline inside the chip, which made it the one
-            control here that read differently from its neighbours. */}
-        {scanned.serialNumber && (
-          <FormField label={t('inventory.lotSerial')}>
-            <div className={s.serialChip} data-testid="serial-chip">
-              <span className={s.serialValue}>{scanned.serialNumber}</span>
-              <button
-                type="button"
-                className={s.serialClear}
-                onClick={clearScannedSerial}
-                aria-label={t('common.clear')}
-                data-testid="serial-clear"
-              >
-                <Icon name="x" size="sm" />
-              </button>
+            {/* Locked while inherited: one batch has one expiry, so a date that
+                came from picking the batch is not the user's to edit. Typing in
+                the batch field unlocks it again. */}
+            <div className={expiryInherited ? forms.lockedInput : undefined}>
+              <input
+                className={cx(forms.input, s.addLotInput)}
+                type="date"
+                value={fields.expiry}
+                onChange={(e) => setFields((f) => ({ ...f, expiry: e.target.value }))}
+                readOnly={expiryInherited}
+                data-testid="expiry-input"
+              />
+              {expiryInherited && (
+                <span className={forms.lockBadge} title={t('inventory.expiryInherited')} data-testid="expiry-lock">
+                  <Icon name="lock" size="sm" />
+                </span>
+              )}
             </div>
           </FormField>
+          {/* Folded fields are absent from the DOM rather than hidden with CSS,
+              so nothing unreachable sits in the tab order or the accessibility
+              tree. */}
+          {disclosure.isRevealed('lot') && (
+            <FormField label={t('inventory.lotNumber')}>
+              {/* Free text with suggestions: a batch this product has never seen
+                  must be typeable, and the list is only a shortcut for the ones
+                  it has. `Combobox` brings the keyboard navigation and the
+                  `aria-activedescendant` the hand-rolled dropdown never had. */}
+              <Combobox
+                allowFreeText
+                value={fields.lotNumber}
+                // Every keystroke: a hand-typed batch number matches nothing and
+                // so inherits nothing, which is what releases the expiry.
+                onChange={(next) => {
+                  setFields((f) => ({ ...f, lotNumber: next }))
+                  setExpiryInherited(false)
+                }}
+                // Picking is an explicit act, so it overwrites a date the user
+                // had already typed. A batch with no expiry inherits nothing and
+                // locks nothing — there is no date to take.
+                onSelect={(picked) => {
+                  setFields((f) => ({ ...f, lotNumber: picked.lot_number, expiry: picked.expiry_date ?? f.expiry }))
+                  setExpiryInherited(picked.expiry_date != null)
+                }}
+                options={suggestions}
+                getLabel={(o) => o.lot_number}
+                getKey={(o) => o.lot_number}
+                // The expiry rides along in the list so the autofill is visibly
+                // sourced rather than arriving from nowhere.
+                renderOption={(o) => (
+                  <span className={s.suggestion}>
+                    <span>{o.lot_number}</span>
+                    {o.expiry_date && <span className={s.suggestionExpiry}>{formatShortDate(o.expiry_date)}</span>}
+                  </span>
+                )}
+                placeholder={t('inventory.lotNumber')}
+                inputClassName={s.addLotInput}
+              />
+            </FormField>
+          )}
+
+          {/* An ordinary field the scanner happens to prefill, not a read-only
+              artefact of the camera. A scratched code, a print too small to
+              decode, or no camera at all must not stop the user registering the
+              box — the backend has accepted a typed serial since day one. */}
+          {disclosure.isRevealed('serial') && (
+            <FormField label={t('inventory.lotSerial')}>
+              <input
+                className={cx(forms.input, s.addLotInput)}
+                type="text"
+                // The model caps `serial_number` at 20, which is the GS1 AI 21
+                // limit. Without the cap the backend answers 400.
+                maxLength={20}
+                placeholder={t('inventory.lotSerial')}
+                value={fields.serialNumber}
+                onChange={(e) => setFields((f) => ({ ...f, serialNumber: e.target.value }))}
+                data-testid="serial-input"
+              />
+            </FormField>
+          )}
+        </div>
+
+        {disclosure.hasHidden && (
+          <button type="button" className={s.moreFieldsBtn} onClick={disclosure.revealAll} data-testid="more-fields">
+            <Icon name="plus" size="sm" />
+            <span>{t('inventory.moreFields')}</span>
+          </button>
         )}
 
-        {scanBlocker && (
+        {blocker && (
           <p className={forms.error} data-testid="scan-blocker">
-            {t(scanBlocker.key, scanBlocker.args)}
+            {t(blocker.key, blocker.args)}
           </p>
         )}
 
@@ -271,11 +377,20 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
             {t('common.cancel')}
           </button>
+          {/* Same gating as Save in every respect — a blocker or being offline
+              refuses both. It differs only in not closing afterwards. */}
           <button
             type="submit"
-            className={cx(buttons.btn, buttons.btnPrimary)}
-            disabled={adding || Boolean(scanBlocker)}
+            className={cx(buttons.btn, buttons.btnSecondary)}
+            onClick={() => {
+              keepOpenRef.current = true
+            }}
+            disabled={adding || Boolean(blocker)}
+            data-testid="add-and-another"
           >
+            {t('inventory.addAndAnother')}
+          </button>
+          <button type="submit" className={cx(buttons.btn, buttons.btnPrimary)} disabled={adding || Boolean(blocker)}>
             {adding ? t('inventory.adding') : t('inventory.addLot')}
           </button>
         </div>
