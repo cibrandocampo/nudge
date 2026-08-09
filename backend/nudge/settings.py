@@ -19,7 +19,21 @@ environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG")
-ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS") if h]
+
+if DEBUG:
+    # Development accepts any Host. The dev server binds 0.0.0.0 and the stack
+    # is routinely opened from a phone or a second machine, whose address is
+    # different for every developer and changes with the lease — and because
+    # Vite proxies /api keeping the original Host, Django sees that address
+    # rather than the container's. A fixed list therefore answers
+    # 400 DisallowedHost to everyone but its author.
+    #
+    # Host validation is not what protects a stack already running with
+    # DEBUG=True, so there is nothing here to weaken. Production takes the
+    # branch below and requires a real list.
+    ALLOWED_HOSTS = ["*"]
+else:  # pragma: no cover — production branch, pure config assignment, no logic to test.
+    ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS") if h]
 
 # ── App version (read at process start; baked into the image by CI) ──────────
 
