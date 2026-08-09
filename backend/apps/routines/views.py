@@ -8,7 +8,7 @@ from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -184,11 +184,34 @@ class StockLotViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         ).distinct()
 
     def _get_stock_for_create(self):
+        """The stock a new lot is being added to, or 404.
+
+        Visibility is the rule, not ownership — the same filter `get_queryset`
+        applies to every other verb here. This used to demand `user=request.user`,
+        which left the recipient of a shared stock able to consume from it, edit
+        its lots and delete them, but not add the box they had just bought. The
+        frontend never agreed with that: `StockDetailPage` renders the add-lot
+        form for guests too, with a branch of its own for them, so the only thing
+        the restriction produced was a 403 at the end of a form the app had
+        invited the user to fill in.
+
+        404 rather than 403: a stock the caller cannot see should be
+        indistinguishable from one that does not exist. The old code raised
+        `PermissionDenied` carrying the text "Stock item not found." — a 403 that
+        described a 404, so neither the status nor the message was true.
+        """
         stock_pk = self.kwargs.get("stock_pk")
-        try:
-            return Stock.objects.get(pk=stock_pk, user=self.request.user)
-        except Stock.DoesNotExist:
-            raise PermissionDenied("Stock item not found.")
+        stock = (
+            Stock.objects.filter(
+                Q(user=self.request.user) | Q(shared_with=self.request.user),
+                pk=stock_pk,
+            )
+            .distinct()
+            .first()
+        )
+        if stock is None:
+            raise NotFound("Stock item not found.")
+        return stock
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
