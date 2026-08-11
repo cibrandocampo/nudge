@@ -36,12 +36,16 @@ export async function goToRoutineDetail(page, routineKey) {
 export async function goToStockDetail(page, stockKey) {
   const name = SEED.stocks[stockKey] ?? stockKey
   await goToInventory(page)
-  // Click the explicit "Open details" button instead of the card body:
-  // the card's `onClick={goDetail}` handler never fires when the click
-  // lands on the `cardActions` row because those children use
-  // `onClick={stop}` to guard their own buttons. The open-details
-  // chevron button routes via `goDetail` unambiguously.
-  await stockCard(page, stockKey).getByRole('button', { name: 'Open details' }).click()
+  // Click the explicit "Open details" button instead of the row body: the
+  // row's `onClick={goDetail}` handler never fires when the click lands on
+  // the actions group, because those children use `onClick={stop}` to guard
+  // their own buttons. The open-details chevron routes via `goDetail`
+  // unambiguously.
+  //
+  // `.first()` because a pinned product renders twice since T095 — once in
+  // the Destacados section and once in its group. Either row opens the same
+  // detail page, so the first one will do.
+  await stockCard(page, stockKey).first().getByRole('button', { name: 'Open details' }).click()
   await expect(page).toHaveURL(/\/inventory\/\d+$/)
   await expect(page.getByText(name).first()).toBeVisible()
 }

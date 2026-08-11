@@ -1,0 +1,111 @@
+/* The inventory's single attention banner (T090).
+   Warning-toned whatever the worst severity inside is: the banner's job is to
+   say "there is something to look at", and which things are red is what the
+   rows and the list below are for. A red banner over a mostly-orange list
+   would overstate it every time one product runs out. */
+
+.banner {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-warning);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: var(--c-text);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary:hover {
+  background: var(--c-border-inner);
+}
+
+.summaryIcon {
+  color: var(--c-warning);
+  flex: none;
+}
+
+.summaryText {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--c-border-inner);
+}
+
+/* Each row is the whole link, so the tap target is the row and not just the
+   product name.
+
+   Two lines rather than one: side by side, flexbox sizes the label column
+   from its max-content width before it hands anything back to the name, so
+   the product name — the thing you identify it by — was the part that got
+   truncated. Stacked, both read in full and the dot spans them. */
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  row-gap: 0.1rem;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+  text-decoration: none;
+  color: var(--c-text);
+  border-bottom: 1px solid var(--c-border-inner);
+}
+
+.rowDot {
+  grid-row: 1 / span 2;
+}
+
+.list li:last-child .row {
+  border-bottom: 0;
+}
+
+.row:hover {
+  background: var(--c-border-inner);
+}
+
+.name {
+  grid-column: 2;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.labels {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.4rem;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.72rem;
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+
+.labelDanger {
+  color: var(--c-danger);
+}

@@ -1,5 +1,5 @@
 /* Share-blue accent for the "Share with…" button. Mirrors the
-   `--c-shared` tokens already used by StockCard's informational
+   `--c-shared` tokens already used by StockRow's informational
    shared badge so every "share" affordance across the app speaks
    the same visual language. */
 .shareBtn {

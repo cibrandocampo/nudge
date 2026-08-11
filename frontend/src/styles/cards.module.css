@@ -145,9 +145,10 @@
   flex-shrink: 0;
 }
 
-/* When a stock badge sits right under the card title (the InventoryPage
- * alert blocks: Sin stock, Stock bajo, etc.), give it a touch of top
- * margin so the title isn't cramped against the first item. */
+/* When a stock badge sits right under the card title, give it a touch of top
+ * margin so the title isn't cramped against the first item. Live consumer
+ * since T090 retired the inventory alert blocks: `HistoryEntryCard`, where a
+ * titled entry that also consumed lots renders the two as siblings. */
 
 .cardTitle + .cardStockBadge {
   margin-top: 0.4rem;
@@ -206,7 +207,7 @@
 }
 
 /* ── Card lot rows ────────────────────────────────────────────
- * Used by StockCard list and StockDetailPage detail. The
+ * Used by the StockRow list and StockDetailPage detail. The
  * data-expiring attribute on rows is data-only; severity is
  * surfaced via the lot icon's className (iconWarning / iconDanger)
  * — see utils/stockSeverity.js. */
@@ -214,7 +215,8 @@
 /* The lot row and its grid contract moved to `components/LotRow.module.css`
  * (T039): every class that laid one out had exactly two consumers, and both
  * now render through that component. `.cardLotsBlock`'s skin went to
- * `StockCard.module.css`, the only card that draws it. */
+ * the card's own stylesheet, the only card that drew it (retired in
+ * T092 — the block itself is gone from the list). */
 
 .consumptionRow {
   padding: 0.35rem 0.75rem;
@@ -230,14 +232,6 @@
 .consumptionOwn {
   font-weight: 600;
   color: var(--c-text-2);
-}
-
-/* ── Alerts section ──────────────────────────────────────────── */
-
-.alertsSection {
-  padding-bottom: 0.75rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid var(--c-border);
 }
 
 /* ── Group (left rail connecting cards) ──────────────────────── */

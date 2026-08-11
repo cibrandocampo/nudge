@@ -55,6 +55,7 @@ from apps.routines.models import (
     StockGroup,
     StockLot,
     UserStockGroup,
+    UserStockPin,
 )
 
 User = get_user_model()
@@ -127,6 +128,7 @@ class Command(BaseCommand):
         # Before Stock, whose cascade would take these anyway — explicit so the
         # order stays obvious to the next reader rather than implied.
         UserStockGroup.objects.all().delete()
+        UserStockPin.objects.all().delete()
         Stock.objects.all().delete()
         StockGroup.objects.all().delete()
         PushSubscription.objects.all().delete()
@@ -484,6 +486,15 @@ class Command(BaseCommand):
         stocks["descaler"] = Stock.objects.create(user=maria, name="Descaler tablets", group=groups[("maria", "Home")])
         stocks["descaler"].shared_with.add(cibran)
         StockLot.objects.create(stock=stocks["descaler"], quantity=2)
+
+        # Pinned to the top of cibran's inventory. Three rather than the
+        # maximum of four, so the section reads as a deliberate shortcut and
+        # not a filled quota, and chosen to span the states the row can show:
+        # one healthy with a consumption rate, one with a batch expiring soon,
+        # one out of stock. Pinning is per user — maria's inventory is
+        # unaffected, which is the point of `UserStockPin` existing at all.
+        for stock_key in ("metformin", "hidroferol", "pump_cannulas"):
+            UserStockPin.objects.create(user=cibran, stock=stocks[stock_key])
 
         # ── Maria — Medicine cabinet (PRIVATE — NOT shared) ─────────────────
 

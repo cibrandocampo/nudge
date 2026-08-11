@@ -42,7 +42,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   const iconCls = iconClassForStock(cachedStock)
 
   // Passive badge only — sharing is edited from the routine form
-  // (ShareWithSection → ShareModal). Mirrors the pattern used on StockCard.
+  // (ShareWithSection → ShareModal). Mirrors the pattern used on StockRow.
   // Owner sees the filled variant; recipient sees the outlined one. Both
   // use the same icon so the visual language is consistent.
   const isShared = routine.shared_with?.length > 0 || routine.is_owner === false

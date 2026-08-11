@@ -3,3 +3,50 @@
   align-items: center;
   gap: 0.5rem;
 }
+
+/* One surface per section, rows separated by their own bottom border
+   (`StockRow.module.css`). The card layout gave every product its own border,
+   radius and margin — about 14 px of chrome per item, which at 44 px rows
+   would have been a third of the list. */
+.rowList {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+/* Pinned products. Deliberately quieter than a group section — no left rail,
+   no count — because it is a shortcut into the list below, not a category of
+   its own. */
+.pinnedSection {
+  margin-bottom: 1.25rem;
+}
+
+.pinnedTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.35rem;
+  padding: 0.5rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+
+/* Section headers stick under the search bar, whose measured height arrives as
+   `--inventory-bar-h` on the page root. `z-index` below the bar's 40 so the
+   header slides under it rather than over it. The fallback matters: with no
+   search bar (an empty inventory) the property is 0px and the header pins
+   directly under the app header. */
+.groupHeaderSticky {
+  position: sticky;
+  top: calc(48px + var(--inventory-bar-h, 0px));
+  z-index: 30;
+  background: var(--c-bg);
+}
+
+/* Pushed to the far end of the header row, opposite the name. */
+.groupDot {
+  margin-left: auto;
+}

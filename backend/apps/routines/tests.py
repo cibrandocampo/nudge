@@ -3,17 +3,19 @@ from datetime import date, timedelta
 from math import floor
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
 User = get_user_model()
@@ -4398,7 +4400,10 @@ class QueryBudgetTests(APITestCase):
     """
 
     BUDGET_ROUTINES_LIST = 5
-    BUDGET_STOCK_LIST = 7
+    # 7 → 8 in T094: the `pins` prefetch backing `is_pinned`. One query for the
+    # whole page, not one per row — `UserStockPinTest` pins several stocks and
+    # asserts the total is unchanged.
+    BUDGET_STOCK_LIST = 8
     BUDGET_DASHBOARD = 4
     BUDGET_ENTRIES_LIST = 2
     BUDGET_STOCK_CONSUMPTIONS_LIST = 2
@@ -4464,9 +4469,10 @@ class QueryBudgetTests(APITestCase):
     def test_stock_list_query_count_is_constant(self):
         """GET /api/stock/ stays under BUDGET_STOCK_LIST.
 
-        StockViewSet.get_queryset already prefetches lots, shared_with,
-        active_routines, recent_consumptions, and group_overrides — the
-        budget reflects that pre-existing optimisation.
+        StockViewSet.get_queryset prefetches lots, shared_with,
+        active_routines, recent_consumptions, group_overrides and pins — the
+        budget reflects that optimisation, one query per prefetch plus the
+        listing and the paginator.
         """
         with self.assertNumQueries(self.BUDGET_STOCK_LIST):
             response = self.client.get("/api/stock/")
@@ -4729,3 +4735,142 @@ class SharedStockLotManagementTest(APITestCase):
     def test_missing_stock_is_also_404(self):
         response = self.client.post("/api/stock/999999/lots/", {"quantity": 1}, format="json")
         self.assertEqual(response.status_code, 404)
+
+
+# ── UserStockPin ─────────────────────────────────────────────────────────────
+
+
+class UserStockPinTest(APITestCase):
+    """The pin is per user, and it is a view on the stock, not a property of it."""
+
+    def setUp(self):
+        self.owner = make_user("pin_owner", email="pin_owner@example.com")
+        self.recipient = make_user("pin_recipient", email="pin_recipient@example.com")
+        self.stranger = make_user("pin_stranger", email="pin_stranger@example.com")
+        self.owner.contacts.add(self.recipient)
+        self.stock = make_stock(self.owner, name="Insulin")
+        self.stock.shared_with.add(self.recipient)
+
+    def test_owner_can_pin_and_unpin(self):
+        self.client.force_authenticate(self.owner)
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_pinned"])
+
+        res = self.client.delete(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(UserStockPin.objects.filter(user=self.owner, stock=self.stock).exists())
+
+    def test_recipient_of_a_shared_stock_can_pin_it(self):
+        # The whole reason this is an action and not a field on Stock: stock
+        # writes are gated on IsOwner, and a recipient must still be able to
+        # pin what was shared with them.
+        self.client.force_authenticate(self.recipient)
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(UserStockPin.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+    def test_pin_is_per_user(self):
+        UserStockPin.objects.create(user=self.owner, stock=self.stock)
+
+        self.client.force_authenticate(self.recipient)
+        res = self.client.get("/api/stock/")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["results"][0]["is_pinned"])
+
+        self.client.force_authenticate(self.owner)
+        res = self.client.get("/api/stock/")
+        self.assertTrue(res.data["results"][0]["is_pinned"])
+
+    def test_stranger_gets_404(self):
+        self.client.force_authenticate(self.stranger)
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(UserStockPin.objects.filter(stock=self.stock).exists())
+
+    def test_pinning_twice_is_idempotent(self):
+        self.client.force_authenticate(self.owner)
+        self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["is_pinned"])
+        self.assertEqual(UserStockPin.objects.filter(user=self.owner).count(), 1)
+
+    def test_unpinning_something_not_pinned_is_idempotent(self):
+        self.client.force_authenticate(self.owner)
+        res = self.client.delete(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 204)
+
+    def test_pin_beyond_the_limit_is_rejected(self):
+        limit = settings.STOCK_MAX_PINNED_ITEMS
+        self.client.force_authenticate(self.owner)
+        for i in range(limit):
+            stock = make_stock(self.owner, name=f"Filler {i}")
+            self.assertEqual(self.client.post(f"/api/stock/{stock.id}/pin/").status_code, 200)
+
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data["code"], "max_pinned_reached")
+        self.assertEqual(res.data["max"], limit)
+        # The rejected create is rolled back, not left behind.
+        self.assertEqual(UserStockPin.objects.filter(user=self.owner).count(), limit)
+
+    def test_the_limit_is_per_user(self):
+        limit = settings.STOCK_MAX_PINNED_ITEMS
+        for i in range(limit):
+            UserStockPin.objects.create(user=self.owner, stock=make_stock(self.owner, name=f"Filler {i}"))
+
+        self.client.force_authenticate(self.recipient)
+        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
+        self.assertEqual(res.status_code, 200)
+
+    def test_pin_deleted_on_unshare(self):
+        UserStockPin.objects.create(user=self.recipient, stock=self.stock)
+        self.stock.shared_with.remove(self.recipient)
+        self.assertFalse(UserStockPin.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+    def test_clearing_shared_with_keeps_the_owners_own_pin(self):
+        # post_clear revokes everyone else's access, not the owner's — unlike
+        # UserStockGroup, the owner can have a pin of their own to protect.
+        UserStockPin.objects.create(user=self.owner, stock=self.stock)
+        UserStockPin.objects.create(user=self.recipient, stock=self.stock)
+
+        self.stock.shared_with.clear()
+        self.assertTrue(UserStockPin.objects.filter(user=self.owner, stock=self.stock).exists())
+        self.assertFalse(UserStockPin.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+    def test_unsharing_one_user_leaves_another_users_pin(self):
+        other = make_user("pin_other", email="pin_other@example.com")
+        self.owner.contacts.add(other)
+        self.stock.shared_with.add(other)
+        UserStockPin.objects.create(user=other, stock=self.stock)
+        UserStockPin.objects.create(user=self.recipient, stock=self.stock)
+
+        self.stock.shared_with.remove(self.recipient)
+        self.assertTrue(UserStockPin.objects.filter(user=other, stock=self.stock).exists())
+        self.assertFalse(UserStockPin.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+    def test_deleting_the_stock_removes_its_pins(self):
+        UserStockPin.objects.create(user=self.owner, stock=self.stock)
+        self.stock.delete()
+        self.assertFalse(UserStockPin.objects.filter(user=self.owner).exists())
+
+    def test_listing_stock_does_not_query_per_pin(self):
+        """`is_pinned` rides the prefetch: pins must not add queries per row."""
+        for i in range(5):
+            make_stock(self.owner, name=f"Extra {i}")
+        self.client.force_authenticate(self.owner)
+
+        with CaptureQueriesContext(connection) as unpinned:
+            res = self.client.get("/api/stock/")
+            self.assertEqual(res.status_code, 200)
+        baseline = len(unpinned.captured_queries)
+
+        for stock in Stock.objects.filter(user=self.owner)[: settings.STOCK_MAX_PINNED_ITEMS]:
+            UserStockPin.objects.create(user=self.owner, stock=stock)
+
+        with CaptureQueriesContext(connection) as pinned:
+            res = self.client.get("/api/stock/")
+            self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(pinned.captured_queries), baseline)
+        self.assertEqual(sum(1 for row in res.data["results"] if row["is_pinned"]), settings.STOCK_MAX_PINNED_ITEMS)

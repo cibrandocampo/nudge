@@ -60,9 +60,12 @@ Object.defineProperty(navigator, 'serviceWorker', {
   },
 })
 
-// Clean up localStorage between tests
+// Clean up web storage between tests. `sessionStorage` matters since T096:
+// the inventory remembers its scroll offset there, and a leaked value would
+// make the next test's list jump.
 afterEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 // Drain the offline mutation queue before EACH test — not after. The queue

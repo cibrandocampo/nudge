@@ -1,70 +1,86 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { toMonthly } from '../utils/consumption'
 import cx from '../utils/cx'
-import { groupLots } from '../utils/lotsForSelection'
 import { borderTokensFromStock } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
-import LotRow, { LotRowList } from './LotRow'
 import SyncStatusBadge from './SyncStatusBadge'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
-import s from './StockCard.module.css'
+import s from './StockRow.module.css'
 
-const MONTHLY_FACTOR = 30
-
-function toMonthly(dailyRate) {
-  const monthly = dailyRate * MONTHLY_FACTOR
-  return monthly % 1 === 0 ? String(monthly) : monthly.toFixed(1)
-}
-
-export default function StockCard({ stock, consuming, flashing, onConsume }) {
+/**
+ * A stock as one compact row, the inventory list's unit after T091.
+ *
+ * The card this replaced rendered a detail view N times: 105–160 px each, with
+ * a height that varied with the number of batches, so twenty products came to
+ * ~2 600 px and nothing in the list could be found by scanning. Here the
+ * per-batch breakdown moves to the detail page — where it was always better —
+ * and the row keeps only what answers the two questions the list is for: is
+ * this one in trouble, and do I need to buy more.
+ *
+ * Line 1 is always there. Line 2 appears only when there is a consumption
+ * rate to report, on the same guard the card used, so products with no routine
+ * and no recent consumption stay a single 44 px line.
+ *
+ * The interaction model is deliberately the card's, unchanged: the row is a
+ * clickable container, the actions inside stop propagation, and the chevron is
+ * the keyboard-reachable route to the detail. E2E navigates by that button's
+ * "Open details" label (`helpers/navigation.js`) and consumes by the −1
+ * button's "Consume 1 unit" label, so both must keep their names.
+ */
+export default function StockRow({ stock, consuming, flashing, onConsume }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const tokens = borderTokensFromStock(stock)
-  // UTC-midnight today for lot expiry comparison; mirrors StockDetailPage.
-  const today = new Date(new Date().toISOString().slice(0, 10))
-  // Same grouping as the detail page and the consumption modals: a batch is
-  // one line, however many boxes of it there are. `minQuantity: 0` shows
-  // exactly what the server sent (an emptied lot kept alive by bulk_create).
-  const lotGroups = groupLots(stock.lots ?? [], { minQuantity: 0 })
 
   const goDetail = () => navigate(`/inventory/${stock.id}`)
   const stop = (e) => e.stopPropagation()
 
+  const quantity = stock.quantity_available ?? stock.quantity ?? 0
+
   // Owner sees the filled variant; recipient sees the outlined one — both
-  // share the same `users` icon so the language is consistent across cards.
+  // share the same `users` icon so the language is consistent across the app.
   const isShared = stock.shared_with?.length > 0 || stock.is_owner === false
   const isOwnerOfShare = stock.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
     ? t('sharing.sharedBadgeOwnerAria')
     : t('sharing.sharedBadgeRecipientAria', { owner: stock.owner_display_name ?? '' })
+
   const ownRate = stock.daily_consumption_own || 0
   const sharedRate = stock.daily_consumption_shared || 0
   const totalRate = ownRate + sharedRate
 
+  // One warning at most, and it comes from `expiry_severity` rather than
+  // `stock_severity`: the dot on line 1 already carries the stock axis, and
+  // the two were deliberately decoupled (see `stockSeverity.js`). 'reached'
+  // outranks 'soon' — the backend awards that precedence, not this component.
+  const expiryWarning =
+    stock.expiry_severity === 'reached'
+      ? { key: 'inventory.rowExpiryReached', className: s.expiryDanger }
+      : stock.expiry_severity === 'soon'
+        ? { key: 'inventory.rowExpiringSoon', className: s.expiryWarning }
+        : null
+
   return (
-    <div className={cx(cards.card, cards.cardClickable, tokens.border)} data-testid="product-card" onClick={goDetail}>
-      <div className={cx(cards.cardHeader, s.compactHeader)}>
-        <div className={cards.cardMeta}>
-          <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-            <span className={cx(cards.dot, tokens.dot)} />
-            <span>{stock.name}</span>
-            <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
+    <div className={s.row} data-testid="product-card" onClick={goDetail}>
+      <div className={s.main}>
+        <span className={cx(cards.dot, tokens.dot)} />
+        <span className={s.name}>{stock.name}</span>
+        <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
+        <span className={s.qtyGroup}>
+          <span className={cx(cards.stockQty, flashing && s.stockQtyFlash)}>
+            {quantity} {t('common.unit')}
           </span>
-          <span className={cards.cardSubtitle}>
-            <span className={cx(cards.stockQty, flashing && s.stockQtyFlash)}>
-              {stock.quantity_available ?? stock.quantity ?? 0} {t('common.unit')}
+          {(stock.quantity_expired ?? 0) > 0 && (
+            <span className={cards.stockQtyExpired}>
+              {' '}
+              ({t('inventory.expiredCount', { count: stock.quantity_expired })})
             </span>
-            {(stock.quantity_expired ?? 0) > 0 && (
-              <span className={cards.stockQtyExpired}>
-                {' '}
-                ({t('inventory.expiredCount', { count: stock.quantity_expired })})
-              </span>
-            )}
-          </span>
-        </div>
-        <div className={cards.cardActions} onClick={stop}>
+          )}
+        </span>
+        <div className={s.actions} onClick={stop}>
           {isShared && (
             <span
               className={cx(
@@ -80,7 +96,7 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
               <Icon name="users" size="sm" />
             </span>
           )}
-          {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
+          {quantity > 0 && (
             <button
               type="button"
               className={cx(buttons.btnIcon, buttons.btnIconConsume, consuming && buttons.disabled)}
@@ -105,28 +121,11 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
         </div>
       </div>
 
-      {/* Smart-hide: skip the lot block when it would only repeat the
-       * header's total qty (single lot with no expiry and no lot_number).
-       * To revert to "always show when there's at least one lot", replace
-       * the next line with `stock.lots && stock.lots.length > 0 && (`. */}
-      {(lotGroups.length > 1 || Boolean(lotGroups[0]?.expiry_date) || Boolean(lotGroups[0]?.lot_number)) && (
-        <LotRowList lots={stock.lots} className={s.lotsBlock}>
-          {/* One row per batch, not per database row: several scanned boxes of
-              the same batch are one line here. The individual serials live in
-              the stock detail, where they can be expanded. No trailing control:
-              this list is read-only, the detail page is where lots are edited. */}
-          {lotGroups.map((group) => (
-            <LotRow key={group.key} group={group} today={today} testId="card-lot-row" />
-          ))}
-        </LotRowList>
-      )}
-
       {totalRate > 0 && (
         <div
-          className={cards.consumptionRow}
+          className={s.meta}
           data-testid="consumption-row"
           title={stock.depletion_is_estimated ? t('inventory.depletionEstimatedAria') : undefined}
-          onClick={stop}
         >
           {stock.depletion_is_estimated && <Icon name="equal-approximately" size="sm" data-testid="estimated-icon" />}
           {ownRate > 0 && (
@@ -137,23 +136,29 @@ export default function StockCard({ stock, consuming, flashing, onConsume }) {
           {ownRate > 0 && sharedRate > 0 && ' + '}
           {sharedRate > 0 && <span>{t('inventory.consumptionShared', { rate: toMonthly(sharedRate) })}</span>}
 
-          {(stock.quantity_available ?? stock.quantity ?? 0) === 0 ? (
-            <span className={cx(cards.depletionEnd, cards.stockDepletionDanger)} data-testid="out-of-stock-footer">
+          {expiryWarning && (
+            <span className={expiryWarning.className} data-testid="row-expiry-warning">
+              {t(expiryWarning.key)}
+            </span>
+          )}
+
+          {/* Right-aligned so the dates form a column down the list: "which
+              one runs out first" is answered by scanning, not by reading. */}
+          {quantity === 0 ? (
+            <span className={cx(s.depletion, s.depletionDanger)} data-testid="out-of-stock-footer">
               {t('inventory.outOfStockFooter')}
             </span>
           ) : (
             stock.estimated_depletion_date && (
               <span
                 className={cx(
-                  cards.depletionEnd,
-                  stock.stock_severity === 'low' && cards.stockDepletionWarn,
-                  stock.stock_severity === 'critical' && cards.stockDepletionDanger,
+                  s.depletion,
+                  stock.stock_severity === 'low' && s.depletionWarning,
+                  stock.stock_severity === 'critical' && s.depletionDanger,
                 )}
                 data-testid="depletion-date"
               >
-                {t('inventory.depletionUntil', {
-                  date: formatShortDate(stock.estimated_depletion_date),
-                })}
+                {t('inventory.depletionUntil', { date: formatShortDate(stock.estimated_depletion_date) })}
               </span>
             )
           )}

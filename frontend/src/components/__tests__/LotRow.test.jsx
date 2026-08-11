@@ -59,9 +59,11 @@ describe('LotRow', () => {
   })
 
   it('emits whichever testId the list gives it', () => {
-    renderWithProviders(<LotRow group={group()} today={today} testId="card-lot-row" />)
+    // The two real call sites are `lot-row` and `pack-row`, both in
+    // `StockLotsList`; the point here is that the value is pass-through.
+    renderWithProviders(<LotRow group={group()} today={today} testId="pack-row" />)
 
-    expect(screen.getByTestId('card-lot-row')).toBeInTheDocument()
+    expect(screen.getByTestId('pack-row')).toBeInTheDocument()
     expect(screen.queryByTestId('lot-row')).not.toBeInTheDocument()
   })
 
@@ -74,8 +76,8 @@ describe('LotRow', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     expect(withControl.querySelector('[class*="trailing"]')).not.toBeNull()
 
-    const { container: bare } = renderWithProviders(<LotRow group={group()} today={today} testId="card-lot-row" />)
-    // No empty wrapper: the read-only card must not carry a trailing cell.
+    const { container: bare } = renderWithProviders(<LotRow group={group()} today={today} testId="pack-row" />)
+    // No empty wrapper: a read-only list must not carry a trailing cell.
     expect(bare.querySelector('[class*="trailing"]')).toBeNull()
   })
 })
