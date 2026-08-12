@@ -209,6 +209,7 @@ to match its own policy without touching the code.
 | `STOCK_LOW_THRESHOLD_UNITS` | `3` | Healthy-quantity threshold below which `stock_severity` returns `low` when no depletion estimate is available (Tipo 1). |
 | `STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS` | `60` | Window (days) considered when estimating depletion from past direct consumption. |
 | `STOCK_DIRECT_CONSUMPTION_HALF_DAYS` | `30` | Half-window used to validate that consumption is recent enough in both halves before estimating. |
+| `STOCK_MAX_PINNED_ITEMS` | `4` | How many stocks a user may pin to the top of their inventory. Enforced by `POST /api/stock/{id}/pin/`, which returns 400 with `code: "max_pinned_reached"` beyond it. |
 
 ## Docker / Infrastructure
 

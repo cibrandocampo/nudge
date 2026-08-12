@@ -1,0 +1,141 @@
+/* Find controls for the inventory (T093): a text box and a chip row, both
+   sticky so they stay reachable however far down the list you are.
+
+   Sticky layering: the app header is `sticky; top: 0; height: 48px;
+   z-index: 50` (`Header.module.css`), so this sits directly under it at
+   `top: 48px` with a lower z-index. The section headers stick under this bar
+   (T096) at `48px + --inventory-bar-h`, a custom property `InventoryPage`
+   publishes from a ResizeObserver on this element — measured, not written
+   down twice, so a wrapped chip row or a larger text size cannot slide the
+   headers underneath. */
+
+.bar {
+  position: sticky;
+  top: 48px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0 0.6rem;
+  margin-bottom: 0.4rem;
+  /* Opaque: rows scroll underneath, and a translucent bar would let them
+     show through the text. */
+  background: var(--c-bg);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  min-height: 38px;
+}
+
+.searchBox:focus-within {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-ring);
+}
+
+.searchIcon {
+  color: var(--c-text-3);
+  flex: none;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--c-text);
+  padding: 0.4rem 0;
+}
+
+.input::placeholder {
+  color: var(--c-text-3);
+}
+
+/* The native clear affordance would sit beside ours and do the same job. */
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+
+.clear:hover {
+  background: var(--c-border-inner);
+  color: var(--c-text);
+}
+
+/* Scrolls sideways rather than wrapping: a wrapping row would change the
+   sticky bar's height as you type, and the group headers below offset from
+   it. */
+.chips {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.1rem;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip:hover {
+  border-color: var(--c-text-3);
+}
+
+.chipAttention {
+  border-color: var(--c-border-warning);
+  color: var(--c-warning);
+}
+
+/* Doubled so the selected state beats `.chipAttention`, whatever order the
+   bundler emits them in — the two are composed on the same element. */
+.chipActive.chipActive {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: var(--c-surface);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}

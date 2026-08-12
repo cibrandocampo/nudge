@@ -19,12 +19,21 @@
   margin: 0;
 }
 
+/* Shared by the `<Link>` and the `<button>` variants of `action`, so the two
+   read identically — the reset is what a button needs to stop looking like
+   one. */
 .link {
   display: inline-block;
   margin-top: 0.6rem;
   color: var(--c-primary);
   font-weight: 500;
   text-decoration: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
 }
 .link:hover {
   text-decoration: underline;

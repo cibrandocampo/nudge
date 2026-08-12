@@ -13,15 +13,17 @@ import StockValuesConfirmModal from '../components/StockValuesConfirmModal'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
 import { useServerReachable } from '../hooks/useServerReachable'
-import { useStock, useStockGroups } from '../hooks/useStock'
+import { useStock, useStockGroups, useStockList } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
+import { MAX_PINNED, useToggleStockPin } from '../hooks/mutations/useToggleStockPin'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
 import { avatarInitial } from '../utils/displayName'
+import { OfflineError } from '../api/errors'
 import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { effectiveGroupId } from '../utils/stockGroup'
@@ -64,6 +66,43 @@ export default function StockDetailPage() {
   // `date.today()` semantics (a lot expiring today reads as 'reached'). Shared
   // with both children so an expired lot never reads differently in each.
   const today = new Date(new Date().toISOString().slice(0, 10))
+
+  // Pinning is a per-user preference the server caps, so the control needs to
+  // know how many are already pinned. That comes from the list cache the
+  // inventory already holds — no extra request for a number we have.
+  const { data: allStocks = [] } = useStockList()
+  // Not `s` for the parameter: that is the stylesheet import in this file,
+  // and shadowing it trips the CSS-module reference guard.
+  const pinnedCount = allStocks.filter((item) => item.is_pinned).length
+  const isPinned = Boolean(stock?.is_pinned)
+  const pinCapReached = !isPinned && pinnedCount >= MAX_PINNED
+  const togglePin = useToggleStockPin()
+
+  const handleTogglePin = async () => {
+    if (!reachable) {
+      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+      return
+    }
+    if (pinCapReached) {
+      showToast({ type: 'error', message: t('inventory.pinCapReached', { max: MAX_PINNED }) })
+      return
+    }
+    try {
+      await togglePin.mutateAsync({ stockId, pinned: !isPinned })
+    } catch (err) {
+      // Live because this mutation is not queueable: offline it rejects
+      // rather than enqueueing. The 400 branch covers two tabs racing past
+      // the cap, where our local count was right when it was read and stale
+      // by the time the request landed.
+      if (err instanceof OfflineError) {
+        showToast({ type: 'error', message: t('offline.pageUnavailable') })
+      } else if (err?.body?.code === 'max_pinned_reached') {
+        showToast({ type: 'error', message: t('inventory.pinCapReached', { max: err.body.max }) })
+      } else {
+        showToast({ type: 'error', message: errorToastMessage(err, t) })
+      }
+    }
+  }
 
   /**
    * Open the pack picker for a single unit. `LotPickerModal` owns the whole
@@ -320,9 +359,39 @@ export default function StockDetailPage() {
                   {groupName}
                 </span>
               )}
+              {/* Pin to the top of the inventory. A per-user preference, so a
+                  recipient of a shared stock gets it too — the endpoint is
+                  not gated on ownership. Disabled rather than hidden at the
+                  cap, with a title that says how to make room. */}
+              <button
+                type="button"
+                className={cx(
+                  buttons.btnIcon,
+                  isPinned && buttons.btnIconShared,
+                  (!reachable || pinCapReached) && buttons.disabled,
+                  isPinned && s.pinnedIcon,
+                )}
+                onClick={handleTogglePin}
+                aria-pressed={isPinned}
+                aria-disabled={!reachable || pinCapReached}
+                aria-label={isPinned ? t('inventory.unpinAction') : t('inventory.pinAction')}
+                title={
+                  !reachable
+                    ? t('offline.pageUnavailable')
+                    : pinCapReached
+                      ? t('inventory.pinCapReached', { max: MAX_PINNED })
+                      : isPinned
+                        ? t('inventory.unpinAction')
+                        : t('inventory.pinAction')
+                }
+                data-testid="pin-toggle"
+                data-pinned={isPinned}
+              >
+                <Icon name="pin" size="sm" />
+              </button>
               {/* Consume one unit, the most frequent action on a stock. It
                   lives on the card rather than in the top bar so it sits next
-                  to the number it decrements, mirrors where `StockCard` puts
+                  to the number it decrements, mirrors where `StockRow` puts
                   it in the inventory list, and stays away from the destructive
                   delete button. Hidden at zero: it could only fail. */}
               {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (

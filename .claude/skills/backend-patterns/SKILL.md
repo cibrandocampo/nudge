@@ -98,6 +98,17 @@ pattern has proven itself.
 - **`seed_e2e` / `seed_demo` management commands** — shared fixture
   builders. Test-writers extend these instead of crafting inline
   fixtures.
+- **Per-user view of a shared stock** — `UserStockGroup` (which category
+  *I* file it under) and `UserStockPin` (whether *I* keep it at the top).
+  Both are `(user, stock)` through-models with a unique constraint, read
+  via a `Prefetch` filtered to `request.user` into a `to_attr`, and
+  surfaced by a `SerializerMethodField` that falls back to a direct query
+  when the attribute is absent. Both are exposed by a **dedicated action**
+  rather than a field on `Stock`, because stock writes are gated on
+  `IsOwner` and a recipient must still be able to set their own view.
+  Two instances is the limit under the 1/2/3 rule: a **third** per-user
+  facet should extract the shape (through-model + prefetch + method
+  field) instead of being pasted a third time.
 
 These are the reuses to protect. If you find yourself writing something
 that could be one of these — stop, find the existing primitive or propose

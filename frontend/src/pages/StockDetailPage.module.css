@@ -95,3 +95,11 @@
 .container > .topBarFlush {
   margin-bottom: 0;
 }
+
+/* The pin reads as filled when active. The base `.icon` sets `fill: none`, so
+   a filled variant is a fill override rather than a second symbol — one glyph,
+   two states, and they can never drift apart. */
+.pinnedIcon svg,
+.pinnedIcon.pinnedIcon svg {
+  fill: currentColor;
+}

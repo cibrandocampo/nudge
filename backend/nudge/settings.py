@@ -299,6 +299,11 @@ STOCK_LOW_THRESHOLD_UNITS = env.int("STOCK_LOW_THRESHOLD_UNITS", default=3)
 STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS = env.int("STOCK_DIRECT_CONSUMPTION_WINDOW_DAYS", default=60)
 STOCK_DIRECT_CONSUMPTION_HALF_DAYS = env.int("STOCK_DIRECT_CONSUMPTION_HALF_DAYS", default=30)
 
+# How many stocks a user may pin to the top of the inventory. A product
+# decision rather than a data constraint: past four the section stops being a
+# shortcut and becomes a second list.
+STOCK_MAX_PINNED_ITEMS = env.int("STOCK_MAX_PINNED_ITEMS", default=4)
+
 # ── Web Push VAPID ────────────────────────────────────────────────────────────
 
 VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")

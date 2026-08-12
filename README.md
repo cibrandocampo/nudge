@@ -49,6 +49,11 @@ What makes it more than a checklist:
 - **Stock that decrements itself.** Attach a consumable to a routine and every
   completion draws it down, lot by lot, First Expired First Out — with expiry
   warnings before anything goes off.
+- **Findable at twenty items.** The inventory is one compact row per product —
+  what is left, how fast it goes, when it runs out — with a search that matches
+  names, categories and batch numbers, filters per category, and up to four
+  products pinned to the top. What needs attention is one summary line, not a
+  wall of alerts.
 - **Scan the box.** Point the camera at the DataMatrix on the packaging and the
   batch, its expiry and the product code fill themselves in — or type them, for
   the boxes where the print is scratched or there is no camera to hand. A pack

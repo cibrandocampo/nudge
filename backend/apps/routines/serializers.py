@@ -140,6 +140,9 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
       estimate using Nudge's heuristic.
     - ``requires_lot_selection`` — UI hint: the stock has lot-numbered lots,
       so the client must let the user pick which to consume before any decrement.
+    - ``is_pinned`` — whether the requesting user has pinned this stock to the
+      top of their inventory. Per-viewer, like ``my_group``: on a shared stock
+      the owner's pin says nothing about the recipient's.
     """
 
     # `raw_scan` is forensic data: useful on the lot endpoint, dead weight on
@@ -152,6 +155,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     quantity_expired = serializers.SerializerMethodField()
     group_name = serializers.CharField(source="group.name", read_only=True, default=None)
     requires_lot_selection = serializers.SerializerMethodField()
+    is_pinned = serializers.SerializerMethodField()
     estimated_depletion_date = serializers.SerializerMethodField()
     depletion_is_estimated = serializers.SerializerMethodField()
     daily_consumption_own = serializers.SerializerMethodField()
@@ -187,6 +191,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "quantity_expired",
             "lots",
             "requires_lot_selection",
+            "is_pinned",
             "estimated_depletion_date",
             "depletion_is_estimated",
             "daily_consumption_own",
@@ -215,6 +220,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "my_group_name",
             "lots",
             "requires_lot_selection",
+            "is_pinned",
             "estimated_depletion_date",
             "depletion_is_estimated",
             "daily_consumption_own",
@@ -504,6 +510,25 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
         if not override or not override.group:
             return None
         return override.group.name
+
+    def get_is_pinned(self, obj):
+        """Whether the viewer has pinned this stock.
+
+        Reads the prefetched ``_my_pin`` attribute populated by
+        ``StockViewSet.get_queryset`` so list endpoints stay query-free, and
+        falls back to a direct query when the serializer is used outside that
+        viewset — the same shape as the consumption fields above.
+
+        No request (schema generation, shell) means no viewer, so nothing is
+        pinned.
+        """
+        request = self.context.get("request")
+        if not request:
+            return False
+        pins = getattr(obj, "_my_pin", None)
+        if pins is None:
+            return obj.pins.filter(user=request.user).exists()
+        return bool(pins)
 
 
 class StockConsumptionSerializer(FlexFieldsModelSerializer):

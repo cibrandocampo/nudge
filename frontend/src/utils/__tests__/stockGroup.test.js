@@ -1,4 +1,4 @@
-import { effectiveGroupId } from '../stockGroup'
+import { effectiveGroupId, effectiveGroupName } from '../stockGroup'
 
 describe('effectiveGroupId', () => {
   it('returns null for nullish stock', () => {
@@ -35,5 +35,40 @@ describe('effectiveGroupId', () => {
     // the legacy "owner group is shown" behaviour during the transition.
     const stock = { id: 1, group: 7, group_name: 'Owner Group' }
     expect(effectiveGroupId(stock)).toBe(7)
+  })
+})
+
+describe('effectiveGroupName', () => {
+  it('returns null for nullish stock', () => {
+    expect(effectiveGroupName(null)).toBeNull()
+    expect(effectiveGroupName(undefined)).toBeNull()
+  })
+
+  it("falls back to the owner's group name when there is no override", () => {
+    const stock = { id: 1, group: 7, group_name: 'Owner Group', my_group: null, my_group_name: null }
+    expect(effectiveGroupName(stock)).toBe('Owner Group')
+  })
+
+  it('prefers the personal override name', () => {
+    const stock = { id: 1, group: 7, group_name: 'Owner Group', my_group: 9, my_group_name: 'Mine' }
+    expect(effectiveGroupName(stock)).toBe('Mine')
+  })
+
+  it('branches on the id, not on the name', () => {
+    // An override with an id but no name means "in my group, name unknown" —
+    // it must NOT leak the owner's name, which belongs to a different group.
+    const stock = { id: 1, group: 7, group_name: 'Owner Group', my_group: 9, my_group_name: null }
+    expect(effectiveGroupName(stock)).toBeNull()
+  })
+
+  it('returns null when the stock is in no group at all', () => {
+    expect(effectiveGroupName({ id: 1, group: null, my_group: null })).toBeNull()
+    expect(effectiveGroupName({ id: 1 })).toBeNull()
+  })
+
+  it('agrees with effectiveGroupId about which group is in force', () => {
+    const stock = { id: 1, group: 7, group_name: 'Owner Group', my_group: 9, my_group_name: 'Mine' }
+    expect(effectiveGroupId(stock)).toBe(9)
+    expect(effectiveGroupName(stock)).toBe('Mine')
   })
 })

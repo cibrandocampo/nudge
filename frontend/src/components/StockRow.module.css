@@ -1,0 +1,123 @@
+/* The inventory list's compact row (T091).
+
+   No coloured left border: the card carried one, but at 44 px tall a 3 px
+   rail reads as noise rather than status, and the dot already says it. */
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-height: 44px;
+  padding: 0.35rem 0.6rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-inner);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row:hover {
+  background: var(--c-border-inner);
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 30px;
+}
+
+/* The name identifies the product, so it is the element that gives way: it
+   takes the space the fixed-width quantity and actions leave and truncates
+   rather than pushing them off the row. */
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qtyGroup {
+  flex: none;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: none;
+}
+
+/* Informational, not interactive — mirrors the card's shared marker. */
+.sharedBadge {
+  pointer-events: none;
+  cursor: default;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-left: calc(8px + 0.4rem);
+  font-size: 0.7rem;
+  color: var(--c-text-3);
+}
+
+/* Severity tints.
+
+   Doubled selectors on purpose. These carry the same meaning as
+   `stockDepletionWarn` / `stockDepletionDanger` in `cards.module.css`, and a
+   single-class selector competing with another single-class selector from a
+   different stylesheet is resolved by bundle order, not source order — the
+   T039 bug, which went a whole series unnoticed. Doubling makes specificity
+   the tiebreaker, and specificity survives a file move. */
+.depletion {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--c-text-3);
+}
+
+.depletionWarning.depletionWarning {
+  color: var(--c-warning);
+}
+
+.depletionDanger.depletionDanger {
+  color: var(--c-danger);
+}
+
+.expiryWarning.expiryWarning {
+  color: var(--c-warning);
+  font-weight: 500;
+}
+
+.expiryDanger.expiryDanger {
+  color: var(--c-danger);
+  font-weight: 500;
+}
+
+/* Quantity pulse after a consumption. Moved here from the card's stylesheet
+   when the card was retired (T092); this is now its only definition. */
+.stockQtyFlash {
+  animation: stockQtyPulse 0.6s ease-out;
+}
+
+@keyframes stockQtyPulse {
+  0% {
+    color: var(--c-danger);
+    transform: scale(1.05);
+  }
+  100% {
+    color: inherit;
+    transform: scale(1);
+  }
+}

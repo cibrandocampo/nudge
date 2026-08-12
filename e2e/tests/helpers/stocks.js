@@ -82,7 +82,10 @@ export async function deleteLot(page, stockKeyOrName, lotNumber) {
  */
 export async function consumeStock(page, stockKeyOrName, quantity = 1) {
   await goToInventory(page)
-  const card = stockCard(page, stockKeyOrName)
+  // `.first()` for the same reason as `goToStockDetail`: a pinned product has
+  // a row in Destacados and another in its group, and both decrement the same
+  // stock.
+  const card = stockCard(page, stockKeyOrName).first()
   for (let i = 0; i < quantity; i += 1) {
     await card.getByRole('button', { name: 'Consume 1 unit' }).click()
   }

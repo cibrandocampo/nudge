@@ -1321,3 +1321,158 @@ describe('StockDetailPage', () => {
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
   })
 })
+
+describe('StockDetailPage — pin control', () => {
+  beforeEach(() => {
+    reachableRef.current = true
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [stock] })),
+    )
+  })
+
+  /** Seed the list endpoint with `count` pinned stocks other than this one. */
+  const mockOtherPinned = (count) =>
+    server.use(
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json({
+          results: [
+            stock,
+            ...Array.from({ length: count }, (_, i) => ({ ...stock, id: 100 + i, name: `P${i}`, is_pinned: true })),
+          ],
+        }),
+      ),
+    )
+
+  it('offers the pin control, unpinned by default', async () => {
+    renderDetail()
+    const pin = await screen.findByTestId('pin-toggle')
+    expect(pin).toHaveAttribute('data-pinned', 'false')
+    expect(pin).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('reflects a stock that is already pinned', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_pinned: true })))
+    renderDetail()
+    const pin = await screen.findByTestId('pin-toggle')
+    expect(pin).toHaveAttribute('data-pinned', 'true')
+    expect(pin).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('pins the stock and flips the control', async () => {
+    // The mock has to remember the pin: the mutation invalidates the stock
+    // queries, so a handler that always answered `is_pinned: false` would
+    // refetch the flag straight back off and the assertion would race.
+    let posted = false
+    let pinned = false
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_pinned: pinned })),
+      http.post(`${BASE}/stock/1/pin/`, () => {
+        posted = true
+        pinned = true
+        return HttpResponse.json({ ...stock, is_pinned: true })
+      }),
+    )
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('pin-toggle'))
+
+    await waitFor(() => expect(posted).toBe(true))
+    await waitFor(() => expect(screen.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'true'))
+  })
+
+  it('unpins a pinned stock', async () => {
+    let deleted = false
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_pinned: true })),
+      http.delete(`${BASE}/stock/1/pin/`, () => {
+        deleted = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { user } = renderDetail()
+    await waitFor(() => expect(screen.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'true'))
+    await user.click(screen.getByTestId('pin-toggle'))
+    await waitFor(() => expect(deleted).toBe(true))
+  })
+
+  it('refuses and explains when the cap is already spent', async () => {
+    mockOtherPinned(4)
+    let posted = false
+    server.use(
+      http.post(`${BASE}/stock/1/pin/`, () => {
+        posted = true
+        return HttpResponse.json({ ...stock, is_pinned: true })
+      }),
+    )
+    const { user } = renderDetail()
+    const pin = await screen.findByTestId('pin-toggle')
+    await waitFor(() => expect(pin).toHaveAttribute('aria-disabled', 'true'))
+
+    await user.click(pin)
+    // The message says how to make room, not just "no".
+    expect(await screen.findByText(/remove one to add this/i)).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
+  it('still lets an already-pinned stock be unpinned at the cap', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_pinned: true })))
+    mockOtherPinned(4)
+    renderDetail()
+    const pin = await screen.findByTestId('pin-toggle')
+    await waitFor(() => expect(pin).toHaveAttribute('data-pinned', 'true'))
+    expect(pin).toHaveAttribute('aria-disabled', 'false')
+  })
+
+  it('surfaces the server cap rejection when two tabs race', async () => {
+    // Our local count was under the cap when read, and stale by the time the
+    // request landed.
+    server.use(
+      http.post(`${BASE}/stock/1/pin/`, () =>
+        HttpResponse.json({ code: 'max_pinned_reached', max: 4, detail: 'nope' }, { status: 400 }),
+      ),
+    )
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('pin-toggle'))
+    expect(await screen.findByText(/remove one to add this/i)).toBeInTheDocument()
+  })
+
+  it('reports an unexpected server failure with the generic error toast', async () => {
+    // Neither offline nor the cap: a 500 must still tell the user something
+    // rather than failing silently.
+    server.use(http.post(`${BASE}/stock/1/pin/`, () => new HttpResponse(null, { status: 500 })))
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('pin-toggle'))
+    expect(await screen.findByText(/something went wrong|could not|error/i)).toBeInTheDocument()
+    expect(screen.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'false')
+  })
+
+  it('refuses offline without firing the request', async () => {
+    reachableRef.current = false
+    let posted = false
+    server.use(
+      http.post(`${BASE}/stock/1/pin/`, () => {
+        posted = true
+        return HttpResponse.json({ ...stock, is_pinned: true })
+      }),
+    )
+    const { user } = renderDetail()
+    const pin = await screen.findByTestId('pin-toggle')
+    expect(pin).toHaveAttribute('aria-disabled', 'true')
+
+    await user.click(pin)
+    expect(await screen.findByText(/not available offline/i)).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
+  it('reports a connection lost between render and click', async () => {
+    // `reachable` is still true, so the guard lets the click through and the
+    // request itself fails — the branch that makes the OfflineError catch
+    // live code rather than decoration.
+    server.use(mockNetworkError('post', '/stock/1/pin/'))
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('pin-toggle'))
+    expect(await screen.findByText(/not available offline/i)).toBeInTheDocument()
+  })
+})

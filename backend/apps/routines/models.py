@@ -218,6 +218,44 @@ class UserStockGroup(models.Model):
         unique_together = [("user", "stock")]
 
 
+class UserStockPin(models.Model):
+    """Per-user pin: the stocks this user wants at the top of the inventory.
+
+    Per-user rather than a flag on Stock, for the same reason
+    ``UserStockGroup`` exists: on a shared stock each person keeps their own
+    view. It also sidesteps ``IsOwner`` on stock writes — a recipient must be
+    able to pin something they do not own.
+
+    The cap on how many a user may pin is a product decision and lives in
+    settings (``STOCK_MAX_PINNED_ITEMS``), not in a database constraint that
+    would turn changing the number into a migration.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stock_pins",
+    )
+    stock = models.ForeignKey(
+        "Stock",
+        on_delete=models.CASCADE,
+        related_name="pins",
+    )
+    # Unused while the UI orders pinned items alphabetically; present from the
+    # start so reordering later needs no migration.
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["display_order", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "stock"], name="unique_stock_pin_per_user"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} → {self.stock}"
+
+
 class StockLot(models.Model):
     """
     A single batch/lot of a Stock item with its own quantity and optional expiry.
@@ -277,13 +315,21 @@ def delete_empty_lot(sender, instance, **kwargs):
 
 @receiver(m2m_changed, sender=Stock.shared_with.through)
 def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
-    """When users are removed from a stock's shared_with, unlink their routines."""
+    """When users are removed from a stock's shared_with, drop what they kept of it.
+
+    Their routines lose the link, and their per-user view of the stock — the
+    group override and the pin — goes with it. The owner's own pin survives
+    ``post_clear``: clearing ``shared_with`` revokes everyone else's access,
+    not the owner's.
+    """
     if action == "post_remove" and pk_set:
         Routine.objects.filter(stock=instance, user_id__in=pk_set).update(stock=None)
         UserStockGroup.objects.filter(user_id__in=pk_set, stock=instance).delete()
+        UserStockPin.objects.filter(user_id__in=pk_set, stock=instance).delete()
     elif action == "post_clear":
         Routine.objects.filter(stock=instance).exclude(user=instance.user).update(stock=None)
         UserStockGroup.objects.filter(stock=instance).delete()
+        UserStockPin.objects.filter(stock=instance).exclude(user=instance.user).delete()
 
 
 class StockConsumption(models.Model):

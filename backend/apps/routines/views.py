@@ -17,7 +17,7 @@ from apps.core.permissions import IsOwner
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup
+from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import (
     ClientTimestampInputSerializer,
     RoutineEntrySerializer,
@@ -71,6 +71,11 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
                     "group_overrides",
                     queryset=UserStockGroup.objects.select_related("group").filter(user=self.request.user),
                     to_attr="_my_group_override",
+                ),
+                Prefetch(
+                    "pins",
+                    queryset=UserStockPin.objects.filter(user=self.request.user),
+                    to_attr="_my_pin",
                 ),
             )
             .order_by("name")
@@ -132,6 +137,55 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
 
         serializer = self.get_serializer(stock)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post", "delete"], url_path="pin")
+    def pin(self, request, pk=None):
+        """Pin or unpin this stock for the requesting user.
+
+        A dedicated action rather than a field on the stock, because stock
+        writes are gated on ``IsOwner`` and a recipient of a shared stock must
+        be able to pin it. Access is whatever ``get_queryset`` already
+        grants — owner or shared-with — so a stranger gets 404, not 403.
+
+        Both verbs are idempotent: pinning something already pinned succeeds,
+        unpinning something not pinned succeeds.
+        """
+        stock = self.get_object()
+
+        if request.method == "DELETE":
+            UserStockPin.objects.filter(user=request.user, stock=stock).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        limit = settings.STOCK_MAX_PINNED_ITEMS
+        # Create first, then check: two tabs racing past a count-then-create
+        # would both pass the check and leave the user over the limit. Doing
+        # it in this order inside one transaction makes the count authoritative.
+        with transaction.atomic():
+            existing = UserStockPin.objects.filter(user=request.user).count()
+            pin, created = UserStockPin.objects.get_or_create(
+                user=request.user,
+                stock=stock,
+                defaults={"display_order": existing},
+            )
+            over_limit = created and UserStockPin.objects.filter(user=request.user).count() > limit
+            if over_limit:
+                pin.delete()
+
+        if over_limit:
+            # A plain Response rather than a raised ValidationError: DRF
+            # coerces every value in a ValidationError detail to a string, and
+            # the client needs `max` as a number and `code` unwrapped.
+            return Response(
+                {
+                    "code": "max_pinned_reached",
+                    "max": limit,
+                    "detail": f"You can pin at most {limit} items.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        stock._my_pin = [pin]
+        return Response(self.get_serializer(stock).data)
 
     @action(detail=True, methods=["post"], url_path="consume")
     def consume(self, request, pk=None):
