@@ -88,7 +88,11 @@ test.describe('helpers smoke', () => {
     expect(H.SEED).toBeDefined()
     expect(H.SEED.admin?.username).toBeTruthy()
     expect(Object.keys(H.SEED.routines ?? {}).length).toBe(10)
-    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(11)
+    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(12)
+    for (const key of H.SEED.pinnedForUser1 ?? []) {
+      expect(H.SEED.stocks, `pinnedForUser1 key "${key}" must be a SEED.stocks key`).toHaveProperty(key)
+    }
+    expect(H.SEED.pinnedForUser1?.length).toBeLessThan(H.SEED.maxPinnedItems)
     expect(H.SEED.expectedStates?.blocked).toContain('changePumpCannula')
   })
 

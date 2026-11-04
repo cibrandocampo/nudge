@@ -63,7 +63,9 @@ test.describe('Stock expiry and dedup', () => {
     // Clicking Consume on a stock card opens the LotPickerModal. The modal's
     // radio list is pre-sorted FEFO and pre-selects the first option, which
     // must be VIT-A (7 days) — not VIT-B (180 days) nor the no-SN lot.
-    const card = stockCard(page, 'hidroferol')
+    // `.first()`: the seed pins Hidroferol, so it renders twice (Destacados +
+    // its group). Both rows consume from the same stock.
+    const card = stockCard(page, 'hidroferol').first()
     await card.getByRole('button', { name: 'Consume 1 unit' }).click()
 
     const dialog = page.getByRole('dialog')
