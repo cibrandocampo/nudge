@@ -51,7 +51,7 @@ Browser / Mobile
 | PWA | Workbox + vite-plugin-pwa | Workbox 7, vite-plugin-pwa 1.x |
 | UI | Custom CSS (no framework) | — |
 | i18n | i18next | 26.x |
-| Backend | Django + Django REST Framework | Django 5.2 LTS, DRF 3.17 |
+| Backend | Django + Django REST Framework | Django 5.2 LTS, DRF 3.18 |
 | Auth | JWT (simplejwt) | 5.5.x |
 | Database | PostgreSQL | 17 |
 | Task queue | Celery + Redis | Celery 5.6, Redis 8 (redis-py 6.4) |
