@@ -45,7 +45,14 @@ export const SEED = {
     orchidFertilizer: 'Orchid fertilizer',
     descalerTablets: 'Descaler tablets',
     birthControlPills: 'Birth control pills',
+    metformin: 'Metformin 850mg',
   },
+  // Stocks the seed pins for user1, so every run starts with the Destacados
+  // section on screen. A pinned product renders twice (Destacados + its
+  // group) — locate it with `.first()` or scope it to a section.
+  pinnedForUser1: ['metformin', 'hidroferol', 'pumpCannulas'],
+  // `STOCK_MAX_PINNED_ITEMS` default in backend/nudge/settings.py.
+  maxPinnedItems: 4,
   lots: {
     // Hidroferol — multi-lot (2 with a lot number + 1 without). HID-A is the FEFO front.
     HIDROFEROL_NEAR: 'HID-A',

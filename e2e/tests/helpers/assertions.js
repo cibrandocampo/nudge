@@ -1,24 +1,38 @@
 import { expect } from '@playwright/test'
+import { SEED } from './constants.js'
 import { historyEntry, routineCard, stockCard } from './locators.js'
 import { goToInventory, goToSettings, goToStockDetail } from './navigation.js'
 
 /**
  * Assert the visual state of a routine on the Dashboard.
  * @param {'due'|'upcoming'|'blocked'} state
- *   - 'due'      : Done button visible and enabled.
- *   - 'upcoming' : Done button NOT visible (the card is a plain Link).
- *   - 'blocked'  : Done button visible but disabled (stock-depleted).
+ *   - 'due'      : in the Today section, check enabled.
+ *   - 'upcoming' : in the Upcoming section, check enabled (T102: upcoming
+ *                  routines can be completed early too).
+ *   - 'blocked'  : check visible but disabled (stock-depleted), either section.
+ *
+ * The check is the button on the card's action layer ("Mark as done"); the
+ * `Done` name matches it as a case-insensitive substring.
  */
 export async function expectRoutineState(page, routineKey, state) {
   const card = routineCard(page, routineKey)
   const done = card.getByRole('button', { name: 'Done' })
+  const inSection = (heading) =>
+    page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: heading }) })
+      .getByTestId('routine-card')
+      .filter({ hasText: SEED.routines[routineKey] ?? routineKey })
   switch (state) {
     case 'due':
+      await expect(inSection('Today')).toBeVisible()
       await expect(done).toBeVisible()
       await expect(done).toBeEnabled()
       break
     case 'upcoming':
-      await expect(done).toHaveCount(0)
+      await expect(inSection('Upcoming')).toBeVisible()
+      await expect(done).toBeVisible()
+      await expect(done).toBeEnabled()
       break
     case 'blocked':
       await expect(done).toBeVisible()

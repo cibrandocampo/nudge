@@ -155,6 +155,116 @@ describe('routine mutation hooks — optimistic updates (T062)', () => {
     expect(qc.getQueryData(['dashboard'])).toEqual(original)
   })
 
+  it('useLogRoutine re-dates an upcoming routine in place without duplicating it or touching due', async () => {
+    server.use(http.post(`${BASE}/routines/6/log/`, () => HttpResponse.json({ id: 43 }, { status: 201 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    const due = [{ id: 5, name: 'Pills', interval_hours: 24, is_due: true }]
+    qc.setQueryData(['dashboard'], {
+      due,
+      upcoming: [{ id: 6, name: 'Yoga', interval_hours: 48, next_due_at: '2000-01-01T00:00:00.000Z' }],
+    })
+    const before = Date.now()
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 6 })
+    })
+    const dash = qc.getQueryData(['dashboard'])
+    expect(dash.due).toEqual(due)
+    expect(dash.upcoming.map((r) => r.id)).toEqual([6])
+    const moved = dash.upcoming[0]
+    const lastEntry = new Date(moved.last_entry_at).getTime()
+    expect(lastEntry).toBeGreaterThanOrEqual(before)
+    expect(new Date(moved.next_due_at).getTime()).toBe(lastEntry + 48 * 3600 * 1000)
+    expect(moved.hours_until_due).toBe(48)
+  })
+
+  it('useLogRoutine patches the routine detail cache when completing an upcoming routine', async () => {
+    server.use(http.post(`${BASE}/routines/6/log/`, () => HttpResponse.json({ id: 43 }, { status: 201 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    qc.setQueryData(['dashboard'], {
+      due: [],
+      upcoming: [{ id: 6, name: 'Yoga', interval_hours: 48, next_due_at: '2099-01-01T00:00:00.000Z' }],
+    })
+    qc.setQueryData(['routine', 6], { id: 6, name: 'Yoga', is_due: false, is_overdue: false, last_entry_at: null })
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 6, clientCreatedAt: '2026-11-04T08:00:00.000Z' })
+    })
+    expect(qc.getQueryData(['routine', 6])).toEqual({
+      id: 6,
+      name: 'Yoga',
+      is_due: false,
+      is_overdue: false,
+      last_entry_at: '2026-11-04T08:00:00.000Z',
+    })
+  })
+
+  it('useLogRoutine re-sorts upcoming after completing an upcoming routine', async () => {
+    server.use(http.post(`${BASE}/routines/6/log/`, () => HttpResponse.json({ id: 43 }, { status: 201 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    // Yoga is first now; with a week-long interval its new next-due lands
+    // after Water's, which is due in one day.
+    qc.setQueryData(['dashboard'], {
+      due: [],
+      upcoming: [
+        { id: 6, name: 'Yoga', interval_hours: 168, next_due_at: new Date(Date.now() + 3600e3).toISOString() },
+        { id: 7, name: 'Water', interval_hours: 24, next_due_at: new Date(Date.now() + 24 * 3600e3).toISOString() },
+      ],
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 6 })
+    })
+    expect(qc.getQueryData(['dashboard']).upcoming.map((r) => r.id)).toEqual([7, 6])
+  })
+
+  it('useLogRoutine bases an upcoming routine on an explicit clientCreatedAt', async () => {
+    server.use(http.post(`${BASE}/routines/6/log/`, () => HttpResponse.json({ id: 43 }, { status: 201 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    qc.setQueryData(['dashboard'], {
+      due: [],
+      upcoming: [{ id: 6, name: 'Yoga', interval_hours: 12, next_due_at: '2099-01-01T00:00:00.000Z' }],
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 6, clientCreatedAt: '2026-11-04T08:00:00.000Z' })
+    })
+    const moved = qc.getQueryData(['dashboard']).upcoming[0]
+    expect(moved.last_entry_at).toBe('2026-11-04T08:00:00.000Z')
+    expect(moved.next_due_at).toBe('2026-11-04T20:00:00.000Z')
+  })
+
+  it('useLogRoutine leaves the dashboard untouched when the routine is in neither list', async () => {
+    server.use(http.post(`${BASE}/routines/8/log/`, () => HttpResponse.json({ id: 44 }, { status: 201 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    const original = { due: [{ id: 5, name: 'Pills' }], upcoming: [{ id: 6, name: 'Yoga' }] }
+    qc.setQueryData(['dashboard'], original)
+
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 8 })
+    })
+    expect(qc.getQueryData(['dashboard'])).toBe(original)
+  })
+
+  it('useLogRoutine restores upcoming when the server rejects an upcoming completion', async () => {
+    server.use(http.post(`${BASE}/routines/6/log/`, () => new HttpResponse(null, { status: 400 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    const original = {
+      due: [],
+      upcoming: [{ id: 6, name: 'Yoga', interval_hours: 48, next_due_at: '2099-01-01T00:00:00.000Z' }],
+    }
+    qc.setQueryData(['dashboard'], original)
+
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ routineId: 6 })
+      } catch {
+        // expected
+      }
+    })
+    expect(qc.getQueryData(['dashboard'])).toEqual(original)
+  })
+
   it('useUpdateRoutine patches caches optimistically and keeps them when queued', async () => {
     server.use(mockNetworkError('patch', '/routines/5/'))
     const { result, qc } = renderMut(() => useUpdateRoutine())
@@ -289,6 +399,51 @@ describe('rollback edge cases', () => {
     expect(qc.getQueryData(['routine', 5])).toBeNull()
   })
 
+  it('logRoutine rollback from upcoming restores the previous dates and leaves due alone', async () => {
+    // T102: a discarded offline completion of an upcoming routine must not
+    // move it into due as overdue — it never was.
+    const { applyRollback } = await import('../../offline/rollbacks')
+    const previous = { next_due_at: '2099-02-01T00:00:00.000Z', last_entry_at: null, hours_until_due: 50 }
+    const qc = makeQc({
+      [JSON.stringify(['dashboard'])]: {
+        due: [{ id: 9 }],
+        upcoming: [
+          { id: 5, name: 'Pills', next_due_at: '2099-03-01T00:00:00.000Z', last_entry_at: '2026-11-04T10:00:00.000Z' },
+          { id: 7, name: 'Yoga', next_due_at: '2099-02-15T00:00:00.000Z' },
+        ],
+      },
+      [JSON.stringify(['routine', 5])]: { id: 5, next_due_at: '2099-03-01T00:00:00.000Z', last_entry_at: 'x' },
+    })
+    applyRollback(qc, 'logRoutine', { routineId: 5, from: 'upcoming', previous })
+    const dash = qc.getQueryData(['dashboard'])
+    expect(dash.due).toEqual([{ id: 9 }])
+    expect(dash.upcoming.map((r) => r.id)).toEqual([5, 7])
+    expect(dash.upcoming[0]).toMatchObject(previous)
+    expect(qc.getQueryData(['routine', 5])).toMatchObject(previous)
+  })
+
+  it('logRoutine rollback from upcoming no-ops when the routine is no longer listed', async () => {
+    const { applyRollback } = await import('../../offline/rollbacks')
+    const original = { due: [], upcoming: [{ id: 7 }] }
+    const qc = makeQc({ [JSON.stringify(['dashboard'])]: original })
+    applyRollback(qc, 'logRoutine', { routineId: 5, from: 'upcoming', previous: { next_due_at: null } })
+    expect(qc.getQueryData(['dashboard'])).toBe(original)
+    expect(qc.getQueryData(['routine', 5])).toBeUndefined()
+  })
+
+  it('logRoutine queues from and previous in the rollback args when offline', async () => {
+    server.use(mockNetworkError('post', '/routines/5/log/'))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    qc.setQueryData(['dashboard'], { due: [], upcoming: [{ id: 5, name: 'Pills', interval_hours: 24 }] })
+    const previous = { next_due_at: '2099-01-01T00:00:00.000Z', last_entry_at: null, hours_until_due: 5 }
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5, from: 'upcoming', previous })
+    })
+    const { list } = await import('../../offline/queue')
+    const [entry] = await list()
+    expect(entry.rollbackArgs).toEqual({ routineId: 5, from: 'upcoming', previous })
+  })
+
   it('logRoutine optimistic returns prev unchanged when dashboard is missing', async () => {
     server.use(mockNetworkError('post', '/routines/5/log/'))
     const { result, qc } = renderMut(() => useLogRoutine())
@@ -303,12 +458,17 @@ describe('rollback edge cases', () => {
     expect(qc.getQueryData(['dashboard'])).toBeUndefined()
   })
 
-  it('logRoutine optimistic sorts upcoming when an entry has null next_due_at', async () => {
+  it('logRoutine optimistic sorts entries without next_due_at first', async () => {
     server.use(mockNetworkError('post', '/routines/5/log/'))
     const { result, qc } = renderMut(() => useLogRoutine())
+    // Two entries without next_due_at, so the comparator meets a missing
+    // date on either side.
     qc.setQueryData(['dashboard'], {
       due: [{ id: 5, name: 'Pills', interval_hours: 12 }],
-      upcoming: [{ id: 7, name: 'Yoga' /* next_due_at omitted -> null */ }],
+      upcoming: [
+        { id: 7, name: 'Yoga' },
+        { id: 8, name: 'Water' },
+      ],
     })
     await act(async () => {
       try {
@@ -318,7 +478,25 @@ describe('rollback edge cases', () => {
       }
     })
     const dash = qc.getQueryData(['dashboard'])
-    expect(dash.upcoming.map((r) => r.id).sort()).toEqual([5, 7])
+    expect(dash.upcoming.map((r) => r.id)).toEqual([7, 8, 5])
+  })
+
+  it('logRoutine optimistic leaves a dashboard without lists unchanged', async () => {
+    server.use(mockNetworkError('post', '/routines/5/log/'))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    const empty = {}
+    qc.setQueryData(['dashboard'], empty)
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5 })
+    })
+    expect(qc.getQueryData(['dashboard'])).toBe(empty)
+  })
+
+  it('logRoutine rollback from upcoming no-ops when the dashboard cache is empty', async () => {
+    const { applyRollback } = await import('../../offline/rollbacks')
+    const qc = makeQc()
+    applyRollback(qc, 'logRoutine', { routineId: 5, from: 'upcoming', previous: { next_due_at: null } })
+    expect(qc.getQueryData(['dashboard'])).toBeUndefined()
   })
 
   it('deleteRoutine rollback falls back to invalidate when detail cache is missing', async () => {
@@ -504,11 +682,12 @@ describe('useRoutine — initialData from list caches', () => {
     expect(result.current.data?.name).toBe('From list')
   })
 
-  it('starts in pending state when no list cache contains the id', () => {
+  it('starts pending and loads from the network when no list cache contains the id', async () => {
     server.use(http.get(`${BASE}/routines/99/`, () => HttpResponse.json({ id: 99, name: 'Cold' })))
     const { result } = renderWithSeededQuery(() => useRoutine(99))
     expect(result.current.data).toBeUndefined()
     expect(result.current.isLoading).toBe(true)
+    await waitFor(() => expect(result.current.data).toEqual({ id: 99, name: 'Cold' }))
   })
 
   it('keeps the seed when the network request fails (offline simulation)', async () => {

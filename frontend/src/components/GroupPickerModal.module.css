@@ -28,9 +28,9 @@
 }
 
 .subtitle {
-  margin: -0.5rem 0 1rem;
+  margin: 0 0 1rem;
   font-size: 0.825rem;
-  color: var(--c-muted);
+  color: var(--c-text-2);
 }
 
 .list {

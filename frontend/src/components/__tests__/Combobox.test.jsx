@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -132,7 +132,7 @@ describe('Combobox', () => {
   it('ArrowDown on a closed combobox opens it without moving the highlight', async () => {
     const { user } = renderCombobox()
     const input = screen.getByRole('combobox')
-    input.focus()
+    act(() => input.focus())
     // Blur to collapse (focus opens by default; we need a "closed+focused-ish" state)
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -143,7 +143,7 @@ describe('Combobox', () => {
   it('ArrowUp on a closed combobox is a no-op', async () => {
     const { user } = renderCombobox()
     const input = screen.getByRole('combobox')
-    input.focus()
+    act(() => input.focus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     await user.keyboard('{ArrowUp}')

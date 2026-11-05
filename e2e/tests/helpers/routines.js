@@ -4,12 +4,18 @@ import { routineCard } from './locators.js'
 import { goToRoutineDetail } from './navigation.js'
 
 /**
- * Mark a routine as done from the Dashboard card.
+ * Mark a routine as done from the Dashboard card, by clicking the check on
+ * the card's action layer (T101 — the same action as swiping the card right;
+ * the swipe itself is covered by routine-swipe.spec.js).
+ *
+ * The card plays its exit animation before the completion is sent, so the
+ * helper waits for the log POST to be answered: a caller that reloads or
+ * navigates right after would otherwise abort it.
  * @param {{
  *   expectBlocked?: boolean,
  *   lotNumber?: string,
  * }} opts
- *   - `expectBlocked`: assert the Done button is disabled (stock-depleted
+ *   - `expectBlocked`: assert the check is disabled (stock-depleted
  *     routines should block completion) and skip the click.
  *   - `lotNumber`: when the routine has `requires_lot_selection=true`
  *     the UI opens a LotSelectionModal; the helper picks the lot whose
@@ -22,6 +28,9 @@ export async function markRoutineDone(page, routineKey, { expectBlocked = false,
     await expect(done).toBeDisabled()
     return
   }
+  const logged = page.waitForResponse(
+    (r) => /\/routines\/\d+\/log\/$/.test(r.url()) && r.request().method() === 'POST',
+  )
   await done.click()
 
   if (lotNumber) {
@@ -33,6 +42,37 @@ export async function markRoutineDone(page, routineKey, { expectBlocked = false,
     await dialog.getByRole('button', { name: /confirm|done/i }).click()
     await expect(dialog).toBeHidden()
   }
+  await logged
+}
+
+/**
+ * Drag a routine card horizontally with the mouse, as a finger would swipe
+ * it (T103). Pointer Events drive the card's swipe hook either way.
+ *
+ * The drag starts at the card's centre and covers `fraction` × the card's
+ * width (negative goes left), in small timed steps, then holds still briefly
+ * before releasing: the hook measures release velocity over the last ~100 ms,
+ * so the hold keeps a short drag from counting as a flick. Whether the
+ * release commits is therefore decided by the distance alone.
+ * @param {{ fraction?: number }} opts
+ */
+export async function swipeRoutineCard(page, routineKey, { fraction = 0.6 } = {}) {
+  const link = routineCard(page, routineKey).getByTestId('routine-card-link')
+  await link.scrollIntoViewIfNeeded()
+  const box = await link.boundingBox()
+  const startX = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  // Clamp the end inside the viewport so the last moves still land.
+  const endX = Math.min(startX + box.width * fraction, page.viewportSize().width - 1)
+  const STEPS = 10
+  await page.mouse.move(startX, y)
+  await page.mouse.down()
+  for (let i = 1; i <= STEPS; i++) {
+    await page.mouse.move(startX + ((endX - startX) * i) / STEPS, y)
+    await page.waitForTimeout(25)
+  }
+  await page.waitForTimeout(150)
+  await page.mouse.up()
 }
 
 /**

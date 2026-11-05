@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto'
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clear, enqueue } from '../../offline/queue'
+import { describe, expect, it } from 'vitest'
+import { enqueue } from '../../offline/queue'
+import { flushQueueReads } from '../../test/helpers'
 import SyncStatusBadge from '../SyncStatusBadge'
 
 function baseEntry(overrides = {}) {
@@ -18,16 +19,12 @@ function baseEntry(overrides = {}) {
   }
 }
 
-beforeEach(async () => {
-  await clear()
-})
-afterEach(async () => {
-  await clear()
-})
+// The global setup empties the queue before each test (src/test/setup.js).
 
 describe('SyncStatusBadge', () => {
-  it('renders nothing when no entries match the resource', () => {
+  it('renders nothing when no entries match the resource', async () => {
     const { container } = render(<SyncStatusBadge resourceKey="routine:5" />)
+    await flushQueueReads()
     expect(container.firstChild).toBeNull()
   })
 
@@ -50,7 +47,7 @@ describe('SyncStatusBadge', () => {
   it('ignores entries from other resources', async () => {
     await enqueue(baseEntry({ resourceKey: 'routine:7' }))
     const { container } = render(<SyncStatusBadge resourceKey="routine:5" />)
-    await new Promise((r) => setTimeout(r, 10))
+    await flushQueueReads()
     expect(container.firstChild).toBeNull()
   })
 

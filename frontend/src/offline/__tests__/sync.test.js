@@ -659,6 +659,26 @@ describe('offline sync worker', () => {
       expect(handlerSignal?.aborted).toBe(true)
       expect(await list()).toHaveLength(0)
     })
+
+    it('does not abort the request of an entry that succeeded', async () => {
+      // The worker removes a drained entry; that removal must not cancel the
+      // request that just succeeded (its response body is still streaming —
+      // the browser reports it as a failed, aborted request).
+      initSyncWorker(fakeQueryClient())
+      let handlerSignal = null
+      server.use(
+        http.post(`${BASE}/routines/1/log/`, ({ request }) => {
+          handlerSignal = request.signal
+          return HttpResponse.json({ id: 10 }, { status: 201 })
+        }),
+      )
+
+      await enqueue(pendingEntry())
+      await processQueue()
+
+      expect(await list()).toHaveLength(0)
+      expect(handlerSignal?.aborted).toBe(false)
+    })
   })
 
   describe('sync events', () => {

@@ -1,12 +1,13 @@
 import 'fake-indexeddb/auto'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clear, enqueue, list } from '../../offline/queue'
+import { enqueue, list } from '../../offline/queue'
 import { __resetSyncWorkerForTests, initSyncWorker } from '../../offline/sync'
 import { server } from '../../test/mocks/server'
+import { flushQueueReads } from '../../test/helpers'
 // Import the hook module so its `registerRollback('consumeStock', …)`
 // side effect populates the registry before the discard tests run.
 import '../../hooks/mutations/useConsumeStock'
@@ -44,21 +45,22 @@ function entry(overrides = {}) {
   }
 }
 
-beforeEach(async () => {
-  await clear()
+// The global setup empties the queue before each test and clears storage after
+// it (src/test/setup.js). Clearing here after a test would change the queue
+// under a still-mounted badge.
+beforeEach(() => {
   __resetSyncWorkerForTests()
   localStorage.setItem('access_token', 'test-token')
 })
 
-afterEach(async () => {
+afterEach(() => {
   __resetSyncWorkerForTests()
-  await clear()
-  localStorage.clear()
 })
 
 describe('PendingBadge', () => {
-  it('renders nothing when the queue is empty', () => {
+  it('renders nothing when the queue is empty', async () => {
     const { container } = renderBadge()
+    await flushQueueReads()
     expect(container.firstChild).toBeNull()
   })
 
@@ -105,8 +107,10 @@ describe('PendingBadge', () => {
     await user.click(screen.getByTestId('pending-badge'))
     await user.click(screen.getByRole('button', { name: /retry/i }))
     // forceSync resets error → pending and then drains; the entry should be
-    // processed and the queue empty.
+    // processed and the queue empty — so the badge goes away.
     await waitFor(() => expect(hits).toBe(1))
+    await waitFor(() => expect(screen.queryByTestId('pending-badge')).not.toBeInTheDocument())
+    expect(await list()).toEqual([])
   })
 
   it('reports the "syncing" dominant state when an entry is in flight', async () => {
@@ -120,7 +124,9 @@ describe('PendingBadge', () => {
     renderBadge()
     await waitFor(() => screen.getByTestId('pending-badge'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    window.dispatchEvent(new Event('open-pending-badge'))
+    act(() => {
+      window.dispatchEvent(new Event('open-pending-badge'))
+    })
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
   })
 

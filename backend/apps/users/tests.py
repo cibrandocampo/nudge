@@ -931,6 +931,21 @@ class TokenAuthTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("access", response.json())
 
+    def test_refresh_token_of_deleted_user_returns_401(self):
+        # simplejwt alone lets User.DoesNotExist escape as a 500.
+        refresh = self.client.post(self.url, {"username": "alice", "password": "secret"}).json()["refresh"]
+        self.user.delete()
+        response = self.client.post("/api/auth/refresh/", {"refresh": refresh})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["code"], "no_active_account")
+
+    def test_refresh_token_of_inactive_user_returns_401(self):
+        refresh = self.client.post(self.url, {"username": "alice", "password": "secret"}).json()["refresh"]
+        self.user.is_active = False
+        self.user.save()
+        response = self.client.post("/api/auth/refresh/", {"refresh": refresh})
+        self.assertEqual(response.status_code, 401)
+
 
 # ── /api/auth/me/ ────────────────────────────────────────────────────────────
 
