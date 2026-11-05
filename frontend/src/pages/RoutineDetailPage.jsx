@@ -156,8 +156,7 @@ export default function RoutineDetailPage() {
   // linked stock is empty surfaces in red even when not due yet. Mirrors
   // RoutineCard.statusTokens so dashboard and detail page stay aligned.
   const stockAvailable = routine?.stock_quantity_available ?? routine?.stock_quantity ?? 0
-  const routineStockDepleted =
-    Boolean(routine?.stock_name) && Number(stockAvailable) < Number(routine?.stock_usage ?? 1)
+  const routineStockDepleted = Boolean(routine?.stock_name) && Number(stockAvailable) < Number(routine?.stock_usage)
 
   // Recipients besides the current viewer. The owner sees every recipient;
   // a non-owner recipient sees every other recipient. Used by the

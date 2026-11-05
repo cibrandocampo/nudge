@@ -1,15 +1,27 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
 import cx from '../utils/cx'
 import { findCachedStock } from '../utils/lotsForSelection'
 import { iconClassForStock } from '../utils/stockSeverity'
+import { useSwipeAction } from '../hooks/useSwipeAction'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import s from './RoutineCard.module.css'
+
+// Exit sequence (T101): the card slides off to the right, then the row
+// collapses its height, then the completion fires. Logging first would let the
+// optimistic update yank the card out of the list mid-animation. Timers rather
+// than `transitionend`: a completion must never hang on an event the browser
+// may skip (hidden tab, interrupted transition). The CSS reads the same values.
+export const EXIT_MS = 180
+export const COLLAPSE_MS = 140
+// The "no" shake of a blocked check button.
+const NUDGE_MS = 300
 
 function statusTokens(routine, { stockDepleted } = {}) {
   // Stock depletion overrides the time-based status: even a not-yet-due routine
@@ -17,22 +29,50 @@ function statusTokens(routine, { stockDepleted } = {}) {
   // this, a routine with `next_due_at` 60 days ahead and 0 units in stock looks
   // identical to one in perfect shape — the user only finds out when they try
   // to log and the backend 422s with `insufficient_stock`.
-  if (stockDepleted) {
-    return { border: cards.cardBorderDanger, dot: cards.dotDanger, text: cards.statusOverdue }
-  }
-  if (!routine.is_due) {
-    return { border: cards.cardBorderSuccess, dot: cards.dotSuccess, text: cards.statusOk }
-  }
-  if (routine.is_overdue) {
-    return { border: cards.cardBorderDanger, dot: cards.dotDanger, text: cards.statusOverdue }
-  }
-  return { border: cards.cardBorderWarning, dot: cards.dotWarning, text: cards.statusDue }
+  if (stockDepleted) return { dot: cards.dotDanger, text: cards.statusOverdue }
+  if (!routine.is_due) return { dot: cards.dotSuccess, text: cards.statusOk }
+  if (routine.is_overdue) return { dot: cards.dotDanger, text: cards.statusOverdue }
+  return { dot: cards.dotWarning, text: cards.statusDue }
 }
 
-export default function RoutineCard({ routine, onMarkDone, completing }) {
+/**
+ * A routine on the dashboard (T101). Two stacked layers in one row:
+ *
+ * - The **action layer** behind: green (red and hatched when the stock can't
+ *   cover a completion) with the check button at its left edge.
+ * - The **card** in front, a link to the routine detail, resting shifted to
+ *   the right so the layer peeks out: a thin strip on touch, the strip plus a
+ *   clickable check with a mouse (the CSS decides by pointer type).
+ *
+ * Swiping the card right past the threshold, or clicking the check, plays the
+ * exit and then calls `onMarkDone(id, { revert })`. `revert` brings the card
+ * back to rest when the caller does not log after all (lot picker, error).
+ *
+ * The status lives in the dot and the time text; the coloured edge now means
+ * the action. Every routine gets the layer, due or upcoming (T102); a
+ * `highlighted` row flashes briefly to show where a completed one moved.
+ */
+export default function RoutineCard({ routine, onMarkDone, completing, highlighted = false }) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  // rest → leaving (card slides out) → collapsing (row closes) → onMarkDone.
+  const [phase, setPhase] = useState('rest')
+  const [nudging, setNudging] = useState(false)
+  const timersRef = useRef([])
+  // A commit whose `onMarkDone` hasn't fired yet. If the card unmounts mid
+  // exit (the user navigates away), the completion still goes through.
+  const pendingRef = useRef(null)
+  // A routine completed from Upcoming stays mounted in the same list. When its
+  // dates change (optimistic re-date, rollback, refetch) the collapsed card
+  // comes back at rest in its new place. Adjusted during render, the React
+  // pattern for state derived from a changing prop.
+  const datesKey = `${routine.next_due_at}|${routine.last_entry_at}`
+  const [seenDates, setSeenDates] = useState(datesKey)
+  if (seenDates !== datesKey) {
+    setSeenDates(datesKey)
+    setPhase('rest')
+  }
+
   const timeLabel = routine.next_due_at
     ? formatRelativeTime(routine.next_due_at)
     : `${t('card.since')} ${formatAbsoluteDate(routine.created_at)}`
@@ -49,7 +89,7 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   const isOwnerOfShare = routine.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
     ? t('sharing.sharedBadgeOwnerAria')
-    : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name ?? '' })
+    : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name })
   const sharedBadge = isShared && (
     <span
       className={cx(buttons.btnIcon, isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient)}
@@ -63,34 +103,85 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
   )
 
   // Block completion when the routine consumes a stock with no inventory
-  // — pain_relief (ibuprofen 0u) is the canonical seed case. Keeping the
-  // button visible (just disabled) lets the user see the reason via the
-  // tooltip instead of silently hiding the affordance.
+  // — pain_relief (ibuprofen 0u) is the canonical seed case. The layer turns
+  // red and the check stays reachable (aria-disabled, not disabled) so its
+  // tooltip explains why and a click answers with a shake.
   // T165: read `stock_quantity_available` (excludes expired lots) so a routine
-  // backed by a stock with only expired lots is correctly disabled. Falls back
+  // backed by a stock with only expired lots is correctly blocked. Falls back
   // to `stock_quantity` for cached snapshots from the pre-T163 API contract;
   // the fallback becomes dead code once caches refresh.
   const stockAvailable = routine.stock_quantity_available ?? routine.stock_quantity ?? 0
-  const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage ?? 1)
+  const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage)
   const tokens = statusTokens(routine, { stockDepleted })
-  const doneDisabled = completing || stockDepleted
-  const doneTitle = stockDepleted ? t('card.noStockAvailable') : undefined
+  const idle = phase === 'rest' && !completing
 
-  const doneButton = routine.is_due && (
-    <button
-      type="button"
-      className={cx(buttons.btnIcon, buttons.btnIconDone, doneDisabled && buttons.disabled)}
-      onClick={(e) => {
-        e.stopPropagation()
-        onMarkDone(routine.id)
-      }}
-      disabled={doneDisabled}
-      aria-label={t('card.done')}
-      title={doneTitle}
-    >
-      {completing ? '…' : <Icon name="check" size="sm" />}
-    </button>
+  const commit = () => {
+    pendingRef.current = () => onMarkDone(routine.id, { revert })
+    // The leaving card is positioned by CSS from here on; dropping the drag
+    // offset now means a card that comes back (revert, re-dated) is at rest.
+    swipe.reset()
+    if (swipe.reducedMotion) {
+      // No exit to watch: hide the row and log straight away.
+      setPhase('collapsing')
+      fire()
+      return
+    }
+    setPhase('leaving')
+    timersRef.current.push(
+      setTimeout(() => {
+        setPhase('collapsing')
+        timersRef.current.push(setTimeout(fire, COLLAPSE_MS))
+      }, EXIT_MS),
+    )
+  }
+
+  const swipe = useSwipeAction({ enabled: idle, blocked: stockDepleted, onCommit: commit })
+
+  function fire() {
+    const pending = pendingRef.current
+    pendingRef.current = null
+    pending?.()
+  }
+
+  function clearTimers() {
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current = []
+  }
+
+  function revert() {
+    clearTimers()
+    pendingRef.current = null
+    setPhase('rest')
+    swipe.reset()
+  }
+
+  useEffect(
+    () => () => {
+      timersRef.current.forEach(clearTimeout)
+      const pending = pendingRef.current
+      pendingRef.current = null
+      pending?.()
+    },
+    [],
   )
+
+  // A short buzz when crossing the threshold, where supported (Android).
+  // Only on arming: disarming stays silent.
+  const wasArmedRef = useRef(false)
+  useEffect(() => {
+    if (swipe.armed && !wasArmedRef.current) navigator.vibrate?.(10)
+    wasArmedRef.current = swipe.armed
+  }, [swipe.armed])
+
+  const onCheckClick = () => {
+    if (!idle) return
+    if (stockDepleted) {
+      setNudging(true)
+      timersRef.current.push(setTimeout(() => setNudging(false), NUDGE_MS))
+      return
+    }
+    commit()
+  }
 
   const chevronButton = (
     <span className={cx(buttons.btnIcon, buttons.btnIconAction)} aria-hidden="true">
@@ -114,31 +205,72 @@ export default function RoutineCard({ routine, onMarkDone, completing }) {
         {routine.stock_name && (
           <span className={cards.cardStockBadge}>
             <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
-            {routine.stock_usage ?? 1} × {routine.stock_name}
+            {routine.stock_usage} × {routine.stock_name}
           </span>
         )}
       </div>
       <div className={cards.cardActions}>
         {sharedBadge}
-        {doneButton}
         {chevronButton}
       </div>
     </div>
   )
 
-  const cardClass = cx(cards.card, cards.cardClickable, tokens.border)
+  const link = (
+    <Link
+      to={`/routines/${routine.id}`}
+      className={cx(cards.card, cards.cardClickable, s.card, nudging && s.nudging)}
+      draggable={false}
+      data-testid="routine-card-link"
+      {...swipe.handlers}
+    >
+      {body}
+    </Link>
+  )
 
-  if (!routine.is_due) {
-    return (
-      <Link to={`/routines/${routine.id}`} className={cx(cardClass, s.cardLink)} data-testid="routine-card">
-        {body}
-      </Link>
-    )
-  }
+  let layerState = 'idle'
+  if (stockDepleted) layerState = 'blocked'
+  else if (swipe.armed || phase !== 'rest') layerState = 'armed'
 
   return (
-    <div className={cardClass} onClick={() => navigate(`/routines/${routine.id}`)} data-testid="routine-card">
-      {body}
+    <div
+      className={cx(s.row, highlighted && s.highlighted)}
+      data-testid="routine-card"
+      data-phase={phase}
+      data-highlighted={highlighted ? 'true' : undefined}
+      data-dragging={swipe.dragging}
+      style={{
+        '--drag': `${swipe.offset}px`,
+        '--progress': swipe.progress,
+        '--exit-ms': `${EXIT_MS}ms`,
+        '--collapse-ms': `${COLLAPSE_MS}ms`,
+        '--nudge-ms': `${NUDGE_MS}ms`,
+      }}
+    >
+      <div className={s.clip}>
+        <div className={s.actionLayer} data-state={layerState} data-testid="routine-action-layer">
+          <button
+            type="button"
+            className={s.check}
+            onClick={onCheckClick}
+            aria-label={t('card.markDone')}
+            aria-disabled={!idle || stockDepleted ? 'true' : undefined}
+            title={stockDepleted ? t('card.noStockAvailable') : undefined}
+          >
+            {stockDepleted ? (
+              <Icon name="x" />
+            ) : (
+              <svg className={cx('icon', s.checkIcon)} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <polyline points="20 6 9 17 4 12" pathLength="1" />
+              </svg>
+            )}
+          </button>
+          <span className={s.actionLabel} aria-hidden="true">
+            {stockDepleted ? t('card.noStockAvailable') : t('card.swipeDone')}
+          </span>
+        </div>
+        {link}
+      </div>
     </div>
   )
 }

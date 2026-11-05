@@ -35,6 +35,7 @@ const FUNCTION_EXPORTS = [
   'historyEntry',
   // Routine actions
   'markRoutineDone',
+  'swipeRoutineCard',
   'createRoutine',
   'renameRoutine',
   'deleteRoutine',

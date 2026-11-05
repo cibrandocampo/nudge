@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +21,10 @@ import buttons from '../styles/buttons.module.css'
 import layout from '../styles/layout.module.css'
 import s from './DashboardPage.module.css'
 
+// How long a just-completed routine stays highlighted in its new place. The
+// card's flash animation lasts the same (`--highlight-ms`).
+export const HIGHLIGHT_MS = 1200
+
 export default function DashboardPage() {
   const { t } = useTranslation()
   const { showToast } = useToast()
@@ -40,6 +44,13 @@ export default function DashboardPage() {
 
   const [completing, setCompleting] = useState(null)
   const [lotModal, setLotModal] = useState(null)
+  const [highlightId, setHighlightId] = useState(null)
+
+  useEffect(() => {
+    if (highlightId == null) return undefined
+    const timer = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlightId])
 
   const logMutation = useLogRoutine()
   const undoLogMutation = useUndoLogRoutine()
@@ -48,14 +59,28 @@ export default function DashboardPage() {
   const upcomingList = data?.upcoming ?? []
   const allRoutines = [...dueList, ...upcomingList]
 
-  const runLog = async (routineId, lotSelections) => {
+  const runLog = async (routineId, { lotSelections, revert } = {}) => {
     setCompleting(routineId)
+    // Where the routine was found decides how a discarded offline entry is
+    // undone: an upcoming one gets its previous dates back (useLogRoutine).
+    const upcomingRoutine = upcomingList.find((r) => r.id === routineId)
+    const from = upcomingRoutine ? 'upcoming' : 'due'
+    const previous = upcomingRoutine && {
+      next_due_at: upcomingRoutine.next_due_at,
+      last_entry_at: upcomingRoutine.last_entry_at ?? null,
+      hours_until_due: upcomingRoutine.hours_until_due,
+    }
+    // The optimistic update moves the routine into Upcoming right away:
+    // highlight it there so it does not look deleted.
+    setHighlightId(routineId)
     try {
       const routineName = allRoutines.find((r) => r.id === routineId)?.name
-      const result = await logMutation.mutateAsync({ routineId, routineName, lotSelections })
-      // `result.__queued` means the mutation was enqueued offline (no
-      // entry id yet). Skip the Undo toast in that case — the user can
-      // still discard the queued entry from the PendingBadge panel.
+      const result = await logMutation.mutateAsync({ routineId, routineName, lotSelections, from, previous })
+      if (result?.__queued) {
+        // No server entry yet, so no Undo: the queued entry can still be
+        // discarded from the PendingBadge panel.
+        showToast({ type: 'info', message: t('card.markedDoneQueued') })
+      }
       if (result && result.id) {
         const entryId = result.id
         showToast({
@@ -71,15 +96,22 @@ export default function DashboardPage() {
         })
       }
     } catch (err) {
+      // The optimistic move is rolled back by the mutation; the card that
+      // played its exit comes back to rest.
+      setHighlightId(null)
+      revert?.()
       showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       setCompleting(null)
     }
   }
 
-  const markDone = async (routineId) => {
+  const markDone = async (routineId, { revert } = {}) => {
     const routine = allRoutines.find((r) => r.id === routineId)
     if (routine?.requires_lot_selection) {
+      // The card already played its exit; nothing is logged until the user
+      // picks lots, so bring it back while the picker is open.
+      revert?.()
       // Derive the selection list from the already-cached stock. Works
       // offline as long as the stock has been fetched at least once (the
       // `useStockList()` warm above seeds it on dashboard mount).
@@ -92,13 +124,13 @@ export default function DashboardPage() {
       setLotModal({ routine, lots })
       return
     }
-    await runLog(routineId)
+    await runLog(routineId, { revert })
   }
 
   const handleLotConfirm = async (lotSelections) => {
     const routineId = lotModal.routine.id
     setLotModal(null)
-    await runLog(routineId, lotSelections)
+    await runLog(routineId, { lotSelections })
   }
 
   // Render the persisted snapshot even when a refetch fails or while a
@@ -134,6 +166,7 @@ export default function DashboardPage() {
         routines={dueList}
         onMarkDone={markDone}
         completing={completing}
+        highlightId={highlightId}
         empty={
           allRoutinesData.length === 0 ? (
             <EmptyCard title={t('dashboard.noRoutinesTitle')} message={t('dashboard.noRoutinesBody')} />
@@ -142,7 +175,13 @@ export default function DashboardPage() {
           )
         }
       />
-      <Section title={t('dashboard.upcoming')} routines={upcomingList} onMarkDone={markDone} completing={completing} />
+      <Section
+        title={t('dashboard.upcoming')}
+        routines={upcomingList}
+        onMarkDone={markDone}
+        completing={completing}
+        highlightId={highlightId}
+      />
       {lotModal && (
         <LotConsumeModal
           groups={lotModal.lots}
@@ -155,7 +194,7 @@ export default function DashboardPage() {
   )
 }
 
-function Section({ title, routines, onMarkDone, completing, empty }) {
+function Section({ title, routines, onMarkDone, completing, highlightId, empty }) {
   return (
     <section className={s.section}>
       <h2 className={layout.sectionTitle}>{title}</h2>
@@ -164,7 +203,13 @@ function Section({ title, routines, onMarkDone, completing, empty }) {
         : routines.length > 0 && (
             <div className={s.list}>
               {routines.map((r) => (
-                <RoutineCard key={r.id} routine={r} onMarkDone={onMarkDone} completing={completing === r.id} />
+                <RoutineCard
+                  key={r.id}
+                  routine={r}
+                  onMarkDone={onMarkDone}
+                  completing={completing === r.id}
+                  highlighted={highlightId === r.id}
+                />
               ))}
             </div>
           )}

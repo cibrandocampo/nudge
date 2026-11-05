@@ -1,11 +1,11 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { vi } from 'vitest'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import { clear, list } from '../../offline/queue'
-import DashboardPage from '../DashboardPage'
+import DashboardPage, { HIGHLIGHT_MS } from '../DashboardPage'
 
 const reachableRef = { current: true }
 vi.mock('../../hooks/useServerReachable', () => ({
@@ -70,6 +70,19 @@ describe('DashboardPage', () => {
       expect(btn).toHaveAttribute('aria-disabled', 'true')
       expect(btn).toHaveAttribute('title', 'This section is not available offline.')
       expect(screen.queryByRole('link', { name: '+ New routine' })).not.toBeInTheDocument()
+    } finally {
+      reachableRef.current = true
+    }
+  })
+
+  it('explains with a toast that the new-routine page is unavailable when clicked offline', async () => {
+    reachableRef.current = false
+    try {
+      const { user } = renderWithProviders(<DashboardPage />)
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Routines' })).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: '+ New routine' }))
+      // The button's title carries the same sentence; only the toast renders it as text.
+      expect(await screen.findByText('This section is not available offline.')).toBeInTheDocument()
     } finally {
       reachableRef.current = true
     }
@@ -479,5 +492,235 @@ describe('DashboardPage', () => {
     const badge = screen.getByTestId('shared-badge')
     expect(badge.getAttribute('data-variant')).toBe('recipient')
     expect(badge.getAttribute('aria-label')).toContain('alice')
+  })
+})
+
+// ── Completing from the dashboard (T102) ───────────────────────────────────
+// The check on the card's action layer (same action as the swipe) plays the
+// exit, then logs. Due and upcoming routines both complete.
+
+describe('DashboardPage — completing routines', () => {
+  const hour = 3600 * 1000
+  const upcomingRoutine = {
+    id: 2,
+    name: 'Water filter',
+    next_due_at: new Date(Date.now() + 5 * hour).toISOString(),
+    last_entry_at: null,
+    created_at: '2025-01-01T00:00:00Z',
+    is_due: false,
+    is_overdue: false,
+    hours_until_due: 5,
+    interval_hours: 48,
+    stock_name: null,
+    stock_quantity: null,
+  }
+  const dueRoutine = {
+    id: 1,
+    name: 'Vitamins',
+    next_due_at: new Date(Date.now() - hour).toISOString(),
+    created_at: '2025-01-01T00:00:00Z',
+    is_due: true,
+    is_overdue: true,
+    hours_until_due: -1,
+    interval_hours: 24,
+    stock_name: null,
+    stock_quantity: null,
+  }
+  const lotRoutine = {
+    ...dueRoutine,
+    stock_name: 'Filters',
+    stock_quantity: 5,
+    stock: 10,
+    stock_usage: 1,
+    requires_lot_selection: true,
+  }
+
+  // What the server returns once a routine has been logged.
+  const redated = (routine) => ({
+    ...routine,
+    is_due: false,
+    is_overdue: false,
+    last_entry_at: new Date().toISOString(),
+    next_due_at: new Date(Date.now() + routine.interval_hours * hour).toISOString(),
+    hours_until_due: routine.interval_hours,
+  })
+  const section = (title) => screen.getByRole('heading', { name: title }).closest('section')
+  const cardIn = (title, name) => within(section(title)).getByText(name).closest('[data-testid="routine-card"]')
+  const checkOf = (card) => within(card).getByRole('button', { name: 'Mark as done' })
+
+  // The page keeps fetching (routines, stock) after a test's last assertion;
+  // let every request settle inside `waitFor` so no update lands after the
+  // test ended ("not wrapped in act"). Notifications are synchronous in tests
+  // (src/test/setup.js).
+  let activeClient
+  const renderDashboard = () => {
+    const view = renderWithProviders(<DashboardPage />)
+    activeClient = view.queryClient
+    return view
+  }
+
+  afterEach(async () => {
+    await waitFor(() => expect(activeClient.isFetching() + activeClient.isMutating()).toBe(0))
+    await clear()
+  })
+
+  it('completes an upcoming routine, which stays in Upcoming with its new date', async () => {
+    let logged = false
+    server.use(
+      // After the log the server answers with the re-dated routine, as the
+      // backend does; the refetch triggered by onSuccess must not undo it.
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json({ due: [], upcoming: [logged ? redated(upcomingRoutine) : upcomingRoutine] }),
+      ),
+      http.post(`${BASE}/routines/2/log/`, () => {
+        logged = true
+        return HttpResponse.json({ id: 77 }, { status: 201 })
+      }),
+    )
+    const { user, queryClient } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Water filter')).toBeInTheDocument())
+
+    await user.click(checkOf(cardIn('Upcoming', 'Water filter')))
+
+    await waitFor(() => expect(logged).toBe(true))
+    const moved = queryClient.getQueryData(['dashboard']).upcoming.find((r) => r.id === 2)
+    expect(new Date(moved.next_due_at).getTime()).toBeGreaterThan(Date.now() + 47 * hour)
+    // The card that played its exit is back at rest in its new place.
+    expect(cardIn('Upcoming', 'Water filter')).toHaveAttribute('data-phase', 'rest')
+  })
+
+  it('shows the Marked as done toast with Undo when the completion is saved online', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({ id: 77 }, { status: 201 })),
+    )
+    const { user } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(checkOf(cardIn('Today', 'Vitamins')))
+
+    const toast = await screen.findByText('Marked as done')
+    expect(within(toast.closest('[role="status"]')).getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+  })
+
+  it('Undo on the Marked as done toast deletes the entry and brings the routine back to Today', async () => {
+    let logged = false
+    const deleted = []
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json(logged ? { due: [], upcoming: [redated(dueRoutine)] } : { due: [dueRoutine], upcoming: [] }),
+      ),
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logged = true
+        return HttpResponse.json({ id: 77 }, { status: 201 })
+      }),
+      http.delete(`${BASE}/entries/:id/`, ({ params }) => {
+        deleted.push(params.id)
+        logged = false
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { user } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+    await user.click(checkOf(cardIn('Today', 'Vitamins')))
+    await waitFor(() => expect(cardIn('Upcoming', 'Vitamins')).toBeInTheDocument())
+
+    const toast = await screen.findByText('Marked as done')
+    await user.click(within(toast.closest('[role="status"]')).getByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(cardIn('Today', 'Vitamins')).toBeInTheDocument())
+    expect(deleted).toEqual(['77'])
+  })
+
+  it('shows the offline toast without Undo when the completion is queued', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [dueRoutine], upcoming: [] })),
+      mockNetworkError('post', '/routines/1/log/'),
+    )
+    const { user } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(checkOf(cardIn('Today', 'Vitamins')))
+
+    const toast = await screen.findByText("Done — will be saved when you're back online")
+    expect(within(toast.closest('[role="status"]')).queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Marked as done')).not.toBeInTheDocument()
+    // The queued entry reaches the card as its pending-sync badge (read from
+    // IndexedDB asynchronously, so it is awaited before the test ends).
+    expect(await screen.findByTestId('sync-status-badge')).toHaveAttribute('data-state', 'pending')
+  })
+
+  it('brings a lot-selection card back to rest and logs nothing until the picker confirms', async () => {
+    let logCalled = false
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [lotRoutine], upcoming: [] })),
+      stockListHandler,
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logCalled = true
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user, queryClient } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+    await waitFor(() => expect(queryClient.getQueryData(['stock'])).toBeTruthy())
+
+    await user.click(checkOf(cardIn('Today', 'Vitamins')))
+
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+    expect(cardIn('Today', 'Vitamins')).toHaveAttribute('data-phase', 'rest')
+    expect(logCalled).toBe(false)
+  })
+
+  it('shows the error and brings the card back to rest when the server rejects', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [upcomingRoutine] })),
+      http.post(`${BASE}/routines/2/log/`, () => new HttpResponse(null, { status: 500 })),
+    )
+    const { user } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Water filter')).toBeInTheDocument())
+
+    await user.click(checkOf(cardIn('Upcoming', 'Water filter')))
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    expect(cardIn('Upcoming', 'Water filter')).toHaveAttribute('data-phase', 'rest')
+  })
+
+  it('highlights the completed routine in Upcoming and then clears the highlight', async () => {
+    let logged = false
+    server.use(
+      http.get(`${BASE}/dashboard/`, () =>
+        HttpResponse.json(logged ? { due: [], upcoming: [redated(dueRoutine)] } : { due: [dueRoutine], upcoming: [] }),
+      ),
+      http.post(`${BASE}/routines/1/log/`, () => {
+        logged = true
+        return HttpResponse.json({ id: 77 }, { status: 201 })
+      }),
+    )
+    const { user } = renderDashboard()
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+
+    await user.click(checkOf(cardIn('Today', 'Vitamins')))
+
+    await waitFor(() => expect(cardIn('Upcoming', 'Vitamins')).toHaveAttribute('data-highlighted', 'true'))
+    await waitFor(() => expect(cardIn('Upcoming', 'Vitamins')).not.toHaveAttribute('data-highlighted'), {
+      timeout: HIGHLIGHT_MS + 1000,
+    })
+  })
+
+  it('blocks a stock-depleted upcoming routine', async () => {
+    const blocked = {
+      ...upcomingRoutine,
+      stock_name: 'Ibuprofen',
+      stock_quantity: 0,
+      stock_quantity_available: 0,
+      stock_usage: 1,
+    }
+    server.use(http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [blocked] })))
+    renderDashboard()
+    await waitFor(() => expect(screen.getByText('Water filter')).toBeInTheDocument())
+
+    const check = checkOf(cardIn('Upcoming', 'Water filter'))
+    expect(check).toHaveAttribute('aria-disabled', 'true')
+    expect(check).toHaveAttribute('title', 'No stock available')
   })
 })

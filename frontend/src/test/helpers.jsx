@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../components/Toast'
 import { AppVersionProvider } from '../contexts/AppVersionContext'
 import { AuthContext } from '../contexts/AuthContext'
+import { list } from '../offline/queue'
 
 const defaultAuth = {
   user: {
@@ -62,6 +63,22 @@ export function renderWithProviders(ui, options = {}) {
     authValue,
     queryClient: qc,
   }
+}
+
+/**
+ * Let every offline-queue read already in flight land inside `act`.
+ *
+ * Components reading the queue (`useQueueEntries`) load it from IndexedDB
+ * after mounting and again on every queue change. `fake-indexeddb` serves
+ * requests in order, so awaiting one more read inside `act` lets the earlier
+ * ones resolve — and their state updates apply — within it. Use it before
+ * asserting on what such a component shows once the queue is known, and
+ * before a test ends right after changing the queue.
+ */
+export async function flushQueueReads() {
+  await act(async () => {
+    await list()
+  })
 }
 
 export { default as userEvent } from '@testing-library/user-event'

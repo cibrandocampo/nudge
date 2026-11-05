@@ -3,17 +3,39 @@ import { registerRollback } from '../../offline/rollbacks'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
 
+// Upcoming is ordered by next due date; a routine without one sorts first.
+const byNextDue = (a, b) => (a.next_due_at ?? '').localeCompare(b.next_due_at ?? '')
+
 /**
- * T114 — Inverse of the optimistic move (T112). If the routine sits in
- * `dashboard.upcoming` because of the optimistic, take it out and put
- * it back into `due` with `is_due: true`. If it isn't there (the
- * optimistic returned prev unchanged because the cache wasn't loaded
- * when the user clicked Done), no-op. Composable: discarding any one
- * of N queued logs of the same routine moves it back to `due` exactly
- * once; subsequent discards find the routine already there and no-op.
+ * T114 — Inverse of the optimistic move (T112), run when a queued offline
+ * log is discarded. Two shapes, picked by where the caller found the routine:
+ *
+ * - From `due` (or an entry queued before T102, which carries no `from`): if
+ *   the routine sits in `dashboard.upcoming` because of the optimistic, take
+ *   it out and put it back into `due` with `is_due: true`. If it isn't there
+ *   (the optimistic returned prev unchanged because the cache wasn't loaded
+ *   when the user clicked Done), no-op. Composable: discarding any one of N
+ *   queued logs of the same routine moves it back to `due` exactly once;
+ *   subsequent discards find the routine already there and no-op.
+ * - From `upcoming` (T102): the routine never left that list, so it stays
+ *   there with its `previous` dates restored and `due` untouched.
  */
-registerRollback('logRoutine', (qc, { routineId }) => {
+registerRollback('logRoutine', (qc, { routineId, from, previous }) => {
   const id = Number(routineId)
+  if (from === 'upcoming' && previous) {
+    // T102: completed from Upcoming, so it never left that list. Put its
+    // previous dates back and re-sort; `due` is untouched.
+    qc.setQueryData(['dashboard'], (prev) => {
+      const upcoming = prev?.upcoming ?? []
+      if (!upcoming.some((r) => r.id === id)) return prev
+      return {
+        ...prev,
+        upcoming: upcoming.map((r) => (r.id === id ? { ...r, ...previous } : r)).sort(byNextDue),
+      }
+    })
+    qc.setQueryData(['routine', id], (prev) => (prev ? { ...prev, ...previous } : prev))
+    return
+  }
   qc.setQueryData(['dashboard'], (prev) => {
     if (!prev) return prev
     const upcoming = prev.upcoming ?? []
@@ -45,7 +67,8 @@ registerRollback('logRoutine', (qc, { routineId }) => {
  * server's audit timestamp regardless.
  *
  * Optimistic (T112): moves the routine from `dashboard.due` to
- * `dashboard.upcoming` with `next_due_at = now + interval_hours h`,
+ * `dashboard.upcoming` (or, since T099, re-dates it in place when it was
+ * already upcoming) with `next_due_at = now + interval_hours h`,
  * keeping `upcoming` sorted ascending by `next_due_at`. Online the
  * `onSuccess` invalidate triggers a refetch that replaces the local
  * approximation with the canonical backend value. Offline the
@@ -63,7 +86,10 @@ export function useLogRoutine() {
       key: 'offline.label.logRoutine',
       args: { name: routineName ?? '?' },
     }),
-    rollback: ({ routineId }) => ({ type: 'logRoutine', args: { routineId } }),
+    // `from` / `previous` (T102): where the caller found the routine and, for
+    // an upcoming one, the dates to restore if the queued entry is discarded.
+    // Entries queued before T102 carry neither and keep the `due` behaviour.
+    rollback: ({ routineId, from, previous }) => ({ type: 'logRoutine', args: { routineId, from, previous } }),
     request: ({ routineId, notes, lotSelections, clientCreatedAt }) => ({
       method: 'POST',
       path: `/routines/${routineId}/log/`,
@@ -84,7 +110,11 @@ export function useLogRoutine() {
         if (!prev) return prev
         const due = prev.due ?? []
         const upcoming = prev.upcoming ?? []
-        const routine = due.find((r) => r.id === id)
+        // T099: a routine can be completed from either list (the dashboard
+        // swipe works on upcoming too). Both end up in `upcoming` with the
+        // new next-due; filtering both lists by id replaces rather than
+        // duplicates an upcoming one and leaves `due` untouched for it.
+        const routine = due.find((r) => r.id === id) ?? upcoming.find((r) => r.id === id)
         if (!routine) return prev
         const intervalHours = routine.interval_hours ?? 0
         const nextDueAt = new Date(now + intervalHours * 3600 * 1000).toISOString()
@@ -97,9 +127,7 @@ export function useLogRoutine() {
           hours_until_due: intervalHours,
         }
         const newDue = due.filter((r) => r.id !== id)
-        const newUpcoming = [...upcoming, moved].sort((a, b) =>
-          (a.next_due_at ?? '').localeCompare(b.next_due_at ?? ''),
-        )
+        const newUpcoming = [...upcoming.filter((r) => r.id !== id), moved].sort(byNextDue)
         return { ...prev, due: newDue, upcoming: newUpcoming }
       })
       client.setQueryData(['routine', id], (prev) => {

@@ -290,7 +290,7 @@ async function main() {
     // 12. Offline banner — force reachability=false, abort the
     //     mark-done call so useOfflineMutation enqueues, surface the
     //     pending badge. Target "Water cactus" (stock-less → no
-    //     lot modal → click Done fires useLogRoutine straight away).
+    //     lot modal → the check fires useLogRoutine after the exit).
     await page.goto(`${BASE}/`)
     await page.waitForLoadState('networkidle')
     await page.evaluate(() => {
@@ -305,10 +305,9 @@ async function main() {
     await context.route('**/api/routines/*/log/', markDoneRoute)
     const cactusTitle = page.getByText('Water cactus', { exact: true }).first()
     await cactusTitle.waitFor({ state: 'visible', timeout: 10_000 })
-    const cactusCard = cactusTitle.locator(
-      'xpath=ancestor::*[.//button[@aria-label="Done"]][1]',
-    )
-    await cactusCard.getByRole('button', { name: 'Done' }).click()
+    // The check on the card's action layer (T101), same action as a swipe.
+    const cactusCard = page.getByTestId('routine-card').filter({ hasText: 'Water cactus' }).first()
+    await cactusCard.getByRole('button', { name: 'Mark as done' }).click()
     await page.waitForSelector('[data-testid="offline-banner"]', { state: 'visible' })
     await page.waitForSelector('[data-testid="pending-badge"]', { state: 'visible' })
     await screenshot(page, 'offline-banner')
@@ -388,7 +387,7 @@ async function main() {
     await pageC.close()
 
     // 14. Lot-selection modal — Take Vitamin D has 2 lots, so clicking
-    //     Done opens the LotSelectionModal (role="dialog" aria-modal).
+    //     the check opens the LotSelectionModal (role="dialog" aria-modal).
     //     Fresh page so modal state is pristine.
     const pageL = await context.newPage()
     await login(pageL, USER_EMAIL, PASS)
@@ -396,10 +395,8 @@ async function main() {
     await pageL.waitForLoadState('networkidle')
     const vitDTitle = pageL.getByText('Take Vitamin D', { exact: true }).first()
     await vitDTitle.waitFor({ state: 'visible', timeout: 10_000 })
-    const vitDCard = vitDTitle.locator(
-      'xpath=ancestor::*[.//button[@aria-label="Done"]][1]',
-    )
-    await vitDCard.getByRole('button', { name: 'Done' }).click()
+    const vitDCard = pageL.getByTestId('routine-card').filter({ hasText: 'Take Vitamin D' }).first()
+    await vitDCard.getByRole('button', { name: 'Mark as done' }).click()
     const modal = pageL.getByRole('dialog')
     await modal.waitFor({ state: 'visible', timeout: 5_000 })
     await pageL.waitForTimeout(300)

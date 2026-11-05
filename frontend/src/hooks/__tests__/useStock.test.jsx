@@ -477,12 +477,13 @@ describe('useStock — initialData from the list cache', () => {
     await waitFor(() => expect(result.current.data?.name).toBe('Filters (fresh)'))
   })
 
-  it('starts in pending state when no list cache contains the id', () => {
+  it('starts pending and loads from the network when no list cache contains the id', async () => {
     const qc = makeClient()
     server.use(http.get(`${BASE}/stock/99/`, () => HttpResponse.json({ id: 99, name: 'Cold' })))
     const { result } = renderWith(() => useStock(99), qc)
     expect(result.current.data).toBeUndefined()
     expect(result.current.isLoading).toBe(true)
+    await waitFor(() => expect(result.current.data).toEqual({ id: 99, name: 'Cold' }))
   })
 
   it('keeps the seed when the network request fails (offline simulation)', async () => {

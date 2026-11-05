@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
 import IntervalPicker from '../IntervalPicker'
@@ -46,7 +46,7 @@ describe('IntervalPicker', () => {
     const input = screen.getByDisplayValue('1')
     await user.clear(input)
     await user.type(input, '7')
-    input.blur()
+    act(() => input.blur())
     expect(onChange).toHaveBeenCalledWith(7 * 24)
   })
 
@@ -57,7 +57,7 @@ describe('IntervalPicker', () => {
     const input = screen.getByDisplayValue('1')
     await user.clear(input)
     await user.type(input, '999')
-    input.blur()
+    act(() => input.blur())
     expect(onChange).toHaveBeenCalledWith(730 * 24)
   })
 
@@ -68,7 +68,7 @@ describe('IntervalPicker', () => {
     await user.clear(input)
     // Only digits reach state; typing "abc" is filtered out to empty.
     await user.type(input, 'abc')
-    input.blur()
+    act(() => input.blur())
     expect(onChange).toHaveBeenCalledWith(24)
   })
 
@@ -84,11 +84,11 @@ describe('IntervalPicker', () => {
     await user.click(input)
     // Focus sets draft='' → blur with draft='' clamps to 1; value is 2, so emit runs once.
     // Re-focus and blur with the same digits typed as current value → no emit.
-    input.blur()
+    act(() => input.blur())
     onChange.mockClear()
     await user.click(input)
     await user.type(input, '1') // draft='1', current value was clamped to 1
-    input.blur()
+    act(() => input.blur())
     expect(onChange).not.toHaveBeenCalled()
   })
 
