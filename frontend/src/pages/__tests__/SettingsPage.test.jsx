@@ -1,6 +1,8 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
+import { enqueue } from '../../offline/queue'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import SettingsPage from '../SettingsPage'
@@ -941,6 +943,22 @@ describe('SettingsPage', () => {
       expect(screen.getByTestId('quiet-hours-end')).not.toBeDisabled()
     })
 
+    it('saves a new start time', async () => {
+      const patches = []
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patches.push(await request.json())
+          return HttpResponse.json({})
+        }),
+      )
+      renderWithProviders(<SettingsPage />, { auth: { user: userWithQuietHours } })
+      const start = await screen.findByTestId('quiet-hours-start')
+
+      fireEvent.change(start, { target: { value: '23:00' } })
+
+      await waitFor(() => expect(patches).toEqual([{ quiet_hours_start: '23:00' }]))
+    })
+
     it('auto-disables the toggle when start equals end', async () => {
       const patches = []
       server.use(
@@ -999,6 +1017,97 @@ describe('SettingsPage', () => {
       await waitFor(() => expect(patchedBody).not.toBeNull(), { timeout: 2000 })
       expect(patchedBody).toEqual({ daily_notification_time: '06:00' })
       expect(screen.queryByTestId('quiet-hours-overlap-error')).not.toBeInTheDocument()
+    })
+  })
+
+  it('the key button in Profile opens the change-password modal, and Cancel closes it', async () => {
+    const { user } = renderWithProviders(<SettingsPage />)
+    await user.click(await screen.findByRole('button', { name: 'Change password' }))
+    const dialog = await screen.findByRole('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  describe('Sign out (T104)', () => {
+    // The global setup empties the offline queue before each test.
+    const queueEntry = (id) => ({
+      id,
+      method: 'POST',
+      endpoint: '/routines/5/log/',
+      body: {},
+      resourceKey: 'routine:5',
+      createdAt: '2026-11-05T08:00:00Z',
+      status: 'pending',
+    })
+
+    function renderSettings(logout = vi.fn().mockResolvedValue(undefined)) {
+      const view = renderWithProviders(
+        <Routes>
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/login" element={<p>Login page</p>} />
+        </Routes>,
+        { initialEntries: ['/settings'], auth: { logout } },
+      )
+      return { ...view, logout }
+    }
+
+    it('is the last button on the page', async () => {
+      renderSettings()
+      await screen.findByText('Settings')
+      expect(screen.getAllByRole('button').at(-1)).toHaveAccessibleName('Sign out')
+    })
+
+    it('with nothing queued, signs out and goes to /login without asking', async () => {
+      const { user, logout } = renderSettings()
+      await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+      expect(await screen.findByText('Login page')).toBeInTheDocument()
+      expect(logout).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('with queued changes, asks first and says how many', async () => {
+      await enqueue(queueEntry('k-1'))
+      await enqueue(queueEntry('k-2'))
+      const { user, logout } = renderSettings()
+      await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+      const dialog = await screen.findByRole('dialog')
+      expect(dialog).toHaveTextContent("You have 2 changes that haven't synced. If you sign out, they will be lost.")
+      expect(logout).not.toHaveBeenCalled()
+    })
+
+    it('uses the singular for one queued change', async () => {
+      await enqueue(queueEntry('k-1'))
+      const { user } = renderSettings()
+      await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+      expect(await screen.findByRole('dialog')).toHaveTextContent(
+        "You have 1 change that hasn't synced. If you sign out, it will be lost.",
+      )
+    })
+
+    it('Cancel keeps the session and the page', async () => {
+      await enqueue(queueEntry('k-1'))
+      const { user, logout } = renderSettings()
+      await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(logout).not.toHaveBeenCalled()
+      expect(screen.getByText('Settings')).toBeInTheDocument()
+    })
+
+    it('confirming signs out and goes to /login', async () => {
+      await enqueue(queueEntry('k-1'))
+      const { user, logout } = renderSettings()
+      await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sign out' }))
+
+      expect(await screen.findByText('Login page')).toBeInTheDocument()
+      expect(logout).toHaveBeenCalledTimes(1)
     })
   })
 })

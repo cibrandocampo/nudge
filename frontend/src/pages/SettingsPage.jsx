@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Info } from 'lucide-react'
 import { api } from '../api/client'
@@ -47,9 +47,10 @@ function isInQuietHours(time, start, end) {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation()
-  const { user } = useAuth()
+  const { user, logout, pendingChangesCount } = useAuth()
   const { showToast } = useToast()
   const { hash } = useLocation()
+  const navigate = useNavigate()
   const [flashId, setFlashId] = useState(null)
 
   // Scroll to a specific section when the URL has a hash (e.g. #push from
@@ -93,6 +94,9 @@ export default function SettingsPage() {
   // string shown in the confirmation copy (never `username`).
   const [contactToRemove, setContactToRemove] = useState(null)
   const [showPwModal, setShowPwModal] = useState(false)
+  // Number of unsynced changes a sign-out would discard; non-null while the
+  // confirmation is open.
+  const [pendingToLose, setPendingToLose] = useState(null)
 
   const updateMe = useUpdateMe()
   // Native time pickers on iOS / Android don't reliably blur the input
@@ -263,6 +267,20 @@ export default function SettingsPage() {
       showToast({ type: 'error', message })
       setContactEmailInvalid(true)
     }
+  }
+
+  // Signing out empties the offline queue, so unsynced changes would be
+  // lost: ask first, saying how many. The count is read from the queue at
+  // the moment of the tap.
+  const signOut = async () => {
+    await logout()
+    navigate('/login')
+  }
+
+  const handleSignOut = async () => {
+    const pending = await pendingChangesCount()
+    if (pending > 0) setPendingToLose(pending)
+    else await signOut()
   }
 
   const confirmRemoveContact = async () => {
@@ -485,6 +503,26 @@ export default function SettingsPage() {
 
       <InstallCard />
 
+      {/* Last on the page (T104): signing out is deliberate, and it wipes
+       * this device. Settings is locked offline, so it only runs online. */}
+      <Section>
+        <button type="button" className={cx(buttons.btn, buttons.btnDanger)} onClick={handleSignOut}>
+          <Icon name="log-out" size="sm" />
+          {t('settings.signOut')}
+        </button>
+      </Section>
+
+      {pendingToLose != null && (
+        <ConfirmModal
+          message={t('settings.signOutPendingConfirm', { count: pendingToLose })}
+          confirmLabel={t('settings.signOut')}
+          onConfirm={() => {
+            setPendingToLose(null)
+            return signOut()
+          }}
+          onCancel={() => setPendingToLose(null)}
+        />
+      )}
       {contactToRemove && (
         <ConfirmModal
           message={t('settings.confirmRemoveContact', { name: contactToRemove.name })}
@@ -638,7 +676,7 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
 function Section({ id, title, children, flash = false }) {
   return (
     <div id={id} className={cx(s.section, flash && s.flash)}>
-      <p className={layout.sectionTitle}>{title}</p>
+      {title && <p className={layout.sectionTitle}>{title}</p>}
       {children}
     </div>
   )

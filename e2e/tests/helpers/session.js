@@ -1,4 +1,5 @@
 import { SEED } from './constants.js'
+import { goToSettings } from './navigation.js'
 
 export async function login(page) {
   await loginAs(page, SEED.admin.email, SEED.admin.password)
@@ -71,14 +72,22 @@ export async function freshSession(page, context, { loginAs: who } = {}) {
 }
 
 /**
- * Sign out via the Header's direct log-out button and wait for the
- * /login redirect. The old user-menu dropdown was replaced by a single
- * button with `aria-label="Sign out"` — the change-password action now
- * lives under Settings → Profile.
+ * Sign out from the end of Settings (T104 — the header no longer has the
+ * button) and wait for /login.
+ *
+ * With unsynced offline changes the app asks first; the helper confirms.
+ * No current spec signs out with a queue, so if a new one hits the dialog,
+ * find out why the queue is not empty before relying on this.
  */
 export async function logout(page) {
+  await goToSettings(page)
   await page.getByRole('button', { name: 'Sign out', exact: true }).click()
-  await page.waitForURL('/login')
+  const dialog = page.getByRole('dialog')
+  await Promise.race([page.waitForURL('/login'), dialog.waitFor({ state: 'visible' })])
+  if (await dialog.isVisible()) {
+    await dialog.getByRole('button', { name: 'Sign out', exact: true }).click()
+    await page.waitForURL('/login')
+  }
 }
 
 /**

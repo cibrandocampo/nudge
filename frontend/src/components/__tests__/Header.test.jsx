@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import Header from '../Header'
 
@@ -8,9 +8,9 @@ describe('Header', () => {
     expect(screen.getByText('nudge')).toBeInTheDocument()
   })
 
-  it('renders a Sign out button', () => {
+  it('has no Sign out button (it lives at the end of Settings)', () => {
     renderWithProviders(<Header />)
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
   })
 
   it('shows Admin button for staff users', () => {
@@ -47,12 +47,5 @@ describe('Header', () => {
     expect(formRef.current.method.toUpperCase()).toBe('POST')
 
     appendSpy.mockRestore()
-  })
-
-  it('calls logout when Sign out is clicked', async () => {
-    const logout = vi.fn()
-    const { user } = renderWithProviders(<Header />, { auth: { logout } })
-    await user.click(screen.getByRole('button', { name: 'Sign out' }))
-    await waitFor(() => expect(logout).toHaveBeenCalled())
   })
 })
