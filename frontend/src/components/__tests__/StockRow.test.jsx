@@ -88,6 +88,14 @@ describe('StockRow — line 1', () => {
     expect(screen.getByTestId('shared-badge')).toHaveAttribute('data-variant', 'owner')
   })
 
+  it('puts the shared indicator right after the name, as an image with its label (T107)', () => {
+    renderRow({ shared_with: [2], is_owner: true })
+    const badge = screen.getByRole('img', { name: 'Shared with others' })
+    expect(badge).toBe(screen.getByTestId('shared-badge'))
+    expect(screen.getByText('Water filter').nextElementSibling).toBe(badge)
+    expect(badge.className).toBe('sharedIcon')
+  })
+
   it('marks a shared stock as recipient when the viewer does not own it', () => {
     renderRow({ shared_with: [], is_owner: false, owner_display_name: 'María' })
     const badge = screen.getByTestId('shared-badge')
@@ -279,10 +287,11 @@ describe('StockRow — navigation', () => {
     expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
   })
 
-  it('does not navigate when the shared badge is clicked', async () => {
+  // T107: the indicator is part of the row, not a control.
+  it('opens the detail when the shared indicator is tapped, like the rest of the row', async () => {
     const user = userEvent.setup()
     renderRouted({ id: 42, shared_with: [2] })
     await user.click(screen.getByTestId('shared-badge'))
-    expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
+    expect(await screen.findByText('Detail stub')).toBeInTheDocument()
   })
 })

@@ -9,7 +9,6 @@ import { iconClassForStock } from '../utils/stockSeverity'
 import { useSwipeAction } from '../hooks/useSwipeAction'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
-import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import s from './RoutineCard.module.css'
 
@@ -82,10 +81,10 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   const cachedStock = findCachedStock(queryClient, routine.stock)
   const iconCls = iconClassForStock(cachedStock)
 
-  // Passive badge only — sharing is edited from the routine form
-  // (ShareWithSection → ShareModal). Mirrors the pattern used on StockRow.
-  // Owner sees the filled variant; recipient sees the outlined one. Both
-  // use the same icon so the visual language is consistent.
+  // Passive indicator (T107) — sharing is edited from the routine form
+  // (ShareWithSection → ShareModal). A bare 14 px icon right after the name,
+  // the same for owner and recipient; `role="img"` so screen readers announce
+  // its label, which says who shares it. Same markup as on StockRow.
   const isShared = routine.shared_with?.length > 0 || routine.is_owner === false
   const isOwnerOfShare = routine.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
@@ -93,7 +92,8 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
     : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name })
   const sharedBadge = isShared && (
     <span
-      className={cx(buttons.btnIcon, isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient)}
+      className={cards.sharedIcon}
+      role="img"
       aria-label={sharedBadgeAria}
       title={sharedBadgeAria}
       data-testid="shared-badge"
@@ -137,6 +137,29 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   }
 
   const swipe = useSwipeAction({ enabled: idle, blocked: stockDepleted, onCommit: commit })
+
+  // Press feedback (T107) from pointer events, not CSS `:active`: a held
+  // touch never matched `:active` in emulated Android Chrome, and iOS Safari
+  // only applies it with a touchstart listener. Same gate as the swipe (main
+  // finger or button); cleared on release, cancel (the browser taking over a
+  // vertical scroll) and leave. The CSS skips it while dragging.
+  const [pressed, setPressed] = useState(false)
+  const handlers = {
+    ...swipe.handlers,
+    onPointerDown: (event) => {
+      if (idle && event.isPrimary && event.button === 0) setPressed(true)
+      swipe.handlers.onPointerDown(event)
+    },
+    onPointerUp: (event) => {
+      setPressed(false)
+      swipe.handlers.onPointerUp(event)
+    },
+    onPointerCancel: (event) => {
+      setPressed(false)
+      swipe.handlers.onPointerCancel(event)
+    },
+    onPointerLeave: () => setPressed(false),
+  }
 
   function fire() {
     const pending = pendingRef.current
@@ -184,17 +207,17 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
     commit()
   }
 
-  const chevronButton = (
-    <span className={cx(buttons.btnIcon, buttons.btnIconAction)} aria-hidden="true">
-      <Icon name="chevron-right" size="sm" />
-    </span>
-  )
+  // Decoration, not a control (T107): the whole card is the link. It says
+  // "a tap opens", where a to-do list would suggest "a tap completes".
+  // `Icon` is aria-hidden already.
+  const chevron = <Icon name="chevron-right" size="sm" className={s.chevron} />
 
   const body = (
     <div className={cards.cardHeader}>
       <div className={cards.cardMeta}>
         <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-          <span>{routine.name}</span>
+          <span className={s.name}>{routine.name}</span>
+          {sharedBadge}
           <SyncStatusBadge resourceKey={resourceKey} className={s.syncBadge} />
         </span>
         <span className={cards.cardSubtitle}>
@@ -216,10 +239,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
             </span>
           ))}
       </div>
-      <div className={cards.cardActions}>
-        {sharedBadge}
-        {chevronButton}
-      </div>
+      <div className={cards.cardActions}>{chevron}</div>
     </div>
   )
 
@@ -229,7 +249,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
       className={cx(cards.card, cards.cardClickable, s.card, nudging && s.nudging)}
       draggable={false}
       data-testid="routine-card-link"
-      {...swipe.handlers}
+      {...handlers}
     >
       {body}
     </Link>
@@ -246,6 +266,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
       data-phase={phase}
       data-highlighted={highlighted ? 'true' : undefined}
       data-dragging={swipe.dragging}
+      data-pressed={pressed && idle ? 'true' : undefined}
       style={{
         '--drag': `${swipe.offset}px`,
         '--progress': swipe.progress,

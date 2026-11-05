@@ -101,6 +101,16 @@
   gap: 0.3rem;
 }
 
+/* "Shared" indicator after a name (T107), on the routine card and the
+ * inventory row alike: a bare 14 px `users` icon (`Icon size="sm"`), no box
+ * and no background, so it doesn't read as a button. Same for owner and
+ * recipient; the label (role="img") says who shares it. */
+.sharedIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--c-shared);
+}
+
 .cardSubtitle {
   font-size: 0.7rem;
   color: var(--c-text-3);
