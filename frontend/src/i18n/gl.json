@@ -124,6 +124,7 @@
   "card.markDone": "Marcar como feita",
   "card.swipeDone": "Feito",
   "card.noStockAvailable": "Sen stock dispoñible",
+  "card.stockDepletedLine": "Sen stock · {{stock}}",
   "card.markedDone": "Marcado como feito",
   "card.markedDoneQueued": "Feito — gardarase ao recuperar a conexión",
   "card.undo": "Desfacer",

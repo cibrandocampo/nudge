@@ -1,11 +1,18 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
-import { clear, list } from '../../offline/queue'
+import { clear, enqueue, list } from '../../offline/queue'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import RoutineDetailPage from '../RoutineDetailPage'
+
+// Reachability as the page reads it; true unless a test flips it (and resets
+// it in its own `finally`). Same pattern as Layout / SettingsPage tests.
+const reachableRef = { current: true }
+vi.mock('../../hooks/useServerReachable', () => ({
+  useServerReachable: () => reachableRef.current,
+}))
 
 const BASE = 'http://localhost/api'
 
@@ -192,6 +199,23 @@ describe('RoutineDetailPage', () => {
     expect(screen.getByText(/Delete "Take vitamins"/)).toBeInTheDocument()
     await user.click(screen.getAllByText('Delete').find((btn) => btn.closest('[role="dialog"]')))
     await waitFor(() => expect(screen.getByText('Home')).toBeInTheDocument())
+  })
+
+  it('Cancel in the delete confirmation keeps the routine', async () => {
+    const deletes = []
+    server.use(
+      http.delete(`${BASE}/routines/1/`, () => {
+        deletes.push(1)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { user } = renderDetail()
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Take vitamins')).toBeInTheDocument()
+    expect(deletes).toEqual([])
   })
 
   it('renders recent history entries', async () => {
@@ -426,6 +450,30 @@ describe('RoutineDetailPage', () => {
     await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
     // T182: pencil is a `<button>` so it can show the offline toast.
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+  })
+
+  it('the edit button opens the routine form', async () => {
+    const { user } = renderWithProviders(
+      <Routes>
+        <Route path="/routines/:id" element={<RoutineDetailPage />} />
+        <Route path="/routines/:id/edit" element={<div>Edit form</div>} />
+      </Routes>,
+      { initialEntries: ['/routines/1'] },
+    )
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByText('Edit form')).toBeInTheDocument()
+  })
+
+  it('offline, the edit button stays put and says the form is unavailable', async () => {
+    reachableRef.current = false
+    try {
+      const { user } = renderDetail()
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
+      expect(await screen.findByText('This section is not available offline.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    } finally {
+      reachableRef.current = true
+    }
   })
 
   it('shows next due with both relative and absolute datetime', async () => {
@@ -765,7 +813,9 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     expect(screen.queryByText(/Log this routine ahead of schedule/i)).not.toBeInTheDocument()
   })
 
-  it('paints the detail card with the danger border when stock is depleted (T173 follow-up)', async () => {
+  it('keeps the "not due" border when stock is depleted (T106 reverses the T173 follow-up)', async () => {
+    // The border says when, like the card's dot; the stock row carries the
+    // depletion (see "colour meaning" below).
     const depletedRoutine = {
       ...routine,
       is_due: false,
@@ -779,8 +829,8 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(depletedRoutine)))
     const { container } = renderDetail()
     await screen.findByText(/Take vitamins/)
-    expect(container.querySelector('[class*="cardBorderDanger"]')).toBeInTheDocument()
-    expect(container.querySelector('[class*="cardBorderSuccess"]')).not.toBeInTheDocument()
+    expect(container.querySelector('[class*="cardBorderSuccess"]')).toBeInTheDocument()
+    expect(container.querySelector('[class*="cardBorderDanger"]')).not.toBeInTheDocument()
   })
 
   it('forces the stock dot to danger when the routine query says depleted, even if cached stock still reports "low"', async () => {
@@ -788,7 +838,7 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
     // (its `stock_quantity_available` dropped to 0) but the `['stock']`
     // cache hasn't been refreshed yet so it still carries the previous
     // severity. Without the routine-driven escalation the dot would stay
-    // orange ("low") next to a "0 × <stock>" row.
+    // orange ("low") next to the red "Out of stock · <stock>" row.
     const depletedRoutine = {
       ...routine,
       is_due: true,
@@ -1021,5 +1071,64 @@ describe('RoutineDetailPage — stock detail link', () => {
     renderDetail()
     await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
     expect(screen.queryByTestId('stock-detail-link')).not.toBeInTheDocument()
+  })
+})
+
+describe('RoutineDetailPage — colour meaning (T106)', () => {
+  // Same rule as the dashboard card: the border says when, the stock row
+  // says whether the stock covers a completion.
+  const notDueDepleted = {
+    ...routine,
+    is_due: false,
+    is_overdue: false,
+    stock: 9,
+    stock_name: 'Descaler tablets',
+    stock_quantity: 0,
+    stock_quantity_available: 0,
+    stock_usage: 1,
+  }
+
+  it('puts the depletion reason on the stock row, in red', async () => {
+    server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(notDueDepleted)))
+    renderDetail()
+    const value = await screen.findByTestId('stock-row-value')
+    expect(value).toHaveTextContent('Out of stock · Descaler tablets')
+    expect(value.className).toContain('stockReason')
+    expect(value).not.toHaveTextContent('0 × Descaler tablets')
+  })
+})
+
+describe('RoutineDetailPage — stock row while a completion is queued (T106)', () => {
+  it('keeps the pending look (clock, struck-through quantity) instead of the depletion reason', async () => {
+    // The queued log is what emptied the stock: until it syncs, the row
+    // shows the pending decrement, not "Out of stock".
+    await enqueue({
+      id: 'k-log-1',
+      method: 'POST',
+      endpoint: '/routines/1/log/',
+      body: {},
+      resourceKey: 'routine:1',
+      createdAt: '2026-11-05T08:00:00Z',
+      status: 'pending',
+    })
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({
+          ...routine,
+          stock: 9,
+          stock_name: 'Descaler tablets',
+          stock_quantity: 0,
+          stock_quantity_available: 0,
+          stock_usage: 1,
+        }),
+      ),
+    )
+    renderDetail()
+    const value = await screen.findByTestId('stock-row-value')
+    await waitFor(() => expect(value.className).toContain('metaValuePending'))
+
+    expect(value).toHaveTextContent('0 × Descaler tablets')
+    expect(value).not.toHaveTextContent('Out of stock')
+    expect(value.className).not.toContain('stockReason')
   })
 })

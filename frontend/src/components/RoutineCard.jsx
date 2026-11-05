@@ -23,13 +23,10 @@ export const COLLAPSE_MS = 140
 // The "no" shake of a blocked check button.
 const NUDGE_MS = 300
 
-function statusTokens(routine, { stockDepleted } = {}) {
-  // Stock depletion overrides the time-based status: even a not-yet-due routine
-  // surfaces in red when the linked stock cannot satisfy a `Mark done`. Without
-  // this, a routine with `next_due_at` 60 days ahead and 0 units in stock looks
-  // identical to one in perfect shape — the user only finds out when they try
-  // to log and the backend 422s with `insufficient_stock`.
-  if (stockDepleted) return { dot: cards.dotDanger, text: cards.statusOverdue }
+// Time only (T106): green not due, amber due today, red overdue. Stock never
+// recolours the dot or the time — a routine due in 10 days with an empty stock
+// is not urgent; its stock line carries that problem instead.
+function statusTokens(routine) {
   if (!routine.is_due) return { dot: cards.dotSuccess, text: cards.statusOk }
   if (routine.is_overdue) return { dot: cards.dotDanger, text: cards.statusOverdue }
   return { dot: cards.dotWarning, text: cards.statusDue }
@@ -48,9 +45,13 @@ function statusTokens(routine, { stockDepleted } = {}) {
  * exit and then calls `onMarkDone(id, { revert })`. `revert` brings the card
  * back to rest when the caller does not log after all (lot picker, error).
  *
- * The status lives in the dot and the time text; the coloured edge now means
- * the action. Every routine gets the layer, due or upcoming (T102); a
- * `highlighted` row flashes briefly to show where a completed one moved.
+ * Each colour has one meaning (T106): the dot and the time text say *when*;
+ * the stock line says whether the stock covers a completion (grey icon when
+ * it does, amber when low, red line with the reason when it doesn't); the
+ * action layer says what a swipe would do, and on touch it stays grey at rest,
+ * taking its colour only while dragged. Every routine gets the layer, due or
+ * upcoming (T102); a `highlighted` row flashes briefly to show where a
+ * completed one moved.
  */
 export default function RoutineCard({ routine, onMarkDone, completing, highlighted = false }) {
   const { t } = useTranslation()
@@ -112,7 +113,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   // the fallback becomes dead code once caches refresh.
   const stockAvailable = routine.stock_quantity_available ?? routine.stock_quantity ?? 0
   const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage)
-  const tokens = statusTokens(routine, { stockDepleted })
+  const tokens = statusTokens(routine)
   const idle = phase === 'rest' && !completing
 
   const commit = () => {
@@ -202,12 +203,18 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
             {timeLabel}
           </span>
         </span>
-        {routine.stock_name && (
-          <span className={cards.cardStockBadge}>
-            <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
-            {routine.stock_usage} × {routine.stock_name}
-          </span>
-        )}
+        {routine.stock_name &&
+          (stockDepleted ? (
+            <span className={cx(cards.cardStockBadge, cards.stockDepletionDanger)} data-testid="stock-line">
+              <Icon name="package" size="sm" className={cards.iconDanger} data-testid="stock-icon" />
+              {t('card.stockDepletedLine', { stock: routine.stock_name })}
+            </span>
+          ) : (
+            <span className={cards.cardStockBadge} data-testid="stock-line">
+              <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
+              {routine.stock_usage} × {routine.stock_name}
+            </span>
+          ))}
       </div>
       <div className={cards.cardActions}>
         {sharedBadge}

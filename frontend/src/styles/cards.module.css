@@ -294,11 +294,8 @@
  * another file — which is precisely what T045 does to this block.
  *
  * Consumers (T165+): `<Icon>` and the per-lot expiry text, both via
- * iconClassForLot() / iconClassForStock() in utils/stockSeverity.js. */
-
-.iconSuccess.iconSuccess {
-  color: var(--c-success);
-}
+ * iconClassForLot() / iconClassForStock() in utils/stockSeverity.js.
+ * There is no success tint: a healthy stock stays neutral (T106). */
 
 .iconWarning.iconWarning {
   color: var(--c-warning);

@@ -128,6 +128,20 @@
   color: var(--c-danger);
 }
 
+/* Touch, at rest (T106): the 4 px strip is neutral grey on every card,
+ * blocked ones too — a green edge next to a red "overdue" dot read as a
+ * status. It takes its colour (green, or red and hatched) only while the
+ * card is dragged or leaving, and when the keyboard focuses the check,
+ * which is what the user is about to press. The media query is the exact
+ * complement of the mouse one at the top of this file, where the 44 px
+ * check is a real button and keeps its colour. */
+@media (hover: none), (pointer: coarse), (pointer: none) {
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
+    background: var(--c-border);
+    color: var(--c-text-3);
+  }
+}
+
 /* Full height and as wide as the mouse resting offset: the whole uncovered
  * strip is the target (WCAG 2.5.8 asks for ≥ 24px). */
 .check {

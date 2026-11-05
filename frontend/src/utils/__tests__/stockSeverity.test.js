@@ -134,8 +134,9 @@ describe('iconClassForStock — 3-tier, stock-only (T165)', () => {
     expect(iconClassForStock({ stock_severity: 'low' })).toBe(cards.iconWarning)
   })
 
-  it('stock_severity=ok → iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok' })).toBe(cards.iconSuccess)
+  // T106: only a problem gets a tint.
+  it('stock_severity=ok → null (no tint)', () => {
+    expect(iconClassForStock({ stock_severity: 'ok' })).toBe(null)
   })
 
   it('returns null when stock_severity is missing', () => {
@@ -147,11 +148,11 @@ describe('iconClassForStock — 3-tier, stock-only (T165)', () => {
   })
 
   // Documents the no-worst-of-two contract.
-  it('ignores expiry_severity=soon when stock_severity is ok → still iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toBe(cards.iconSuccess)
+  it('ignores expiry_severity=soon when stock_severity is ok → still no tint', () => {
+    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toBe(null)
   })
 
-  it('ignores expiry_severity=reached when stock_severity is ok → still iconSuccess', () => {
-    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toBe(cards.iconSuccess)
+  it('ignores expiry_severity=reached when stock_severity is ok → still no tint', () => {
+    expect(iconClassForStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toBe(null)
   })
 })
