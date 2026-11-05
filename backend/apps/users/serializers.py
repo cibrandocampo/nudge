@@ -1,6 +1,8 @@
 from django.utils.timezone import now as tz_now
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
 from .models import User
 
@@ -159,3 +161,18 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         if changed:
             validated_data["settings_updated_at"] = tz_now()
         return super().update(instance, validated_data)
+
+
+class SafeTokenRefreshSerializer(TokenRefreshSerializer):
+    """Refresh that answers 401 when the token's user no longer exists.
+
+    simplejwt 5.5.1 looks the user up with `.get()` and lets `DoesNotExist`
+    escape as a 500. A deleted account (or a dev reseed) then leaves the
+    client with a generic error instead of sending it back to log in.
+    """
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except User.DoesNotExist as exc:
+            raise AuthenticationFailed(self.error_messages["no_active_account"], "no_active_account") from exc
