@@ -107,6 +107,16 @@ describe('Layout', () => {
     expect(await screen.findByText(/Notifications are off/)).toBeInTheDocument()
   })
 
+  it('the push alert banner takes the user to Settings', async () => {
+    setNotification('default')
+    await stubSubscription(null)
+    const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+
+    await user.click(await screen.findByRole('button', { name: /Notifications are off/ }))
+
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('does not render the banner when push is fully active', async () => {
     setNotification('granted')
     await stubSubscription({
@@ -136,6 +146,47 @@ describe('Layout', () => {
     })
     // When push is active, the only badge should be the routines dot.
     expect(container.querySelectorAll('.badge').length).toBeGreaterThan(0)
+  })
+
+  // The icon a nav entry draws from the sprite (`<use href="#i-NAME">`).
+  const navIcon = (name) => screen.getByRole('link', { name }).querySelector('use').getAttribute('href')
+  // Layout re-renders when its routines query lands; assert after that.
+  const routinesLoaded = (queryClient) =>
+    waitFor(() => expect(queryClient.getQueryState(['routines'])?.status).toBe('success'))
+
+  it.each([
+    ['with', true],
+    ['without', false],
+  ])('Routines uses the list-checks icon %s pending routines', async (_, isDue) => {
+    server.use(
+      http.get(`${BASE}/routines/`, () =>
+        HttpResponse.json([{ id: 1, name: 'Water plants', interval_hours: 24, is_due: isDue }]),
+      ),
+    )
+    const { queryClient } = renderWithProviders(<Layout />)
+    await routinesLoaded(queryClient)
+
+    expect(Boolean(screen.getByRole('link', { name: 'Routines' }).querySelector('.badge'))).toBe(isDue)
+    expect(navIcon('Routines')).toBe('#i-list-checks')
+  })
+
+  it('History uses the clock-with-arrow history icon', async () => {
+    const { queryClient } = renderWithProviders(<Layout />)
+    await routinesLoaded(queryClient)
+
+    expect(navIcon('History')).toBe('#i-history')
+  })
+
+  it('the active tab carries its label, and moves with navigation', async () => {
+    const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    const routines = screen.getByRole('link', { name: 'Routines' })
+    expect(routines).toHaveAttribute('aria-current', 'page')
+    expect(routines).toHaveTextContent('Routines')
+
+    await user.click(screen.getByRole('link', { name: 'Inventory' }))
+
+    expect(screen.getByRole('link', { name: 'Inventory' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Routines' })).not.toHaveAttribute('aria-current')
   })
 
   it('places the banner before the main element in the DOM', async () => {
