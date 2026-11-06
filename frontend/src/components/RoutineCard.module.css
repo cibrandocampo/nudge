@@ -168,15 +168,31 @@
   color: var(--c-danger);
 }
 
-/* Touch, at rest (T106): the 4 px strip is neutral grey on every card,
- * blocked ones too — a green edge next to a red "overdue" dot read as a
- * status. It takes its colour (green, or red and hatched) only while the
- * card is dragged or leaving, and when the keyboard focuses the check,
- * which is what the user is about to press. The media query is the exact
- * complement of the mouse one at the top of this file, where the 44 px
- * check is a real button and keeps its colour. */
+/* Touch, at rest: the 4 px strip is a status edge, not the action. It repeats
+ * the dot — green not due, amber due today, red overdue — so the list scans
+ * at a glance; a card the stock blocks is grey, the usual "can't be used".
+ * (A green "completable" edge next to a red overdue dot read as two states.)
+ * It takes the action colour (green, or red and hatched) only while the card
+ * is dragged or leaving, and when the keyboard focuses the check, which is
+ * what the user is about to press. The media query is the exact complement
+ * of the mouse one at the top of this file, where the 44 px check is a real
+ * button and keeps its action colour. */
 @media (hover: none), (pointer: coarse), (pointer: none) {
   .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
+    background: var(--c-success);
+  }
+
+  .row[data-phase='rest'][data-status='due']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
+    background: var(--c-warning);
+  }
+
+  .row[data-phase='rest'][data-status='overdue']:not([data-dragging='true']):not(:has(.check:focus-visible))
+    .actionLayer {
+    background: var(--c-danger);
+  }
+
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible))
+    .actionLayer[data-state='blocked'] {
     background: var(--c-border);
     color: var(--c-text-3);
   }

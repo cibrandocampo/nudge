@@ -311,6 +311,25 @@ describe('RoutineCard', () => {
     expect(container.querySelector('[class*="dotSuccess"]')).toBeInTheDocument()
   })
 
+  // The touch strip's colour comes from `data-status` in the CSS; jsdom has no
+  // media queries, so the colour itself is checked in the browser.
+  it.each([
+    ['overdue', { is_due: true, is_overdue: true }],
+    ['due', { is_due: true, is_overdue: false, hours_until_due: 3 }],
+    ['ok', { is_due: false, is_overdue: false, hours_until_due: 24 }],
+  ])('exposes the time status "%s" on the row for the resting strip', (status, timing) => {
+    renderCard({ ...baseRoutine, ...timing })
+    expect(row()).toHaveAttribute('data-status', status)
+  })
+
+  it('keeps the time status on a row the stock blocks', () => {
+    // The CSS paints a blocked strip grey whatever the status; the status
+    // itself stays the time's, like the dot.
+    renderCard({ ...baseRoutine, ...depleted, is_due: true, is_overdue: true })
+    expect(row()).toHaveAttribute('data-status', 'overdue')
+    expect(layer()).toHaveAttribute('data-state', 'blocked')
+  })
+
   it('keeps the green dot and time for a not-yet-due routine whose stock is depleted', () => {
     // "In 10 days" in red read as urgent when the problem was the stock.
     const { container } = renderCard({ ...baseRoutine, ...depleted, is_due: false, is_overdue: false })

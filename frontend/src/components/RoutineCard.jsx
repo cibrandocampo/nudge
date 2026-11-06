@@ -25,10 +25,11 @@ const NUDGE_MS = 300
 // Time only (T106): green not due, amber due today, red overdue. Stock never
 // recolours the dot or the time — a routine due in 10 days with an empty stock
 // is not urgent; its stock line carries that problem instead.
+// `status` also colours the resting strip on touch (see the CSS).
 function statusTokens(routine) {
-  if (!routine.is_due) return { dot: cards.dotSuccess, text: cards.statusOk }
-  if (routine.is_overdue) return { dot: cards.dotDanger, text: cards.statusOverdue }
-  return { dot: cards.dotWarning, text: cards.statusDue }
+  if (!routine.is_due) return { status: 'ok', dot: cards.dotSuccess, text: cards.statusOk }
+  if (routine.is_overdue) return { status: 'overdue', dot: cards.dotDanger, text: cards.statusOverdue }
+  return { status: 'due', dot: cards.dotWarning, text: cards.statusDue }
 }
 
 /**
@@ -47,8 +48,10 @@ function statusTokens(routine) {
  * Each colour has one meaning (T106): the dot and the time text say *when*;
  * the stock line says whether the stock covers a completion (grey icon when
  * it does, amber when low, red line with the reason when it doesn't); the
- * action layer says what a swipe would do, and on touch it stays grey at rest,
- * taking its colour only while dragged. Every routine gets the layer, due or
+ * action layer says what a swipe would do. On touch its resting 4 px strip
+ * repeats the time status instead (green / amber / red, grey when the stock
+ * blocks the completion) and shows the action colour only while dragged.
+ * Every routine gets the layer, due or
  * upcoming (T102); a `highlighted` row flashes briefly to show where a
  * completed one moved.
  */
@@ -264,6 +267,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
       className={cx(s.row, highlighted && s.highlighted)}
       data-testid="routine-card"
       data-phase={phase}
+      data-status={tokens.status}
       data-highlighted={highlighted ? 'true' : undefined}
       data-dragging={swipe.dragging}
       data-pressed={pressed && idle ? 'true' : undefined}
