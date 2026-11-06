@@ -233,9 +233,10 @@ export default function SettingsPage() {
   const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim())
 
   const handleAddContact = async (e) => {
-    if (e?.preventDefault) e.preventDefault()
+    e.preventDefault()
+    // The submit button is disabled while the field is blank, and a form
+    // whose default button is disabled ignores Enter: `email` is never empty.
     const email = contactEmail.trim()
-    if (!email) return
     if (!isValidEmail(email)) {
       showToast({ type: 'error', message: t('settings.addContact.errorEmail') })
       setContactEmailInvalid(true)
@@ -284,9 +285,9 @@ export default function SettingsPage() {
   }
 
   const confirmRemoveContact = async () => {
-    const contactId = contactToRemove?.id
+    // Only reachable from the modal, which renders while `contactToRemove` is set.
+    const contactId = contactToRemove.id
     setContactToRemove(null)
-    if (contactId == null) return
     try {
       await deleteContact.mutateAsync({ contactId })
     } catch (err) {
@@ -492,7 +493,8 @@ export default function SettingsPage() {
           value={form.timezone}
           onChange={(tz) => {
             setForm((f) => ({ ...f, timezone: tz }))
-            if (tz && tz !== user?.timezone) autosave({ timezone: tz })
+            // Combobox (no free text) only reports a picked option, never ''.
+            if (tz !== user?.timezone) autosave({ timezone: tz })
           }}
           options={TIMEZONES}
           placeholder={t('settings.timezoneSearch')}

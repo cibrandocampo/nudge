@@ -879,6 +879,21 @@ describe('SettingsPage', () => {
       expect(screen.getByText(/Use these only if you suspect/i)).toBeInTheDocument()
     })
 
+    it('offline, the disable and test buttons say they need a connection', async () => {
+      reachableRef.current = false
+      try {
+        const { user } = await renderWithPushActive()
+        await user.click(await screen.findByTestId('push-troubleshooting-toggle'))
+        for (const name of ['Disable notifications', 'Send test notification', 'Schedule test (5 min)']) {
+          const btn = screen.getByRole('button', { name })
+          expect(btn).toBeDisabled()
+          expect(btn).toHaveAttribute('title', 'Requires connection')
+        }
+      } finally {
+        reachableRef.current = true
+      }
+    })
+
     it('does not render the Troubleshooting toggle when push is not active', async () => {
       // No Notification override / no fake subscription → push is NOT active.
       renderWithProviders(<SettingsPage />)
@@ -1018,6 +1033,109 @@ describe('SettingsPage', () => {
       expect(patchedBody).toEqual({ daily_notification_time: '06:00' })
       expect(screen.queryByTestId('quiet-hours-overlap-error')).not.toBeInTheDocument()
     })
+
+    it('flags a same-day range that covers the daily time', async () => {
+      const daytime = { ...userWithQuietHours, quiet_hours_start: '07:00:00', quiet_hours_end: '09:00:00' }
+      renderWithProviders(<SettingsPage />, { auth: { user: daytime } })
+      expect(await screen.findByTestId('quiet-hours-overlap-error')).toBeInTheDocument()
+    })
+
+    it('does not save the toggle when turning it on would cover the daily time', async () => {
+      const patches = []
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patches.push(await request.json())
+          return HttpResponse.json({})
+        }),
+      )
+      // 23:00 sits inside 22:00 → 07:00 once the toggle is on.
+      const lateDaily = { ...userWithQuietHours, quiet_hours_enabled: false, daily_notification_time: '23:00:00' }
+      const { user } = renderWithProviders(<SettingsPage />, { auth: { user: lateDaily } })
+      await user.click(await screen.findByLabelText('Enable quiet hours'))
+      expect(await screen.findByTestId('quiet-hours-overlap-error')).toBeInTheDocument()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(patches).toEqual([])
+    })
+
+    it('does not save a range edit that would cover the daily time', async () => {
+      const patches = []
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patches.push(await request.json())
+          return HttpResponse.json({})
+        }),
+      )
+      renderWithProviders(<SettingsPage />, { auth: { user: userWithQuietHours } })
+      const end = await screen.findByTestId('quiet-hours-end')
+      // 22:00 → 09:00 now covers the 08:00 daily heads-up.
+      fireEvent.change(end, { target: { value: '09:00' } })
+      expect(await screen.findByTestId('quiet-hours-overlap-error')).toBeInTheDocument()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(patches).toEqual([])
+    })
+  })
+
+  describe('autosave skips values that are not a change', () => {
+    let patches
+    beforeEach(() => {
+      patches = []
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patches.push(await request.json())
+          return HttpResponse.json({})
+        }),
+      )
+    })
+
+    it('does not save a cleared daily time', async () => {
+      renderWithProviders(<SettingsPage />)
+      const daily = await screen.findByDisplayValue('08:00')
+      fireEvent.change(daily, { target: { value: '' } })
+      // Past the 500 ms debounce.
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      expect(patches).toEqual([])
+    })
+
+    it('does not save the daily time when it is set back to the saved value', async () => {
+      renderWithProviders(<SettingsPage />)
+      const daily = await screen.findByDisplayValue('08:00')
+      fireEvent.change(daily, { target: { value: '09:00' } })
+      fireEvent.change(daily, { target: { value: '08:00' } })
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      expect(patches).toEqual([])
+    })
+
+    it('saves a daily time for a user who never had one', async () => {
+      const noDaily = {
+        id: 1,
+        username: 'testuser',
+        timezone: 'Europe/Madrid',
+        language: 'en',
+        daily_notification_time: null,
+      }
+      renderWithProviders(<SettingsPage />, { auth: { user: noDaily } })
+      const daily = await screen.findByDisplayValue('08:00')
+      fireEvent.change(daily, { target: { value: '09:00' } })
+      await waitFor(() => expect(patches).toEqual([{ daily_notification_time: '09:00' }]), { timeout: 2000 })
+    })
+
+    it('does not save when the current timezone is picked again', async () => {
+      const { user } = renderWithProviders(<SettingsPage />)
+      const input = await screen.findByPlaceholderText('Search timezone…')
+      await user.click(input)
+      await user.keyboard('Madrid')
+      await user.click(screen.getByText('Europe/Madrid'))
+      expect(input).toHaveValue('Europe/Madrid')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(patches).toEqual([])
+    })
+  })
+
+  it('keeps the form defaults while there is no user (mid sign-out)', async () => {
+    // Sign-out sets `['me']` to null before navigating away, so the page
+    // renders one last time without a user.
+    renderWithProviders(<SettingsPage />, { auth: { user: null } })
+    expect(await screen.findByDisplayValue('08:00')).toBeInTheDocument()
   })
 
   it('the key button in Profile opens the change-password modal, and Cancel closes it', async () => {
