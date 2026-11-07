@@ -252,5 +252,8 @@ Thumbs.db
 !.claude/skills/
 !.claude/commands/
 
-# Local RS256 dev keypair — generated locally, never commit secrets
-backend/*.pem
+# Secrets and runtime artifacts — keys live in .env, never commit them.
+# celerybeat-schedule is already ignored in the Celery section above.
+*.pem
+# Production Postgres data dir when docker-compose.yml runs locally (DATA_PATH default).
+/data/
