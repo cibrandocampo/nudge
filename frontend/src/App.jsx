@@ -11,7 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { ToastProvider } from './components/Toast'
 import { useSyncToasts } from './hooks/useSyncToasts'
 import { forceSync, initSyncWorker } from './offline/sync'
-import { persistOptions, queryClient } from './query/queryClient'
+import { persistOptions, queryClient, refreshRestoredCache } from './query/queryClient'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import RoutineDetailPage from './pages/RoutineDetailPage'
@@ -39,7 +39,7 @@ function AppRuntime() {
 
 export default function App() {
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions} onSuccess={refreshRestoredCache}>
       <AppVersionProvider>
         <IconsSprite />
         <ToastProvider>

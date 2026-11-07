@@ -9,7 +9,6 @@ import { iconClassForStock } from '../utils/stockSeverity'
 import { useSwipeAction } from '../hooks/useSwipeAction'
 import Icon from './Icon'
 import SyncStatusBadge from './SyncStatusBadge'
-import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import s from './RoutineCard.module.css'
 
@@ -23,16 +22,14 @@ export const COLLAPSE_MS = 140
 // The "no" shake of a blocked check button.
 const NUDGE_MS = 300
 
-function statusTokens(routine, { stockDepleted } = {}) {
-  // Stock depletion overrides the time-based status: even a not-yet-due routine
-  // surfaces in red when the linked stock cannot satisfy a `Mark done`. Without
-  // this, a routine with `next_due_at` 60 days ahead and 0 units in stock looks
-  // identical to one in perfect shape — the user only finds out when they try
-  // to log and the backend 422s with `insufficient_stock`.
-  if (stockDepleted) return { dot: cards.dotDanger, text: cards.statusOverdue }
-  if (!routine.is_due) return { dot: cards.dotSuccess, text: cards.statusOk }
-  if (routine.is_overdue) return { dot: cards.dotDanger, text: cards.statusOverdue }
-  return { dot: cards.dotWarning, text: cards.statusDue }
+// Time only (T106): green not due, amber due today, red overdue. Stock never
+// recolours the dot or the time — a routine due in 10 days with an empty stock
+// is not urgent; its stock line carries that problem instead.
+// `status` also colours the resting strip on touch (see the CSS).
+function statusTokens(routine) {
+  if (!routine.is_due) return { status: 'ok', dot: cards.dotSuccess, text: cards.statusOk }
+  if (routine.is_overdue) return { status: 'overdue', dot: cards.dotDanger, text: cards.statusOverdue }
+  return { status: 'due', dot: cards.dotWarning, text: cards.statusDue }
 }
 
 /**
@@ -48,9 +45,15 @@ function statusTokens(routine, { stockDepleted } = {}) {
  * exit and then calls `onMarkDone(id, { revert })`. `revert` brings the card
  * back to rest when the caller does not log after all (lot picker, error).
  *
- * The status lives in the dot and the time text; the coloured edge now means
- * the action. Every routine gets the layer, due or upcoming (T102); a
- * `highlighted` row flashes briefly to show where a completed one moved.
+ * Each colour has one meaning (T106): the dot and the time text say *when*;
+ * the stock line says whether the stock covers a completion (grey icon when
+ * it does, amber when low, red line with the reason when it doesn't); the
+ * action layer says what a swipe would do. On touch its resting 4 px strip
+ * repeats the time status instead (green / amber / red, grey when the stock
+ * blocks the completion) and shows the action colour only while dragged.
+ * Every routine gets the layer, due or
+ * upcoming (T102); a `highlighted` row flashes briefly to show where a
+ * completed one moved.
  */
 export default function RoutineCard({ routine, onMarkDone, completing, highlighted = false }) {
   const { t } = useTranslation()
@@ -81,10 +84,10 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   const cachedStock = findCachedStock(queryClient, routine.stock)
   const iconCls = iconClassForStock(cachedStock)
 
-  // Passive badge only — sharing is edited from the routine form
-  // (ShareWithSection → ShareModal). Mirrors the pattern used on StockRow.
-  // Owner sees the filled variant; recipient sees the outlined one. Both
-  // use the same icon so the visual language is consistent.
+  // Passive indicator (T107) — sharing is edited from the routine form
+  // (ShareWithSection → ShareModal). A bare 14 px icon right after the name,
+  // the same for owner and recipient; `role="img"` so screen readers announce
+  // its label, which says who shares it. Same markup as on StockRow.
   const isShared = routine.shared_with?.length > 0 || routine.is_owner === false
   const isOwnerOfShare = routine.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
@@ -92,7 +95,8 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
     : t('sharing.sharedBadgeRecipientAria', { owner: routine.owner_display_name })
   const sharedBadge = isShared && (
     <span
-      className={cx(buttons.btnIcon, isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient)}
+      className={cards.sharedIcon}
+      role="img"
       aria-label={sharedBadgeAria}
       title={sharedBadgeAria}
       data-testid="shared-badge"
@@ -112,7 +116,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   // the fallback becomes dead code once caches refresh.
   const stockAvailable = routine.stock_quantity_available ?? routine.stock_quantity ?? 0
   const stockDepleted = Boolean(routine.stock_name) && Number(stockAvailable) < Number(routine.stock_usage)
-  const tokens = statusTokens(routine, { stockDepleted })
+  const tokens = statusTokens(routine)
   const idle = phase === 'rest' && !completing
 
   const commit = () => {
@@ -136,6 +140,29 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   }
 
   const swipe = useSwipeAction({ enabled: idle, blocked: stockDepleted, onCommit: commit })
+
+  // Press feedback (T107) from pointer events, not CSS `:active`: a held
+  // touch never matched `:active` in emulated Android Chrome, and iOS Safari
+  // only applies it with a touchstart listener. Same gate as the swipe (main
+  // finger or button); cleared on release, cancel (the browser taking over a
+  // vertical scroll) and leave. The CSS skips it while dragging.
+  const [pressed, setPressed] = useState(false)
+  const handlers = {
+    ...swipe.handlers,
+    onPointerDown: (event) => {
+      if (idle && event.isPrimary && event.button === 0) setPressed(true)
+      swipe.handlers.onPointerDown(event)
+    },
+    onPointerUp: (event) => {
+      setPressed(false)
+      swipe.handlers.onPointerUp(event)
+    },
+    onPointerCancel: (event) => {
+      setPressed(false)
+      swipe.handlers.onPointerCancel(event)
+    },
+    onPointerLeave: () => setPressed(false),
+  }
 
   function fire() {
     const pending = pendingRef.current
@@ -183,17 +210,17 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
     commit()
   }
 
-  const chevronButton = (
-    <span className={cx(buttons.btnIcon, buttons.btnIconAction)} aria-hidden="true">
-      <Icon name="chevron-right" size="sm" />
-    </span>
-  )
+  // Decoration, not a control (T107): the whole card is the link. It says
+  // "a tap opens", where a to-do list would suggest "a tap completes".
+  // `Icon` is aria-hidden already.
+  const chevron = <Icon name="chevron-right" size="sm" className={s.chevron} />
 
   const body = (
     <div className={cards.cardHeader}>
       <div className={cards.cardMeta}>
         <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-          <span>{routine.name}</span>
+          <span className={s.name}>{routine.name}</span>
+          {sharedBadge}
           <SyncStatusBadge resourceKey={resourceKey} className={s.syncBadge} />
         </span>
         <span className={cards.cardSubtitle}>
@@ -202,17 +229,20 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
             {timeLabel}
           </span>
         </span>
-        {routine.stock_name && (
-          <span className={cards.cardStockBadge}>
-            <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
-            {routine.stock_usage} × {routine.stock_name}
-          </span>
-        )}
+        {routine.stock_name &&
+          (stockDepleted ? (
+            <span className={cx(cards.cardStockBadge, cards.stockDepletionDanger)} data-testid="stock-line">
+              <Icon name="package" size="sm" className={cards.iconDanger} data-testid="stock-icon" />
+              {t('card.stockDepletedLine', { stock: routine.stock_name })}
+            </span>
+          ) : (
+            <span className={cards.cardStockBadge} data-testid="stock-line">
+              <Icon name="package" size="sm" className={iconCls} data-testid="stock-icon" />
+              {routine.stock_usage} × {routine.stock_name}
+            </span>
+          ))}
       </div>
-      <div className={cards.cardActions}>
-        {sharedBadge}
-        {chevronButton}
-      </div>
+      <div className={cards.cardActions}>{chevron}</div>
     </div>
   )
 
@@ -222,7 +252,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
       className={cx(cards.card, cards.cardClickable, s.card, nudging && s.nudging)}
       draggable={false}
       data-testid="routine-card-link"
-      {...swipe.handlers}
+      {...handlers}
     >
       {body}
     </Link>
@@ -237,8 +267,10 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
       className={cx(s.row, highlighted && s.highlighted)}
       data-testid="routine-card"
       data-phase={phase}
+      data-status={tokens.status}
       data-highlighted={highlighted ? 'true' : undefined}
       data-dragging={swipe.dragging}
+      data-pressed={pressed && idle ? 'true' : undefined}
       style={{
         '--drag': `${swipe.offset}px`,
         '--progress': swipe.progress,

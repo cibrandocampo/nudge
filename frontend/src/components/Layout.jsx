@@ -33,26 +33,29 @@ export default function Layout() {
   const reachable = useServerReachable()
   const { showToast } = useToast()
 
+  // Pending routines show as the brand dot on the icon, not as a different
+  // icon (T105).
   const NAV = [
-    {
-      to: '/',
-      icon: hasPendingRoutines ? 'badge-alert' : 'badge',
-      label: t('nav.home'),
-      end: true,
-    },
+    { to: '/', icon: 'list-checks', label: t('nav.home'), end: true },
     { to: '/inventory', icon: 'nav-inventory', label: t('nav.inventory'), end: false },
-    { to: '/history', icon: 'nav-history', label: t('nav.history'), end: false },
+    { to: '/history', icon: 'history', label: t('nav.history'), end: false },
     { to: '/settings', icon: 'nav-settings', label: t('nav.settings'), end: false },
   ]
 
+  // The dots hang off `iconWrap`, not `linkInner`: the label can be wider
+  // than the icon, and the dot belongs on the icon's corner at either size.
   const renderInner = (icon, label, to) => (
     <span className={s.linkInner}>
-      <Icon name={icon} size="lg" />
+      <span className={s.iconWrap}>
+        <Icon name={icon} size="lg" />
+        {to === '/settings' && !active && (
+          <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
+        )}
+        {to === '/' && hasPendingRoutines && (
+          <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
+        )}
+      </span>
       <span className={s.navLabel}>{label}</span>
-      {to === '/settings' && !active && <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />}
-      {to === '/' && hasPendingRoutines && (
-        <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
-      )}
     </span>
   )
 

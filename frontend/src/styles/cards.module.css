@@ -101,6 +101,16 @@
   gap: 0.3rem;
 }
 
+/* "Shared" indicator after a name (T107), on the routine card and the
+ * inventory row alike: a bare 14 px `users` icon (`Icon size="sm"`), no box
+ * and no background, so it doesn't read as a button. Same for owner and
+ * recipient; the label (role="img") says who shares it. */
+.sharedIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--c-shared);
+}
+
 .cardSubtitle {
   font-size: 0.7rem;
   color: var(--c-text-3);
@@ -294,11 +304,8 @@
  * another file — which is precisely what T045 does to this block.
  *
  * Consumers (T165+): `<Icon>` and the per-lot expiry text, both via
- * iconClassForLot() / iconClassForStock() in utils/stockSeverity.js. */
-
-.iconSuccess.iconSuccess {
-  color: var(--c-success);
-}
+ * iconClassForLot() / iconClassForStock() in utils/stockSeverity.js.
+ * There is no success tint: a healthy stock stays neutral (T106). */
 
 .iconWarning.iconWarning {
   color: var(--c-warning);

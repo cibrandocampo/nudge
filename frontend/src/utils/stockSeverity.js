@@ -45,17 +45,15 @@ export function iconClassForLot(lot, today) {
 }
 
 // Stock-only icon class (T165). Same rationale as `borderTokensFromStock`:
-// `expiry_severity` is per-lot territory and not consumed here. Default
-// branch returns null (no tint) for cold caches / unknown values — keeps
-// the badge neutral instead of forcing danger like the border helper.
+// `expiry_severity` is per-lot territory and not consumed here. Only a
+// problem gets a tint (T106): `ok`, cold caches and unknown values all stay
+// neutral, so colour on the stock line always means something is wrong.
 export function iconClassForStock(stock) {
   switch (stock?.stock_severity) {
     case 'critical':
       return cards.iconDanger
     case 'low':
       return cards.iconWarning
-    case 'ok':
-      return cards.iconSuccess
     default:
       return null
   }

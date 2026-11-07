@@ -71,3 +71,22 @@ export function formatRelativeTime(isoString) {
   const days = Math.round(diffHours / 24)
   return days === 1 ? i18next.t('time.inDay') : i18next.t('time.inDays', { n: days })
 }
+
+/**
+ * Formats a past moment (ms timestamp or ISO string) as "N ago", for
+ * "when did this last happen" labels. Not `formatRelativeTime`: that one
+ * reads a past time as a missed due date ("Due now", "Overdue by 3h").
+ *
+ *   - < 1 min (or in the future, clock skew) → "just now"
+ *   - < 1h  → whole minutes
+ *   - < 48h → whole hours
+ *   - else  → whole days
+ */
+export function formatTimeAgo(value) {
+  const minutes = Math.floor((Date.now() - new Date(value).getTime()) / 60_000)
+  if (minutes < 1) return i18next.t('time.justNow')
+  if (minutes < 60) return i18next.t('time.minAgo', { n: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return i18next.t('time.hoursAgo', { n: hours })
+  return i18next.t('time.daysAgo', { n: Math.floor(hours / 24) })
+}

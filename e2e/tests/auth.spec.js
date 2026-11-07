@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, SEED } from './helpers.js'
+import { login, logout, SEED } from './helpers.js'
 
 test.describe('Auth', () => {
   test('login page loads', async ({ page }) => {
@@ -34,11 +34,9 @@ test.describe('Auth', () => {
 
   test('sign out clears session', async ({ page }) => {
     await login(page)
-    // The old user-menu dropdown was replaced by a single Header button
-    // whose aria-label is "Sign out". `exact: true` disambiguates it
-    // from the "Sign in" button on the login page that renders after.
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click()
-    await expect(page).toHaveURL('/login')
+    // Sign out sits at the end of Settings (T104); `logout` goes there,
+    // clicks it and waits for /login.
+    await logout(page)
     await page.goto('/')
     await expect(page).toHaveURL('/login')
   })

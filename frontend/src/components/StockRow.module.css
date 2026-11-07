@@ -30,11 +30,19 @@
   min-height: 30px;
 }
 
-/* The name identifies the product, so it is the element that gives way: it
-   takes the space the fixed-width quantity and actions leave and truncates
-   rather than pushing them off the row. */
-.name {
+/* The name identifies the product, so it is the element that gives way: its
+   group takes the space the fixed-width quantity and actions leave, and the
+   name truncates inside it rather than pushing them off the row. The shared
+   icon (T107) sits right after the name, not at the far end of that space. */
+.nameGroup {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.name {
   min-width: 0;
   font-size: 0.85rem;
   font-weight: 600;
@@ -55,12 +63,6 @@
   align-items: center;
   gap: 0.15rem;
   flex: none;
-}
-
-/* Informational, not interactive — mirrors the card's shared marker. */
-.sharedBadge {
-  pointer-events: none;
-  cursor: default;
 }
 
 .meta {
