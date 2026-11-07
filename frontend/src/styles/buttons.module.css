@@ -185,13 +185,6 @@
   cursor: default;
 }
 
-.btnIconSharedRecipient {
-  color: var(--c-shared);
-  background: transparent;
-  border: 1px solid var(--c-shared-light);
-  cursor: default;
-}
-
 .btnIconDelete {
   color: var(--c-delete);
   background: rgba(239, 68, 68, 0.04);

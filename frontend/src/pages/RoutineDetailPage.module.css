@@ -50,6 +50,13 @@
   min-width: 0; /* allow the value to shrink + wrap inside its column */
 }
 
+/* The stock can't cover a completion (T106): the row says so in red.
+ * Two classes, so it beats `.metaValue`'s colour whatever order the bundle
+ * emits the stylesheets in (`cards.stockDepletionDanger` lost that race). */
+.metaValue.stockReason {
+  color: var(--c-danger);
+}
+
 .statusValue {
   display: inline-flex;
   align-items: center;

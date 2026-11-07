@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
-import { persistOptions, queryClient } from '../queryClient'
+import { persistOptions, queryClient, refreshRestoredCache } from '../queryClient'
 
 describe('queryClient', () => {
   afterEach(async () => {
@@ -44,6 +44,22 @@ describe('queryClient', () => {
     const retry = queryClient.getDefaultOptions().queries.retry
     expect(retry(0, { response: { status: 404 } })).toBe(false)
     expect(retry(0, { response: { status: 500 } })).toBe(true)
+  })
+
+  it('marks restored queries stale so a recent snapshot is refetched', async () => {
+    // A snapshot written just before a reload carries a recent
+    // dataUpdatedAt; under staleTime it would paint as fresh and never
+    // refetch. After the restore hook it must count as stale.
+    const key = ['restored-snapshot-test']
+    queryClient.setQueryData(key, { stale: 'optimistic' })
+    expect(queryClient.getQueryState(key).isInvalidated).toBe(false)
+    expect(queryClient.getQueryCache().find({ queryKey: key }).isStale()).toBe(false)
+
+    await refreshRestoredCache()
+
+    expect(queryClient.getQueryState(key).isInvalidated).toBe(true)
+    expect(queryClient.getQueryCache().find({ queryKey: key }).isStale()).toBe(true)
+    queryClient.removeQueries({ queryKey: key })
   })
 
   it('persists a client snapshot to IndexedDB and restores it', async () => {

@@ -257,8 +257,44 @@ describe('RoutineCard', () => {
     expect(onMarkDone).toHaveBeenCalledTimes(1)
   })
 
+  // ── Press feedback (T107) ──────────────────────────────────────────────────
+  // `data-pressed` drives the darker, 0.98-scaled card in CSS (verified in the
+  // browser); here only the state machine.
+
+  const press = (extra = {}) =>
+    fireEvent.pointerDown(cardLink(), { pointerId: 1, isPrimary: true, button: 0, clientX: 0, clientY: 0, ...extra })
+
+  it('marks the row pressed while the main pointer is down', () => {
+    renderCard()
+    press()
+    expect(row()).toHaveAttribute('data-pressed', 'true')
+  })
+
+  it.each([
+    ['release', () => fireEvent.pointerUp(cardLink(), { pointerId: 1, clientX: 0, clientY: 0 })],
+    ['cancel (the browser takes over a scroll)', () => fireEvent.pointerCancel(cardLink(), { pointerId: 1 })],
+    ['leave', () => fireEvent.pointerLeave(cardLink(), { pointerId: 1 })],
+  ])('clears the pressed state on %s', (_, end) => {
+    renderCard()
+    press()
+    end()
+    expect(row()).not.toHaveAttribute('data-pressed')
+  })
+
+  it('ignores a secondary button', () => {
+    renderCard()
+    press({ button: 2 })
+    expect(row()).not.toHaveAttribute('data-pressed')
+  })
+
+  it('does not press a card whose completion is in flight', () => {
+    renderCard(baseRoutine, { completing: true })
+    press()
+    expect(row()).not.toHaveAttribute('data-pressed')
+  })
+
   // ── Status dot ─────────────────────────────────────────────────────────────
-  // The coloured edge now means the action; the status lives in the dot.
+  // The dot and the time text say when (T106): stock never recolours them.
 
   it('colours the dot red when overdue', () => {
     const { container } = renderCard({ ...baseRoutine, is_due: true, is_overdue: true })
@@ -275,12 +311,40 @@ describe('RoutineCard', () => {
     expect(container.querySelector('[class*="dotSuccess"]')).toBeInTheDocument()
   })
 
-  it('escalates the dot to red when stock is depleted, even for a not-yet-due routine', () => {
-    // Without this, a routine with `next_due_at` 60 days ahead and 0 units
-    // looks identical to one in perfect shape.
+  // The touch strip's colour comes from `data-status` in the CSS; jsdom has no
+  // media queries, so the colour itself is checked in the browser.
+  it.each([
+    ['overdue', { is_due: true, is_overdue: true }],
+    ['due', { is_due: true, is_overdue: false, hours_until_due: 3 }],
+    ['ok', { is_due: false, is_overdue: false, hours_until_due: 24 }],
+  ])('exposes the time status "%s" on the row for the resting strip', (status, timing) => {
+    renderCard({ ...baseRoutine, ...timing })
+    expect(row()).toHaveAttribute('data-status', status)
+  })
+
+  it('keeps the time status on a row the stock blocks', () => {
+    // The CSS paints a blocked strip grey whatever the status; the status
+    // itself stays the time's, like the dot.
+    renderCard({ ...baseRoutine, ...depleted, is_due: true, is_overdue: true })
+    expect(row()).toHaveAttribute('data-status', 'overdue')
+    expect(layer()).toHaveAttribute('data-state', 'blocked')
+  })
+
+  it('keeps the green dot and time for a not-yet-due routine whose stock is depleted', () => {
+    // "In 10 days" in red read as urgent when the problem was the stock.
     const { container } = renderCard({ ...baseRoutine, ...depleted, is_due: false, is_overdue: false })
-    expect(container.querySelector('[class*="dotDanger"]')).toBeInTheDocument()
-    expect(container.querySelector('[class*="dotSuccess"]')).not.toBeInTheDocument()
+    expect(container.querySelector('[class*="dotSuccess"]')).toBeInTheDocument()
+    expect(container.querySelector('[class*="dotDanger"]')).not.toBeInTheDocument()
+    expect(container.querySelector('[class*="statusOk"]')).toBeInTheDocument()
+  })
+
+  it('puts the depletion reason on the stock line, in red', () => {
+    renderCard({ ...baseRoutine, ...depleted })
+    const line = screen.getByTestId('stock-line')
+    expect(line).toHaveTextContent('Out of stock · Ibuprofen')
+    expect(line.className).toContain('stockDepletionDanger')
+    expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconDanger')
+    expect(screen.queryByText(/1 × Ibuprofen/)).not.toBeInTheDocument()
   })
 
   it('keeps the green dot when the linked stock has enough quantity', () => {
@@ -298,29 +362,43 @@ describe('RoutineCard', () => {
 
   // ── Sharing ────────────────────────────────────────────────────────────────
   // Sharing is edited from the routine form (ShareWithSection). The card
-  // surfaces a passive `shared-badge` for both owner (filled variant) and
-  // recipient (outlined variant). The inline owner-username label was
-  // removed in T134 — the badge's `aria-label` carries the owner's name
-  // for the recipient case instead.
+  // shows a passive indicator right after the name (T107): a bare icon with
+  // role="img", the same for owner and recipient. The inline owner-username
+  // label was removed in T134 — the indicator's label carries the owner's
+  // name for the recipient case instead.
 
   it('does not expose an interactive share button', () => {
-    renderCard({ ...baseRoutine, shared_with: [], is_owner: true, owner_display_name: 'testuser' })
+    renderCard({ ...baseRoutine, shared_with: [10], is_owner: true, owner_display_name: 'testuser' })
     expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument()
   })
 
-  it('renders the owner-variant badge when the user owns and has shared the routine', () => {
+  it('puts the shared indicator inside the title, right after the name', () => {
     renderCard({ ...baseRoutine, shared_with: [10], is_owner: true })
     const badge = screen.getByTestId('shared-badge')
-    expect(badge.getAttribute('data-variant')).toBe('owner')
-    expect(badge.className).toContain('btnIconShared')
-    expect(badge.className).not.toContain('btnIconSharedRecipient')
+    expect(screen.getByText('Take vitamins').nextElementSibling).toBe(badge)
+    expect(badge.closest('[class*="cardTitle"]')).not.toBeNull()
   })
 
-  it('renders the recipient-variant badge when the user is not the owner', () => {
+  it('renders the owner variant as an image named for the owner', () => {
+    renderCard({ ...baseRoutine, shared_with: [10], is_owner: true })
+    const badge = screen.getByRole('img', { name: 'Shared with others' })
+    expect(badge).toHaveAttribute('data-variant', 'owner')
+    expect(badge.className).toBe('sharedIcon')
+  })
+
+  it('renders the recipient variant as an image naming who shares it, with the same look', () => {
     renderCard({ ...baseRoutine, shared_with: [], is_owner: false, owner_display_name: 'alice' })
-    const badge = screen.getByTestId('shared-badge')
-    expect(badge.getAttribute('data-variant')).toBe('recipient')
-    expect(badge.className).toContain('btnIconSharedRecipient')
+    const badge = screen.getByRole('img', { name: 'Shared with you by alice' })
+    expect(badge).toHaveAttribute('data-variant', 'recipient')
+    expect(badge.className).toBe('sharedIcon')
+  })
+
+  it('draws the chevron as hidden decoration, not a button', () => {
+    const { container } = renderCard()
+    const chevron = container.querySelector('use[href="#i-chevron-right"]').closest('svg')
+    expect(chevron).toHaveAttribute('aria-hidden', 'true')
+    expect(chevron.closest('button')).toBeNull()
+    expect(chevron.getAttribute('class')).toBe('icon icon-sm chevron')
   })
 
   it('omits the badge entirely when the owner has not shared the routine', () => {
@@ -348,17 +426,19 @@ describe('RoutineCard', () => {
   })
 
   // ── Stock severity icon tint ───────────────────────────────────────────────
-  // The package icon next to the linked stock takes its colour from the
-  // cached stock's `stock_severity`. When the stock cache is cold (e.g. user
-  // landed on the dashboard before the stock list resolved), the icon falls
-  // back to the badge's default text colour and stays neutral.
+  // The package icon next to the linked stock is tinted only when there is a
+  // problem (T106): amber for `low`, red for `critical`. A healthy stock, or a
+  // cold cache (dashboard reached before the stock list resolved), leaves it
+  // neutral — the bare `icon icon-sm` classes.
 
   it('tints the stock icon red when the cached stock_severity is critical', () => {
     // T165: 'critical' replaces the old 'out' as the red tier and now also
-    // covers running-out-fast and all-expired cases. See T164.
-    const routine = { ...baseRoutine, stock: 7, stock_name: 'Ibuprofen', stock_quantity: 0, stock_usage: 1 }
+    // covers running-out-fast and all-expired cases. See T164. Two units
+    // still cover a completion, so this is the tint, not the depleted line.
+    const routine = { ...baseRoutine, stock: 7, stock_name: 'Ibuprofen', stock_quantity: 2, stock_usage: 1 }
     renderCard(routine, { queryClient: clientWithStock({ id: 7, stock_severity: 'critical' }) })
     expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconDanger')
+    expect(screen.getByTestId('stock-line')).toHaveTextContent('1 × Ibuprofen')
   })
 
   it('tints the stock icon amber when the cached stock_severity is low', () => {
@@ -367,10 +447,10 @@ describe('RoutineCard', () => {
     expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconWarning')
   })
 
-  it('tints the stock icon green when the cached stock_severity is ok', () => {
+  it('leaves the stock icon untinted when the cached stock_severity is ok', () => {
     const routine = { ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 5, stock_usage: 1 }
     renderCard(routine, { queryClient: clientWithStock({ id: 7, stock_severity: 'ok' }) })
-    expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconSuccess')
+    expect(screen.getByTestId('stock-icon').getAttribute('class')).toBe('icon icon-sm')
   })
 
   // T165: documents the no-worst-of-two contract — `iconClassForStock` looks
@@ -379,14 +459,11 @@ describe('RoutineCard', () => {
   it('iconClassForStock ignores expiry_severity=soon when stock_severity is ok', () => {
     const routine = { ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 5, stock_usage: 1 }
     renderCard(routine, { queryClient: clientWithStock({ id: 7, stock_severity: 'ok', expiry_severity: 'soon' }) })
-    expect(screen.getByTestId('stock-icon').getAttribute('class')).toContain('iconSuccess')
+    expect(screen.getByTestId('stock-icon').getAttribute('class')).toBe('icon icon-sm')
   })
 
   it('leaves the stock icon untinted when the stock cache is cold', () => {
     renderCard({ ...baseRoutine, stock: 7, stock_name: 'Filters', stock_quantity: 5, stock_usage: 1 })
-    const cls = screen.getByTestId('stock-icon').getAttribute('class') ?? ''
-    expect(cls).not.toContain('iconDanger')
-    expect(cls).not.toContain('iconWarning')
-    expect(cls).not.toContain('iconSuccess')
+    expect(screen.getByTestId('stock-icon').getAttribute('class')).toBe('icon icon-sm')
   })
 })

@@ -1,12 +1,26 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { persistQueryClientSubscribe } from '@tanstack/react-query-persist-client'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { enqueue, list } from '../../offline/queue'
+import { persister } from '../../query/queryClient'
 import { server } from '../../test/mocks/server'
 import { mockUser } from '../../test/mocks/handlers'
 import { AuthProvider, useAuth } from '../AuthContext'
 
 const BASE = 'http://localhost/api'
+
+// A queued offline write. The global setup empties the queue before each test.
+const queueEntry = (id) => ({
+  id,
+  method: 'POST',
+  endpoint: '/routines/5/log/',
+  body: {},
+  resourceKey: 'routine:5',
+  createdAt: '2026-11-05T08:00:00Z',
+  status: 'pending',
+})
 
 function createWrapper(qc) {
   return function Wrapper({ children }) {
@@ -253,6 +267,19 @@ describe('AuthContext', () => {
     expect(qc.getQueryData(['me'])).toEqual(updated)
   })
 
+  it('completeProfile rejects with complete_profile_failed and keeps the cached user on a non-2xx', async () => {
+    localStorage.setItem('access_token', 'tok')
+    server.use(http.patch(`${BASE}/auth/me/`, () => new HttpResponse(null, { status: 400 })))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+    const before = qc.getQueryData(['me'])
+
+    await act(async () => {
+      await expect(result.current.completeProfile('Ada', 'Lovelace')).rejects.toThrow('complete_profile_failed')
+    })
+    expect(qc.getQueryData(['me'])).toEqual(before)
+  })
+
   // ── isNewUser derived flag ──────────────────────────────────────────────
 
   it('isNewUser is false when first/last name are set', async () => {
@@ -292,12 +319,110 @@ describe('AuthContext', () => {
     await waitFor(() => expect(result.current.user).not.toBeNull())
 
     await act(async () => {
-      result.current.logout()
+      await result.current.logout()
     })
 
     await waitFor(() => expect(result.current.user).toBeNull())
     expect(localStorage.getItem('access_token')).toBeNull()
     expect(localStorage.getItem('refresh_token')).toBeNull()
+  })
+
+  it('logout empties the offline queue', async () => {
+    localStorage.setItem('access_token', 'tok')
+    await enqueue(queueEntry('k-1'))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.logout()
+    })
+
+    expect(await list()).toEqual([])
+  })
+
+  it('logout leaves no snapshot of the user in the persisted cache', async () => {
+    localStorage.setItem('access_token', 'tok')
+    // The app persists through PersistQueryClientProvider; subscribe the
+    // same persister to this client so its writes happen here. The
+    // persister throttles writes to one per second (a library default the
+    // app keeps), so each wait below spans two intervals: one write may
+    // have just run, and the next waits a full interval behind it.
+    const THROTTLE_MS = 1000
+    const unsubscribe = persistQueryClientSubscribe({ queryClient: qc, persister })
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.user).not.toBeNull())
+      qc.setQueryData(['routines'], [{ id: 7, name: 'Private routine' }])
+      await waitFor(async () => expect(JSON.stringify(await persister.restoreClient())).toContain('Private routine'), {
+        timeout: 2 * THROTTLE_MS,
+      })
+
+      await act(async () => {
+        await result.current.logout()
+        // A write scheduled during logout lands within the window; read
+        // the snapshot only after it.
+        await new Promise((resolve) => setTimeout(resolve, 2 * THROTTLE_MS))
+      })
+
+      const snapshot = await persister.restoreClient()
+      const queries = snapshot?.clientState.queries ?? []
+      expect(queries.map((q) => q.queryKey)).not.toContainEqual(['routines'])
+      expect(queries.find((q) => q.queryKey[0] === 'me')?.state.data ?? null).toBeNull()
+    } finally {
+      unsubscribe()
+      await persister.removeClient()
+    }
+  })
+
+  it('logout unregisters the push subscription while still authenticated', async () => {
+    localStorage.setItem('access_token', 'tok')
+    const subscription = { endpoint: 'https://push.example.com/sub/9', unsubscribe: vi.fn().mockResolvedValue(true) }
+    const { pushManager } = await navigator.serviceWorker.ready
+    pushManager.getSubscription.mockResolvedValueOnce(subscription)
+    const unsubscribeCalls = []
+    server.use(
+      http.delete(`${BASE}/push/unsubscribe/`, async ({ request }) => {
+        unsubscribeCalls.push({ auth: request.headers.get('Authorization'), body: await request.json() })
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.logout()
+    })
+
+    expect(unsubscribeCalls).toEqual([{ auth: 'Bearer tok', body: { endpoint: 'https://push.example.com/sub/9' } }])
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('logout still signs out when unregistering push fails', async () => {
+    localStorage.setItem('access_token', 'tok')
+    const { pushManager } = await navigator.serviceWorker.ready
+    pushManager.getSubscription.mockResolvedValueOnce({
+      endpoint: 'https://push.example.com/sub/9',
+      unsubscribe: vi.fn(),
+    })
+    server.use(http.delete(`${BASE}/push/unsubscribe/`, () => new HttpResponse(null, { status: 500 })))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.logout()
+    })
+
+    expect(result.current.user).toBeNull()
+    expect(localStorage.getItem('access_token')).toBeNull()
+  })
+
+  it('pendingChangesCount reads the number of queued offline writes', async () => {
+    await enqueue(queueEntry('k-1'))
+    await enqueue(queueEntry('k-2'))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await expect(result.current.pendingChangesCount()).resolves.toBe(2)
   })
 
   // ── public API shape ────────────────────────────────────────────────────
@@ -314,6 +439,7 @@ describe('AuthContext', () => {
         loginVerify: expect.any(Function),
         completeProfile: expect.any(Function),
         logout: expect.any(Function),
+        pendingChangesCount: expect.any(Function),
       }),
     )
     // Old `login(username, password)` is intentionally gone.

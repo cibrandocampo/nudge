@@ -40,8 +40,9 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
 
   const quantity = stock.quantity_available ?? stock.quantity ?? 0
 
-  // Owner sees the filled variant; recipient sees the outlined one — both
-  // share the same `users` icon so the language is consistent across the app.
+  // Passive indicator after the name (T107): the routine card's markup — a
+  // bare `users` icon with role="img", the same for owner and recipient. It is
+  // part of the row, so tapping it opens the detail like the rest of the row.
   const isShared = stock.shared_with?.length > 0 || stock.is_owner === false
   const isOwnerOfShare = stock.is_owner !== false
   const sharedBadgeAria = isOwnerOfShare
@@ -67,7 +68,21 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
     <div className={s.row} data-testid="product-card" onClick={goDetail}>
       <div className={s.main}>
         <span className={cx(cards.dot, tokens.dot)} />
-        <span className={s.name}>{stock.name}</span>
+        <span className={s.nameGroup}>
+          <span className={s.name}>{stock.name}</span>
+          {isShared && (
+            <span
+              className={cards.sharedIcon}
+              role="img"
+              aria-label={sharedBadgeAria}
+              title={sharedBadgeAria}
+              data-testid="shared-badge"
+              data-variant={isOwnerOfShare ? 'owner' : 'recipient'}
+            >
+              <Icon name="users" size="sm" />
+            </span>
+          )}
+        </span>
         <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
         <span className={s.qtyGroup}>
           <span className={cx(cards.stockQty, flashing && s.stockQtyFlash)}>
@@ -81,21 +96,6 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           )}
         </span>
         <div className={s.actions} onClick={stop}>
-          {isShared && (
-            <span
-              className={cx(
-                buttons.btnIcon,
-                isOwnerOfShare ? buttons.btnIconShared : buttons.btnIconSharedRecipient,
-                s.sharedBadge,
-              )}
-              aria-label={sharedBadgeAria}
-              title={sharedBadgeAria}
-              data-testid="shared-badge"
-              data-variant={isOwnerOfShare ? 'owner' : 'recipient'}
-            >
-              <Icon name="users" size="sm" />
-            </span>
-          )}
           {quantity > 0 && (
             <button
               type="button"

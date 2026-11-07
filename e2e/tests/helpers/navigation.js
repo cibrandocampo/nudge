@@ -27,7 +27,11 @@ export async function goToSettings(page) {
 
 export async function goToRoutineDetail(page, routineKey) {
   const name = SEED.routines[routineKey] ?? routineKey
-  await page.goto('/')
+  // Client-side, through the bottom bar — not `page.goto('/')`. A hard reload
+  // within the persister's 1 s window after a write rehydrates the previous
+  // snapshot as fresh: unshare.spec saved the share, reloaded here, and the
+  // form then sent the pre-share `updated_at` and got a 412.
+  await goToDashboard(page)
   await routineCard(page, routineKey).first().click()
   await expect(page).toHaveURL(/\/routines\/\d+$/)
   await expect(page.getByText(name).first()).toBeVisible()
