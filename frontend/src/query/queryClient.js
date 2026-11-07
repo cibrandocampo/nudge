@@ -63,6 +63,18 @@ export const persister = createAsyncStoragePersister({
   key: IDB_KEY,
 })
 
+// Called once the persisted snapshot has been restored (the provider's
+// `onSuccess`). The persister writes at most once per second, so a reload
+// right after a write can restore a snapshot from before it — e.g. the
+// optimistic dashboard of a completion, the routine in neither Today nor
+// Upcoming — with a recent `dataUpdatedAt`. Under `staleTime` that snapshot
+// counts as fresh and nothing refetches it for 30 s. Marking every restored
+// query stale makes the mounted ones refetch now; offline, the fetch pauses
+// and the restored data keeps painting (T108 QA, 2026-11-07).
+export function refreshRestoredCache() {
+  return queryClient.invalidateQueries()
+}
+
 export const persistOptions = {
   persister,
   // Throw away persisted cache older than 30 days — stale enough that a
