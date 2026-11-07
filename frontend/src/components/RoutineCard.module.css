@@ -176,10 +176,17 @@
  * is dragged or leaving, and when the keyboard focuses the check, which is
  * what the user is about to press. The media query is the exact complement
  * of the mouse one at the top of this file, where the 44 px check is a real
- * button and keeps its action colour. */
+ * button and keeps its action colour.
+ *
+ * At rest the layer is cut down to the strip it shows. The card and the clip
+ * share one radius, so at the card's right corners the two arcs coincide and
+ * the card's anti-aliased edge let a sliver of the layer through — invisible
+ * in grey, a red or amber fringe in colour (T108 QA, B1). Dragging, leaving
+ * or a focused check drop this rule, and the whole layer shows again. */
 @media (hover: none), (pointer: coarse), (pointer: none) {
   .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
     background: var(--c-success);
+    clip-path: inset(0 calc(100% - var(--rest-offset)) 0 0);
   }
 
   .row[data-phase='rest'][data-status='due']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
