@@ -53,12 +53,52 @@
   /* Vertical scrolling stays native; horizontal movement goes to the swipe. */
   touch-action: pan-y;
   /* The resting offset is a margin, not a translate, so the card narrows
-   * instead of having its right edge clipped. The drag rides on transform. */
+   * instead of having its right edge clipped. The drag rides on transform,
+   * and the press scale (T107) is composed into the same transform so
+   * neither replaces the other. */
   margin-left: calc(var(--rest-offset) + var(--hover-nudge));
-  transform: translateX(var(--drag));
+  transform: translateX(var(--drag)) scale(var(--press, 1));
   transition:
     transform 200ms ease,
-    margin-left 150ms ease;
+    margin-left 150ms ease,
+    background-color 100ms ease;
+  /* Our press feedback replaces the browser's tap highlight. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Press feedback (T107): the whole card darkens a step and shrinks a little
+ * while held — but never mid-drag, where the card must follow the finger.
+ * `data-pressed` comes from pointer events (see RoutineCard): `:active` is not
+ * applied to a held touch reliably across mobile browsers. */
+.row[data-pressed='true'][data-dragging='false'] .card {
+  --press: 0.98;
+  background: var(--c-border-inner);
+  transition:
+    transform 100ms ease,
+    margin-left 150ms ease,
+    background-color 100ms ease;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bare chevron (T107): light grey, no box — it marks the card as opening,
+ * it is not a button. No idle motion: moving sideways means "complete" here. */
+.chevron {
+  color: var(--c-text-3);
+  transition:
+    transform 150ms ease,
+    color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card:hover .chevron {
+    transform: translateX(2px);
+    color: var(--c-text-2);
+  }
 }
 
 .clip:has(.check:hover:not([aria-disabled='true'])) {
@@ -126,6 +166,43 @@
 .actionLayer[data-state='blocked'] {
   background: repeating-linear-gradient(-45deg, var(--c-border-danger) 0 6px, rgba(239, 68, 68, 0.08) 6px 12px);
   color: var(--c-danger);
+}
+
+/* Touch, at rest: the 4 px strip is a status edge, not the action. It repeats
+ * the dot — green not due, amber due today, red overdue — so the list scans
+ * at a glance; a card the stock blocks is grey, the usual "can't be used".
+ * (A green "completable" edge next to a red overdue dot read as two states.)
+ * It takes the action colour (green, or red and hatched) only while the card
+ * is dragged or leaving, and when the keyboard focuses the check, which is
+ * what the user is about to press. The media query is the exact complement
+ * of the mouse one at the top of this file, where the 44 px check is a real
+ * button and keeps its action colour.
+ *
+ * At rest the layer is cut down to the strip it shows. The card and the clip
+ * share one radius, so at the card's right corners the two arcs coincide and
+ * the card's anti-aliased edge let a sliver of the layer through — invisible
+ * in grey, a red or amber fringe in colour (T108 QA, B1). Dragging, leaving
+ * or a focused check drop this rule, and the whole layer shows again. */
+@media (hover: none), (pointer: coarse), (pointer: none) {
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
+    background: var(--c-success);
+    clip-path: inset(0 calc(100% - var(--rest-offset)) 0 0);
+  }
+
+  .row[data-phase='rest'][data-status='due']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
+    background: var(--c-warning);
+  }
+
+  .row[data-phase='rest'][data-status='overdue']:not([data-dragging='true']):not(:has(.check:focus-visible))
+    .actionLayer {
+    background: var(--c-danger);
+  }
+
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible))
+    .actionLayer[data-state='blocked'] {
+    background: var(--c-border);
+    color: var(--c-text-3);
+  }
 }
 
 /* Full height and as wide as the mouse resting offset: the whole uncovered
@@ -234,5 +311,17 @@
   .highlighted .card {
     animation: none;
     background: color-mix(in srgb, var(--c-success) 18%, var(--c-surface));
+  }
+
+  /* Press and hover keep their colour change, without scale or shift. */
+  .row[data-pressed='true'][data-dragging='false'] .card {
+    --press: 1;
+    transition: none;
+  }
+
+  .card:hover .chevron,
+  .chevron {
+    transform: none;
+    transition: none;
   }
 }

@@ -192,10 +192,15 @@ async function main() {
     ],
   })
   // locale: 'en-US' pins react-i18next's language-detector to English
-  // regardless of the host / runner locale.
+  // regardless of the host / runner locale. hasTouch + isMobile (T108): the
+  // captures are phone-sized, so the CSS must see a phone (hover: none,
+  // pointer: coarse) — otherwise the routine cards render their mouse layout
+  // (the 44 px coloured check strip) instead of the touch one (4 px grey).
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     locale: 'en-US',
+    hasTouch: true,
+    isMobile: true,
   })
   const page = await context.newPage()
 
@@ -279,6 +284,8 @@ async function main() {
       const context2 = await browser.newContext({
         viewport: { width: 390, height: 844 },
         locale: 'en-US',
+        hasTouch: true,
+        isMobile: true,
       })
       const page2 = await context2.newPage()
       await login(page2, USER2_EMAIL, PASS)
@@ -306,8 +313,11 @@ async function main() {
     const cactusTitle = page.getByText('Water cactus', { exact: true }).first()
     await cactusTitle.waitFor({ state: 'visible', timeout: 10_000 })
     // The check on the card's action layer (T101), same action as a swipe.
+    // On touch it sits behind the card's 4 px strip, so it is reached the way
+    // a keyboard or screen reader does: focus (first stop of the card) + Enter.
     const cactusCard = page.getByTestId('routine-card').filter({ hasText: 'Water cactus' }).first()
-    await cactusCard.getByRole('button', { name: 'Mark as done' }).click()
+    await cactusCard.getByRole('button', { name: 'Mark as done' }).focus()
+    await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid="offline-banner"]', { state: 'visible' })
     await page.waitForSelector('[data-testid="pending-badge"]', { state: 'visible' })
     await screenshot(page, 'offline-banner')
@@ -396,7 +406,9 @@ async function main() {
     const vitDTitle = pageL.getByText('Take Vitamin D', { exact: true }).first()
     await vitDTitle.waitFor({ state: 'visible', timeout: 10_000 })
     const vitDCard = pageL.getByTestId('routine-card').filter({ hasText: 'Take Vitamin D' }).first()
-    await vitDCard.getByRole('button', { name: 'Mark as done' }).click()
+    // Touch layout: the check is behind the card (see the offline step).
+    await vitDCard.getByRole('button', { name: 'Mark as done' }).focus()
+    await pageL.keyboard.press('Enter')
     const modal = pageL.getByRole('dialog')
     await modal.waitFor({ state: 'visible', timeout: 5_000 })
     await pageL.waitForTimeout(300)

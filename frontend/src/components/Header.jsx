@@ -1,15 +1,13 @@
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { unsubscribeFromPush } from '../utils/push'
-import Icon from './Icon'
 import PendingBadge from './PendingBadge'
 import s from './Header.module.css'
 
+// Signing out lives at the end of Settings (T104), not here: the header is
+// the most reachable spot on every screen, wrong for a deliberate action.
 export default function Header() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const { t } = useTranslation()
-  const navigate = useNavigate()
 
   const goToAdmin = () => {
     const token = localStorage.getItem('access_token')
@@ -25,15 +23,6 @@ export default function Header() {
     form.submit()
   }
 
-  // Direct log-out affordance — the old dropdown (change password / sign out)
-  // was replaced by: change-password button inside Settings → Profile, and
-  // this header button only logs out.
-  const handleLogout = async () => {
-    await unsubscribeFromPush().catch(() => {})
-    logout()
-    navigate('/login')
-  }
-
   return (
     <header className={s.header}>
       <span className={s.logo}>
@@ -47,15 +36,6 @@ export default function Header() {
             {t('header.admin', 'Admin')}
           </button>
         )}
-        <button
-          type="button"
-          className={s.userBtn}
-          onClick={handleLogout}
-          aria-label={t('header.signOut')}
-          title={t('header.signOut')}
-        >
-          <Icon name="log-out" />
-        </button>
       </div>
     </header>
   )

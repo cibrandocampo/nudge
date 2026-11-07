@@ -7,7 +7,8 @@ import { goOffline, expectPendingBadge } from './helpers/offline.js'
  *
  * Regression guard for the bug where `position: absolute; right: 0` placed
  * the panel partially off-screen because the wrapper was not flush with
- * the viewport's right edge (admin + logout buttons sit between them).
+ * the viewport's right edge (header buttons sat between them; since T104
+ * only the staff-only Admin button can).
  * The fix adds a `@media (max-width: 480px)` rule that switches the panel
  * to `position: fixed` with viewport-spanning `left` / `right` paddings.
  *

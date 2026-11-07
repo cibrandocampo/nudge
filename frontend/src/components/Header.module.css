@@ -51,23 +51,3 @@
   color: var(--c-text-2);
   border-color: var(--c-muted);
 }
-
-.userBtn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  border: none;
-  color: var(--c-text-3);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition);
-  -webkit-tap-highlight-color: transparent;
-}
-.userBtn:hover {
-  color: var(--c-text-2);
-  background: rgba(0, 0, 0, 0.05);
-}

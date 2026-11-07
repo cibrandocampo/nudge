@@ -152,9 +152,8 @@ export default function RoutineDetailPage() {
     }
   }
 
-  // Stock-depleted escalation: a routine that can't be logged because the
-  // linked stock is empty surfaces in red even when not due yet. Mirrors
-  // RoutineCard.statusTokens so dashboard and detail page stay aligned.
+  // The linked stock can't cover one completion: logging is blocked and the
+  // stock row says why. Same definition as RoutineCard's `stockDepleted`.
   const stockAvailable = routine?.stock_quantity_available ?? routine?.stock_quantity ?? 0
   const routineStockDepleted = Boolean(routine?.stock_name) && Number(stockAvailable) < Number(routine?.stock_usage)
 
@@ -164,13 +163,12 @@ export default function RoutineDetailPage() {
   const otherRecipients = (routine?.shared_with_details ?? []).filter(
     (c) => routine?.is_owner !== false || c.id !== user?.id,
   )
-  const borderClass = routineStockDepleted
-    ? cards.cardBorderDanger
-    : !routine?.is_due
-      ? cards.cardBorderSuccess
-      : routine.is_overdue
-        ? cards.cardBorderDanger
-        : cards.cardBorderWarning
+  // Time only, like RoutineCard's status dot (T106): stock never recolours it.
+  const borderClass = !routine?.is_due
+    ? cards.cardBorderSuccess
+    : routine.is_overdue
+      ? cards.cardBorderDanger
+      : cards.cardBorderWarning
 
   // Severity contract is the post-T164 3-tier ('critical' | 'low' | 'ok').
   // Anything else (null when stock isn't cached yet) renders no dot.
@@ -197,6 +195,10 @@ export default function RoutineDetailPage() {
         : stockSeverity === 'ok'
           ? cards.dotSuccess
           : null
+  // The stock row carries the depletion reason in red (T106), as the card's
+  // stock line does. A queued completion owns the row's look meanwhile
+  // (struck-through quantity, clock), so the reason waits for it to sync.
+  const showStockReason = routineStockDepleted && !hasPendingLog
 
   return (
     <QueryHandler
@@ -300,17 +302,24 @@ export default function RoutineDetailPage() {
                 <div className={s.metaRow}>
                   <span className={s.metaLabel}>{t('routine.detail.stock')}</span>
                   <span
-                    className={cx(s.metaValue, s.statusValue, hasPendingLog && s.metaValuePending)}
+                    className={cx(
+                      s.metaValue,
+                      s.statusValue,
+                      hasPendingLog && s.metaValuePending,
+                      showStockReason && s.stockReason,
+                    )}
                     data-testid="stock-row-value"
                   >
                     {stockDotClass && !hasPendingLog && (
                       <span className={cx(cards.dot, stockDotClass)} data-testid="stock-severity-dot" />
                     )}
                     {hasPendingLog && <Icon name="clock" size="sm" />}
-                    {t('routine.detail.stockValue', {
-                      qty: routine.stock_quantity,
-                      name: routine.stock_name,
-                    })}
+                    {showStockReason
+                      ? t('card.stockDepletedLine', { stock: routine.stock_name })
+                      : t('routine.detail.stockValue', {
+                          qty: routine.stock_quantity,
+                          name: routine.stock_name,
+                        })}
                     {stockDetailPath && (
                       <Link
                         to={stockDetailPath}

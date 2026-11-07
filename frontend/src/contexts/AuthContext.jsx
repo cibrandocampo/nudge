@@ -1,6 +1,9 @@
 import { createContext, useContext } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, BASE_URL } from '../api/client'
+import { clear as clearQueue, list as listQueue } from '../offline/queue'
+import { persister } from '../query/queryClient'
+import { unsubscribeFromPush } from '../utils/push'
 
 export const AuthContext = createContext(null)
 
@@ -118,19 +121,50 @@ export function AuthProvider({ children }) {
     queryClient.setQueryData(['me'], updated)
   }
 
-  const logout = () => {
+  // How many offline writes would be lost by signing out now. Read from the
+  // queue at the moment of asking, never from a cached count.
+  const pendingChangesCount = async () => (await listQueue()).length
+
+  // Leaves the device without the user's data: tokens, offline queue, and
+  // the query cache both in memory and in IndexedDB. Device preferences
+  // (scanner camera, collapsed inventory groups) live in localStorage under
+  // their own keys and stay. Callers navigate to /login afterwards.
+  const logout = async () => {
+    // Still authenticated: the backend call needs the token.
+    await unsubscribeFromPush().catch(() => {})
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
-    // Null (not removeQueries) so the active observer sees user=null this
-    // render. removeQueries would transition the observer to a fresh
-    // Query and — because the re-render that flips `enabled` to false
-    // hasn't run yet — trigger an unwanted refetch of the old session.
+    // Null before any cache removal, so the active observer sees user=null
+    // this render while its query still exists. Removing the query first
+    // (clear / removeQueries) would leave the observer on a destroyed Query
+    // that never reports the change, and — because the re-render that flips
+    // `enabled` to false hasn't run yet — a fresh one would refetch the old
+    // session.
     queryClient.setQueryData(['me'], null)
+    // Otherwise the next user on this device would replay these writes
+    // with their own token.
+    await clearQueue()
+    // Memory first, then the persisted snapshot: the persister writes on
+    // every cache change, so removing the snapshot before clearing would
+    // let that write bring it back with the old data. A throttled write
+    // can still land afterwards, but it carries the cleared cache.
+    queryClient.clear()
+    await persister.removeClient()
   }
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, isNewUser, allowSelfSignup, loginStart, loginVerify, completeProfile, logout }}
+      value={{
+        user,
+        loading,
+        isNewUser,
+        allowSelfSignup,
+        loginStart,
+        loginVerify,
+        completeProfile,
+        logout,
+        pendingChangesCount,
+      }}
     >
       {children}
     </AuthContext.Provider>

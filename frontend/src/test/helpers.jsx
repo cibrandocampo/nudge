@@ -21,6 +21,8 @@ const defaultAuth = {
   loginVerify: vi.fn().mockResolvedValue({ is_new: false }),
   completeProfile: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn(),
+  // Same as the real one: the size of the offline queue at call time.
+  pendingChangesCount: async () => (await list()).length,
   loading: false,
   isNewUser: false,
   allowSelfSignup: null,
