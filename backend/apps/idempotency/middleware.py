@@ -5,7 +5,7 @@ import logging
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import AuthenticationFailed, TokenError
 
 from .models import IdempotencyRecord
 
@@ -102,7 +102,9 @@ class IdempotencyMiddleware:
         """
         try:
             user_token = self.jwt_authenticator.authenticate(request)
-        except (InvalidToken, TokenError):
+        except (AuthenticationFailed, TokenError):
+            # A malformed or expired token, or one whose user was deleted or
+            # deactivated: let the view reject it with a 401.
             user_token = None
         if user_token is not None:
             user, _ = user_token

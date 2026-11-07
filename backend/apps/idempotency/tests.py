@@ -93,6 +93,25 @@ class MiddlewareTest(APITestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(IdempotencyRecord.objects.count(), 0)
 
+    # ── Valid token for a user that no longer exists ─────────────────────────
+    def test_token_of_deleted_user_returns_401(self):
+        # A reseed (or an account deletion) leaves a signed, unexpired token
+        # behind. It used to escape the middleware as a 500, which the client
+        # shows as a generic error instead of sending the user to log in.
+        headers = {**auth_headers(self.other), "HTTP_IDEMPOTENCY_KEY": "gone-key"}
+        self.other.delete()
+        response = self.client.post("/api/routines/", {"name": "R", "interval_hours": 24}, **headers)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)
+
+    def test_token_of_inactive_user_returns_401(self):
+        headers = {**auth_headers(self.other), "HTTP_IDEMPOTENCY_KEY": "inactive-key"}
+        self.other.is_active = False
+        self.other.save()
+        response = self.client.post("/api/routines/", {"name": "R", "interval_hours": 24}, **headers)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)
+
     # ── GET not processed ────────────────────────────────────────────────────
     def test_get_is_not_processed(self):
         response = self.client.get(

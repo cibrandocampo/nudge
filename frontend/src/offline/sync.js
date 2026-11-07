@@ -168,6 +168,9 @@ async function runEntry(entry) {
     const res =
       method === 'get' ? await api.get(entry.endpoint, opts) : await api[method](entry.endpoint, entry.body, opts)
     if (res.ok) {
+      // Done with the request: unregister its controller first, or the
+      // removal below would abort it while its response body still streams.
+      clearAbortController(entry.id)
       await remove(entry.id)
       if (queryClient) {
         const keys = queryKeysForResource(entry.resourceKey)

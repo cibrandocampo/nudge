@@ -1,10 +1,238 @@
-/* Overrides for shared.card when rendered as an anchor. */
-.cardLink {
+/* ── Row: two stacked layers (T101) ──────────────────────────────────────────
+ * The row owns the spacing between cards and the height collapse after a
+ * completion (grid-template-rows 1fr → 0fr animates the real height). The
+ * clip stacks the action layer behind the card and rounds both. */
+.row {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-bottom: 0.5rem;
+  /* How far the card rests to the right, uncovering the action layer: a strip
+   * on touch, the strip plus a clickable check with a mouse. */
+  --rest-offset: 4px;
+  --hover-nudge: 0px;
+  --drag: 0px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row {
+    --rest-offset: 44px;
+  }
+}
+
+/* Keyboard users on touch layouts still see the check they focused. */
+.row:has(.check:focus-visible) {
+  --rest-offset: 44px;
+}
+
+.row[data-phase='collapsing'] {
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+  transition:
+    grid-template-rows var(--collapse-ms) ease-in,
+    margin-bottom var(--collapse-ms) ease-in;
+}
+
+.clip {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
+/* ── Card (front) ─────────────────────────────────────────────────────────── */
+/* Overrides for the shared `.card` rendered as an anchor in front of the
+ * layer. The status border-left is gone: the coloured edge is the layer. */
+.card {
+  position: relative;
   display: block;
+  margin-top: 0;
+  margin-bottom: 0;
+  border-left-width: 1px;
   text-decoration: none;
   color: inherit;
+  /* Vertical scrolling stays native; horizontal movement goes to the swipe. */
+  touch-action: pan-y;
+  /* The resting offset is a margin, not a translate, so the card narrows
+   * instead of having its right edge clipped. The drag rides on transform. */
+  margin-left: calc(var(--rest-offset) + var(--hover-nudge));
+  transform: translateX(var(--drag));
+  transition:
+    transform 200ms ease,
+    margin-left 150ms ease;
+}
+
+.clip:has(.check:hover:not([aria-disabled='true'])) {
+  --hover-nudge: 6px;
+}
+
+/* While the finger drives the card it must follow without lag. */
+.row[data-dragging='true'] .card {
+  transition: none;
+  user-select: none;
+}
+
+.row[data-phase='leaving'] .card,
+.row[data-phase='collapsing'] .card {
+  transform: translateX(110%);
+  transition: transform var(--exit-ms) ease-in;
+}
+
+/* Where a completed routine went: its card flashes a soft green that fades
+ * back to the surface. The dashboard clears the flag after HIGHLIGHT_MS. */
+.highlighted .card {
+  animation: flash var(--highlight-ms, 1200ms) ease-out;
+}
+
+@keyframes flash {
+  from {
+    background: color-mix(in srgb, var(--c-success) 18%, var(--c-surface));
+  }
+  to {
+    background: var(--c-surface);
+  }
+}
+
+.nudging {
+  animation: nudge var(--nudge-ms) ease-in-out;
+}
+
+@keyframes nudge {
+  25% {
+    translate: 8px 0;
+  }
+  60% {
+    translate: -3px 0;
+  }
+}
+
+/* ── Action layer (behind) ────────────────────────────────────────────────── */
+.actionLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  background: var(--c-border-success);
+  color: var(--c-success);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.actionLayer[data-state='armed'] {
+  background: var(--c-success);
+  color: var(--c-surface);
+}
+
+.actionLayer[data-state='blocked'] {
+  background: repeating-linear-gradient(-45deg, var(--c-border-danger) 0 6px, rgba(239, 68, 68, 0.08) 6px 12px);
+  color: var(--c-danger);
+}
+
+/* Full height and as wide as the mouse resting offset: the whole uncovered
+ * strip is the target (WCAG 2.5.8 asks for ≥ 24px). */
+.check {
+  align-self: stretch;
+  flex-shrink: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.check[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.check:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -4px;
+  border-radius: var(--radius);
+}
+
+/* Grows with the drag until the threshold, then pops. */
+.checkIcon {
+  width: 20px;
+  height: 20px;
+  opacity: calc(0.55 + 0.45 * var(--progress, 0));
+  transform: scale(calc(0.85 + 0.15 * var(--progress, 0)));
+}
+
+.actionLayer[data-state='armed'] .checkIcon {
+  opacity: 1;
+  animation: pop 180ms ease-out;
+}
+
+/* The check draws itself as the card leaves. */
+.row[data-phase='leaving'] .checkIcon polyline {
+  stroke-dasharray: 1;
+  animation: draw var(--exit-ms) ease-out;
+}
+
+@keyframes pop {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.actionLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+/* A blocked card stops at 40% of the width (BLOCKED_MAX_RATIO): the reason
+ * wraps to fit the strip it uncovers next to the ✕. */
+.actionLayer[data-state='blocked'] .actionLabel {
+  max-width: calc(40% - 52px);
+  font-size: 0.75rem;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.actionLayer[data-state='armed'] .actionLabel,
+.row[data-dragging='true'] .actionLayer[data-state='blocked'] .actionLabel {
+  opacity: 1;
 }
 
 .syncBadge {
   flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row[data-phase='collapsing'],
+  .card,
+  .row[data-phase='leaving'] .card,
+  .row[data-phase='collapsing'] .card,
+  .actionLayer,
+  .actionLabel {
+    transition: none;
+  }
+
+  .nudging,
+  .actionLayer[data-state='armed'] .checkIcon,
+  .row[data-phase='leaving'] .checkIcon polyline {
+    animation: none;
+  }
+
+  /* Same signal without motion: a steady tint for as long as the flag lasts. */
+  .highlighted .card {
+    animation: none;
+    background: color-mix(in srgb, var(--c-success) 18%, var(--c-surface));
+  }
 }
