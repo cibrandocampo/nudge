@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { getLastReachableAt } from '../offline/reachability'
-import { formatRelativeTime } from '../utils/time'
+import { formatTimeAgo } from '../utils/time'
 import Icon from './Icon'
 import s from './OfflineBanner.module.css'
 
@@ -27,7 +27,7 @@ export default function OfflineBanner() {
   const lastSyncLabel =
     lastReachableAt != null
       ? t('offline.lastSync', {
-          relative: formatRelativeTime(new Date(lastReachableAt).toISOString()),
+          relative: formatTimeAgo(lastReachableAt),
         })
       : null
 

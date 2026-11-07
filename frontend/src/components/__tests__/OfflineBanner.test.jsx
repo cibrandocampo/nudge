@@ -56,23 +56,32 @@ describe('OfflineBanner', () => {
     expect(screen.queryByTestId('offline-banner-last-sync')).not.toBeInTheDocument()
   })
 
-  it('renders the last-sync line with a relative timestamp once a successful response was observed', () => {
+  it('renders the last-sync line as "just now" right after a successful response', () => {
     // Stamp the timestamp through the real setReachable path, then flip
-    // to unreachable so the banner mounts. The relative formatter for a
-    // timestamp ~5 minutes in the past renders something containing the
-    // word "minute"/"min" in any locale — assert on a regex broad enough
-    // to survive en/es/gl wording.
+    // to unreachable so the banner mounts.
     const { rerender } = render(<OfflineBanner />)
     act(() => {
       setReachable(true) // bumps lastReachableAt to now
       setReachable(false) // flips banner visible
     })
     rerender(<OfflineBanner />)
-    const lastSync = screen.getByTestId('offline-banner-last-sync')
-    expect(lastSync).toBeInTheDocument()
-    // Generic check: the line contains some text (the i18n string + the
-    // relative output). Fragile assertions on exact wording would couple
-    // the test to formatRelativeTime's internals.
-    expect(lastSync.textContent.length).toBeGreaterThan(0)
+    expect(screen.getByTestId('offline-banner-last-sync')).toHaveTextContent(/^Last sync just now$/)
+  })
+
+  it('renders the last-sync line as time elapsed, never as a due date', () => {
+    // A past timestamp once went through the routine due-date formatter
+    // and read "Last sync Due now" / "Last sync Overdue by 3h" (T108 QA3).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      act(() => {
+        setReachable(true)
+        setReachable(false)
+      })
+      vi.setSystemTime(Date.now() + 3 * 3_600_000)
+      render(<OfflineBanner />)
+      expect(screen.getByTestId('offline-banner-last-sync')).toHaveTextContent(/^Last sync 3h ago$/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

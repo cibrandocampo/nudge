@@ -1,4 +1,4 @@
-import { formatAbsoluteDate, formatRelativeTime, formatShortDate } from '../time'
+import { formatAbsoluteDate, formatRelativeTime, formatShortDate, formatTimeAgo } from '../time'
 
 describe('formatAbsoluteDate', () => {
   it('returns dash for null', () => {
@@ -141,5 +141,33 @@ describe('formatShortDate', () => {
   it('accepts a full ISO datetime string', () => {
     const out = formatShortDate('2020-03-15T09:00:00Z')
     expect(out).toContain('2020')
+  })
+})
+
+describe('formatTimeAgo', () => {
+  const ago = (ms) => Date.now() - ms
+
+  it('returns "just now" under a minute', () => {
+    expect(formatTimeAgo(ago(30_000))).toBe('just now')
+  })
+
+  it('returns "just now" for a moment slightly in the future (clock skew)', () => {
+    expect(formatTimeAgo(Date.now() + 5_000)).toBe('just now')
+  })
+
+  it('returns whole minutes under an hour', () => {
+    expect(formatTimeAgo(ago(5 * 60_000 + 40_000))).toBe('5 min ago')
+  })
+
+  it('returns whole hours under 48h', () => {
+    expect(formatTimeAgo(ago(3 * 3_600_000 + 50 * 60_000))).toBe('3h ago')
+  })
+
+  it('returns whole days from 48h on', () => {
+    expect(formatTimeAgo(ago(3 * 86_400_000 + 3_600_000))).toBe('3 days ago')
+  })
+
+  it('accepts an ISO string', () => {
+    expect(formatTimeAgo(new Date(ago(10 * 60_000)).toISOString())).toBe('10 min ago')
   })
 })
