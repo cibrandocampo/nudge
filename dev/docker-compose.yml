@@ -103,7 +103,9 @@ services:
     build:
       context: ..
       dockerfile: dev/Dockerfile.backend
-    command: sh -c 'celery -A nudge worker -B --loglevel=$${CELERY_LOG_LEVEL:-debug}'
+    # Beat's schedule file goes to /tmp, as in production: the default (cwd)
+    # is /app, the backend/ bind mount, which left it in the working tree.
+    command: sh -c 'celery -A nudge worker -B --loglevel=$${CELERY_LOG_LEVEL:-debug} --schedule /tmp/celerybeat-schedule'
     env_file: ../.env
     environment:
       DJANGO_DEBUG: "True"
