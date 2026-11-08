@@ -78,17 +78,16 @@ let cameraQueue = Promise.resolve()
  * holding the lens.
  */
 function acquireCamera(constraints, isCancelled) {
-  const attempt = cameraQueue
-    .catch(() => {})
-    .then(async () => {
-      if (isCancelled()) return null
-      const stream = await openCamera(constraints, isCancelled)
-      if (isCancelled()) {
-        stopStream(stream)
-        return null
-      }
-      return stream
-    })
+  // `cameraQueue` never rejects (see below), so chaining straight onto it is safe.
+  const attempt = cameraQueue.then(async () => {
+    if (isCancelled()) return null
+    const stream = await openCamera(constraints, isCancelled)
+    if (isCancelled()) {
+      stopStream(stream)
+      return null
+    }
+    return stream
+  })
   // The queue must survive a failed attempt, or one error would wedge it.
   cameraQueue = attempt.catch(() => {})
   return attempt
@@ -118,13 +117,6 @@ async function applyTrackConstraint(track, constraint) {
   }
 }
 
-/**
- * Ask the track for continuous autofocus, ignoring cameras that don't do it.
- *
- * `focusMode` is not in the standard MediaTrackConstraints set, so it goes in
- * `advanced` (best-effort by spec) and is applied only when the capability is
- * actually advertised — some drivers throw on an unknown constraint name.
- */
 /**
  * Whether a device is a rear-facing camera.
  *
@@ -185,6 +177,13 @@ function preferredRearCamera(rear) {
   return sized.reduce((biggest, cur) => (cur.pixels > biggest.pixels ? cur : biggest)).device
 }
 
+/**
+ * Ask the track for continuous autofocus, ignoring cameras that don't do it.
+ *
+ * `focusMode` is not in the standard MediaTrackConstraints set, so it goes in
+ * `advanced` (best-effort by spec) and is applied only when the capability is
+ * actually advertised — some drivers throw on an unknown constraint name.
+ */
 async function enableContinuousFocus(track) {
   const modes = track?.getCapabilities?.().focusMode
   if (!Array.isArray(modes) || !modes.includes('continuous')) return
@@ -259,7 +258,12 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
     // Backgrounded: the previous run's cleanup has already released the lens,
     // and there is nothing to decode for a viewport nobody can see. Returning
     // to the tab re-runs this effect and reopens the same camera.
-    if (!pageVisible) return undefined
+    // An error panel or an accepted read ends the session the same way:
+    // `error` is a dependency, so setting it re-runs this effect and the
+    // cleanup releases the lens instead of leaving it lit behind the message.
+    // Both also mean the viewport is gone or done, so the decode loop below
+    // can rely on the video element being mounted.
+    if (!pageVisible || error || decodedRef.current) return undefined
 
     // `getUserMedia` simply does not exist outside a secure context, so this
     // is not a permission problem and must not be reported as one.
@@ -293,7 +297,8 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
         const stillPresent = remembered && rearCameras.some((d) => d.deviceId === remembered)
         wanted = (stillPresent ? remembered : null) ?? preferredRearCamera(rearCameras)?.deviceId ?? null
       }
-      if (cancelled) return
+      // Closed while listing: `acquireCamera` sees `cancelled` before it touches
+      // the hardware, so no separate check is needed here.
 
       let stream
       try {
@@ -371,18 +376,19 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
         return
       }
 
-      const video = videoRef.current
-      if (video) {
-        video.srcObject = stream
-        // jsdom (and a browser that refuses autoplay) rejects here; the decode
-        // loop copes with an empty frame, so this must never throw.
-        await video.play?.().catch(() => {})
-      }
+      videoEl.srcObject = stream
+      // A browser that refuses autoplay rejects here; the decode loop copes
+      // with an empty frame, so this must never throw.
+      await videoEl.play?.().catch(() => {})
 
       let readBarcodes
       try {
         const reader = await import('zxing-wasm/reader')
-        reader.prepareZXingModule({ overrides: { locateFile: () => ZXING_WASM_URL } })
+        // Compile the decoder now, not lazily on the first frame: a decoder
+        // that cannot load (a CSP without 'wasm-unsafe-eval', an unreachable
+        // or corrupt binary) must say so here. Lazily, every frame's read
+        // fails, the loop swallows it, and the viewfinder never reads a code.
+        await reader.prepareZXingModule({ overrides: { locateFile: () => ZXING_WASM_URL }, fireImmediately: true })
         readBarcodes = reader.readBarcodes
       } catch {
         if (!cancelled) setError('decoder')
@@ -393,16 +399,17 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext?.('2d') ?? null
 
+      // Only the decode itself awaits, so that is the one point where this run
+      // can be torn down mid-frame; a timer pending at teardown is cleared.
       const scan = async () => {
-        if (cancelled || decodedRef.current) return
-        const el = videoRef.current
-        const width = el?.videoWidth ?? 0
-        const height = el?.videoHeight ?? 0
+        const width = videoEl.videoWidth ?? 0
+        const height = videoEl.videoHeight ?? 0
+        let text = null
         if (ctx && width > 0 && height > 0) {
           const size = Math.floor(Math.min(width, height) * CROP_RATIO)
           canvas.width = size
           canvas.height = size
-          ctx.drawImage(el, (width - size) / 2, (height - size) / 2, size, size, 0, 0, size, size)
+          ctx.drawImage(videoEl, (width - size) / 2, (height - size) / 2, size, size, 0, 0, size, size)
           try {
             const results = await readBarcodes(ctx.getImageData(0, 0, size, size), {
               formats: ['DataMatrix', 'QRCode'],
@@ -413,27 +420,25 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
               tryHarder: true,
               maxNumberOfSymbols: 1,
             })
-            const text = results?.[0]?.text
-            if (text && !decodedRef.current) {
-              // The caller may reject a read it cannot use (an unrecognised
-              // payload) by returning false: the user is still holding the box
-              // up to the camera, so closing would be the wrong answer.
-              if (onDecoded(text) !== false) {
-                decodedRef.current = true
-                // Read the id off the live track rather than trusting state:
-                // this is the lens that actually produced the scan.
-                rememberScannerCamera(track?.getSettings?.().deviceId)
-                onClose()
-                return
-              }
-            }
+            text = results?.[0]?.text ?? null
           } catch {
             // A frame that fails to decode is the normal case, not an error.
           }
+          // Closed while this frame was decoding: nothing may fire after that.
+          if (cancelled) return
         }
-        if (!cancelled && !decodedRef.current) {
-          timerRef.current = setTimeout(scan, DECODE_INTERVAL_MS)
+        // The caller may reject a read it cannot use (an unrecognised payload)
+        // by returning false: the user is still holding the box up to the
+        // camera, so closing would be the wrong answer.
+        if (text && onDecoded(text) !== false) {
+          decodedRef.current = true
+          // Read the id off the live track rather than trusting state: this is
+          // the lens that actually produced the scan.
+          rememberScannerCamera(track?.getSettings?.().deviceId)
+          onClose()
+          return
         }
+        timerRef.current = setTimeout(scan, DECODE_INTERVAL_MS)
       }
       scan()
     }
@@ -446,17 +451,16 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
       // Detach before stopping, so nothing keeps referencing a live stream
       // while its tracks are being released. Captured at effect setup because
       // the ref may already point elsewhere by the time cleanup runs.
-      if (videoEl) {
-        videoEl.pause?.()
-        videoEl.srcObject = null
-      }
+      videoEl.pause?.()
+      videoEl.srcObject = null
       stopStream(streamRef.current)
       streamRef.current = null
     }
     // `deviceId` is a dependency on purpose: picking another lens has to tear
     // the stream down and open the new one, which is exactly what a re-run
-    // does. `pageVisible` rides the same mechanism to release and reacquire.
-  }, [onDecoded, onClose, deviceId, pageVisible])
+    // does. `pageVisible` rides the same mechanism to release and reacquire,
+    // and `error` to release for good.
+  }, [onDecoded, onClose, deviceId, pageVisible, error])
 
   const toggleTorch = async () => {
     const track = streamRef.current?.getVideoTracks?.()[0]

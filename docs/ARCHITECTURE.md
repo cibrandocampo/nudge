@@ -578,17 +578,22 @@ workers and ensures the scheduler survives independently of worker restarts.
 
 ### Security headers
 
-The application is designed to run behind a reverse proxy (e.g. Synology DSM's nginx,
-Traefik, Caddy) that handles HTTPS termination and security headers.
+The frontend nginx sends its own security headers on everything it serves (the SPA
+and its assets): a strict `Content-Security-Policy`, `X-Content-Type-Options`,
+`Referrer-Policy`, `X-Frame-Options` and `Permissions-Policy`. They live in
+`frontend/nginx-security-headers.conf`, included per location in `nginx.conf` —
+not at `server` level, so the `/api/` and `/admin/` proxies keep Django's own headers.
+The reverse proxy in front (e.g. Synology DSM's nginx, Traefik, Caddy) still handles
+HTTPS termination.
 
-If the app is deployed **without** a reverse proxy, the following headers should be
-added to `frontend/nginx.conf` inside the `server` block:
+The CSP allows only same-origin resources: no inline `<script>`/`<style>` or `style=""`
+markup (React style props are fine — they go through the CSSOM), images from `'self'`
+and `data:`, and WebAssembly through `'wasm-unsafe-eval'`, which the barcode scanner's
+zxing-wasm decoder needs to compile (it does not allow `eval()` of JavaScript).
 
-```nginx
-add_header X-Content-Type-Options "nosniff" always;
-add_header X-Frame-Options "DENY" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-```
+`vite preview` reads the same include and serves the same headers, so the E2E spec
+`e2e/tests/csp.spec.js` (the `chromium-preview` project) fails on any CSP violation
+before it reaches production.
 
 ### VAPID keys
 

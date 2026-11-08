@@ -196,12 +196,21 @@ docker compose -f dev/docker-compose.yml --env-file .env \
 `playwright.config.js` has two projects that Playwright runs together:
 
 - `chromium-dev` at `localhost:5173` — runs every spec except
-  `offline-*.spec.js`.
-- `chromium-preview` at `localhost:4173` — runs only `offline-*.spec.js`.
+  `offline-*.spec.js` and `csp.spec.js`.
+- `chromium-preview` at `localhost:4173` — runs only `offline-*.spec.js` and
+  `csp.spec.js`.
+
+**The preview serves the production CSP** (T055): `vite.config.js` reads the
+headers from `frontend/nginx-security-headers.conf`, the include the
+production nginx loads, and sets them as `preview.headers`. `csp.spec.js`
+fails on any `securitypolicyviolation`. An inline `<style>`/`style=""` in
+markup, a third-party origin or a new image scheme breaks it: fix the code,
+or change the include on purpose. After editing the include, restart
+`frontend-preview`: the config is read at startup.
 
 Run subsets:
 - `npx playwright test --project=chromium-dev` — dev specs only.
-- `npx playwright test --project=chromium-preview` — offline specs only.
+- `npx playwright test --project=chromium-preview` — offline + CSP specs.
 - `npx playwright test` — all, dispatched to the right project automatically.
 
 ## E2E — estado actual (T072)
