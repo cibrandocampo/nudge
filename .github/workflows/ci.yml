@@ -145,13 +145,15 @@ jobs:
             echo "Waiting for $url"
             timeout 600 sh -c "until curl -sf -o /dev/null $url; do sleep 3; done"
           done
+      # The config records no traces, which keeps local runs light; CI keeps
+      # one per failed test so the artifact opens in `playwright show-trace`.
       - name: Run Playwright (chromium-dev + chromium-preview)
         run: >
           docker run --rm --network host
           -e E2E_USERNAME=admin -e E2E_PASSWORD=adminpass -e DEMO_USERS_PASSWORD=change-me
           -v "$PWD/e2e/playwright-report:/e2e/playwright-report"
           -v "$PWD/e2e/test-results:/e2e/test-results"
-          nudge-e2e npx playwright test --retries=0
+          nudge-e2e npx playwright test --retries=0 --trace=retain-on-failure
       - name: Dump service logs
         if: failure()
         run: docker compose --env-file .env -f dev/docker-compose.yml --profile preview logs --no-color > e2e-stack.log
