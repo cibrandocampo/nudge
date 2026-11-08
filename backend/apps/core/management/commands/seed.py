@@ -824,6 +824,12 @@ class Command(BaseCommand):
             target_next_due = min(now + timedelta(hours=2), end_of_today_local)
             # Guarantee the target is in the future so is_overdue=False holds.
             target_next_due = max(target_next_due, now + timedelta(minutes=1))
+            # In the day's last minute, now+1min is already tomorrow and the
+            # routine would read as upcoming. "Due today, not yet overdue"
+            # can't hold there; overdue by a minute keeps it in Today, which
+            # is what the specs that reseed per test rely on.
+            if target_next_due.astimezone(user_tz).date() != now_local.date():
+                target_next_due = now - timedelta(minutes=1)
             return timedelta(hours=interval_hours) - (target_next_due - now)
         if status == "upcoming":
             return timedelta(hours=interval_hours // 3)
