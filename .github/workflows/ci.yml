@@ -93,6 +93,81 @@ jobs:
           flags: frontend
           fail_ci_if_error: false
 
+  # Full Playwright suite against the real dev stack (Postgres, Redis, Django,
+  # Celery, the Vite dev server and the production-build preview with its
+  # service worker), both projects, no retries: a flaky spec has a cause to
+  # find, not a retry to hide behind. Gates PRs only; the image builds below
+  # keep depending on the unit jobs.
+  test-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Write the dev stack's .env
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_DB=nudge
+          POSTGRES_USER=nudge
+          POSTGRES_PASSWORD=ci
+          REDIS_PASSWORD=ci
+          DJANGO_SECRET_KEY=ci-secret-key-not-used-in-production
+          DJANGO_DEBUG=True
+          E2E_SEED_ALLOWED=true
+          ADMIN_USERNAME=admin
+          ADMIN_EMAIL=admin@example.com
+          ADMIN_PASSWORD=adminpass
+          EOF
+          # A throwaway VAPID pair, so push-realtime.spec can subscribe. The
+          # backend wants the PKCS#8 DER private key in base64 and the public
+          # key as the base64url uncompressed point (what `vapid --gen` makes).
+          openssl ecparam -name prime256v1 -genkey -noout -out "$RUNNER_TEMP/vapid.pem"
+          echo "VAPID_PRIVATE_KEY=$(openssl pkcs8 -topk8 -nocrypt -in "$RUNNER_TEMP/vapid.pem" -outform DER | base64 -w0)" >> .env
+          echo "VAPID_PUBLIC_KEY=$(openssl ec -in "$RUNNER_TEMP/vapid.pem" -pubout -outform DER 2>/dev/null | tail -c 65 | base64 -w0 | tr '+/' '-_' | tr -d '=')" >> .env
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the E2E image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./e2e
+          file: ./e2e/Dockerfile
+          tags: nudge-e2e
+          load: true
+          cache-from: type=gha,scope=e2e
+          cache-to: type=gha,mode=max,scope=e2e
+      - name: Start the dev stack
+        run: >
+          docker compose --env-file .env -f dev/docker-compose.yml --profile preview
+          up -d --build db redis mailpit backend celery frontend frontend-preview
+      # The backend migrates and creates the admin before serving; the preview
+      # runs `vite build` first. Wait for all three to answer.
+      - name: Wait for backend, dev server and preview
+        run: |
+          for url in http://localhost:18000/api/health/ http://localhost:15173/ http://localhost:14173/; do
+            echo "Waiting for $url"
+            timeout 600 sh -c "until curl -sf -o /dev/null $url; do sleep 3; done"
+          done
+      # The config records no traces, which keeps local runs light; CI keeps
+      # one per failed test so the artifact opens in `playwright show-trace`.
+      - name: Run Playwright (chromium-dev + chromium-preview)
+        run: >
+          docker run --rm --network host
+          -e E2E_USERNAME=admin -e E2E_PASSWORD=adminpass -e DEMO_USERS_PASSWORD=change-me
+          -v "$PWD/e2e/playwright-report:/e2e/playwright-report"
+          -v "$PWD/e2e/test-results:/e2e/test-results"
+          nudge-e2e npx playwright test --retries=0 --trace=retain-on-failure
+      - name: Dump service logs
+        if: failure()
+        run: docker compose --env-file .env -f dev/docker-compose.yml --profile preview logs --no-color > e2e-stack.log
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            e2e-stack.log
+          retention-days: 14
+
   build-backend:
     needs: [test-backend, test-frontend]
     if: github.event_name == 'push' || github.event_name == 'release'
@@ -104,8 +179,8 @@ jobs:
       - name: Compute app version
         id: version
         run: |
-          echo "value=$(git describe --tags --always --abbrev=5)" >> $GITHUB_OUTPUT
-          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "value=$(git describe --tags --always --abbrev=5)" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -152,7 +227,7 @@ jobs:
           fetch-depth: 0
       - name: Compute app version
         id: version
-        run: echo "value=$(git describe --tags --always --abbrev=5)" >> $GITHUB_OUTPUT
+        run: echo "value=$(git describe --tags --always --abbrev=5)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4

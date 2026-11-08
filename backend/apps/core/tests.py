@@ -562,6 +562,27 @@ class SeedCommandTest(TestCase):
                     msg=f"{name} should not be overdue right after seed",
                 )
 
+    def test_due_routine_seeded_in_the_last_local_minute_stays_in_today(self):
+        """Regression: at 23:59:30 local even now+1min is tomorrow, so a
+        "due" routine landed in Upcoming (T078's cold E2E run hit it at
+        midnight). It must stay due today; overdue by a minute is accepted
+        because "due, not overdue" cannot hold in that minute.
+        """
+        # 2026-11-07 22:59:30 UTC = 23:59:30 CET (winter offset +01:00).
+        frozen_now = datetime(2026, 11, 7, 22, 59, 30, tzinfo=timezone.utc)
+        with mock.patch(
+            "apps.core.management.commands.seed.timezone.now",
+            return_value=frozen_now,
+        ):
+            call_command("seed")
+        with mock.patch("django.utils.timezone.now", return_value=frozen_now):
+            for name in ("Take antihistamine", "Take birth control pill", "Water cactus"):
+                routine = Routine.objects.get(name=name)
+                self.assertTrue(
+                    routine.is_due(),
+                    msg=f"{name} should be due when seeded in the last minute of the local day",
+                )
+
     def test_idempotent(self):
         call_command("seed")
         first_counts = (
