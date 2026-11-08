@@ -10,11 +10,11 @@ from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
-from rest_framework import serializers
 from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
+from .exceptions import InvalidLotSelection
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
@@ -133,6 +133,10 @@ class StockModelTest(TestCase):
 
     def test_str(self):
         self.assertEqual(str(self.stock), "Filter (10)")
+
+    def test_pin_str_names_user_and_stock(self):
+        pin = UserStockPin.objects.create(user=self.user, stock=self.stock)
+        self.assertEqual(str(pin), f"{self.user} → Filter (10)")
 
     def test_default_quantity_no_lots(self):
         s = Stock.objects.create(user=self.user, name="No lots")
@@ -1781,6 +1785,9 @@ class StockConsumeTest(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"lot_selections": ["Total quantity must equal quantity."]})
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 5)
 
     def test_consume_lot_selections_invalid_lot_returns_400(self):
         other_stock = make_stock(self.other)
@@ -1791,6 +1798,7 @@ class StockConsumeTest(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"lot_selections": ["One or more lot_ids are invalid."]})
 
     def test_consume_zero_quantity_returns_400(self):
         response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 0})
@@ -2191,7 +2199,10 @@ class RoutineViewSetTest(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("lot_selections", response.json())
+        self.assertEqual(response.json(), {"lot_selections": ["Total quantity must equal quantity."]})
+        # The entry is created before the lots are consumed; the error must
+        # roll it back with the rest of the transaction.
+        self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
 
     def test_log_lot_selection_wrong_stock(self):
         """lot_id belonging to a different stock → 400."""
@@ -2211,7 +2222,10 @@ class RoutineViewSetTest(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("lot_selections", response.json())
+        self.assertEqual(response.json(), {"lot_selections": ["One or more lot_ids are invalid."]})
+        self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
+        other_lot.refresh_from_db()
+        self.assertEqual(other_lot.quantity, 10)
 
     def test_log_fefo_stores_consumed_lots(self):
         """FEFO auto-consumption also saves consumed_lots for traceability."""
@@ -4188,27 +4202,27 @@ class StockConsumeLotsMethodTests(TestCase):
         self.assertEqual(result[1]["quantity"], 2)
 
     def test_consume_lots_total_mismatch_raises(self):
-        """Selections summing != quantity raises ValidationError under `lot_selections`."""
-        with self.assertRaises(serializers.ValidationError) as ctx:
+        """Selections summing != quantity raise the domain error, not a DRF one."""
+        with self.assertRaises(InvalidLotSelection) as ctx:
             self.stock.consume_lots(
                 quantity=5,
                 lot_selections=[{"lot_id": self.lot1.id, "quantity": 3}],
             )
-        self.assertIn("lot_selections", ctx.exception.detail)
+        self.assertEqual(ctx.exception.reason, "Total quantity must equal quantity.")
         # No lot was decremented (atomic rollback).
         self.lot1.refresh_from_db()
         self.assertEqual(self.lot1.quantity, 3)
 
     def test_consume_lots_invalid_lot_id_raises(self):
-        """A lot_id not belonging to this stock raises ValidationError."""
+        """A lot_id not belonging to this stock raises the domain error."""
         other_stock = make_stock(self.user, name="Other")
         foreign_lot = make_lot(other_stock, quantity=10)
-        with self.assertRaises(serializers.ValidationError) as ctx:
+        with self.assertRaises(InvalidLotSelection) as ctx:
             self.stock.consume_lots(
                 quantity=1,
                 lot_selections=[{"lot_id": foreign_lot.id, "quantity": 1}],
             )
-        self.assertIn("lot_selections", ctx.exception.detail)
+        self.assertEqual(ctx.exception.reason, "One or more lot_ids are invalid.")
         # Original lots untouched.
         self.lot1.refresh_from_db()
         self.lot2.refresh_from_db()

@@ -150,6 +150,13 @@ The `routines` app is the exception — it defines `routines/`, `stock/`, `entri
 - User fields: `timezone` (IANA string), `daily_notification_time` (local time),
   `language` (en/es/gl)
 - Backend always stores/works in UTC. Timezone conversion happens in Celery tasks.
+- **Models never import DRF.** Domain rules raise the framework-free errors in
+  `apps/routines/exceptions.py` (`InsufficientStock`, `InvalidLotSelection`,
+  subclasses of `DomainError`). `apps/core/exception_handler.py`, registered as
+  `REST_FRAMEWORK["EXCEPTION_HANDLER"]`, is the one place that maps each to an
+  HTTP status and body. A new domain error needs a mapping there; an unmapped one
+  surfaces as a 500 on purpose. Serializers keep raising
+  `serializers.ValidationError` as usual.
 
 ## Push notifications
 

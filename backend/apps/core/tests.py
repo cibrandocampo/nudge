@@ -7,12 +7,16 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase, override_settings
 from rest_framework import serializers as drf_serializers
-from rest_framework.test import APITestCase
+from rest_framework.permissions import AllowAny
+from rest_framework.test import APIRequestFactory, APITestCase
+from rest_framework.views import APIView
 
+from apps.core.exception_handler import exception_handler
 from apps.core.mixins import SharedWithMixin, parse_http_date
 from apps.core.permissions import IsOwner
 from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import PushSubscription
+from apps.routines.exceptions import DomainError, InsufficientStock, InvalidLotSelection
 from apps.routines.models import (
     Routine,
     RoutineEntry,
@@ -814,3 +818,60 @@ class SharedWithMixinTest(TestCase):
         obj = _MockObj([])
         details = _MockSerializer().get_shared_with_details(obj)
         self.assertEqual(details, [])
+
+
+class _RaisingView(APIView):
+    """Minimal view that raises whatever exception the test hands it."""
+
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    exc = None
+
+    def get(self, request):
+        raise self.exc
+
+
+class DomainExceptionHandlerTest(TestCase):
+    """`apps.core.exception_handler` translates domain errors to HTTP (T056)."""
+
+    def _dispatch(self, exc):
+        view = _RaisingView.as_view(exc=exc)
+        return view(APIRequestFactory().get("/"))
+
+    def test_insufficient_stock_is_a_422_with_the_log_precheck_shape(self):
+        # Same body the `RoutineViewSet.log` pre-check returns, so the
+        # frontend reads both identically.
+        response = self._dispatch(InsufficientStock(requested=3, available=1))
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.data,
+            {"detail": "Insufficient stock.", "code": "insufficient_stock", "required": 3, "available": 1},
+        )
+
+    def test_invalid_lot_selection_is_a_400_field_error(self):
+        response = self._dispatch(InvalidLotSelection("One or more lot_ids are invalid."))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, {"lot_selections": ["One or more lot_ids are invalid."]})
+
+    def test_drf_exceptions_keep_drf_default_handling(self):
+        # Untouched by the domain mapping: exactly what DRF's own handler
+        # builds (which keeps a bare string nested in a dict as is).
+        exc = drf_serializers.ValidationError({"name": "Required."})
+        response = self._dispatch(exc)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, {"name": "Required."})
+
+    def test_an_unmapped_domain_error_is_not_swallowed(self):
+        # A new DomainError subclass without a mapping must surface as a
+        # server error, never as a silent 2xx/4xx the client misreads.
+        class Unmapped(DomainError):
+            pass
+
+        self.assertIsNone(exception_handler(Unmapped("boom"), {}))
+        with self.assertRaises(Unmapped):
+            self._dispatch(Unmapped("boom"))
+
+    def test_handler_is_registered_in_settings(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.REST_FRAMEWORK["EXCEPTION_HANDLER"], "apps.core.exception_handler.exception_handler")
