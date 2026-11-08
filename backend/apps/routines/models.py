@@ -8,7 +8,8 @@ from django.db.models import F, Q, Sum
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
-from rest_framework import serializers
+
+from .exceptions import InvalidLotSelection
 
 
 class StockGroup(models.Model):
@@ -133,20 +134,21 @@ class Stock(models.Model):
             missing key as "no serial".
 
         Raises:
-            rest_framework.serializers.ValidationError on bad input.
-            DRF translates to 400 when this bubbles from a viewset action.
+            InvalidLotSelection when the selections do not sum to `quantity`
+            or name a lot of another stock. `apps.core.exception_handler`
+            turns it into a 400 when it bubbles out of a viewset action.
         """
         consumed_lots = []
 
         if lot_selections is not None:
             total = sum(sel.get("quantity", 0) for sel in lot_selections)
             if total != quantity:
-                raise serializers.ValidationError({"lot_selections": "Total quantity must equal quantity."})
+                raise InvalidLotSelection("Total quantity must equal quantity.")
             lot_ids = [sel["lot_id"] for sel in lot_selections]
             valid_ids = set(self.lots.filter(id__in=lot_ids).values_list("id", flat=True))
             invalid = set(lot_ids) - valid_ids
             if invalid:
-                raise serializers.ValidationError({"lot_selections": "One or more lot_ids are invalid."})
+                raise InvalidLotSelection("One or more lot_ids are invalid.")
             for sel in lot_selections:
                 qty = sel["quantity"]
                 if qty <= 0:

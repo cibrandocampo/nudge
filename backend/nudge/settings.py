@@ -189,6 +189,9 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    # Translates the framework-free domain errors (apps.routines.exceptions)
+    # to HTTP; everything else goes through DRF's default handler.
+    "EXCEPTION_HANDLER": "apps.core.exception_handler.exception_handler",
     "DEFAULT_THROTTLE_CLASSES": (),
     "DEFAULT_THROTTLE_RATES": {
         "auth": "9999/minute" if DEBUG else "5/minute",
