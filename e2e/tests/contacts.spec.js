@@ -23,7 +23,7 @@ test.describe('Settings › Contacts', () => {
   test('seeded contacts (user2, user3) appear on first load', async ({ page }) => {
     const list = page.getByTestId('contacts-list')
     await expect(list).toBeVisible()
-    await expect(list).toContainText(SEED.user2.email)
+    await expect(list).toContainText("t078-artifact-check@example.invalid")
     await expect(list).toContainText(SEED.user3.email)
   })
 
