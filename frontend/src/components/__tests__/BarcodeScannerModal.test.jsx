@@ -491,6 +491,18 @@ describe('BarcodeScannerModal', () => {
     expect(await screen.findByText('Could not load the scanner. Check your connection.')).toBeInTheDocument()
   })
 
+  it('says the scanner could not load when the decoder binary fails to compile', async () => {
+    mockCamera()
+    prepareZXingModule.mockRejectedValueOnce(new Error('CompileError: violates Content Security Policy'))
+    readBarcodes.mockResolvedValue([{ text: '0109506000134376' }])
+
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    expect(await screen.findByText('Could not load the scanner. Check your connection.')).toBeInTheDocument()
+    expect(prepareZXingModule.mock.calls[0][0].fireImmediately).toBe(true)
+    expect(readBarcodes).not.toHaveBeenCalled()
+  })
+
   it('never samples a frame when the canvas has no 2D context', async () => {
     mockCamera()
     HTMLCanvasElement.prototype.getContext = vi.fn(() => null)
@@ -546,5 +558,261 @@ describe('BarcodeScannerModal', () => {
     // Nothing is left holding the lens: the stream that landed late is stopped
     // rather than leaked, which is what makes reopening the scanner work.
     await waitFor(() => expect(tracks[0].stop).toHaveBeenCalled())
+  })
+
+  it('keeps scanning when the browser refuses to autoplay the preview', async () => {
+    mockCamera()
+    HTMLMediaElement.prototype.play.mockRejectedValue(new DOMException('autoplay refused', 'NotAllowedError'))
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled()
+    expect(screen.queryByTestId('scan-error')).not.toBeInTheDocument()
+  })
+
+  it('releases the camera when the decoder cannot load', async () => {
+    // The error panel replaces the viewport; a lens left open behind it keeps
+    // the camera light on and locks the camera for every other app.
+    mockCamera()
+    prepareZXingModule.mockRejectedValueOnce(new Error('CompileError'))
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await screen.findByTestId('scan-error')
+    await waitFor(() => expect(tracks[0].stop).toHaveBeenCalled())
+  })
+
+  it('does not reopen the camera after an accepted read', async () => {
+    mockCamera()
+    readBarcodes.mockResolvedValue([{ text: '0109506000134376' }])
+    const onClose = vi.fn()
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={onClose} />)
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+
+    // Backgrounding and returning before the parent unmounts the modal re-runs
+    // the camera effect; the scan is over, so it must not open a lens again.
+    hidePage(true)
+    hidePage(false)
+
+    await waitFor(() => expect(tracks[0].stop).toHaveBeenCalled())
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('still opens the camera when the lens list cannot be read', async () => {
+    mockCamera()
+    navigator.mediaDevices.enumerateDevices = vi.fn().mockRejectedValue(new Error('enumerate failed'))
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    // Both listings failed (before and after opening): the generic rear hint
+    // opens the camera, and there is no picker to offer.
+    expect(navigator.mediaDevices.enumerateDevices).toHaveBeenCalledTimes(2)
+    expect(navigator.mediaDevices.getUserMedia.mock.calls[0][0].video.facingMode).toBe('environment')
+    expect(screen.queryByTestId('scan-camera')).not.toBeInTheDocument()
+  })
+
+  it('keeps scanning when the camera refuses a constraint both ways', async () => {
+    mockCamera({ focusModes: ['continuous'] })
+    tracks[0].applyConstraints.mockRejectedValue(new Error('OverconstrainedError'))
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(tracks[0].applyConstraints).toHaveBeenCalledTimes(2)
+    expect(screen.queryByTestId('scan-error')).not.toBeInTheDocument()
+  })
+
+  it('ranks a lens whose capabilities throw below one that reports a size', async () => {
+    mockCamera({ activeDeviceId: 'id-sized' })
+    mockDevices([
+      {
+        deviceId: 'id-broken',
+        label: 'Back camera',
+        getCapabilities: () => {
+          throw new Error('not implemented')
+        },
+      },
+      {
+        deviceId: 'id-sized',
+        label: 'Back camera',
+        getCapabilities: () => ({ width: { max: 640 }, height: { max: 480 } }),
+      },
+    ])
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(navigator.mediaDevices.getUserMedia.mock.calls[0][0].video.deviceId).toEqual({ exact: 'id-sized' })
+  })
+
+  it('hides the torch when the camera turns out not to honour it', async () => {
+    mockCamera({ torch: true })
+    tracks[0].applyConstraints.mockRejectedValueOnce(new Error('torch unsupported'))
+    const { user } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+
+    await user.click(await screen.findByTestId('scan-torch'))
+
+    await waitFor(() => expect(screen.queryByTestId('scan-torch')).not.toBeInTheDocument())
+  })
+
+  it('ignores the torch while the next lens is still opening', async () => {
+    const stream = mockCamera({ torch: true, activeDeviceId: 'id-0' })
+    mockDevices([
+      { deviceId: 'id-0', label: 'camera 0, facing back' },
+      { deviceId: 'id-2', label: 'camera 2, facing back' },
+    ])
+    const { user } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await screen.findByTestId('scan-camera')
+
+    const opening = deferred()
+    navigator.mediaDevices.getUserMedia = vi.fn(() => opening.promise)
+    await user.click(screen.getByTestId('scan-camera'))
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled())
+
+    // The old lens is released and the new one has not arrived: there is no
+    // track to drive, so the press must do nothing rather than throw.
+    await user.click(screen.getByTestId('scan-torch'))
+    expect(tracks[0].applyConstraints).not.toHaveBeenCalled()
+    expect(screen.getByTestId('scan-torch')).toHaveAttribute('aria-pressed', 'false')
+
+    opening.resolve(stream)
+    await waitFor(() => expect(prepareZXingModule).toHaveBeenCalledTimes(2))
+  })
+})
+
+/** A promise the test settles by hand, to hold the scanner at one `await`. */
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/** Let the effect's pending continuations run after a manual settle. */
+const flush = () => act(() => new Promise((r) => setTimeout(r, 0)))
+
+// Closing the modal (or backgrounding the page) while one of the scanner's
+// awaits is pending: whatever that await yields must be dropped, and the lens
+// must not stay open. Each test parks the effect at one await.
+describe('BarcodeScannerModal torn down mid-start', () => {
+  it('opens nothing when closed while the lenses are being listed', async () => {
+    mockCamera()
+    const listing = deferred()
+    navigator.mediaDevices.enumerateDevices = vi.fn(() => listing.promise)
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(navigator.mediaDevices.enumerateDevices).toHaveBeenCalled())
+
+    unmount()
+    listing.resolve([{ kind: 'videoinput', deviceId: 'id-0', label: 'camera 0, facing back' }])
+    await flush()
+
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('does not retry a busy camera once the modal is closed', async () => {
+    mockCameraFailure('NotReadableError')
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1))
+
+    unmount()
+    // Past the retry pause: a retry would have asked for the camera again.
+    await act(() => new Promise((r) => setTimeout(r, 450)))
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a camera request still queued behind an earlier one', async () => {
+    // Backgrounding and returning while the first request is still pending
+    // queues a second one behind it; closing then must cancel the queued one
+    // before it ever reaches the hardware.
+    const stream = mockCamera()
+    const opening = deferred()
+    navigator.mediaDevices.getUserMedia = vi.fn(() => opening.promise)
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1))
+
+    hidePage(true)
+    hidePage(false)
+    await flush()
+    unmount()
+    await act(async () => {
+      opening.resolve(stream)
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+    expect(tracks[0].stop).toHaveBeenCalled()
+  })
+
+  it('loads no decoder when closed while the lenses are re-listed', async () => {
+    mockCamera()
+    const relisting = deferred()
+    navigator.mediaDevices.enumerateDevices = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(() => relisting.promise)
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(navigator.mediaDevices.enumerateDevices).toHaveBeenCalledTimes(2))
+
+    unmount()
+    relisting.resolve([])
+    await flush()
+
+    expect(prepareZXingModule).not.toHaveBeenCalled()
+    expect(tracks[0].stop).toHaveBeenCalled()
+  })
+
+  it('reads no frame when closed while the decoder compiles', async () => {
+    mockCamera()
+    const compiling = deferred()
+    prepareZXingModule.mockImplementationOnce(() => compiling.promise)
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(prepareZXingModule).toHaveBeenCalled())
+
+    unmount()
+    compiling.resolve()
+    await flush()
+
+    expect(readBarcodes).not.toHaveBeenCalled()
+    expect(tracks[0].stop).toHaveBeenCalled()
+  })
+
+  it('does not let a stale compile failure mask the next attempt', async () => {
+    // Backgrounded mid-compile, then the compile fails: that run is over, so
+    // its failure must not paint an error over the run that replaces it.
+    mockCamera()
+    const compiling = deferred()
+    prepareZXingModule.mockImplementationOnce(() => compiling.promise)
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(prepareZXingModule).toHaveBeenCalled())
+
+    hidePage(true)
+    await act(async () => {
+      compiling.reject(new Error('NetworkError'))
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(screen.queryByTestId('scan-error')).not.toBeInTheDocument()
+
+    hidePage(false)
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(screen.queryByTestId('scan-error')).not.toBeInTheDocument()
+  })
+
+  it('fires nothing when closed while a frame is decoding', async () => {
+    mockCamera()
+    const decoding = deferred()
+    readBarcodes.mockImplementationOnce(() => decoding.promise)
+    const onDecoded = vi.fn()
+    const onClose = vi.fn()
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={onDecoded} onClose={onClose} />)
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+
+    unmount()
+    decoding.resolve([{ text: '0109506000134376' }])
+    await flush()
+
+    expect(onDecoded).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(readBarcodes).toHaveBeenCalledTimes(1)
   })
 })

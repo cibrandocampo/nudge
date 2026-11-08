@@ -422,12 +422,13 @@ async function main() {
     //     hands the payload to the form — the viewfinder would never be on
     //     screen to photograph. So the decoder's WebAssembly binary (a
     //     same-origin Vite asset) is held open for the life of the scene: the
-    //     camera still streams and the reticle still draws, but the decode loop
-    //     parks inside `readBarcodes` and never comes back.
+    //     camera still streams and the reticle still draws, but the scanner
+    //     parks in `prepareZXingModule` waiting for the decoder to compile and
+    //     never reaches its decode loop.
     //
-    //     Holding it open rather than aborting is deliberate — an abort is
-    //     swallowed as "this frame did not decode" and the loop simply retries
-    //     every 150 ms, which is a lot of noise for the same result.
+    //     Holding it open rather than aborting is required: an aborted binary
+    //     is a decoder that failed to load, and the modal swaps the viewfinder
+    //     for its error panel.
     let releaseWasm
     const wasmHeld = new Promise((resolve) => {
       releaseWasm = resolve

@@ -1,6 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+
+// The production nginx's security headers (CSP and friends), read from the
+// include nginx itself loads, so `vite preview` serves the build under the
+// exact same policy and the E2E suite catches a CSP regression before it
+// reaches production. Not applied to the dev server: its HMR client needs
+// inline scripts the policy forbids.
+const nginxHeaders = readFileSync(new URL('./nginx-security-headers.conf', import.meta.url), 'utf8')
+const securityHeaders = Object.fromEntries(
+  [...nginxHeaders.matchAll(/^add_header\s+(\S+)\s+"([^"]*)"/gm)].map(([, name, value]) => [name, value]),
+)
+if (!securityHeaders['Content-Security-Policy']) {
+  throw new Error('nginx-security-headers.conf: no Content-Security-Policy found to mirror on vite preview')
+}
 
 export default defineConfig({
   server: {
@@ -24,6 +38,7 @@ export default defineConfig({
       '/admin':         { target: 'http://backend:8000' },
       '/django-static': { target: 'http://backend:8000' },
     },
+    headers: securityHeaders,
     allowedHosts: true,
     host: true,
     port: 4173,
