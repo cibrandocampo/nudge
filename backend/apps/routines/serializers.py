@@ -48,16 +48,38 @@ def validate_client_created_at(value):
     return value
 
 
-class ClientTimestampInputSerializer(serializers.Serializer):
+class LotSelectionSerializer(serializers.Serializer):
+    lot_id = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class LogInputSerializer(serializers.Serializer):
     """
-    Tiny input-only serializer for endpoints that accept an optional
-    `client_created_at` alongside their domain payload (log, consume).
+    Input of `RoutineViewSet.log`: optional explicit lot selections (None or
+    [] means FEFO) and an optional `client_created_at`. The quantity is not
+    part of it, it comes from `routine.stock_usage`.
     """
 
+    lot_selections = LotSelectionSerializer(many=True, required=False, allow_null=True)
     client_created_at = serializers.DateTimeField(required=False, allow_null=True)
 
     def validate_client_created_at(self, value):
         return validate_client_created_at(value)
+
+    def validate_lot_selections(self, value):
+        # `Stock.consume_lots` treats None as FEFO; an empty list means the same.
+        if not value:
+            return None
+        lot_ids = [sel["lot_id"] for sel in value]
+        if len(set(lot_ids)) != len(lot_ids):
+            raise serializers.ValidationError("Duplicate lot_id in selection.")
+        return value
+
+
+class ConsumeInputSerializer(LogInputSerializer):
+    """Input of `StockViewSet.consume`: the log input plus the quantity to take."""
+
+    quantity = serializers.IntegerField(min_value=1, default=1)
 
 
 class StockLotSerializer(FlexFieldsModelSerializer):
@@ -74,11 +96,6 @@ class StockLotSerializer(FlexFieldsModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
-
-    def validate_quantity(self, value):
-        if value < 0:
-            raise serializers.ValidationError("Quantity cannot be negative.")
-        return value
 
     def validate_serial_number(self, value):
         """Turn a duplicate serial into a 400 instead of an IntegrityError 500.

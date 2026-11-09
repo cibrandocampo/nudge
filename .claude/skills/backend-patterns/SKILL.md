@@ -176,6 +176,10 @@ The `routines` app is the exception — it defines `routines/`, `stock/`, `entri
 
 - Use DRF `ModelSerializer` as the base
 - Validation goes in `validate_<field>()` or `validate()` — never in the view
+- Action request bodies go through an input-only `Serializer` too (e.g.
+  `ConsumeInputSerializer`, `LogInputSerializer` in `apps/routines/serializers.py`),
+  never `int(request.data.get(...))` in the view. Share fields by subclassing
+  (`ConsumeInputSerializer(LogInputSerializer)` adds `quantity`).
 - Read-only computed fields use `SerializerMethodField`
 - Nested objects: use separate serializers, never raw dict construction
 
@@ -220,6 +224,10 @@ docker compose -f dev/docker-compose.yml exec backend python manage.py migrate
       lot.quantity -= consumed
       lot.save()
   ```
+- **Consumption is all or nothing**: `Stock.consume_lots` returns lots that add
+  up to exactly the requested quantity or raises `InsufficientStock` (→ 422 via
+  the exception handler). Never clip a request to what is available; audit rows
+  are built from the returned list and must not overstate what was taken.
 
 ## Testing
 

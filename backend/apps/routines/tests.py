@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .exceptions import InvalidLotSelection
+from .exceptions import InsufficientStock, InvalidLotSelection
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
@@ -484,13 +484,43 @@ class StockAdminTest(TestCase):
 
 class ClientTimestampValidatorTest(TestCase):
     def test_client_timestamp_none_passes_through(self):
-        # `ClientTimestampInputSerializer.validate_client_created_at`
-        # short-circuits to None when the value is None.
-        from .serializers import ClientTimestampInputSerializer
+        # `LogInputSerializer.validate_client_created_at` short-circuits to
+        # None when the value is None.
+        from .serializers import LogInputSerializer
 
-        s = ClientTimestampInputSerializer(data={"client_created_at": None})
+        s = LogInputSerializer(data={"client_created_at": None})
         self.assertTrue(s.is_valid(), s.errors)
         self.assertIsNone(s.validated_data.get("client_created_at"))
+
+
+class ConsumeInputSerializerTest(TestCase):
+    """The input checks themselves, apart from the model's last-defense copies."""
+
+    def test_duplicate_lot_id_is_rejected_before_the_model(self):
+        from .serializers import ConsumeInputSerializer
+
+        s = ConsumeInputSerializer(
+            data={"quantity": 2, "lot_selections": [{"lot_id": 7, "quantity": 1}, {"lot_id": 7, "quantity": 1}]}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertEqual(s.errors, {"lot_selections": ["Duplicate lot_id in selection."]})
+
+    def test_null_and_empty_lot_selections_mean_fefo(self):
+        from .serializers import ConsumeInputSerializer
+
+        for value in (None, []):
+            with self.subTest(lot_selections=value):
+                s = ConsumeInputSerializer(data={"quantity": 2, "lot_selections": value})
+                self.assertTrue(s.is_valid(), s.errors)
+                self.assertIsNone(s.validated_data["lot_selections"])
+
+    def test_log_input_has_no_quantity(self):
+        """`log` takes the quantity from `routine.stock_usage`, never from the body."""
+        from .serializers import LogInputSerializer
+
+        s = LogInputSerializer(data={"quantity": 99})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertNotIn("quantity", s.validated_data)
 
 
 # ── StockLotSerializer ───────────────────────────────────────────────────────
@@ -498,9 +528,10 @@ class ClientTimestampValidatorTest(TestCase):
 
 class StockLotSerializerTest(TestCase):
     def test_negative_quantity_invalid(self):
+        # The model field's MinValueValidator(0) is what rejects it.
         s = StockLotSerializer(data={"quantity": -1, "lot_number": "X"})
         self.assertFalse(s.is_valid())
-        self.assertIn("quantity", s.errors)
+        self.assertEqual(s.errors, {"quantity": ["Ensure this value is greater than or equal to 0."]})
 
     def test_zero_quantity_valid(self):
         s = StockLotSerializer(data={"quantity": 0})
@@ -1801,8 +1832,148 @@ class StockConsumeTest(APITestCase):
         self.assertEqual(response.json(), {"lot_selections": ["One or more lot_ids are invalid."]})
 
     def test_consume_zero_quantity_returns_400(self):
-        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 0})
+        lot = make_lot(self.stock, quantity=5)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 0}, format="json")
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"quantity": ["Ensure this value is greater than or equal to 1."]})
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 5)
+        self.assertFalse(StockConsumption.objects.exists())
+
+    def test_consume_negative_quantity_returns_400(self):
+        lot = make_lot(self.stock, quantity=5)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": -1}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"quantity": ["Ensure this value is greater than or equal to 1."]})
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 5)
+
+    def test_consume_non_integer_quantity_returns_400(self):
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": "two"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"quantity": ["A valid integer is required."]})
+
+    def test_consume_without_quantity_defaults_to_one(self):
+        lot = make_lot(self.stock, quantity=5)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {}, format="json")
+        self.assertEqual(response.status_code, 200)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 4)
+
+    # ── consumed == requested invariant (T057) ────────────────────────────────
+
+    def test_consume_fefo_insufficient_stock_returns_422_and_rolls_back(self):
+        """FEFO asking for more than every lot holds: 422, and no lot is touched.
+
+        Before T057 FEFO drained both lots, returned 200 and wrote a
+        StockConsumption claiming 10 units out of the 5 that existed.
+        """
+        soon = make_lot(self.stock, quantity=2, expiry_date=date.today() + timedelta(days=10))
+        later = make_lot(self.stock, quantity=3, expiry_date=date.today() + timedelta(days=100))
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 10}, format="json")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Insufficient stock.", "code": "insufficient_stock", "required": 10, "available": 5},
+        )
+        # Both lots keep their quantity: the partial FEFO decrements (which
+        # would have emptied, and so deleted, them) are rolled back.
+        soon.refresh_from_db()
+        later.refresh_from_db()
+        self.assertEqual(soon.quantity, 2)
+        self.assertEqual(later.quantity, 3)
+        self.assertFalse(StockConsumption.objects.exists())
+
+    def test_consume_explicit_selection_insufficient_lot_returns_422_and_rolls_back(self):
+        """A selection asking a lot for more than it holds: 422, nothing consumed.
+
+        Before T057 `min()` clipped the selection to the lot's 1 unit in
+        silence, and the audit row still said 3.
+        """
+        first = make_lot(self.stock, quantity=5, lot_number="FIRST")
+        short = make_lot(self.stock, quantity=1, lot_number="SHORT")
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {
+                "quantity": 5,
+                "lot_selections": [{"lot_id": first.id, "quantity": 2}, {"lot_id": short.id, "quantity": 3}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Insufficient stock.", "code": "insufficient_stock", "required": 3, "available": 1},
+        )
+        # FIRST was decremented before SHORT failed; the rollback undoes it.
+        first.refresh_from_db()
+        short.refresh_from_db()
+        self.assertEqual(first.quantity, 5)
+        self.assertEqual(short.quantity, 1)
+        self.assertFalse(StockConsumption.objects.exists())
+
+    def test_consume_duplicate_lot_id_returns_400(self):
+        lot = make_lot(self.stock, quantity=1)
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 2, "lot_selections": [{"lot_id": lot.id, "quantity": 1}, {"lot_id": lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"lot_selections": ["Duplicate lot_id in selection."]})
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 1)
+        self.assertFalse(StockConsumption.objects.exists())
+
+    def test_consume_selection_with_zero_quantity_returns_400(self):
+        lot = make_lot(self.stock, quantity=5)
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1, "lot_selections": [{"lot_id": lot.id, "quantity": 0}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            # DRF keys a nested list's errors by item index.
+            {"lot_selections": {"0": {"quantity": ["Ensure this value is greater than or equal to 1."]}}},
+        )
+
+    def test_consume_empty_lot_selections_falls_back_to_fefo(self):
+        soon = make_lot(self.stock, quantity=3, expiry_date=date.today() + timedelta(days=10))
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/", {"quantity": 2, "lot_selections": []}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        soon.refresh_from_db()
+        self.assertEqual(soon.quantity, 1)
+
+    def test_consume_fefo_audit_records_exactly_requested_not_insufficient(self):
+        """Happy FEFO path: the audit row's consumed lots add up to the request."""
+        make_lot(self.stock, quantity=2, expiry_date=date.today() + timedelta(days=10))
+        make_lot(self.stock, quantity=4, expiry_date=date.today() + timedelta(days=100))
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 3}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["quantity"], 3)
+        consumption = StockConsumption.objects.get()
+        self.assertEqual(consumption.quantity, 3)
+        self.assertEqual(sum(c["quantity"] for c in consumption.consumed_lots), 3)
+
+    def test_consume_explicit_audit_records_exactly_requested_not_insufficient(self):
+        """Happy explicit path: the audit row's consumed lots add up to the request."""
+        a = make_lot(self.stock, quantity=2, lot_number="A")
+        b = make_lot(self.stock, quantity=4, lot_number="B")
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 5, "lot_selections": [{"lot_id": a.id, "quantity": 2}, {"lot_id": b.id, "quantity": 3}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["quantity"], 1)
+        consumption = StockConsumption.objects.get()
+        self.assertEqual(consumption.quantity, 5)
+        self.assertEqual(sum(c["quantity"] for c in consumption.consumed_lots), 5)
+        self.assertEqual([c["lot_number"] for c in consumption.consumed_lots], ["A", "B"])
 
     def test_consume_returns_updated_stock_data(self):
         make_lot(self.stock, quantity=10)
@@ -2087,8 +2258,11 @@ class RoutineViewSetTest(APITestCase):
         lot.refresh_from_db()
         self.assertEqual(lot.quantity, 2)
 
-    def test_log_refuses_when_stock_is_zero(self):
-        """Pain-relief-like scenario: stock exists but every lot is 0."""
+    def test_log_precheck_refuses_insufficient_when_stock_is_zero(self):
+        """Pain-relief-like scenario: stock exists but every lot is 0.
+
+        The view's pre-check answers before `consume_lots` runs (T057 kept it).
+        """
         stock = make_stock(self.user)
         # A lot explicitly at 0 — normally wiped by `delete_empty_lot`, but
         # we bypass that via bulk_create to emulate the T073 seed state.
@@ -2096,6 +2270,16 @@ class RoutineViewSetTest(APITestCase):
         r = make_routine(self.user, stock=stock)
         response = self.client.post(f"/api/routines/{r.id}/log/", {})
         self.assertEqual(response.status_code, 422)
+        # The pre-check's own body (its `detail` differs from the handler's).
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": "Insufficient stock to log this routine.",
+                "code": "insufficient_stock",
+                "required": 1,
+                "available": 0,
+            },
+        )
         self.assertEqual(r.entries.count(), 0)
 
     def test_log_resets_notification_state(self):
@@ -2227,6 +2411,67 @@ class RoutineViewSetTest(APITestCase):
         other_lot.refresh_from_db()
         self.assertEqual(other_lot.quantity, 10)
 
+    def test_log_duplicate_lot_id_returns_400(self):
+        """`log` validates lot_selections too (before T057 it did not look at them)."""
+        stock = make_stock(self.user)
+        lot = make_lot(stock, quantity=5)
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 2
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": lot.id, "quantity": 1}, {"lot_id": lot.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"lot_selections": ["Duplicate lot_id in selection."]})
+        self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 5)
+
+    def test_log_explicit_selection_insufficient_lot_returns_422_and_rolls_back(self):
+        """The stock total passes the pre-check, but the chosen lot is short.
+
+        The entry is created before the lots are consumed; the domain error
+        must roll it back along with the other lot's decrement.
+        """
+        stock = make_stock(self.user)
+        big = make_lot(stock, quantity=10, lot_number="BIG")
+        short = make_lot(stock, quantity=1, lot_number="SHORT")
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 3
+        r.save()
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": big.id, "quantity": 1}, {"lot_id": short.id, "quantity": 2}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Insufficient stock.", "code": "insufficient_stock", "required": 2, "available": 1},
+        )
+        self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
+        big.refresh_from_db()
+        short.refresh_from_db()
+        self.assertEqual(big.quantity, 10)
+        self.assertEqual(short.quantity, 1)
+
+    def test_log_fefo_entry_records_exactly_stock_usage_not_insufficient(self):
+        """Happy FEFO path: the entry's consumed lots add up to stock_usage."""
+        stock = make_stock(self.user)
+        make_lot(stock, quantity=1, expiry_date=date.today() + timedelta(days=10))
+        make_lot(stock, quantity=5, expiry_date=date.today() + timedelta(days=100))
+        r = make_routine(self.user, stock=stock)
+        r.stock_usage = 3
+        r.save()
+        response = self.client.post(f"/api/routines/{r.id}/log/", {}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(sum(c["quantity"] for c in response.json()["consumed_lots"]), 3)
+        entry = RoutineEntry.objects.get(routine=r)
+        self.assertEqual(sum(c["quantity"] for c in entry.consumed_lots), 3)
+        self.assertEqual(stock.quantity, 3)
+
     def test_log_fefo_stores_consumed_lots(self):
         """FEFO auto-consumption also saves consumed_lots for traceability."""
         stock = make_stock(self.user)
@@ -2267,6 +2512,15 @@ class RoutineEntryViewSetTest(APITestCase):
         self.user = make_user()
         self.other = make_user(username="other")
         self.client.force_authenticate(user=self.user)
+
+    def test_list_filters_by_routine(self):
+        first = make_routine(self.user, name="First")
+        second = make_routine(self.user, name="Second")
+        kept = make_entry(first)
+        make_entry(second)
+        response = self.client.get(f"/api/entries/?routine={first.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([e["id"] for e in response.json()["results"]], [kept.id])
 
     def test_list_returns_own_entries_only(self):
         my_routine = make_routine(self.user)
@@ -4246,16 +4500,68 @@ class StockConsumeLotsMethodTests(TestCase):
         self.assertEqual(result[0]["lot_number"], "A")
         self.assertEqual(result[0]["quantity"], 2)
 
-    def test_consume_lots_fefo_partial(self):
-        """FEFO with quantity > stock total consumes everything available and returns just that."""
-        # Single-lot stock with qty=3, asking for 5.
-        single_stock = make_stock(self.user, name="Single")
-        single_lot = make_lot(single_stock, quantity=3, expiry_date=date(2026, 8, 1))
-        result = single_stock.consume_lots(quantity=5)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["quantity"], 3)
-        # Lot is now depleted (signal deletes it).
-        self.assertFalse(StockLot.objects.filter(pk=single_lot.pk).exists())
+    def test_consume_lots_fefo_insufficient_raises_and_rolls_back(self):
+        """FEFO asking for more than the stock holds raises, and every lot keeps its quantity.
+
+        Before T057 it drained the lots and returned the 5 units it found as if
+        the 6 asked for had been consumed.
+        """
+        with self.assertRaises(InsufficientStock) as ctx:
+            self.stock.consume_lots(quantity=6)
+        self.assertEqual(ctx.exception.requested, 6)
+        self.assertEqual(ctx.exception.available, 5)
+        self.lot1.refresh_from_db()
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+        self.assertEqual(self.lot2.quantity, 2)
+
+    def test_consume_lots_explicit_insufficient_lot_raises_and_rolls_back(self):
+        """A selection larger than its lot raises instead of being clipped to the lot."""
+        with self.assertRaises(InsufficientStock) as ctx:
+            self.stock.consume_lots(
+                quantity=5,
+                lot_selections=[
+                    {"lot_id": self.lot1.id, "quantity": 2},
+                    {"lot_id": self.lot2.id, "quantity": 3},
+                ],
+            )
+        self.assertEqual(ctx.exception.requested, 3)
+        self.assertEqual(ctx.exception.available, 2)
+        # lot1 was decremented before lot2 failed; the atomic block undoes it.
+        self.lot1.refresh_from_db()
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+        self.assertEqual(self.lot2.quantity, 2)
+
+    def test_consume_lots_duplicate_lot_id_raises(self):
+        """The model rejects a repeated lot_id itself, for callers that skip the serializer."""
+        with self.assertRaises(InvalidLotSelection) as ctx:
+            self.stock.consume_lots(
+                quantity=4,
+                lot_selections=[
+                    {"lot_id": self.lot1.id, "quantity": 2},
+                    {"lot_id": self.lot1.id, "quantity": 2},
+                ],
+            )
+        self.assertEqual(ctx.exception.reason, "Duplicate lot_id in selection.")
+        self.lot1.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+
+    def test_consume_lots_negative_selection_raises(self):
+        """A negative selection cannot offset a larger one to fake the total."""
+        with self.assertRaises(InvalidLotSelection) as ctx:
+            self.stock.consume_lots(
+                quantity=2,
+                lot_selections=[
+                    {"lot_id": self.lot1.id, "quantity": 3},
+                    {"lot_id": self.lot2.id, "quantity": -1},
+                ],
+            )
+        self.assertEqual(ctx.exception.reason, "Selection quantities must not be negative.")
+        self.lot1.refresh_from_db()
+        self.lot2.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+        self.assertEqual(self.lot2.quantity, 2)
 
     def test_consume_lots_skips_zero_qty_in_selections(self):
         """A selection with quantity=0 is skipped (no decrement, no entry in result)."""

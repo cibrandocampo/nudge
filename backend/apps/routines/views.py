@@ -19,7 +19,8 @@ from apps.notifications.push import notify_routine_shared, notify_stock_shared
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import (
-    ClientTimestampInputSerializer,
+    ConsumeInputSerializer,
+    LogInputSerializer,
     RoutineEntrySerializer,
     RoutineSerializer,
     StockConsumptionSerializer,
@@ -194,18 +195,11 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         Accepts optional lot_selections; otherwise uses FEFO.
         """
         stock = self.get_object()
-        try:
-            quantity = int(request.data.get("quantity", 1))
-        except (TypeError, ValueError):
-            return Response({"quantity": "Must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        if quantity <= 0:
-            return Response({"quantity": "Must be > 0."}, status=status.HTTP_400_BAD_REQUEST)
-
-        ts_serializer = ClientTimestampInputSerializer(data=request.data)
-        ts_serializer.is_valid(raise_exception=True)
-        client_created_at = ts_serializer.validated_data.get("client_created_at")
-
-        lot_selections = request.data.get("lot_selections")
+        input_serializer = ConsumeInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        quantity = input_serializer.validated_data["quantity"]
+        lot_selections = input_serializer.validated_data.get("lot_selections")
+        client_created_at = input_serializer.validated_data.get("client_created_at")
 
         with transaction.atomic():
             consumed_lots = stock.consume_lots(quantity, lot_selections)
@@ -358,12 +352,10 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         Resets notification state for this cycle.
         """
         routine = self.get_object()
-
-        ts_serializer = ClientTimestampInputSerializer(data=request.data)
-        ts_serializer.is_valid(raise_exception=True)
-        client_created_at = ts_serializer.validated_data.get("client_created_at")
-
-        lot_selections = request.data.get("lot_selections")
+        input_serializer = LogInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        lot_selections = input_serializer.validated_data.get("lot_selections")
+        client_created_at = input_serializer.validated_data.get("client_created_at")
 
         # Refuse to log when the routine has a linked stock whose total
         # quantity is below `stock_usage`. Otherwise the entry would be
@@ -413,10 +405,9 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         """Return the full entry history for a single routine."""
         routine = self.get_object()
         qs = routine.entries.all()
+        # Pagination is global (`DEFAULT_PAGINATION_CLASS`), so a page always exists.
         page = self.paginate_queryset(qs)
-        if page is not None:
-            return self.get_paginated_response(RoutineEntrySerializer(page, many=True).data)
-        return Response(RoutineEntrySerializer(qs, many=True).data)
+        return self.get_paginated_response(RoutineEntrySerializer(page, many=True).data)
 
 
 class StockConsumptionViewSet(
