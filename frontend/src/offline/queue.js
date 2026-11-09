@@ -36,7 +36,10 @@ import { applyRollback, hasRollback } from './rollbacks'
  *     retryCount: number (default 0, incremented by `markRetryPending`),
  *     nextAttemptAt: string | null (ISO timestamp; sync worker skips entries
  *         whose scheduled attempt is still in the future — T064 backoff),
- *     errorMessage?: string,
+ *     errorMessage?: string (a backend error `code` such as `insufficient_stock`
+ *         when the refusal carried one, else `HTTP <status>` or the thrown message),
+ *     errorArgs?: object (the refusal's JSON body when `errorMessage` is a code, so
+ *         the UI can interpolate fields like `available`),
  *     conflictCurrent?: any,
  *   }
  */
@@ -99,15 +102,21 @@ async function patchStatus(id, patch) {
 }
 
 export function markSyncing(id) {
-  return patchStatus(id, { status: 'syncing', errorMessage: undefined })
+  return patchStatus(id, { status: 'syncing', errorMessage: undefined, errorArgs: undefined })
 }
 
 export function markPending(id) {
-  return patchStatus(id, { status: 'pending', errorMessage: undefined })
+  return patchStatus(id, { status: 'pending', errorMessage: undefined, errorArgs: undefined })
 }
 
 export function markPendingFresh(id) {
-  return patchStatus(id, { status: 'pending', errorMessage: undefined, retryCount: 0, nextAttemptAt: null })
+  return patchStatus(id, {
+    status: 'pending',
+    errorMessage: undefined,
+    errorArgs: undefined,
+    retryCount: 0,
+    nextAttemptAt: null,
+  })
 }
 
 /**
@@ -122,6 +131,7 @@ export async function markRetryPending(id, delayMs) {
     ...existing,
     status: 'pending',
     errorMessage: undefined,
+    errorArgs: undefined,
     retryCount: (existing.retryCount ?? 0) + 1,
     nextAttemptAt: new Date(Date.now() + Math.max(0, delayMs)).toISOString(),
   }
@@ -130,8 +140,8 @@ export async function markRetryPending(id, delayMs) {
   return next
 }
 
-export function markError(id, errorMessage) {
-  return patchStatus(id, { status: 'error', errorMessage })
+export function markError(id, errorMessage, errorArgs = undefined) {
+  return patchStatus(id, { status: 'error', errorMessage, errorArgs })
 }
 
 export function markConflict(id, conflictCurrent) {
@@ -201,7 +211,7 @@ export async function discard(id, qc) {
   if (!entry) return
   let applied = false
   if (entry.rollbackType && hasRollback(entry.rollbackType)) {
-    applied = applyRollback(qc, entry.rollbackType, entry.rollbackArgs ?? {})
+    applied = applyRollback(qc, entry.rollbackType, entry.rollbackArgs)
   }
   if (!applied && entry.resourceKey) {
     const queryKey = resourceKeyToQueryKey(entry.resourceKey)

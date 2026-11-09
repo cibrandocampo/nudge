@@ -202,6 +202,31 @@ describe('stock mutation hooks — online + offline paths', () => {
     expect(returned).toEqual({ ok: true })
   })
 
+  it('useConsumeStock on a 422 insufficient_stock restores the snapshot and marks the stock stale', async () => {
+    const body = { detail: 'Insufficient stock.', code: 'insufficient_stock', required: 5, available: 2 }
+    server.use(http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json(body, { status: 422 })))
+    const { result, qc } = renderWith(() => useConsumeStock())
+    const lots = [{ id: 100, quantity: 2, expiry_date: null }]
+    qc.setQueryData(['stock'], [{ id: 1, quantity: 2, lots }])
+    qc.setQueryData(['stock', 1], { id: 1, quantity: 2, lots })
+
+    let caught
+    await act(async () => {
+      await result.current.mutateAsync({ stockId: 1, quantity: 5 }).catch((err) => {
+        caught = err
+      })
+    })
+    // The server's body reaches the caller, so errorToastMessage can say why.
+    expect(caught.status).toBe(422)
+    expect(caught.body).toEqual(body)
+    // The optimistic decrement is undone...
+    expect(qc.getQueryData(['stock'])).toEqual([{ id: 1, quantity: 2, lots }])
+    expect(qc.getQueryData(['stock', 1])).toEqual({ id: 1, quantity: 2, lots })
+    // ...and, since the snapshot itself predates the refusal, both are refetched.
+    expect(qc.getQueryState(['stock']).isInvalidated).toBe(true)
+    expect(qc.getQueryState(['stock', 1]).isInvalidated).toBe(true)
+  })
+
   it('useCreateStockLot refreshes the parent stock into the cache', async () => {
     server.use(
       http.post(`${BASE}/stock/1/lots/`, () => HttpResponse.json({ id: 10, quantity: 3 }, { status: 201 })),
@@ -391,6 +416,25 @@ describe('stock mutation hooks — optimistic updates (T062)', () => {
     })
     // Server response lands and overwrites.
     expect(qc.getQueryData(['stock', 1]).quantity).toBe(8)
+  })
+
+  it('useConsumeStock FEFO breaks an expiry tie by created_at, a lot without one first', async () => {
+    // Queued offline, so the optimistic state is what stays in the cache.
+    server.use(mockNetworkError('post', '/stock/1/consume/'))
+    const { result, qc } = renderWith(() => useConsumeStock())
+    const lots = [
+      { id: 1, quantity: 2, expiry_date: '2027-01-01', created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, quantity: 2, expiry_date: '2027-01-01' },
+    ]
+    qc.setQueryData(['stock', 1], { id: 1, quantity: 4, lots })
+
+    await act(async () => {
+      await result.current.mutateAsync({ stockId: 1, quantity: 1 })
+    })
+    expect(qc.getQueryData(['stock', 1]).lots).toEqual([
+      { id: 2, quantity: 1, expiry_date: '2027-01-01' },
+      { id: 1, quantity: 2, expiry_date: '2027-01-01', created_at: '2026-01-01T00:00:00Z' },
+    ])
   })
 
   it('useConsumeStock rolls back optimistic state on server error', async () => {

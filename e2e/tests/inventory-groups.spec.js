@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsUser1 } from './helpers/session.js'
-import { goToInventory, goToStockDetail } from './helpers/navigation.js'
+import { goToInventory } from './helpers/navigation.js'
+import { stockCard } from './helpers/locators.js'
 
 /**
  * Section behaviour on the inventory (T096): folding that is worth doing,
@@ -67,9 +68,19 @@ test.describe('Inventory sections', () => {
 
     await page.evaluate(() => window.scrollTo(0, 400))
     await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(300)
-    const before = await page.evaluate(() => Math.round(window.scrollY))
 
-    await goToStockDetail(page, 'hidroferol')
+    // Open the product from a row the user can actually see at this offset:
+    // its copy inside its group, not the pinned one at the top. Clicking an
+    // off-screen row makes Playwright scroll it into view first (to ~37),
+    // and whether the page records that scroll before navigating is a race —
+    // the test would then be asserting its own scroll, not the restoration.
+    const open = stockCard(page, 'hidroferol').last().getByRole('button', { name: 'Open details' })
+    await expect(open).toBeInViewport()
+    const before = await page.evaluate(() => Math.round(window.scrollY))
+    expect(before).toBeGreaterThan(300)
+    await open.click()
+    await expect(page).toHaveURL(/\/inventory\/\d+$/)
+
     await page.getByRole('link', { name: /back to inventory/i }).click()
     await expect(page).toHaveURL('/inventory')
 

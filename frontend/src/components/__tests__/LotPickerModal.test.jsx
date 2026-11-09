@@ -82,6 +82,23 @@ describe('LotPickerModal', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('shows a coded refusal (422 insufficient_stock) with its numbers instead of the generic copy', async () => {
+    server.use(
+      http.post(`${BASE}/stock/5/consume/`, () =>
+        HttpResponse.json(
+          { detail: 'Insufficient stock.', code: 'insufficient_stock', required: 1, available: 0 },
+          { status: 422 },
+        ),
+      ),
+    )
+    const onClose = vi.fn()
+    const { user } = renderModal({ onClose })
+    await user.click(screen.getByRole('button', { name: /consume 1/i }))
+    expect(await screen.findByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument()
+    expect(screen.queryByText(/could not consume/i)).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('closes via onClose after a successful consume', async () => {
     server.use(http.post(`${BASE}/stock/5/consume/`, () => HttpResponse.json({ ok: true })))
     const onClose = vi.fn()

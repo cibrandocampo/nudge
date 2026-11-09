@@ -155,6 +155,29 @@ describe('routine mutation hooks — optimistic updates (T062)', () => {
     expect(qc.getQueryData(['dashboard'])).toEqual(original)
   })
 
+  it('useLogRoutine rolls back and surfaces the body of a 422 insufficient_stock from consume_lots', async () => {
+    // Since T057 the 422 can also come from `consume_lots` after the view's
+    // pre-check passed (the chosen lot emptied meanwhile): same rollback, and
+    // the body reaches the caller for errorToastMessage.
+    const body = { detail: 'Insufficient stock.', code: 'insufficient_stock', required: 2, available: 1 }
+    server.use(http.post(`${BASE}/routines/5/log/`, () => HttpResponse.json(body, { status: 422 })))
+    const { result, qc } = renderMut(() => useLogRoutine())
+    const original = { due: [{ id: 5, name: 'Pills', interval_hours: 24 }], upcoming: [] }
+    qc.setQueryData(['dashboard'], original)
+    qc.setQueryData(['routine', 5], { id: 5, is_due: true })
+
+    let caught
+    await act(async () => {
+      await result.current.mutateAsync({ routineId: 5, lotSelections: [{ lot_id: 9, quantity: 2 }] }).catch((err) => {
+        caught = err
+      })
+    })
+    expect(caught.status).toBe(422)
+    expect(caught.body).toEqual(body)
+    expect(qc.getQueryData(['dashboard'])).toEqual(original)
+    expect(qc.getQueryData(['routine', 5])).toEqual({ id: 5, is_due: true })
+  })
+
   it('useLogRoutine re-dates an upcoming routine in place without duplicating it or touching due', async () => {
     server.use(http.post(`${BASE}/routines/6/log/`, () => HttpResponse.json({ id: 43 }, { status: 201 })))
     const { result, qc } = renderMut(() => useLogRoutine())
@@ -611,6 +634,33 @@ describe('rollback edge cases', () => {
     const stock = qc.getQueryData(['stock', 5])
     expect(stock.lots).toEqual([{ id: 1, quantity: 2 }])
     expect(stock.quantity).toBe(2)
+  })
+
+  it('consumeStock rollback credits only the selected lot and leaves the others alone', async () => {
+    const { applyRollback } = await import('../../offline/rollbacks')
+    const qc = makeQc({
+      [JSON.stringify(['stock', 5])]: {
+        id: 5,
+        quantity: 4,
+        lots: [
+          { id: 1, quantity: 1 },
+          { id: 2, quantity: 3 },
+        ],
+      },
+    })
+    applyRollback(qc, 'consumeStock', { stockId: 5, quantity: 2, lotSelections: [{ lot_id: 1, quantity: 2 }] })
+    expect(qc.getQueryData(['stock', 5]).lots).toEqual([
+      { id: 1, quantity: 3 },
+      { id: 2, quantity: 3 },
+    ])
+  })
+
+  it('consumeStock rollback copes with a cached stock that has no lots nor quantity', async () => {
+    // A list row from an older payload: no `lots` array, no `quantity`.
+    const { applyRollback } = await import('../../offline/rollbacks')
+    const qc = makeQc({ [JSON.stringify(['stock', 5])]: { id: 5, name: 'Bare' } })
+    applyRollback(qc, 'consumeStock', { stockId: 5, quantity: 2, lotSelections: [{ lot_id: 1, quantity: 2 }] })
+    expect(qc.getQueryData(['stock', 5])).toEqual({ id: 5, name: 'Bare', quantity: 2, lots: undefined })
   })
 
   it('consumeStock rollback also patches the list cache (["stock"])', async () => {

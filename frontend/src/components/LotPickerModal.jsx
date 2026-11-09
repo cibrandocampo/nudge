@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConsumeStock } from '../hooks/mutations/useConsumeStock'
+import { errorToastMessage } from '../utils/errors'
 import { lotsForSelection } from '../utils/lotsForSelection'
 import LotConsumeModal from './LotConsumeModal'
 
@@ -36,11 +37,12 @@ export default function LotPickerModal({ stock, onClose, onConsumed }) {
       })
       onConsumed?.()
       onClose()
-    } catch {
+    } catch (err) {
       // Never an OfflineError: `useConsumeStock` is queueable, so losing the
       // network enqueues the consume and resolves instead of throwing. What
-      // reaches here is a real server refusal.
-      setError(t('lotPicker.errorGeneric'))
+      // reaches here is a real server refusal. A coded one (`insufficient_stock`)
+      // says why, with the numbers; the rest resolves as errorToastMessage does.
+      setError(errorToastMessage(err, t, 'lotPicker.errorGeneric'))
       setSubmitting(false)
     }
   }

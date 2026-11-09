@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OfflineError } from '../../api/errors'
-import { errorToastMessage } from '../errors'
+import { errorToastMessage, queueErrorMessage } from '../errors'
 
 describe('errorToastMessage', () => {
   it('returns the offline message when the error is an OfflineError', () => {
@@ -59,5 +59,25 @@ describe('errorToastMessage', () => {
     const err = new Error('HTTP 500')
     err.body = { code: 'mystery' }
     expect(errorToastMessage(err, t)).toBe('common.actionError')
+  })
+})
+
+describe('queueErrorMessage', () => {
+  it('translates a mapped code with the stored body as args', () => {
+    const t = vi.fn((key, args) => `[${key}] available=${args.available}`)
+    const entry = { errorMessage: 'insufficient_stock', errorArgs: { code: 'insufficient_stock', available: 1 } }
+    expect(queueErrorMessage(entry, t)).toBe('[errors.insufficientStock] available=1')
+  })
+
+  it('passes empty args when a mapped code was stored without a body', () => {
+    const t = vi.fn((key) => key)
+    expect(queueErrorMessage({ errorMessage: 'insufficient_stock' }, t)).toBe('errors.insufficientStock')
+    expect(t).toHaveBeenCalledWith('errors.insufficientStock', {})
+  })
+
+  it('shows an unmapped message as stored, untranslated', () => {
+    const t = vi.fn((key) => key)
+    expect(queueErrorMessage({ errorMessage: 'HTTP 400' }, t)).toBe('HTTP 400')
+    expect(t).not.toHaveBeenCalled()
   })
 })

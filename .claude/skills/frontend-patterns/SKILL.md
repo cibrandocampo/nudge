@@ -131,6 +131,12 @@ const res = await api.delete('/push/unsubscribe/', { endpoint })
 - `BASE_URL` defaults to `/api` — paths are relative (e.g., `/auth/me/` becomes `/api/auth/me/`)
 - Auto-refreshes JWT on 401 using a mutex to prevent duplicate refresh requests
 - Always include trailing slashes in paths (Django requires them)
+- Backend refusals with a `code` (`insufficient_stock`, …) map to i18n keys in
+  `ERROR_CODE_I18N_KEYS` (`src/utils/errors.js`). Show them through
+  `errorToastMessage(err, t, fallbackKey)` (toasts and inline errors) or
+  `queueErrorMessage(entry, t)` (offline-queue entries). A new code that can come
+  back from a queueable mutation needs an entry there, otherwise PendingBadge
+  shows the raw code.
 
 ## CSS conventions
 
