@@ -9,7 +9,7 @@ from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
-from .exceptions import InvalidLotSelection
+from .exceptions import InsufficientStock, InvalidLotSelection
 
 
 class StockGroup(models.Model):
@@ -125,7 +125,7 @@ class Stock(models.Model):
             lot_selections: optional list of dicts
                 [{"lot_id": int, "quantity": int}, ...]. When None, FEFO
                 (First Expired, First Out) consumes from earliest expiry
-                until `quantity` reached or lots exhausted.
+                until `quantity` is reached.
 
         Returns: list of consumed_lot dicts
             [{"lot_number", "expiry_date", "serial_number", "quantity"}, ...]
@@ -134,9 +134,17 @@ class Stock(models.Model):
             missing key as "no serial".
 
         Raises:
-            InvalidLotSelection when the selections do not sum to `quantity`
-            or name a lot of another stock. `apps.core.exception_handler`
-            turns it into a 400 when it bubbles out of a viewset action.
+            InvalidLotSelection when the selections do not sum to `quantity`,
+            repeat a lot_id, carry a negative quantity or name a lot of
+            another stock. `apps.core.exception_handler` turns it into a 400.
+            InsufficientStock when the lots cannot cover `quantity` (FEFO) or a
+            selection asks a lot for more than it holds. The handler turns it
+            into a 422; the method is atomic, so no lot keeps a partial
+            decrement.
+
+        Invariant: on return, the quantities in the returned dicts add up to
+        exactly `quantity`, so the audit rows built from them (RoutineEntry,
+        StockConsumption) never record more than was taken off the lots.
         """
         consumed_lots = []
 
@@ -145,19 +153,24 @@ class Stock(models.Model):
             if total != quantity:
                 raise InvalidLotSelection("Total quantity must equal quantity.")
             lot_ids = [sel["lot_id"] for sel in lot_selections]
+            if len(set(lot_ids)) != len(lot_ids):
+                raise InvalidLotSelection("Duplicate lot_id in selection.")
+            if any(sel["quantity"] < 0 for sel in lot_selections):
+                raise InvalidLotSelection("Selection quantities must not be negative.")
             valid_ids = set(self.lots.filter(id__in=lot_ids).values_list("id", flat=True))
             invalid = set(lot_ids) - valid_ids
             if invalid:
                 raise InvalidLotSelection("One or more lot_ids are invalid.")
             for sel in lot_selections:
                 qty = sel["quantity"]
-                if qty <= 0:
+                if qty == 0:
                     continue
                 lot = StockLot.objects.select_for_update().get(id=sel["lot_id"], stock=self)
-                consume_qty = min(lot.quantity, qty)
-                lot.quantity -= consume_qty
+                if qty > lot.quantity:
+                    raise InsufficientStock(requested=qty, available=lot.quantity)
+                lot.quantity -= qty
                 lot.save(update_fields=["quantity"])
-                consumed_lots.append(_lot_consumed_dict(lot, consume_qty))
+                consumed_lots.append(_lot_consumed_dict(lot, qty))
         else:
             remaining = quantity
             for lot in (
@@ -173,6 +186,11 @@ class Stock(models.Model):
                 remaining -= consume
                 consumed_lots.append(_lot_consumed_dict(lot, consume))
 
+        # Only FEFO can fall short here: it walked every lot, so what it took
+        # is everything the stock had.
+        consumed_total = sum(c["quantity"] for c in consumed_lots)
+        if consumed_total != quantity:
+            raise InsufficientStock(requested=quantity, available=consumed_total)
         return consumed_lots
 
 

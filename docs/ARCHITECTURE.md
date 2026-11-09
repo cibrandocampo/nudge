@@ -127,6 +127,8 @@ NotificationState
 
 When a routine is logged, stock is decremented using FEFO (First Expired, First Out): lots are consumed in ascending `expiry_date` order (`NULL` expiry dates are treated as furthest in the future). Each lot is decremented partially until the required `stock_usage` units are satisfied across as many lots as needed.
 
+A consumption is all or nothing. `Stock.consume_lots` (used by `POST /api/stock/{id}/consume/` and `POST /api/routines/{id}/log/`) either takes exactly the requested units or raises `InsufficientStock`, which the API returns as `422` with `code: "insufficient_stock"`, `required` and `available`. The method is atomic, so a failure leaves every lot as it was. This applies when FEFO runs out of lots and when an explicit lot selection asks a lot for more than it holds. As a result, the audit rows (`RoutineEntry.consumed_lots`, `StockConsumption`) always add up to the quantity they record. Both request bodies go through `ConsumeInputSerializer` / `LogInputSerializer`: `quantity >= 1`, no repeated `lot_id`, and `lot_selections` null or `[]` means FEFO.
+
 ### Timezone handling
 
 Users set their `daily_notification_time` as a **local time**. The Celery beat task runs every 5 minutes and, for each user, converts their local time to UTC using their IANA `timezone` string before comparing against the current UTC time. This ensures the notification fires at the correct local time year-round, including across DST transitions.
