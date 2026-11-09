@@ -197,6 +197,60 @@ describe('InventoryPage — −1 lot picker', () => {
     expect(consumeBody.lot_selections).toEqual([{ lot_id: 10, quantity: 1 }])
   })
 
+  it('after a 422 lot_unavailable the open picker stops offering the batch that is gone', async () => {
+    // Stateful: the refused consume flips `gone`, and the refetch it triggers
+    // returns the stock without LOT-A, as the server now has it.
+    let gone = false
+    const lotA = { id: 10, quantity: 1, expiry_date: '2027-01-01', lot_number: 'LOT-A' }
+    const lotB = { id: 11, quantity: 2, expiry_date: '2028-01-01', lot_number: 'LOT-B' }
+    mockGroups([])
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json([stock({ lots: gone ? [lotB] : [lotA, lotB] })])),
+      http.post(`${BASE}/stock/1/consume/`, () => {
+        gone = true
+        return HttpResponse.json(
+          { detail: 'Lot no longer available.', code: 'lot_unavailable', lot_ids: [10] },
+          { status: 422 },
+        )
+      }),
+    )
+
+    const { user } = renderPage()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('LOT-A')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: /consume 1/i }))
+
+    expect(await within(dialog).findByText('This batch is no longer available.')).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).queryByText('LOT-A')).not.toBeInTheDocument())
+    expect(within(dialog).getByText('LOT-B')).toBeInTheDocument()
+  })
+
+  it('keeps the picker on the row it opened with when that stock leaves the list', async () => {
+    // E.g. the owner deleted the stock meanwhile: the refetch after the refusal
+    // no longer has it, and the open picker must not lose its content.
+    let gone = false
+    mockGroups([])
+    server.use(
+      http.get(`${BASE}/stock/`, () => HttpResponse.json(gone ? [] : [stock()])),
+      http.post(`${BASE}/stock/1/consume/`, () => {
+        gone = true
+        return HttpResponse.json({ detail: 'Not found.' }, { status: 404 })
+      }),
+    )
+
+    const { user } = renderPage()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /consume 1/i }))
+
+    expect(await within(dialog).findByText('Not found.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('product-card')).not.toBeInTheDocument())
+    expect(within(dialog).getByText('LOT-A')).toBeInTheDocument()
+  })
+
   it('shows an error toast and does not open the picker when the stock has no lots', async () => {
     // Defensive guard: the card hides the −1 button when quantity is 0, but
     // backend drift could surface a stock whose quantity > 0 yet whose lots

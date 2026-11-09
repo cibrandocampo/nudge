@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.views import set_rollback
 
-from apps.routines.exceptions import InsufficientStock, InvalidLotSelection
+from apps.routines.exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
 
 
 def exception_handler(exc, context):
@@ -29,6 +29,15 @@ def exception_handler(exc, context):
         # before T056 rendered a bare string here; no client read it.)
         body = {"lot_selections": [exc.reason]}
         response_status = status.HTTP_400_BAD_REQUEST
+    elif isinstance(exc, LotUnavailable):
+        # 422 like insufficient stock: the request was well formed, the stock
+        # changed under it. Not 409: the offline queue is to retry those (T064).
+        body = {
+            "detail": "Lot no longer available.",
+            "code": "lot_unavailable",
+            "lot_ids": exc.lot_ids,
+        }
+        response_status = status.HTTP_422_UNPROCESSABLE_ENTITY
     else:
         return drf_exception_handler(exc, context)
 

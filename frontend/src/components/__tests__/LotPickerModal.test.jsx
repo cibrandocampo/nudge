@@ -99,6 +99,22 @@ describe('LotPickerModal', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('says the batch is gone when it was emptied after the picker opened (422 lot_unavailable)', async () => {
+    server.use(
+      http.post(`${BASE}/stock/5/consume/`, () =>
+        HttpResponse.json(
+          { detail: 'Lot no longer available.', code: 'lot_unavailable', lot_ids: [10] },
+          { status: 422 },
+        ),
+      ),
+    )
+    const onClose = vi.fn()
+    const { user } = renderModal({ onClose })
+    await user.click(screen.getByRole('button', { name: /consume 1/i }))
+    expect(await screen.findByText('This batch is no longer available.')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('closes via onClose after a successful consume', async () => {
     server.use(http.post(`${BASE}/stock/5/consume/`, () => HttpResponse.json({ ok: true })))
     const onClose = vi.fn()

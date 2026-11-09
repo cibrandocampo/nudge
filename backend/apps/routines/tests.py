@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .exceptions import InsufficientStock, InvalidLotSelection
+from .exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
@@ -1925,6 +1925,26 @@ class StockConsumeTest(APITestCase):
         self.assertEqual(lot.quantity, 1)
         self.assertFalse(StockConsumption.objects.exists())
 
+    def test_consume_a_lot_emptied_meanwhile_returns_422_lot_unavailable(self):
+        """The picker offered a lot that someone else emptied (and so deleted) before Confirm."""
+        kept = make_lot(self.stock, quantity=3, lot_number="KEPT")
+        gone = make_lot(self.stock, quantity=1, lot_number="GONE")
+        gone_id = gone.id
+        gone.delete()
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1, "lot_selections": [{"lot_id": gone_id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Lot no longer available.", "code": "lot_unavailable", "lot_ids": [gone_id]},
+        )
+        kept.refresh_from_db()
+        self.assertEqual(kept.quantity, 3)
+        self.assertFalse(StockConsumption.objects.exists())
+
     def test_consume_selection_with_zero_quantity_returns_400(self):
         lot = make_lot(self.stock, quantity=5)
         response = self.client.post(
@@ -2428,6 +2448,29 @@ class RoutineViewSetTest(APITestCase):
         self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
         lot.refresh_from_db()
         self.assertEqual(lot.quantity, 5)
+
+    def test_log_a_lot_emptied_meanwhile_returns_422_lot_unavailable(self):
+        """The stock still covers the pre-check, but the lot the user picked is gone."""
+        stock = make_stock(self.user)
+        kept = make_lot(stock, quantity=5, lot_number="KEPT")
+        gone = make_lot(stock, quantity=1, lot_number="GONE")
+        gone_id = gone.id
+        gone.delete()
+        r = make_routine(self.user, stock=stock)
+        response = self.client.post(
+            f"/api/routines/{r.id}/log/",
+            {"lot_selections": [{"lot_id": gone_id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Lot no longer available.", "code": "lot_unavailable", "lot_ids": [gone_id]},
+        )
+        # The entry created before consume_lots ran is rolled back.
+        self.assertFalse(RoutineEntry.objects.filter(routine=r).exists())
+        kept.refresh_from_db()
+        self.assertEqual(kept.quantity, 5)
 
     def test_log_explicit_selection_insufficient_lot_returns_422_and_rolls_back(self):
         """The stock total passes the pre-check, but the chosen lot is short.
@@ -4454,6 +4497,37 @@ class StockConsumeLotsMethodTests(TestCase):
         self.assertEqual(result[0]["quantity"], 3)
         self.assertEqual(result[1]["lot_number"], "B")
         self.assertEqual(result[1]["quantity"], 2)
+
+    def test_consume_lots_vanished_lot_raises_lot_unavailable(self):
+        """A selected lot that no longer exists is unavailable, not invalid."""
+        gone_id = self.lot2.id
+        self.lot2.delete()
+        with self.assertRaises(LotUnavailable) as ctx:
+            self.stock.consume_lots(
+                quantity=2,
+                lot_selections=[
+                    {"lot_id": self.lot1.id, "quantity": 1},
+                    {"lot_id": gone_id, "quantity": 1},
+                ],
+            )
+        self.assertEqual(ctx.exception.lot_ids, [gone_id])
+        self.lot1.refresh_from_db()
+        self.assertEqual(self.lot1.quantity, 3)
+
+    def test_consume_lots_foreign_lot_wins_over_vanished_one(self):
+        """With a lot of another stock in the selection the request is invalid, whatever else is gone."""
+        foreign_lot = make_lot(make_stock(self.user, name="Other"), quantity=4)
+        gone_id = self.lot2.id
+        self.lot2.delete()
+        with self.assertRaises(InvalidLotSelection) as ctx:
+            self.stock.consume_lots(
+                quantity=2,
+                lot_selections=[
+                    {"lot_id": foreign_lot.id, "quantity": 1},
+                    {"lot_id": gone_id, "quantity": 1},
+                ],
+            )
+        self.assertEqual(ctx.exception.reason, "One or more lot_ids are invalid.")
 
     def test_consume_lots_total_mismatch_raises(self):
         """Selections summing != quantity raise the domain error, not a DRF one."""
