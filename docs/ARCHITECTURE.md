@@ -304,7 +304,7 @@ Per entry the worker:
 3. On 2xx — `remove(id)` and **focal invalidation**: only the cache keys that `resourceKey` identifies get invalidated, not the whole React Query store.
 4. On 412 — `status='conflict'`, `conflictCurrent=response.body.current`. The orchestrator takes over.
 5. On 5xx / 429 / network error — `retryCount++`, `nextAttemptAt = now + backoff[retryCount]` where `backoff = [2s, 10s, 30s]`. After the last step retries are attempted at the longest delay. Override in dev via `window.__NUDGE_SYNC_RETRY_DELAYS_MS__`.
-6. On 4xx (non-conflict) — `status='error'`. The entry lives in the `PendingBadge` panel; the user decides to retry or discard.
+6. On 4xx (non-conflict) — `status='error'`. The entry lives in the `PendingBadge` panel; the user decides to retry or discard. When the response body carries a `code` (e.g. `insufficient_stock`), the entry stores it as `errorMessage` and the body as `errorArgs`. The panel then shows the translated message with the server's numbers (`queueErrorMessage` in `utils/errors.js`) instead of `HTTP <status>`.
 
 A per-entry discard aborts the in-flight fetch and removes the queue row. If discard arrives while the request is mid-flight we deliberately leak the server write — correctness from the user's perspective is that they asked to throw it away.
 

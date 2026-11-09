@@ -109,6 +109,12 @@ export function useConsumeStock() {
 
       return () => restoreKeys(client, snap)
     },
+    onError: () => {
+      // The wrapper already put the snapshot back, but a refusal (above all
+      // the 422 `insufficient_stock`) means that snapshot was stale too:
+      // refetch so the lots on screen are the ones the server has.
+      qc.invalidateQueries({ queryKey: ['stock'] })
+    },
     onSuccess: (data, { stockId }) => {
       if (data && !data.__queued && data.id) {
         // The endpoint returns the updated Stock; merge it into the list

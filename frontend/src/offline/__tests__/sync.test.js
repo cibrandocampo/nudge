@@ -177,6 +177,49 @@ describe('offline sync worker', () => {
     expect(all.find((e) => e.id === 'ok')).toBeUndefined()
   })
 
+  it('keeps the code and body of a 422 insufficient_stock and does not retry it', async () => {
+    const qc = fakeQueryClient()
+    initSyncWorker(qc)
+    const body = { detail: 'Insufficient stock.', code: 'insufficient_stock', required: 3, available: 1 }
+    let calls = 0
+    server.use(
+      http.post(`${BASE}/stock/7/consume/`, () => {
+        calls += 1
+        return HttpResponse.json(body, { status: 422 })
+      }),
+    )
+
+    await enqueue(pendingEntry({ endpoint: '/stock/7/consume/', resourceKey: 'stock:7', body: { quantity: 3 } }))
+    await processQueue()
+
+    const [entry] = await list()
+    expect(entry.status).toBe('error')
+    expect(entry.errorMessage).toBe('insufficient_stock')
+    expect(entry.errorArgs).toEqual(body)
+    // A definitive refusal: no backoff scheduled, one request only.
+    expect(entry.retryCount ?? 0).toBe(0)
+    expect(entry.nextAttemptAt ?? null).toBeNull()
+    expect(calls).toBe(1)
+    expect(qc.invalidateQueries).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the status when the refusal body has no code', async () => {
+    initSyncWorker(fakeQueryClient())
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () =>
+        HttpResponse.json({ lot_selections: ['Duplicate lot_id in selection.'] }, { status: 400 }),
+      ),
+    )
+
+    await enqueue(pendingEntry())
+    await processQueue()
+
+    const [entry] = await list()
+    expect(entry.status).toBe('error')
+    expect(entry.errorMessage).toBe('HTTP 400')
+    expect(entry.errorArgs).toBeUndefined()
+  })
+
   it('re-running processQueue concurrently does not fire duplicate network calls', async () => {
     const qc = fakeQueryClient()
     initSyncWorker(qc)
@@ -467,6 +510,18 @@ describe('offline sync worker', () => {
     // on reachability recovery + health poll instead of HTTP-level
     // backoff. The retry-backoff path here is exercised by 408, 429 and
     // 500 (the 5xx that still bubbles up as a real HTTP response).
+    it('counts a legacy entry without retryCount as its first attempt', async () => {
+      initSyncWorker(fakeQueryClient())
+      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 429 })))
+      // `enqueue` defaults retryCount to 0; spreading undefined over it
+      // reproduces an entry persisted before T064.
+      await enqueue(pendingEntry({ retryCount: undefined }))
+      await processQueue()
+      const [entry] = await list()
+      expect(entry.status).toBe('pending')
+      expect(entry.retryCount).toBe(1)
+    })
+
     it('reschedules with the first backoff delay on transient HTTP errors (retryCount 0 → 1)', async () => {
       initSyncWorker(fakeQueryClient())
       server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 429 })))
@@ -857,5 +912,36 @@ describe('offline sync worker', () => {
       await processQueue()
       expect(await list()).toHaveLength(0)
     })
+
+    it.each([
+      ['stock:4', [['dashboard'], ['stock'], ['stock', 4], ['stock-consumptions'], ['stock-lots', 4]]],
+      ['entry:4', [['entries'], ['routine-entries']]],
+      ['consumption:4', [['stock-consumptions']]],
+    ])('a drained "%s" entry invalidates exactly its keys', async (resourceKey, keys) => {
+      const qc = fakeQueryClient()
+      server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.json({}, { status: 201 })))
+      await enqueue(pendingEntry({ resourceKey }))
+      initSyncWorker(qc)
+      await processQueue()
+      expect(await list()).toHaveLength(0)
+      expect(qc.invalidateQueries.mock.calls.map(([arg]) => arg.queryKey)).toEqual(keys)
+    })
+  })
+
+  it('honours the retry schedule override and gives up once it is spent', async () => {
+    // `window.__NUDGE_SYNC_RETRY_DELAYS_MS__` lets E2E specs shorten the
+    // backoff; its length is the retry budget.
+    window.__NUDGE_SYNC_RETRY_DELAYS_MS__ = [1]
+    try {
+      initSyncWorker(fakeQueryClient())
+      server.use(http.post(`${BASE}/routines/1/log/`, () => new HttpResponse(null, { status: 429 })))
+      await enqueue(pendingEntry({ retryCount: 1 }))
+      await processQueue()
+      const [entry] = await list()
+      expect(entry.status).toBe('error')
+      expect(entry.errorMessage).toBe('HTTP 429 after 1 retries')
+    } finally {
+      delete window.__NUDGE_SYNC_RETRY_DELAYS_MS__
+    }
   })
 })

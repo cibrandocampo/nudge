@@ -275,6 +275,59 @@ describe('PendingBadge', () => {
     expect(screen.queryByTestId('error-detail')).not.toBeInTheDocument()
   })
 
+  it('translates an insufficient_stock refusal with the numbers the server sent', async () => {
+    await enqueue(
+      entry({
+        id: 'err',
+        status: 'error',
+        errorMessage: 'insufficient_stock',
+        errorArgs: { detail: 'Insufficient stock.', code: 'insufficient_stock', required: 3, available: 1 },
+      }),
+    )
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.getByTestId('error-detail')).toHaveTextContent('Not enough stock (3 needed, 1 available).')
+  })
+
+  it('discarding a consume refused with insufficient_stock restores the cached stock', async () => {
+    // The sync worker leaves an entry refused for good in `error`; the
+    // optimistic decrement stays on screen until the user discards it.
+    const qc = new QueryClient()
+    qc.setQueryData(['stock', 1], {
+      id: 1,
+      name: 'Vit D',
+      quantity: 0,
+      lots: [],
+    })
+    qc.setQueryData(['stock'], [{ id: 1, name: 'Vit D', quantity: 0, lots: [] }])
+    await enqueue(
+      entry({
+        id: 'consume-422',
+        status: 'error',
+        endpoint: '/stock/1/consume/',
+        body: { quantity: 3 },
+        resourceKey: 'stock:1',
+        errorMessage: 'insufficient_stock',
+        errorArgs: { code: 'insufficient_stock', required: 3, available: 1 },
+        rollbackType: 'consumeStock',
+        rollbackArgs: { stockId: 1, quantity: 3 },
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderBadge({ qc })
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /discard/i }))
+
+    await waitFor(async () => expect(await list()).toHaveLength(0))
+    expect(qc.getQueryData(['stock', 1]).quantity).toBe(3)
+    expect(qc.getQueryData(['stock'])[0].quantity).toBe(3)
+  })
+
   it('discard rolls back the optimistic before removing the entry (T113)', async () => {
     // End-to-end: an offline consume left the cache decremented (10 → 9)
     // and an entry with `rollbackType: 'consumeStock'` in the queue. Click

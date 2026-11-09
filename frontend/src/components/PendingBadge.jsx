@@ -5,6 +5,7 @@ import { useClickOutside } from '../hooks/useClickOutside'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { discard } from '../offline/queue'
 import { forceSync } from '../offline/sync'
+import { queueErrorMessage } from '../utils/errors'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
 import s from './PendingBadge.module.css'
@@ -111,7 +112,7 @@ export default function PendingBadge() {
                 </div>
                 {openedDetail === entry.id && entry.errorMessage && (
                   <div className={s.errorDetail} data-testid="error-detail">
-                    {entry.errorMessage}
+                    {queueErrorMessage(entry, t)}
                   </div>
                 )}
               </li>

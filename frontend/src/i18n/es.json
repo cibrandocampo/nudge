@@ -423,7 +423,7 @@
   "sharing.sharedBadgeRecipientAria": "Compartido contigo por {{owner}}",
   "errors.stockShareFailed": "No se pudo compartir el stock asociado. La rutina tampoco se guardó — inténtalo de nuevo.",
   "errors.routineSavedAfterStockShared": "El stock se compartió, pero la rutina no se pudo guardar. Vuelve a intentar guardar la rutina.",
-  "errors.insufficientStock": "No hay stock suficiente para registrar esta rutina (necesario {{required}}, disponible {{available}}).",
+  "errors.insufficientStock": "No hay stock suficiente (necesario {{required}}, disponible {{available}}).",
   "toast.error.generic": "Algo salió mal",
   "toast.success.generic": "Listo",
   "offline.banner": "Sin conexión con el servidor. Tus cambios en rutinas y stocks se guardan localmente y se sincronizarán al reconectar.",

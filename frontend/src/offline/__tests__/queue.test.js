@@ -13,6 +13,7 @@ import {
   remove,
   subscribe,
 } from '../queue'
+import { registerRollback } from '../rollbacks'
 
 function baseEntry(overrides = {}) {
   return {
@@ -190,5 +191,42 @@ describe('offline queue', () => {
     const qc = { invalidateQueries: vi.fn() }
     await discard('does-not-exist', qc)
     expect(qc.invalidateQueries).not.toHaveBeenCalled()
+  })
+
+  it('markRetryPending counts from 0 for an entry stored without retryCount', async () => {
+    // Entries persisted before T064 carry no retryCount at all.
+    await enqueue(baseEntry({ retryCount: undefined }))
+    const updated = await markRetryPending('abc', 2_000)
+    expect(updated.retryCount).toBe(1)
+  })
+
+  it('discard with a non-string resourceKey removes the entry without invalidating', async () => {
+    await enqueue(baseEntry({ id: 'd4', resourceKey: 42 }))
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('d4', qc)
+    expect(qc.invalidateQueries).not.toHaveBeenCalled()
+    expect(await list()).toHaveLength(0)
+  })
+
+  it('discard hands a registered rollback empty args when the entry stored none', async () => {
+    const inverse = vi.fn()
+    registerRollback('queueTestNullArgs', inverse)
+    await enqueue(baseEntry({ id: 'd5', rollbackType: 'queueTestNullArgs', rollbackArgs: null }))
+    const qc = { invalidateQueries: vi.fn() }
+    await discard('d5', qc)
+    expect(inverse).toHaveBeenCalledWith(qc, {})
+    expect(await list()).toHaveLength(0)
+  })
+
+  it('markError keeps the refusal body as errorArgs, and a new attempt clears it', async () => {
+    await enqueue(baseEntry())
+    const body = { code: 'insufficient_stock', required: 3, available: 1 }
+    const errored = await markError('abc', 'insufficient_stock', body)
+    expect(errored.status).toBe('error')
+    expect(errored.errorMessage).toBe('insufficient_stock')
+    expect(errored.errorArgs).toEqual(body)
+    const syncing = await markSyncing('abc')
+    expect(syncing.errorMessage).toBeUndefined()
+    expect(syncing.errorArgs).toBeUndefined()
   })
 })

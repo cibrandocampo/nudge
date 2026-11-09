@@ -32,3 +32,16 @@ export function errorToastMessage(err, t, fallbackKey = 'common.actionError') {
   }
   return t(fallbackKey)
 }
+
+/**
+ * Message for a queue entry that ended in `status: 'error'`. The sync worker
+ * stores a backend `code` as `errorMessage` (with the response body as
+ * `errorArgs`) when the refusal carried one; a mapped code is translated like
+ * `errorToastMessage` does. Anything else (`HTTP 400`, a thrown message) is
+ * technical detail with no translation, shown as stored.
+ */
+export function queueErrorMessage(entry, t) {
+  const key = ERROR_CODE_I18N_KEYS[entry.errorMessage]
+  if (key) return t(key, entry.errorArgs ?? {})
+  return entry.errorMessage
+}

@@ -189,7 +189,13 @@ async function runEntry(entry) {
       await markError(entry.id, `HTTP ${res.status} after ${maxRetries} retries`)
       return 'error'
     }
-    await markError(entry.id, `HTTP ${res.status}`)
+    // A definitive refusal. When the body names a `code` (e.g. the 422
+    // `insufficient_stock` of a consume replayed against stock that shrank
+    // meanwhile), keep it and the body so PendingBadge can say why in the
+    // user's language, with the numbers the server sent.
+    const body = await res.json().catch(() => null)
+    const code = typeof body?.code === 'string' ? body.code : null
+    await markError(entry.id, code ?? `HTTP ${res.status}`, code ? body : undefined)
     return 'error'
   } catch (err) {
     if (err?.name === 'AbortError') {
@@ -352,9 +358,7 @@ export function initSyncWorker(client) {
   setQueryClient(client)
   if (initialised) return
   initialised = true
-  if (typeof window !== 'undefined') {
-    window.addEventListener('online', onOnline)
-  }
+  window.addEventListener('online', onOnline)
   if (typeof navigator !== 'undefined' && navigator.serviceWorker?.addEventListener) {
     navigator.serviceWorker.addEventListener('message', onSwMessage)
   }
@@ -372,9 +376,7 @@ export function initSyncWorker(client) {
  * Tear down listeners — only used in tests so each case starts clean.
  */
 export function __resetSyncWorkerForTests() {
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('online', onOnline)
-  }
+  window.removeEventListener('online', onOnline)
   if (typeof navigator !== 'undefined' && navigator.serviceWorker?.removeEventListener) {
     navigator.serviceWorker.removeEventListener('message', onSwMessage)
   }
