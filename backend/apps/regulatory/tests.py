@@ -789,6 +789,17 @@ class ApplyPresentationTests(TestCase):
         self.assertFalse(stock.name_offer_pending)
         self.assertEqual(stock.updated_at, before)
 
+    def test_not_found_closes_the_active_supply_problem(self):
+        self.apply(fiasp_data())
+
+        presentation = self.apply(NOT_FOUND)
+
+        self.assertIsNone(presentation.supply_severity)
+        # Closed, not deleted: it stays in the presentation's history.
+        problem = SupplyProblem.objects.get()
+        self.assertIsNotNone(problem.resolved_at)
+        self.assertEqual(problem.native_type, "1")
+
     def test_success_clears_a_previous_error(self):
         services.record_fetch_error(self.presentation.pk, "boom")
         presentation = self.apply(fiasp_data())
@@ -817,8 +828,13 @@ class RefreshPresentationTests(TestCase):
         self.assertIsNotNone(presentation.last_attempt_at)
 
     def test_untrusted_payload_is_recorded_not_raised(self):
-        with mock.patch.object(aemps, "fetch", side_effect=UpstreamPayloadError("bad")):
+        with (
+            mock.patch.object(aemps, "fetch", side_effect=UpstreamPayloadError("bad")),
+            self.assertLogs("apps.regulatory.services", level="ERROR") as logs,
+        ):
             self.assertIsNone(services.refresh_presentation(self.presentation.pk))
+        self.assertEqual(logs.records[0].levelname, "ERROR")
+        self.assertIn(f"presentation {self.presentation.pk}: bad", logs.output[0])
         presentation = Presentation.objects.get(pk=self.presentation.pk)
         self.assertEqual((presentation.fetch_status, presentation.last_error), ("error", "bad"))
         self.assertIsNone(presentation.fetched_at)

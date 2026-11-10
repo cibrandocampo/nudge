@@ -149,7 +149,11 @@ def apply_presentation(presentation_id, data: PresentationData | NotFound):
             presentation.last_error = ""
             # Also a baseline: the agency has answered, even if with nothing.
             presentation.fetched_at = now
-            presentation.save(update_fields=["fetch_status", "last_error", "fetched_at"])
+            # A code the agency no longer knows has no current shortage: an
+            # active problem would otherwise stay in the summary for good.
+            presentation.supply_severity = None
+            presentation.save(update_fields=["fetch_status", "last_error", "fetched_at", "supply_severity"])
+            _apply_supply(presentation, None, now)
             # No official name will ever come for this code.
             Stock.objects.filter(presentation=presentation, name_offer_pending=True).update(name_offer_pending=False)
             return presentation
