@@ -8,6 +8,8 @@ from rest_flex_fields import FlexFieldsModelSerializer
 from rest_framework import serializers
 
 from apps.core.mixins import SharedWithMixin
+from apps.regulatory.clients import aemps
+from apps.regulatory.serializers import RegulatorySummarySerializer
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot
 
@@ -160,6 +162,16 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     - ``is_pinned`` — whether the requesting user has pinned this stock to the
       top of their inventory. Per-viewer, like ``my_group``: on a shared stock
       the owner's pin says nothing about the recipient's.
+
+    Regulatory identity (agency-neutral; today the only agency is AEMPS):
+
+    - ``national_code`` — the pack's national code (Spain: the 6-digit CN).
+      Writable by the owner, typed or sent from a scanned AI 712; derived from
+      the GTIN, and read-only in effect, when the GTIN is an NTIN.
+    - ``national_code_source`` — the agency the code belongs to.
+    - ``regulatory`` — read-only summary of the official data (``null`` with
+      no national code). ``name_offer_pending`` inside it is the owner's
+      pending "use the official name?" question.
     """
 
     # `raw_scan` is forensic data: useful on the lot endpoint, dead weight on
@@ -191,6 +203,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     user_timezone = serializers.CharField(source="user.timezone", read_only=True)
     my_group = serializers.SerializerMethodField()
     my_group_name = serializers.SerializerMethodField()
+    regulatory = serializers.SerializerMethodField()
 
     class Meta:
         model = Stock
@@ -223,6 +236,9 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "user_timezone",
             "gtin",
             "default_lot_quantity",
+            "national_code",
+            "national_code_source",
+            "regulatory",
             "updated_at",
         ]
         read_only_fields = [
@@ -249,6 +265,8 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "owner_id",
             "owner_display_name",
             "user_timezone",
+            "national_code_source",
+            "regulatory",
             "updated_at",
         ]
 
@@ -274,6 +292,55 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
         if value and request and value.user != request.user:
             raise serializers.ValidationError("Invalid stock group.")
         return value
+
+    def validate(self, attrs):
+        """Settle the national code from the GTIN and what the client sent.
+
+        1. An NTIN (a Spanish GTIN that embeds the CN) wins; a different code
+           sent alongside it is a contradiction, not a choice.
+        2. Otherwise a code that was sent — typed by the owner or taken from a
+           scanned AI 712, the backend cannot tell and does not need to — is
+           normalised and validated, its check digit included; empty clears it.
+        3. Otherwise the stored code stays: clearing a Spanish GTIN does not
+           change which medicine the box is.
+        """
+        attrs = super().validate(attrs)
+        gtin = attrs.get("gtin", self.instance.gtin if self.instance else "")
+        derived = aemps.code_from_gtin(gtin or "")
+        sent = attrs.get("national_code")
+
+        if derived is not None:
+            if sent and aemps.normalize_code(sent) != derived:
+                raise serializers.ValidationError(
+                    {
+                        "national_code": serializers.ErrorDetail(
+                            "The national code does not match the one in the GTIN.",
+                            code="national_code_mismatch",
+                        )
+                    }
+                )
+            attrs["national_code"], attrs["national_code_source"] = derived, aemps.SOURCE
+        elif "national_code" in attrs:
+            if not sent:
+                attrs["national_code"], attrs["national_code_source"] = "", ""
+            else:
+                normalised = aemps.normalize_code(sent)
+                if normalised is None:
+                    raise serializers.ValidationError(
+                        {
+                            "national_code": serializers.ErrorDetail(
+                                "Invalid national code: 6 digits, or 7 with a valid check digit.",
+                                code="invalid_national_code",
+                            )
+                        }
+                    )
+                attrs["national_code"], attrs["national_code_source"] = normalised, aemps.SOURCE
+        return attrs
+
+    def get_regulatory(self, obj):
+        if obj.presentation_id is None:
+            return None
+        return RegulatorySummarySerializer(obj, context=self.context).data
 
     def get_is_owner(self, obj):
         request = self.context.get("request")

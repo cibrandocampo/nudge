@@ -60,3 +60,20 @@
   gap: 0.75rem;
   justify-content: flex-end;
 }
+
+/* Free text — a product name — rather than a code. Codes stay monospace on one
+   line so a digit cannot be misread; a name is read, not compared character by
+   character, and can be sixty characters long. It takes the row's full width:
+   the current name on one line, "→ new name" under it. */
+.valuesText {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.valuesText .current {
+  grid-column: 1 / -1;
+}

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
 import StockValuesConfirmModal from '../StockValuesConfirmModal'
@@ -8,6 +8,7 @@ const GTIN = '05705244020856'
 const renderModal = (discrepancies, props = {}) =>
   renderWithProviders(
     <StockValuesConfirmModal
+      {...props}
       discrepancies={discrepancies}
       onConfirm={props.onConfirm ?? vi.fn()}
       onCancel={props.onCancel ?? vi.fn()}
@@ -81,5 +82,54 @@ describe('StockValuesConfirmModal', () => {
     renderModal([{ field: 'gtin', current: undefined, next: GTIN }])
 
     expect(screen.getByTestId('stock-values-current')).toHaveTextContent('—')
+  })
+})
+
+describe('StockValuesConfirmModal — reuse for the official-name offer (T112)', () => {
+  it('labels the name and the national code', () => {
+    renderModal([
+      { field: 'name', current: 'Insulin', next: 'FIASP 100 UNIDADES/ML' },
+      { field: 'national_code', current: '728514', next: '661426' },
+    ])
+    const rows = screen.getAllByTestId('stock-values-row')
+    expect(rows[0]).toHaveTextContent('Name')
+    expect(rows[1]).toHaveTextContent('National code (CN)')
+  })
+
+  it('takes its own title and an interpolated intro', () => {
+    renderModal([{ field: 'name', current: 'Insulin', next: 'FIASP' }], {
+      title: 'stockValues.nameOfferTitle',
+      intro: 'stockValues.nameOfferIntro',
+      introValues: { source: 'AEMPS (CIMA)' },
+    })
+    expect(screen.getByText('Use the official name?')).toBeInTheDocument()
+    expect(screen.getByText(/according to AEMPS \(CIMA\)/)).toBeInTheDocument()
+  })
+
+  it('keeps the lot wording by default', () => {
+    renderModal([{ field: 'default_lot_quantity', current: 10, next: 6 }])
+    expect(screen.getByText('Update the product?')).toBeInTheDocument()
+  })
+
+  it('holds both actions while an answer is in flight', () => {
+    renderModal([{ field: 'name', current: 'a', next: 'b' }], { busy: true })
+    expect(screen.getByTestId('stock-values-keep')).toBeDisabled()
+    expect(screen.getByTestId('stock-values-update')).toBeDisabled()
+  })
+
+  it('closing with Escape dismisses without answering when onDismiss is given', () => {
+    const onCancel = vi.fn()
+    const onDismiss = vi.fn()
+    renderModal([{ field: 'name', current: 'a', next: 'b' }], { onCancel, onDismiss })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
+  it('closing with Escape still means "keep" for the lot question', () => {
+    const onCancel = vi.fn()
+    renderModal([{ field: 'gtin', current: GTIN, next: '08470007285144' }], { onCancel })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledTimes(1)
   })
 })

@@ -59,6 +59,10 @@ What makes it more than a checklist:
   the boxes where the print is scratched or there is no camera to hand. A pack
   carrying a serial stays one physical box, never merged with another, so "which
   box did I open?" has an answer.
+- **Knows the medicine.** For Spanish medicines, the national code on the box
+  links the stock to its official record in CIMA, the AEMPS database: the
+  official name, supply problems with what the agency advises, safety notices,
+  and whether it is still marketed — refreshed every day.
 - **Offline-first, honestly.** Mutations queue in IndexedDB, sync when the
   network returns, and a conflict opens a per-field diff instead of guessing.
   Reads come from the service-worker cache.

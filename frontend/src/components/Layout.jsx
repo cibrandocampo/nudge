@@ -1,4 +1,5 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { useLayoutEffect } from 'react'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
@@ -32,6 +33,17 @@ export default function Layout() {
   const hasPendingRoutines = routines.some((r) => r.is_due)
   const reachable = useServerReachable()
   const { showToast } = useToast()
+  const { pathname } = useLocation()
+
+  // A new page opens at its top. The browser keeps the window's offset across
+  // client-side navigation, so a page opened from far down a list would land
+  // part-way down, and keep sliding while its later sections load. The
+  // inventory is left alone: it restores its own offset, and this effect, a
+  // parent's, runs after the page's and would undo it.
+  useLayoutEffect(() => {
+    if (pathname === '/inventory' || window.scrollY === 0) return
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   // Pending routines show as the brand dot on the icon, not as a different
   // icon (T105).

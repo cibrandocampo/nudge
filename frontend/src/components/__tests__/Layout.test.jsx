@@ -275,3 +275,38 @@ describe('Layout — bottom nav offline lock', () => {
     await waitFor(() => expect(screen.getByText(/not available offline/i)).toBeInTheDocument())
   })
 })
+
+describe('Layout scroll on navigation', () => {
+  const setScrollY = (y) => Object.defineProperty(window, 'scrollY', { value: y, configurable: true, writable: true })
+  let scrollTo
+
+  beforeEach(() => {
+    setScrollY(0)
+    scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    scrollTo.mockRestore()
+    setScrollY(0)
+  })
+
+  it('opens a new page at its top', async () => {
+    const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    setScrollY(500)
+    await user.click(screen.getByRole('link', { name: 'History' }))
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+  })
+
+  it('leaves the inventory to restore its own offset', async () => {
+    const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    setScrollY(500)
+    await user.click(screen.getByRole('link', { name: 'Inventory' }))
+    expect(screen.getByRole('link', { name: 'Inventory' })).toHaveAttribute('aria-current', 'page')
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll a page that is already at its top', () => {
+    renderWithProviders(<Layout />, { initialEntries: ['/history'] })
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+})

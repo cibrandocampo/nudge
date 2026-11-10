@@ -1,0 +1,99 @@
+{
+  "nregistro": "55315",
+  "nombre": "HIDROFEROL 0,1 mg/ml GOTAS ORALES EN SOLUCION",
+  "pactivos": "CALCIFEDIOL",
+  "labtitular": "Faes Farma S.A.",
+  "labcomercializador": "Faes Farma S.A.",
+  "cpresc": "Medicamento Sujeto A Prescripción Médica",
+  "estado": {
+    "aut": 362786400000
+  },
+  "comerc": true,
+  "receta": true,
+  "generico": false,
+  "conduc": false,
+  "triangulo": false,
+  "huerfano": false,
+  "biosimilar": false,
+  "nosustituible": {
+    "id": 0,
+    "nombre": "N/A"
+  },
+  "psum": false,
+  "notas": true,
+  "materialesInf": false,
+  "ema": false,
+  "docs": [
+    {
+      "tipo": 1,
+      "url": "https://cima.aemps.es/cima/pdfs/ft/55315/FT_55315.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/ft/55315/FT_55315.html",
+      "secc": true,
+      "fecha": 1737503038000
+    },
+    {
+      "tipo": 2,
+      "url": "https://cima.aemps.es/cima/pdfs/p/55315/P_55315.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/p/55315/P_55315.html",
+      "secc": true,
+      "fecha": 1743063928000
+    }
+  ],
+  "atcs": [
+    {
+      "codigo": "A11C",
+      "nombre": "VITAMINAS A Y D, INCLUYENDO COMBINACIONES DE LAS DOS",
+      "nivel": 3
+    },
+    {
+      "codigo": "A11CC",
+      "nombre": "Vitamina D y analogos",
+      "nivel": 4
+    },
+    {
+      "codigo": "A11CC06",
+      "nombre": "Calcifediol",
+      "nivel": 5
+    }
+  ],
+  "principiosActivos": [
+    {
+      "id": 547,
+      "codigo": "547A",
+      "nombre": "CALCIFEDIOL",
+      "cantidad": "0,1",
+      "unidad": "mg",
+      "orden": 1
+    }
+  ],
+  "viasAdministracion": [
+    {
+      "id": 48,
+      "nombre": "VÍA ORAL"
+    }
+  ],
+  "presentaciones": [
+    {
+      "cn": "934554",
+      "nombre": "HIDROFEROL 0,1 mg/ml GOTAS ORALES EN SOLUCION , 1 frasco de 10 ml",
+      "estado": {
+        "aut": 362786400000
+      },
+      "comerc": true,
+      "psum": false
+    }
+  ],
+  "formaFarmaceutica": {
+    "id": 1,
+    "nombre": "GOTAS ORALES EN SOLUCIÓN"
+  },
+  "formaFarmaceuticaSimplificada": {
+    "id": 64,
+    "nombre": "SOLUCION/SUSPENSION GOTAS ORALES"
+  },
+  "vtm": {
+    "id": 88519001,
+    "nombre": "calcifediol"
+  },
+  "dosis": "0,1 mg"
+}

@@ -1,0 +1,113 @@
+{
+  "nregistro": "62258",
+  "nombre": "DOCTRIL FORTE 400 MG COMPRMIDOS RECUBIERTOS CON PELICULA",
+  "pactivos": "IBUPROFENO LISINA",
+  "labtitular": "Jntl Consumer Health (Spain) S.L.",
+  "labcomercializador": "Jntl Consumer Health (Spain) S.L.",
+  "cpresc": "Sin Receta",
+  "estado": {
+    "aut": 907192800000,
+    "susp": 1745570106000
+  },
+  "comerc": false,
+  "receta": false,
+  "generico": false,
+  "conduc": false,
+  "triangulo": false,
+  "huerfano": false,
+  "biosimilar": false,
+  "nosustituible": {
+    "id": 0,
+    "nombre": "N/A"
+  },
+  "psum": false,
+  "notas": true,
+  "materialesInf": false,
+  "ema": false,
+  "docs": [
+    {
+      "tipo": 1,
+      "url": "https://cima.aemps.es/cima/pdfs/ft/62258/FT_62258.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/ft/62258/FT_62258.html",
+      "secc": true,
+      "fecha": 1741908603000
+    },
+    {
+      "tipo": 2,
+      "url": "https://cima.aemps.es/cima/pdfs/p/62258/P_62258.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/p/62258/P_62258.html",
+      "secc": true,
+      "fecha": 1741908620000
+    }
+  ],
+  "fotos": [
+    {
+      "tipo": "materialas",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/materialas/62258/62258_materialas.jpg",
+      "fecha": 1679479661000
+    },
+    {
+      "tipo": "formafarmac",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/formafarmac/62258/62258_formafarmac.jpg",
+      "fecha": 1679479668000
+    }
+  ],
+  "atcs": [
+    {
+      "codigo": "M01A",
+      "nombre": "PRODUCTOS ANTIINFLAMATORIOS Y ANTIRREUMATICOS NO ESTEROIDEOS",
+      "nivel": 3
+    },
+    {
+      "codigo": "M01AE",
+      "nombre": "Derivados del acido propionico",
+      "nivel": 4
+    },
+    {
+      "codigo": "M01AE01",
+      "nombre": "Ibuprofeno",
+      "nivel": 5
+    }
+  ],
+  "principiosActivos": [
+    {
+      "id": 1769,
+      "codigo": "1769LB",
+      "nombre": "IBUPROFENO LISINA",
+      "cantidad": "400",
+      "unidad": "mg",
+      "orden": 1
+    }
+  ],
+  "viasAdministracion": [
+    {
+      "id": 48,
+      "nombre": "VÍA ORAL"
+    }
+  ],
+  "presentaciones": [
+    {
+      "cn": "656538",
+      "nombre": "DOCTRIL FORTE 400 MG COMPRMIDOS RECUBIERTOS CON PELICULA, 10 comprimidos",
+      "estado": {
+        "aut": null,
+        "susp": 1745570106000
+      },
+      "comerc": false,
+      "psum": false
+    }
+  ],
+  "formaFarmaceutica": {
+    "id": 41,
+    "nombre": "COMPRIMIDO RECUBIERTO"
+  },
+  "formaFarmaceuticaSimplificada": {
+    "id": 10,
+    "nombre": "COMPRIMIDO"
+  },
+  "vtm": {
+    "id": 38268001,
+    "nombre": "ibuprofeno"
+  },
+  "dosis": "400 mg"
+}

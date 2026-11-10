@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AddLotForm from '../components/AddLotForm'
@@ -6,6 +6,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import QueryHandler from '../components/QueryHandler'
+import RegulatoryInfoSection from '../components/RegulatoryInfoSection'
 import SharedWithChips from '../components/SharedWithChips'
 import LotPickerModal from '../components/LotPickerModal'
 import StockLotsList from '../components/StockLotsList'
@@ -19,6 +20,7 @@ import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
 import { MAX_PINNED, useToggleStockPin } from '../hooks/mutations/useToggleStockPin'
+import { useAnswerNameOffer } from '../hooks/mutations/useAnswerNameOffer'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
@@ -43,7 +45,8 @@ export default function StockDetailPage() {
   const { showToast } = useToast()
 
   const stockId = Number(id)
-  const { data: stock, isLoading, isError, error } = useStock(stockId)
+  // Polls while the stock's regulatory data is being fetched (see `useStock`).
+  const { data: stock, isLoading, isError, error } = useStock(stockId, { pollWhilePending: true })
   const { data: groups = [] } = useStockGroups()
   const { data: consumptions = [] } = useStockConsumptions({ stock: String(stockId), enabled: !isNaN(stockId) })
   const deleteStock = useDeleteStock()
@@ -247,6 +250,52 @@ export default function StockDetailPage() {
   const isOwner = stock?.is_owner !== false
   const { user } = useAuth()
 
+  // ── Official-name offer ──────────────────────────────────────────────────
+  // The first time a stock gets a national code (and on "Refresh info") the
+  // server raises `regulatory.name_offer_pending`; the owner is asked once
+  // whether to adopt the agency's name. Only when the fetch is `ok` — before
+  // that there is no official name — and only online, because the answer is
+  // not queueable (see `useAnswerNameOffer`).
+  const regulatory = stock?.regulatory
+  // Closing the modal (X, Escape) answers nothing: the offer is hidden for this
+  // visit and comes back on the next one. Keyed by stock and fetch, because the
+  // route reuses this component across stocks and a new fetch is a new offer.
+  const offerKey = regulatory ? `${stockId}:${regulatory.fetched_at}` : null
+  const [dismissedOffer, setDismissedOffer] = useState(null)
+  const answerNameOffer = useAnswerNameOffer()
+  const autoAnsweredOffer = useRef(null)
+  const nameOfferReady =
+    isOwner &&
+    Boolean(regulatory?.name_offer_pending) &&
+    regulatory.fetch_status === 'ok' &&
+    reachable &&
+    dismissedOffer !== offerKey
+  const sameOfficialName = nameOfferReady && regulatory.official_name === stock.name
+  // Never stack two modals: a lot reconciliation, a consumption or a delete
+  // confirmation in progress goes first, and the offer waits for it.
+  const otherModalOpen = Boolean(pendingReconcile || consumeOpen || confirmDelete || confirmRemoveLot)
+  const showNameOffer = nameOfferReady && !sameOfficialName && !otherModalOpen
+
+  // Nothing to ask when the names already match: clear the flag, once.
+  useEffect(() => {
+    if (!sameOfficialName || autoAnsweredOffer.current === offerKey) return
+    autoAnsweredOffer.current = offerKey
+    answerNameOffer.mutateAsync({ stockId, accept: false }).catch(() => {
+      // Harmless: the flag stays and the same check runs on the next visit.
+    })
+  }, [sameOfficialName, offerKey, stockId, answerNameOffer])
+
+  const answerOffer = async (accept) => {
+    try {
+      await answerNameOffer.mutateAsync({ stockId, accept })
+    } catch (err) {
+      // Not queueable, so a dropped connection rejects instead of enqueueing:
+      // treat it as "not answered" and ask again on the next visit.
+      setDismissedOffer(offerKey)
+      if (!(err instanceof OfflineError)) showToast({ type: 'error', message: errorToastMessage(err, t) })
+    }
+  }
+
   // Recipients besides the current viewer. The owner sees every recipient;
   // a non-owner recipient sees every other recipient. Used by the
   // "Shared with" section so the label means the same thing on both sides.
@@ -411,6 +460,11 @@ export default function StockDetailPage() {
             </div>
           </div>
 
+          {/* What the regulatory agency says about the medicine. Right under the
+              header: a supply problem or a suspension matters more than who
+              the stock is shared with. Only for a stock with a national code. */}
+          {stock.regulatory && <RegulatoryInfoSection stock={stock} isOwner={isOwner} reachable={reachable} />}
+
           {/* Non-owner viewer: single card with the owner chip on the left
               and (if any) the other recipients on the right. Mirrors
               RoutineDetailPage. */}
@@ -503,6 +557,19 @@ export default function StockDetailPage() {
               discrepancies={pendingReconcile.discrepant}
               onConfirm={() => resolveReconcile(true)}
               onCancel={() => resolveReconcile(false)}
+            />
+          )}
+
+          {showNameOffer && (
+            <StockValuesConfirmModal
+              discrepancies={[{ field: 'name', current: stock.name, next: regulatory.official_name }]}
+              title="stockValues.nameOfferTitle"
+              intro="stockValues.nameOfferIntro"
+              introValues={{ source: regulatory.display_name }}
+              busy={answerNameOffer.isPending}
+              onConfirm={() => answerOffer(true)}
+              onCancel={() => answerOffer(false)}
+              onDismiss={() => setDismissedOffer(offerKey)}
             />
           )}
 

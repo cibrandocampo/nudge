@@ -6,7 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { clear, list } from '../../offline/queue'
-import { useStock, useStockGroups, useStockList } from '../useStock'
+import {
+  REGULATORY_POLL_MAX_MS,
+  REGULATORY_POLL_MS,
+  regulatoryPollInterval,
+  useStock,
+  useStockGroups,
+  useStockList,
+} from '../useStock'
 import { useCreateStock } from '../mutations/useCreateStock'
 import { useUpdateStock } from '../mutations/useUpdateStock'
 import { useDeleteStock } from '../mutations/useDeleteStock'
@@ -539,5 +546,36 @@ describe('useStock — initialData from the list cache', () => {
     expect(result.current.data?.name).toBe('Cached stock')
     await waitFor(() => expect(result.current.isFetching).toBe(false))
     expect(result.current.data?.name).toBe('Cached stock')
+  })
+})
+
+describe('regulatoryPollInterval — polling while the agency fetch is in flight (T113)', () => {
+  const pending = { regulatory: { fetch_status: 'pending' } }
+
+  it('polls while pending, from the first sight of it', () => {
+    const wait = { since: null }
+    expect(regulatoryPollInterval(pending, wait, 1_000)).toBe(REGULATORY_POLL_MS)
+    expect(wait.since).toBe(1_000)
+    expect(regulatoryPollInterval(pending, wait, 1_000 + REGULATORY_POLL_MAX_MS - 1)).toBe(REGULATORY_POLL_MS)
+  })
+
+  it('gives up after a minute of pending', () => {
+    const wait = { since: null }
+    regulatoryPollInterval(pending, wait, 1_000)
+    expect(regulatoryPollInterval(pending, wait, 1_000 + REGULATORY_POLL_MAX_MS)).toBe(false)
+  })
+
+  it('stops as soon as the fetch is over, and a later wait gets its own minute', () => {
+    const wait = { since: null }
+    regulatoryPollInterval(pending, wait, 1_000)
+    expect(regulatoryPollInterval({ regulatory: { fetch_status: 'ok' } }, wait, 5_000)).toBe(false)
+    expect(wait.since).toBeNull()
+    expect(regulatoryPollInterval(pending, wait, 999_000)).toBe(REGULATORY_POLL_MS)
+  })
+
+  it('never polls a stock with no regulatory data', () => {
+    const wait = { since: null }
+    expect(regulatoryPollInterval({ regulatory: null }, wait, 1)).toBe(false)
+    expect(regulatoryPollInterval(undefined, wait, 1)).toBe(false)
   })
 })

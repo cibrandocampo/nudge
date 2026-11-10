@@ -1,0 +1,144 @@
+{
+  "nregistro": "1161160012",
+  "nombre": "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO",
+  "pactivos": "INSULINA ASPARTA",
+  "labtitular": "Novo Nordisk A/S",
+  "labcomercializador": "Novo Nordisk Pharma S.A.",
+  "cpresc": "Medicamento Sujeto A Prescripción Médica. Tratamiento De Larga Duración",
+  "estado": {
+    "aut": 1593036000000
+  },
+  "comerc": true,
+  "receta": true,
+  "generico": false,
+  "conduc": true,
+  "triangulo": false,
+  "huerfano": false,
+  "biosimilar": false,
+  "nosustituible": {
+    "id": 1,
+    "nombre": "Biológicos"
+  },
+  "psum": true,
+  "notas": false,
+  "materialesInf": false,
+  "ema": true,
+  "docs": [
+    {
+      "tipo": 1,
+      "url": "https://cima.aemps.es/cima/pdfs/ft/1161160012/FT_1161160012.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/ft/1161160012/FT_1161160012.html",
+      "secc": true
+    },
+    {
+      "tipo": 2,
+      "url": "https://cima.aemps.es/cima/pdfs/p/1161160012/P_1161160012.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html",
+      "secc": true
+    },
+    {
+      "tipo": 3,
+      "url": "https://cima.aemps.es/cima/pdfs/ipe/1161160012/IPE_1161160012.pdf",
+      "secc": false
+    }
+  ],
+  "fotos": [
+    {
+      "tipo": "materialas",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/materialas/1161160012/1161160012_materialas.jpg",
+      "fecha": 1631832279000
+    },
+    {
+      "tipo": "formafarmac",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/formafarmac/1161160012/1161160012_formafarmac.jpg",
+      "fecha": 1631832279000
+    }
+  ],
+  "atcs": [
+    {
+      "codigo": "A10A",
+      "nombre": "INSULINAS Y ANALOGOS",
+      "nivel": 3
+    },
+    {
+      "codigo": "A10AB",
+      "nombre": "Insulinas y analogos de accion rapida para inyeccion",
+      "nivel": 4
+    },
+    {
+      "codigo": "A10AB05",
+      "nombre": "Insulina asparta",
+      "nivel": 5
+    }
+  ],
+  "principiosActivos": [
+    {
+      "id": 1123,
+      "codigo": "1123A",
+      "nombre": "INSULINA ASPARTA",
+      "cantidad": "100",
+      "unidad": "U",
+      "orden": 1
+    }
+  ],
+  "excipientes": [
+    {
+      "id": 4661,
+      "nombre": "GLICEROL (E 422)",
+      "cantidad": "3,3",
+      "unidad": "mg",
+      "orden": 2
+    },
+    {
+      "id": 476,
+      "nombre": "FOSFATO DISODICO DIHIDRATADO HIDROGENADO",
+      "cantidad": "0,53",
+      "unidad": "mg",
+      "orden": 4
+    },
+    {
+      "id": 4991,
+      "nombre": "HIDROXIDO DE SODIO (E 524)",
+      "cantidad": "c.s.p pH 7,1",
+      "unidad": "ml",
+      "orden": 8
+    }
+  ],
+  "viasAdministracion": [
+    {
+      "id": 58,
+      "nombre": "VÍA SUBCUTÁNEA"
+    }
+  ],
+  "presentaciones": [
+    {
+      "cn": "728514",
+      "nombre": "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO, 5 cartuchos de 1,6 ml",
+      "estado": {
+        "aut": 1593080873000
+      },
+      "comerc": true,
+      "psum": true,
+      "detalleProblemaSuministro": {
+        "cn": "728514",
+        "fini": 1744236000000,
+        "ffin": 1803769200000,
+        "activo": true,
+        "observ": "Consultar Nota Informativa: https://www.aemps.gob.es/informa/la-aemps-en-colaboracion-con-las-sociedades-medicas-implicadas-en-el-tratamiento-de-la-diabetes-emite-recomendaciones-de-uso-de-las-insulinas-de-accion-rapida/"
+      }
+    }
+  ],
+  "formaFarmaceutica": {
+    "id": 1435,
+    "nombre": "SOLUCIÓN INYECTABLE EN CARTUCHO"
+  },
+  "formaFarmaceuticaSimplificada": {
+    "id": 34,
+    "nombre": "INYECTABLE"
+  },
+  "vtm": {
+    "id": 388452006,
+    "nombre": "insulina asparta"
+  },
+  "dosis": "100 U/ml"
+}

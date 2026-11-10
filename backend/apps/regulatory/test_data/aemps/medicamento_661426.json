@@ -1,0 +1,120 @@
+{
+  "nregistro": "70039",
+  "nombre": "IBUPROFENO CINFA 600 mg COMPRIMIDOS RECUBIERTOS CON PELICULA EFG",
+  "pactivos": "IBUPROFENO",
+  "labtitular": "Laboratorios Cinfa S.A.",
+  "labcomercializador": "Laboratorios Cinfa S.A.",
+  "cpresc": "Medicamento Sujeto A Prescripción Médica",
+  "estado": {
+    "aut": 1219701600000
+  },
+  "comerc": true,
+  "receta": true,
+  "generico": true,
+  "conduc": false,
+  "triangulo": false,
+  "huerfano": false,
+  "biosimilar": false,
+  "nosustituible": {
+    "id": 0,
+    "nombre": "N/A"
+  },
+  "psum": false,
+  "notas": true,
+  "materialesInf": false,
+  "ema": false,
+  "docs": [
+    {
+      "tipo": 1,
+      "url": "https://cima.aemps.es/cima/pdfs/ft/70039/FT_70039.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/ft/70039/FT_70039.html",
+      "secc": true,
+      "fecha": 1731655134000
+    },
+    {
+      "tipo": 2,
+      "url": "https://cima.aemps.es/cima/pdfs/p/70039/P_70039.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/p/70039/P_70039.html",
+      "secc": true,
+      "fecha": 1731655150000
+    }
+  ],
+  "fotos": [
+    {
+      "tipo": "materialas",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/materialas/70039/70039_materialas.jpg",
+      "fecha": 1713786609000
+    },
+    {
+      "tipo": "formafarmac",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/formafarmac/70039/70039_formafarmac.jpg",
+      "fecha": 1713786611000
+    }
+  ],
+  "atcs": [
+    {
+      "codigo": "M01A",
+      "nombre": "PRODUCTOS ANTIINFLAMATORIOS Y ANTIRREUMATICOS NO ESTEROIDEOS",
+      "nivel": 3
+    },
+    {
+      "codigo": "M01AE",
+      "nombre": "Derivados del acido propionico",
+      "nivel": 4
+    },
+    {
+      "codigo": "M01AE01",
+      "nombre": "Ibuprofeno",
+      "nivel": 5
+    }
+  ],
+  "principiosActivos": [
+    {
+      "id": 1769,
+      "codigo": "1769A",
+      "nombre": "IBUPROFENO",
+      "cantidad": "600",
+      "unidad": "mg",
+      "orden": 1
+    }
+  ],
+  "excipientes": [
+    {
+      "id": 15547,
+      "nombre": "LACTOSA MONOHIDRATO",
+      "cantidad": "2,952",
+      "unidad": "mg",
+      "orden": 5
+    }
+  ],
+  "viasAdministracion": [
+    {
+      "id": 48,
+      "nombre": "VÍA ORAL"
+    }
+  ],
+  "presentaciones": [
+    {
+      "cn": "661426",
+      "nombre": "IBUPROFENO CINFA 600 mg COMPRIMIDOS RECUBIERTOS CON PELICULA EFG , 40 comprimidos",
+      "estado": {
+        "aut": 1219701600000
+      },
+      "comerc": true,
+      "psum": false
+    }
+  ],
+  "formaFarmaceutica": {
+    "id": 42,
+    "nombre": "COMPRIMIDO RECUBIERTO CON PELÍCULA"
+  },
+  "formaFarmaceuticaSimplificada": {
+    "id": 10,
+    "nombre": "COMPRIMIDO"
+  },
+  "vtm": {
+    "id": 38268001,
+    "nombre": "ibuprofeno"
+  },
+  "dosis": "600 mg"
+}

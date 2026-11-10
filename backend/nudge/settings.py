@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -60,6 +61,7 @@ INSTALLED_APPS = [
     "apps.routines",
     "apps.notifications",
     "apps.idempotency",
+    "apps.regulatory",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -244,6 +246,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.users.tasks.cleanup_login_codes",
         "schedule": 24 * 60 * 60,  # once a day
     },
+    # A fixed time of day, unlike the cleanups above: the refreshed data must be
+    # there before any user's morning digest. 03:00 UTC is 04:00–05:00 in Spain.
+    "sync-regulatory-data": {
+        "task": "apps.regulatory.tasks.sync_regulatory_data",
+        "schedule": crontab(hour=3, minute=0),
+    },
 }
 
 # ── Email (SMTP) ──────────────────────────────────────────────────────────────
@@ -307,6 +315,13 @@ STOCK_DIRECT_CONSUMPTION_HALF_DAYS = env.int("STOCK_DIRECT_CONSUMPTION_HALF_DAYS
 # decision rather than a data constraint: past four the section stops being a
 # shortcut and becomes a second list.
 STOCK_MAX_PINNED_ITEMS = env.int("STOCK_MAX_PINNED_ITEMS", default=4)
+
+# ── Regulatory data (CIMA / AEMPS) ────────────────────────────────────────────
+
+# Gates only the *network*: parsing and validating national codes always works,
+# so the stock form keeps validating a CN where fetching is off (CI and E2E,
+# which must never depend on a third-party service). Forced off in tests.
+REGULATORY_FETCH_ENABLED = env.bool("REGULATORY_FETCH_ENABLED", default=True)
 
 # ── Web Push VAPID ────────────────────────────────────────────────────────────
 
@@ -396,3 +411,7 @@ if "test" in sys.argv:
     # is enqueueing the right task with the right args.
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+
+    # No test may reach a regulatory agency: a call a test forgot to mock
+    # raises `FetchDisabled` instead of silently going to the internet.
+    REGULATORY_FETCH_ENABLED = False

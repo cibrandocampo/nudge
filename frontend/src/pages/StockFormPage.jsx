@@ -16,7 +16,7 @@ import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
-import { isValidGtin } from '../utils/gs1'
+import { isValidGtin, spanishCnFromGtin } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
 import { effectiveGroupId } from '../utils/stockGroup'
 import buttons from '../styles/buttons.module.css'
@@ -24,7 +24,7 @@ import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockFormPage.module.css'
 
-const EMPTY_FORM = { name: '', group: '', gtin: '', default_lot_quantity: '' }
+const EMPTY_FORM = { name: '', group: '', gtin: '', national_code: '', default_lot_quantity: '' }
 // `crypto.randomUUID` requires a secure context (HTTPS or localhost).
 // Production may run over plain HTTP on a LAN (Synology) and e2e hits
 // `host.docker.internal`, where the API is unavailable. The fallback
@@ -84,6 +84,7 @@ export default function StockFormPage() {
       name: stock.name ?? '',
       group: effectiveGroupId(stock) ?? '',
       gtin: stock.gtin ?? '',
+      national_code: stock.national_code ?? '',
       default_lot_quantity: stock.default_lot_quantity ?? '',
     })
     setSharedWith(Array.isArray(stock.shared_with) ? stock.shared_with : [])
@@ -144,6 +145,22 @@ export default function StockFormPage() {
 
   const groupValue = form.group === '' || form.group === null ? null : Number(form.group)
 
+  // An NTIN (a Spanish GTIN) carries the CN: the field then shows it, read-only,
+  // and nothing is sent — the backend derives it from the GTIN on save.
+  const derivedCn = spanishCnFromGtin(form.gtin.trim())
+  const nationalCodeBody = derivedCn ? {} : { national_code: form.national_code.trim() }
+
+  /**
+   * Map a rejected save to the form. The serializer refuses a CN that is not
+   * one (or contradicts the GTIN) as a field error; DRF turns its detail into
+   * plain strings, so the `code` does not survive and one translated message
+   * covers both cases. Anything else stays a form-level error.
+   */
+  const submitErrors = (err) =>
+    err?.body?.national_code
+      ? { national_code: t('stockForm.errorNationalCode') }
+      : { submit: errorToastMessage(err, t) }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const err = validate()
@@ -161,12 +178,13 @@ export default function StockFormPage() {
         } else {
           await updateStock.mutateAsync({
             stockId,
-            stockName: form.name.trim() || stock?.name,
+            stockName: form.name.trim(),
             patch: {
               name: form.name.trim(),
               group: groupValue,
               shared_with: sharedWith,
               gtin: form.gtin.trim(),
+              ...nationalCodeBody,
               default_lot_quantity: parseIntSafe(String(form.default_lot_quantity).trim(), 0) || null,
             },
             updatedAt: stock?.updated_at,
@@ -180,6 +198,7 @@ export default function StockFormPage() {
         name: form.name.trim(),
         group: groupValue,
         gtin: form.gtin.trim(),
+        nationalCode: nationalCodeBody.national_code ?? '',
         defaultLotQuantity: resolvedDefaultLotQuantity(),
       })
       const newStockId = created?.id
@@ -229,7 +248,7 @@ export default function StockFormPage() {
 
       navigate(`/inventory/${newStockId}`)
     } catch (err) {
-      setErrors({ submit: errorToastMessage(err, t) })
+      setErrors(submitErrors(err))
     } finally {
       setSubmitting(false)
     }
@@ -275,7 +294,7 @@ export default function StockFormPage() {
             </FormField>
 
             <FormField label={t('stockForm.groupLabel')}>
-              <select className={forms.input} value={form.group ?? ''} onChange={field('group')}>
+              <select className={forms.input} value={form.group} onChange={field('group')}>
                 <option value="">{t('stockForm.groupNone')}</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -302,6 +321,38 @@ export default function StockFormPage() {
                     placeholder={t('stockForm.gtinPlaceholder')}
                     maxLength={14}
                   />
+                </FormField>
+
+                <FormField
+                  label={t('stockForm.nationalCodeLabel')}
+                  error={errors.national_code}
+                  hint={derivedCn ? t('stockForm.nationalCodeDerived') : t('stockForm.nationalCodeHelp')}
+                >
+                  {/* A derived code wears the same lock as a guest's name: same
+                      meaning — shown, but not editable here. */}
+                  <div className={derivedCn ? forms.lockedInput : undefined}>
+                    <input
+                      // Text, like the GTIN: the printed form carries a dot
+                      // (`728514.4`) and the backend normalises whatever is typed.
+                      type="text"
+                      inputMode="numeric"
+                      className={forms.input}
+                      value={derivedCn ?? form.national_code}
+                      onChange={field('national_code')}
+                      placeholder={t('stockForm.nationalCodePlaceholder')}
+                      maxLength={8}
+                      // Read-only rather than disabled: the derived code can still
+                      // be selected and copied.
+                      readOnly={Boolean(derivedCn)}
+                      aria-label={t('stockForm.nationalCodeLabel')}
+                      data-testid="national-code-input"
+                    />
+                    {derivedCn && (
+                      <span className={forms.lockBadge} aria-hidden="true">
+                        <Icon name="lock" size="sm" />
+                      </span>
+                    )}
+                  </div>
                 </FormField>
 
                 <FormField label={t('stockForm.defaultLotQuantityLabel')} error={errors.default_lot_quantity}>

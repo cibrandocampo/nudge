@@ -17,3 +17,6 @@ DATABASES = {
 # Disable Celery during tests
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# Never reach a regulatory agency from a test (see nudge/settings.py).
+REGULATORY_FETCH_ENABLED = False

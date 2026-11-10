@@ -1,0 +1,16 @@
+{
+  "totalFilas": 1,
+  "pagina": 1,
+  "tamanioPagina": 200,
+  "resultados": [
+    {
+      "cn": "728514",
+      "nombre": "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO, 5 cartuchos de 1,6 ml",
+      "tipoProblemaSuministro": 1,
+      "fini": 1744236000000,
+      "ffin": 1803769200000,
+      "activo": true,
+      "observ": "Consultar Nota Informativa: https://www.aemps.gob.es/informa/la-aemps-en-colaboracion-con-las-sociedades-medicas-implicadas-en-el-tratamiento-de-la-diabetes-emite-recomendaciones-de-uso-de-las-insulinas-de-accion-rapida/"
+    }
+  ]
+}

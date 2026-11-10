@@ -113,6 +113,7 @@ jobs:
           DJANGO_SECRET_KEY=ci-secret-key-not-used-in-production
           DJANGO_DEBUG=True
           E2E_SEED_ALLOWED=true
+          REGULATORY_FETCH_ENABLED=false
           ADMIN_USERNAME=admin
           ADMIN_EMAIL=admin@example.com
           ADMIN_PASSWORD=adminpass
