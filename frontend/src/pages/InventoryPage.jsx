@@ -317,7 +317,9 @@ export default function InventoryPage() {
 
       {pickerStock && (
         <LotPickerModal
-          stock={pickerStock}
+          // The live row, not the one clicked: a refused consume refetches the
+          // list, and the picker must stop offering a batch that is gone.
+          stock={stocks.find((row) => row.id === pickerStock.id) ?? pickerStock}
           onClose={() => {
             setPickerStock(null)
             setConsumingId(null)

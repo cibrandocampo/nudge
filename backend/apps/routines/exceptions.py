@@ -25,3 +25,17 @@ class InvalidLotSelection(DomainError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+class LotUnavailable(DomainError):
+    """Selected lots that no longer exist.
+
+    A lot is deleted when it reaches 0 (`delete_empty_lot`), so a selection
+    made on a screen loaded before someone else emptied that lot names an id
+    that is gone. Unlike `InvalidLotSelection` this is not a client mistake:
+    the user picked a real lot that vanished in the meantime.
+    """
+
+    def __init__(self, lot_ids):
+        self.lot_ids = sorted(lot_ids)
+        super().__init__(f"Lots no longer available: {self.lot_ids}.")
