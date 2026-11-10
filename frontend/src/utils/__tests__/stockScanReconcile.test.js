@@ -164,3 +164,65 @@ describe('reconcileStockFromLot', () => {
     })
   })
 })
+
+// A pack coded with the manufacturer's own GTIN carries its Spanish CN in AI 712,
+// as 7 digits with the check digit (T112). An NTIN embeds it instead.
+const MANUFACTURER_GTIN = GTIN
+const NTIN = '08470007285144'
+const scanWithCn = (gtin, value) => ({ ...scanWith(gtin), nhrn: { ai: '712', value } })
+
+describe('reconcileStockFromLot — national code from AI 712', () => {
+  it('fills a blank CN silently', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: MANUFACTURER_GTIN, national_code: '', default_lot_quantity: 5 },
+      scan: scanWithCn(MANUFACTURER_GTIN, '6614266'),
+      quantity: 5,
+    })
+    expect(result).toEqual({ silent: { national_code: '661426' }, discrepant: [] })
+  })
+
+  it('does nothing when the stored CN matches on its 6 digits', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: MANUFACTURER_GTIN, national_code: '661426', default_lot_quantity: 5 },
+      scan: scanWithCn(MANUFACTURER_GTIN, '6614266'),
+      quantity: 5,
+    })
+    expect(result).toEqual({ silent: {}, discrepant: [] })
+  })
+
+  it('reports a different CN instead of overwriting it', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: MANUFACTURER_GTIN, national_code: '728514', default_lot_quantity: 5 },
+      scan: scanWithCn(MANUFACTURER_GTIN, '6614266'),
+      quantity: 5,
+    })
+    expect(result.discrepant).toEqual([{ field: 'national_code', current: '728514', next: '661426' }])
+  })
+
+  it('leaves the CN to the backend when the GTIN is an NTIN', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: NTIN, national_code: '', default_lot_quantity: 5 },
+      scan: scanWithCn(NTIN, '7285144'),
+      quantity: 5,
+    })
+    expect(result.silent).not.toHaveProperty('national_code')
+  })
+
+  it('says nothing about the CN for a hand-typed lot', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: '', national_code: '', default_lot_quantity: null },
+      scan: null,
+      quantity: 5,
+    })
+    expect(result.silent).not.toHaveProperty('national_code')
+  })
+
+  it('ignores an AI 712 whose check digit is wrong', () => {
+    const result = reconcileStockFromLot({
+      stock: { gtin: MANUFACTURER_GTIN, national_code: '', default_lot_quantity: 5 },
+      scan: scanWithCn(MANUFACTURER_GTIN, '6614265'),
+      quantity: 5,
+    })
+    expect(result).toEqual({ silent: {}, discrepant: [] })
+  })
+})

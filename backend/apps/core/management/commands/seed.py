@@ -14,7 +14,11 @@ fixture is shaped to:
    a scanned pack whose code carries no serial · consumed-lot snapshots in
    history with a serial, without one, and in the pre-serial legacy shape ·
    product identity (GTIN / default lot quantity) fully known, half known
-   and unknown.
+   and unknown · regulatory data from real recorded AEMPS answers: an active
+   supply problem with an official-name offer pending (Fast-acting insulin),
+   safety notices on a typed national code (Hidroferol), an ordinary
+   medicine linked through its NTIN (Ibuprofen) and a foreign GTIN with no
+   regulatory link (Metformin).
 
 2. Read like a real person's life rather than a QA matrix. The chosen
    protagonist is `cibran` (the maintainer): type-1 diabetes management
@@ -37,6 +41,7 @@ Applied to all three users.
 
 import os
 from datetime import time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -47,6 +52,9 @@ from django.utils import timezone
 
 from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import NotificationState, PushSubscription
+from apps.regulatory import services as regulatory
+from apps.regulatory.clients import aemps
+from apps.regulatory.models import Medicine, Presentation, SafetyNotice, SupplyProblem
 from apps.routines.models import (
     Routine,
     RoutineEntry,
@@ -79,6 +87,12 @@ def _gs1_payload(lot_number, expiry_date, serial_number=None):
     return payload if serial_number is None else f"{payload}\x1d21{serial_number}"
 
 
+# Real CIMA answers recorded for the regulatory tests (see that directory's
+# README). The seed applies them through the same parser and service as a live
+# fetch, so the demo data is real data and the seed never touches the network.
+_CIMA_FIXTURES = Path(__file__).resolve().parents[3] / "regulatory" / "test_data" / "aemps"
+
+
 def _consumed(lot_number, expiry_date, quantity, serial_number=None):
     """A `consumed_lots` snapshot entry, shaped like `_lot_consumed_dict`."""
     return {
@@ -102,6 +116,7 @@ class Command(BaseCommand):
             self._create_contacts(users)
             groups = self._create_groups(users)
             stocks = self._create_stocks(users, groups)
+            self._create_regulatory(stocks)
             routines = self._create_routines(users, stocks)
             self._create_history(users, routines, stocks)
 
@@ -130,6 +145,13 @@ class Command(BaseCommand):
         UserStockGroup.objects.all().delete()
         UserStockPin.objects.all().delete()
         Stock.objects.all().delete()
+        # The regulatory catalogue after the stocks: `Stock.presentation` is
+        # SET_NULL, so nothing points at it any more; then in FK order
+        # (`Presentation.medicine` is PROTECT).
+        SupplyProblem.objects.all().delete()
+        Presentation.objects.all().delete()
+        SafetyNotice.objects.all().delete()
+        Medicine.objects.all().delete()
         StockGroup.objects.all().delete()
         PushSubscription.objects.all().delete()
         IdempotencyRecord.objects.all().delete()
@@ -241,8 +263,15 @@ class Command(BaseCommand):
         # HID-B is far; the third lot has no lot number and a mid-range expiry.
         # Demo readout: `expiry_severity=soon` because HID-A expires in
         # 7 days.
+        # Regulatory identity typed by hand, no GTIN: the national code of
+        # Hidroferol 0,1 mg/ml gotas (10 ml), whose medicine has two AEMPS
+        # safety notices about vitamin-D overdose (`_create_regulatory`).
         stocks["hidroferol"] = Stock.objects.create(
-            user=cibran, name="Hidroferol drops", group=groups[("cibran", "Diabetes")]
+            user=cibran,
+            name="Hidroferol drops",
+            group=groups[("cibran", "Diabetes")],
+            national_code="934554",
+            national_code_source=aemps.SOURCE,
         )
         StockLot.objects.create(
             stock=stocks["hidroferol"],
@@ -260,6 +289,27 @@ class Command(BaseCommand):
             stock=stocks["hidroferol"],
             quantity=20,
             expiry_date=today + timedelta(days=60),
+        )
+
+        # Fast-acting insulin — the regulatory showcase: a real FIASP NTIN whose
+        # presentation has an active AEMPS supply problem (type 1, "consult the
+        # informative note"), and an official-name offer still pending — so
+        # opening it asks whether to use the AEMPS name. Only `regulatory.spec`
+        # opens it; the offer would cover the page in any other spec.
+        stocks["fast_insulin"] = Stock.objects.create(
+            user=cibran,
+            name="Fast-acting insulin",
+            group=groups[("cibran", "Diabetes")],
+            gtin="08470007285144",
+            national_code="728514",
+            national_code_source=aemps.SOURCE,
+            default_lot_quantity=5,
+        )
+        StockLot.objects.create(
+            stock=stocks["fast_insulin"],
+            quantity=5,
+            expiry_date=today + timedelta(days=400),
+            lot_number="FIA-1",
         )
 
         # Insulin pump cannulas — qty=0 (bulk_create bypasses delete_empty_lot
@@ -308,11 +358,17 @@ class Command(BaseCommand):
         # field, so adding a lot here fills the blank silently while a matching
         # code stays quiet — the mixed case that an all-or-nothing
         # implementation gets wrong.
+        #
+        # The GTIN is a real NTIN — Ibuprofeno Cinfa 600 mg, 40 comprimidos
+        # (CN 661426.6) — so the stock derives its national code from it and is
+        # linked to an ordinary, marketed medicine with no supply problem.
         stocks["ibuprofen"] = Stock.objects.create(
             user=cibran,
             name="Ibuprofen 600mg",
             group=groups[("cibran", "Medicine cabinet")],
-            gtin="08470007285144",
+            gtin="08470006614266",
+            national_code="661426",
+            national_code_source=aemps.SOURCE,
         )
         StockLot.objects.create(
             stock=stocks["ibuprofen"],
@@ -514,6 +570,30 @@ class Command(BaseCommand):
         )
 
         return stocks
+
+    # ── Regulatory data ─────────────────────────────────────────────────────
+
+    def _create_regulatory(self, stocks):
+        """Link three stocks to real AEMPS data, without the network.
+
+        Each recorded answer goes through the client's parser and
+        `apply_presentation`, the path a live fetch takes, so `fetched_at` is
+        set: there is a baseline and nothing stays pending.
+
+        - Fast-acting insulin: active supply problem, official-name offer pending.
+        - Hidroferol drops: two safety notices, typed national code.
+        - Ibuprofen 600mg: ordinary marketed medicine, code from its NTIN.
+        """
+        for key in ("fast_insulin", "hidroferol", "ibuprofen"):
+            code = stocks[key].national_code
+            data = aemps.parse_recorded(code, _CIMA_FIXTURES)
+            presentation = Presentation.objects.create(source=aemps.SOURCE, code=code)
+            regulatory.apply_presentation(presentation.pk, data)
+            # Background-style write: the seeded `updated_at` stays as created.
+            Stock.objects.filter(pk=stocks[key].pk).update(presentation=presentation)
+
+        # Exactly one pending offer, on a stock only `regulatory.spec` opens.
+        Stock.objects.filter(pk=stocks["fast_insulin"].pk).update(name_offer_pending=True)
 
     # ── Routines ────────────────────────────────────────────────────────────
 

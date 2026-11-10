@@ -10,6 +10,9 @@ celery[redis]~=5.6
 # to 8.x is a deliberate major bump, not a compatibility blocker anymore.
 redis~=6.4
 pywebpush~=2.5
+# Outbound HTTP to the regulatory agencies (apps.regulatory.clients). Already
+# a transitive dependency of pywebpush; pinned here because our code imports it.
+requests~=2.34
 djangorestframework-simplejwt~=5.5
 django-environ~=0.14
 drf-flex-fields~=1.0

@@ -250,6 +250,7 @@ class SeedCommandTest(TestCase):
         "Ibuprofen 600mg",
         "Paracetamol 1g",
         "Metformin 850mg",
+        "Fast-acting insulin",
         "Ebastine",
         "Biodramina",
         "Brita filter cartridges",
@@ -271,9 +272,9 @@ class SeedCommandTest(TestCase):
         # 3 demo users (cibran/maria/laura) plus the seeded admin = 4 total.
         self.assertEqual(User.objects.filter(is_superuser=False).count(), 3)
         self.assertEqual(Routine.objects.count(), 10)
-        self.assertEqual(Stock.objects.count(), 12)
+        self.assertEqual(Stock.objects.count(), 13)
         # 22 = 21 + MET-C, the pack scanned from a code carrying no serial.
-        self.assertEqual(StockLot.objects.count(), 22)
+        self.assertEqual(StockLot.objects.count(), 23)
         self.assertEqual(RoutineEntry.objects.count(), 50)
         # 8 = 6 + the two Metformin consumptions that give history a serialised
         # snapshot and a pre-serial one.

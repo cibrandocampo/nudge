@@ -66,7 +66,13 @@ describe('StockFormPage — create', () => {
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
     // Product identity travels with every create; blank is the "not known yet"
     // state the serializer expects.
-    expect(stockBody).toEqual({ name: 'Paracetamol', group: null, gtin: '', default_lot_quantity: null })
+    expect(stockBody).toEqual({
+      name: 'Paracetamol',
+      group: null,
+      gtin: '',
+      national_code: '',
+      default_lot_quantity: null,
+    })
     expect(lotCalls).toBe(0)
   })
 
@@ -552,6 +558,7 @@ describe('StockFormPage — edit', () => {
       group: 5,
       shared_with: [],
       gtin: '',
+      national_code: '',
       default_lot_quantity: null,
     })
   })
@@ -834,5 +841,217 @@ describe('StockFormPage — batch serials', () => {
     expect(serial).toHaveAttribute('maxLength', '20')
     await user.type(serial, 'A'.repeat(30))
     expect(serial).toHaveValue('A'.repeat(20))
+  })
+})
+
+describe('StockFormPage — national code (T112)', () => {
+  const NTIN = '08470007285144' // FIASP: CN 728514.4 inside
+  const MANUFACTURER_GTIN = '05705244020856'
+
+  const cnInput = () => screen.getByTestId('national-code-input')
+
+  const mockCreate = (onBody, response) =>
+    server.use(
+      http.post(`${BASE}/stock/`, async ({ request }) => {
+        onBody(await request.json())
+        return (
+          response ??
+          HttpResponse.json(
+            { id: 42, name: 'X', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' },
+            { status: 201 },
+          )
+        )
+      }),
+    )
+
+  const editableStock = (over = {}) => ({
+    id: 1,
+    name: 'Insulin',
+    group: null,
+    shared_with: [],
+    gtin: '',
+    national_code: '',
+    default_lot_quantity: null,
+    is_owner: true,
+    updated_at: '2026-04-22T10:00:00Z',
+    ...over,
+  })
+
+  const mockPatch = (onBody, response) =>
+    server.use(
+      http.patch(`${BASE}/stock/1/`, async ({ request }) => {
+        onBody(await request.json())
+        return response ?? HttpResponse.json(editableStock())
+      }),
+    )
+
+  beforeEach(() => {
+    mockGroups()
+    mockContacts()
+  })
+
+  it('sends a typed CN on create, as typed (the backend normalises it)', async () => {
+    let body = null
+    mockCreate((b) => (body = b))
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Insulin')
+    await user.type(cnInput(), '728514.4')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(body.national_code).toBe('728514.4')
+  })
+
+  it('shows the CN derived from an NTIN, read-only, and does not send it', async () => {
+    let body = null
+    mockCreate((b) => (body = b))
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Insulin')
+    await user.type(screen.getByPlaceholderText('14 digits from the barcode'), NTIN)
+
+    expect(cnInput()).toHaveValue('728514')
+    expect(cnInput()).toHaveAttribute('readonly')
+    expect(screen.getByText(/taken from the product code/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(body.national_code).toBe('')
+    expect(body.gtin).toBe(NTIN)
+  })
+
+  it('keeps the CN editable for a manufacturer GTIN', async () => {
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('14 digits from the barcode'), MANUFACTURER_GTIN)
+    expect(cnInput()).not.toHaveAttribute('readonly')
+    expect(screen.getByText(/as printed on the box/)).toBeInTheDocument()
+  })
+
+  it('does not send a derived CN in an edit', async () => {
+    let body = null
+    mockStock(editableStock({ gtin: NTIN, national_code: '728514' }))
+    mockPatch((b) => (body = b))
+    const { user } = renderEdit()
+    await screen.findByDisplayValue('Insulin')
+    expect(cnInput()).toHaveValue('728514')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(body).not.toHaveProperty('national_code')
+  })
+
+  it('clearing the NTIN leaves the stored CN editable and keeps it', async () => {
+    let body = null
+    mockStock(editableStock({ gtin: NTIN, national_code: '728514' }))
+    mockPatch((b) => (body = b))
+    const { user } = renderEdit()
+    await screen.findByDisplayValue('Insulin')
+    await user.clear(screen.getByPlaceholderText('14 digits from the barcode'))
+
+    expect(cnInput()).not.toHaveAttribute('readonly')
+    expect(cnInput()).toHaveValue('728514')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(body).toMatchObject({ gtin: '', national_code: '728514' })
+  })
+
+  it('shows a refused CN under its field, not as a form error', async () => {
+    mockStock(editableStock())
+    mockPatch(
+      () => {},
+      HttpResponse.json(
+        { national_code: ['Invalid national code: 6 digits, or 7 with a valid check digit.'] },
+        { status: 400 },
+      ),
+    )
+    const { user } = renderEdit()
+    await screen.findByDisplayValue('Insulin')
+    await user.type(cnInput(), '728514.5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Not a valid national code for this product')).toBeInTheDocument()
+    expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
+  })
+
+  it('a guest does not see the field', async () => {
+    mockStock(editableStock({ is_owner: false, owner_display_name: 'alice' }))
+    renderEdit()
+    await screen.findByDisplayValue('Insulin')
+    expect(screen.queryByTestId('national-code-input')).not.toBeInTheDocument()
+  })
+})
+
+describe('StockFormPage — leaving the form and batch details', () => {
+  // The form is opened from the inventory, so going back lands there.
+  const renderFromInventory = () =>
+    renderWithProviders(
+      <Routes>
+        <Route path="/inventory" element={<div>Inventory stub</div>} />
+        <Route path="/inventory/new" element={<StockFormPage />} />
+        <Route path="/inventory/:id" element={<div>Detail stub</div>} />
+      </Routes>,
+      { initialEntries: ['/inventory', '/inventory/new'] },
+    )
+
+  beforeEach(() => {
+    mockGroups()
+    mockContacts()
+  })
+
+  it('the back link returns to where the form was opened from', async () => {
+    const { user } = renderFromInventory()
+    await user.click(screen.getByRole('button', { name: '← Back to inventory' }))
+    expect(await screen.findByText('Inventory stub')).toBeInTheDocument()
+  })
+
+  it('cancel leaves without creating anything', async () => {
+    let created = false
+    server.use(http.post(`${BASE}/stock/`, () => ((created = true), HttpResponse.json({}, { status: 201 }))))
+    const { user } = renderFromInventory()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Half typed')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Inventory stub')).toBeInTheDocument()
+    expect(created).toBe(false)
+  })
+
+  it("sends a batch's expiry and lot number as typed", async () => {
+    const bodies = []
+    server.use(
+      http.post(`${BASE}/stock/`, () =>
+        HttpResponse.json(
+          { id: 9, name: 'X', group: null, shared_with: [], updated_at: '2026-04-22T10:00:00Z' },
+          { status: 201 },
+        ),
+      ),
+      http.post(`${BASE}/stock/9/lots/`, async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ id: 1 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'Insulin')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByTestId('more-fields'))
+    await user.type(screen.getByLabelText(/Batch 1 quantity/), '5')
+    await user.type(screen.getByLabelText(/Batch 1 expiry/), '2027-03-31')
+    await user.type(screen.getByLabelText(/Batch 1 lot number/), 'FIA-1')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ quantity: 5, expiry_date: '2027-03-31', lot_number: 'FIA-1' })
+  })
+})
+
+describe('StockFormPage — partial cached data', () => {
+  it('opens the edit form for a cached stock that has no name yet', async () => {
+    // The detail cache can be seeded from a partial list entry; the form must
+    // still open, with an empty name the owner is asked to fill.
+    mockStock({ id: 1, group: null, shared_with: [], is_owner: true, updated_at: '2026-04-22T10:00:00Z' })
+    mockGroups()
+    mockContacts()
+    const { user } = renderEdit()
+    const name = await screen.findByPlaceholderText('e.g. Ibuprofen 400mg')
+    expect(name).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/name is required/i)).toBeInTheDocument()
   })
 })

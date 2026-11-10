@@ -211,6 +211,16 @@ to match its own policy without touching the code.
 | `STOCK_DIRECT_CONSUMPTION_HALF_DAYS` | `30` | Half-window used to validate that consumption is recent enough in both halves before estimating. |
 | `STOCK_MAX_PINNED_ITEMS` | `4` | How many stocks a user may pin to the top of their inventory. Enforced by `POST /api/stock/{id}/pin/`, which returns 400 with `code: "max_pinned_reached"` beyond it. |
 
+## Regulatory data (CIMA)
+
+Nudge links medicines to their official record in CIMA, the public database of
+the Spanish medicines agency (AEMPS). The backend is the only component that
+calls it, so it needs outbound HTTPS to `cima.aemps.es`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REGULATORY_FETCH_ENABLED` | `True` | Whether the backend may call CIMA. Only the network is gated: national codes are still parsed and validated when it is `False`. Set it to `False` where no outbound access is wanted (CI and E2E run with it off). Always off during the backend test run. |
+
 ## Docker / Infrastructure
 
 | Variable | Default | Description |

@@ -1,0 +1,189 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Same surface as the lots card next to it on the page. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* Agency names are long and upper case: wrap anywhere rather than overflow. */
+.officialName {
+  font-weight: 600;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.presentation,
+.sourceLine {
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+  overflow-wrap: anywhere;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--c-text-2);
+}
+
+.stateError {
+  color: var(--c-warning);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--c-text-2);
+}
+
+/* Tones are doubled for specificity: they must win over `.chip` (and over
+   `.problem`) whatever order the bundler emits them in — the T039 lesson in
+   `StockRow.module.css`. */
+.toneOk.toneOk {
+  border-color: var(--c-border-success);
+  color: var(--c-success);
+}
+
+.toneNeutral.toneNeutral {
+  color: var(--c-text-2);
+}
+
+.toneWarning.toneWarning {
+  border-color: var(--c-border-warning);
+  color: var(--c-warning);
+}
+
+.toneDanger.toneDanger {
+  border-color: var(--c-border-danger);
+  color: var(--c-danger);
+}
+
+.problem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--c-border-inner);
+}
+
+.problemTitle {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* The agency's own words: kept in the body colour, not the tone. */
+.note {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--c-text-3);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.blockTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+}
+
+/* The page's collapsible pattern: a plain button with a chevron. */
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+  cursor: pointer;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pastItem,
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sourceLink {
+  font-size: 0.85rem;
+}
+
+.refresh {
+  margin-left: auto;
+}
+
+.hint,
+.disclaimer {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--c-text-3);
+}

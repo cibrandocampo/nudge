@@ -76,7 +76,8 @@ backend/
 │   ├── core/            # Health-check endpoint
 │   ├── users/           # Custom user model + auth views
 │   ├── routines/        # Domain models and API
-│   └── notifications/   # Push subscription + Celery tasks
+│   ├── notifications/   # Push subscription + Celery tasks
+│   └── regulatory/      # Official medicine data (CIMA / AEMPS) linked to stocks
 ├── entrypoint.sh        # Runs migrations + ensure_admin on startup (collectstatic runs at build time)
 └── requirements.txt
 ```
@@ -100,7 +101,10 @@ RoutineEntry
  └── routine, created_at, notes
 
 Stock
- ├── name
+ ├── name, gtin, default_lot_quantity
+ ├── national_code, national_code_source   (e.g. the Spanish CN; user data)
+ ├── presentation → Presentation (nullable, derived from national_code)
+ ├── name_offer_pending                     (ask the owner to adopt the official name)
  └── lots → [StockLot]  (quantity is computed from lots)
 
 StockLot
@@ -122,6 +126,41 @@ NotificationState
  ├── last_reminder
  └── last_daily_notified
 ```
+
+Regulatory catalogue (`apps/regulatory`) — agency-neutral tables, holding
+**only** what some stock is linked to:
+
+```
+Medicine        (source, code)  name, authorized_on / suspended_on / revoked_on, agency_url, raw
+ └── presentations → [Presentation]
+Presentation    (source, code)  name, marketed, supply_severity, fetch_status, fetched_at, raw
+ └── supply_problems → [SupplyProblem]  native_type, severity, note, dates, resolved_at
+SafetyNotice    (source, reference)  title, url, published_on ←→ medicines (M2M)
+```
+
+### Regulatory data (CIMA / AEMPS)
+
+A stock with a national code is linked to the official record of its medicine.
+The data model is generic (a `source` on every row, the agency's own codes next
+to normalised values such as `severity`); the code serves one agency today:
+`apps/regulatory/clients/aemps.py` is the only module that knows CIMA's URLs
+and fields, and it returns the standard shape of `clients/types.py`.
+
+- **Code.** An NTIN (`0847000…`) embeds the Spanish CN; a pack with the
+  manufacturer's own GTIN carries it in the scanned AI 712; the owner can also
+  type it. The CN's 7th digit is the GS1 check digit of `0847000` + CN.
+- **Fetch.** Saving a code links the stock and enqueues `fetch_presentation`
+  (Celery, retried with backoff); the user's write never waits for the agency.
+  A presentation's first fetch is its baseline (`fetched_at`).
+- **Daily refresh.** Beat runs `sync_regulatory_data` at 03:00 UTC (`crontab`):
+  relinks stocks with a code, refreshes every linked presentation one by one,
+  and prunes rows no stock has used for 30 days.
+- **Switch.** `REGULATORY_FETCH_ENABLED=False` keeps the backend off the
+  network (CI, E2E, tests); codes are still validated.
+- **Seed.** `seed` applies recorded CIMA answers
+  (`apps/regulatory/test_data/aemps/`) through the same parser, offline.
+- **Upgrade.** Existing stocks are linked once with `link_regulatory_stocks`
+  (see `docs/upgrade.md`).
 
 ### Inventory — FEFO
 
@@ -195,6 +234,9 @@ The legacy endpoint `POST /api/auth/token/` (username + password) is kept operat
 | GET | `/api/entries/` | Global history |
 | GET/POST/PATCH/DELETE | `/api/stock/` | Inventory CRUD |
 | POST/PATCH/DELETE | `/api/stock/{id}/lots/` | Lot management |
+| GET | `/api/stock/{id}/regulatory/` | Official medicine data: supply problems, safety notices, agency link |
+| POST | `/api/stock/{id}/regulatory/refresh/` | Owner: fetch again and re-ask the official-name question (`202`) |
+| POST | `/api/stock/{id}/regulatory/name-offer/` | Owner: `{accept}` — adopt or decline the official name |
 | POST | `/api/push/subscribe/` | Register push endpoint |
 | DELETE | `/api/push/unsubscribe/` | Remove push endpoint |
 | POST | `/api/push/test/` | Send instant test notification |

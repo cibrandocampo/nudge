@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseGs1, parseGs1Date, isValidGtin } from '../gs1'
+import { parseGs1, parseGs1Date, isValidGtin, spanishCnFromGtin, spanishCnFromNhrn } from '../gs1'
 
 // FNC1 as it surfaces in decoded text.
 const GS = '\u001d'
@@ -202,5 +202,56 @@ describe('isValidGtin', () => {
   it('rejects anything that is not 14 digits', () => {
     expect(isValidGtin('123')).toBe(false)
     expect(isValidGtin('0950600013437X')).toBe(false)
+  })
+})
+
+// Real CNs with their printed check digit (BotPlus, all present in CIMA) and
+// the FIASP pack the user owns — the set T109 verified the algorithm on.
+const REAL_CNS = ['7285144', '6614266', '6057216', '6310519', '6501405', '7548461']
+
+describe('spanishCnFromGtin', () => {
+  it('extracts the CN from an NTIN', () => {
+    expect(spanishCnFromGtin('08470007285144')).toBe('728514')
+  })
+
+  it('returns null for a manufacturer GTIN, whose CN travels in AI 712', () => {
+    expect(spanishCnFromGtin('05705244020856')).toBeNull()
+  })
+
+  it('returns null when the check digit fails', () => {
+    expect(spanishCnFromGtin('08470007285145')).toBeNull()
+  })
+
+  it('returns null for empty or non-string input', () => {
+    expect(spanishCnFromGtin('')).toBeNull()
+    expect(spanishCnFromGtin(undefined)).toBeNull()
+  })
+})
+
+describe('spanishCnFromNhrn', () => {
+  it.each(REAL_CNS)('returns the 6 canonical digits of %s', (value) => {
+    expect(spanishCnFromNhrn({ ai: '712', value })).toBe(value.slice(0, 6))
+  })
+
+  it('rejects a wrong check digit instead of linking another medicine', () => {
+    expect(spanishCnFromNhrn({ ai: '712', value: '7285145' })).toBeNull()
+  })
+
+  it("rejects the AEMPS FAQ's illustrative 8722513, which is not a real CN", () => {
+    expect(spanishCnFromNhrn({ ai: '712', value: '8722513' })).toBeNull()
+  })
+
+  it('rejects 6 digits: AEMPS requires the check digit in AI 712', () => {
+    expect(spanishCnFromNhrn({ ai: '712', value: '728514' })).toBeNull()
+  })
+
+  it('ignores another country NHRN', () => {
+    expect(spanishCnFromNhrn({ ai: '710', value: '7285144' })).toBeNull()
+  })
+
+  it('returns null without an NHRN', () => {
+    expect(spanishCnFromNhrn(null)).toBeNull()
+    expect(spanishCnFromNhrn(undefined)).toBeNull()
+    expect(spanishCnFromNhrn({ ai: '712', value: 7285144 })).toBeNull()
   })
 })

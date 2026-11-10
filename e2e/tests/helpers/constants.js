@@ -46,6 +46,28 @@ export const SEED = {
     descalerTablets: 'Descaler tablets',
     birthControlPills: 'Birth control pills',
     metformin: 'Metformin 850mg',
+    fastInsulin: 'Fast-acting insulin',
+  },
+  // Regulatory data the seed applies from recorded AEMPS answers (T111).
+  // `officialName` is the medicine name CIMA writes (the name offer proposes
+  // it); `cn` is the 6-digit national code. Only fastInsulin has the offer
+  // pending, so only a spec that answers it may open that stock.
+  regulatory: {
+    fastInsulin: {
+      cn: '728514',
+      officialName: 'FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO',
+      supplyProblem: true,
+      nameOfferPending: true,
+    },
+    hidroferol: {
+      cn: '934554',
+      officialName: 'HIDROFEROL 0,1 mg/ml GOTAS ORALES EN SOLUCION',
+      safetyNotices: 2,
+    },
+    ibuprofen: {
+      cn: '661426',
+      officialName: 'IBUPROFENO CINFA 600 mg COMPRIMIDOS RECUBIERTOS CON PELICULA EFG',
+    },
   },
   // Stocks the seed pins for user1, so every run starts with the Destacados
   // section on screen. A pinned product renders twice (Destacados + its

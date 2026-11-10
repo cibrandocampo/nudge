@@ -89,7 +89,11 @@ test.describe('helpers smoke', () => {
     expect(H.SEED).toBeDefined()
     expect(H.SEED.admin?.username).toBeTruthy()
     expect(Object.keys(H.SEED.routines ?? {}).length).toBe(10)
-    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(12)
+    // 13 since T111 added "Fast-acting insulin", the regulatory showcase.
+    expect(Object.keys(H.SEED.stocks ?? {}).length).toBe(13)
+    for (const key of H.SEED.regulatory ? Object.keys(H.SEED.regulatory) : []) {
+      expect(H.SEED.stocks, `regulatory key "${key}" must be a SEED.stocks key`).toHaveProperty(key)
+    }
     for (const key of H.SEED.pinnedForUser1 ?? []) {
       expect(H.SEED.stocks, `pinnedForUser1 key "${key}" must be a SEED.stocks key`).toHaveProperty(key)
     }

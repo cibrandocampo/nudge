@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, vi } from 'vitest'
@@ -1320,6 +1320,46 @@ describe('StockDetailPage', () => {
     await user.click(screen.getByTestId('add-lot-toggle'))
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
   })
+
+  // ── National code from a scanned AI 712 (T112) ────────────────────────────
+  // A pack coded with the manufacturer's own GTIN carries its Spanish CN in
+  // AI 712 (7 digits with the check digit); the reconcile treats it like the GTIN.
+
+  const cnPayload = (cn7) => `01${GTIN}17${yymmdd(futureIso)}10LOT-CN${GS}712${cn7}`
+
+  it('fills a blank national code from AI 712 without asking', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 1, national_code: '' })
+    payloadRef.current = cnPayload('6614266')
+    captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    expect(patch.body).toEqual({ national_code: '661426' })
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('asks before replacing a different national code, and sends it when accepted', async () => {
+    stockWith({ gtin: GTIN, default_lot_quantity: 1, national_code: '728514' })
+    payloadRef.current = cnPayload('6614266')
+    const lot = captureCreateLot()
+    const patch = capturePatch()
+    const { user } = renderDetail()
+    await openScanner(user)
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+
+    const row = await screen.findByTestId('stock-values-row')
+    expect(row).toHaveTextContent('National code (CN)')
+    expect(within(row).getByTestId('stock-values-current')).toHaveTextContent('728514')
+    expect(within(row).getByTestId('stock-values-next')).toHaveTextContent('661426')
+    await user.click(screen.getByTestId('stock-values-update'))
+
+    await waitFor(() => expect(patch.body).not.toBeNull())
+    expect(patch.body).toEqual({ national_code: '661426' })
+    expect(lot.calls).toBe(1)
+  })
 })
 
 describe('StockDetailPage — pin control', () => {
@@ -1475,4 +1515,412 @@ describe('StockDetailPage — pin control', () => {
     await user.click(await screen.findByTestId('pin-toggle'))
     expect(await screen.findByText(/not available offline/i)).toBeInTheDocument()
   })
+})
+
+describe('StockDetailPage — official-name offer (T112)', () => {
+  const OFFICIAL = 'FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO'
+
+  const summary = (over = {}) => ({
+    source: 'aemps',
+    code: '728514',
+    display_name: 'AEMPS (CIMA)',
+    attribution: 'Agencia Española de Medicamentos y Productos Sanitarios (AEMPS) — CIMA',
+    language: 'es',
+    official_name: OFFICIAL,
+    fetch_status: 'ok',
+    fetched_at: '2026-11-10T01:00:00Z',
+    marketed: true,
+    status: 'authorised',
+    supply_severity: 'danger',
+    name_offer_pending: true,
+    ...over,
+  })
+
+  /**
+   * A server that remembers the answer: the POST flips the flag (and the name,
+   * when accepted) and every later GET returns that state. A static handler
+   * would let the post-mutation refetch bring the offer back.
+   */
+  const serve = (over = {}, regulatoryOver = {}) => {
+    const state = { stock: { ...stock, ...over, regulatory: summary(regulatoryOver) }, answers: [] }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(state.stock)),
+      http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/stock-groups/`, () => HttpResponse.json({ results: [] })),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json({ results: [state.stock] })),
+      http.post(`${BASE}/stock/1/regulatory/name-offer/`, async ({ request }) => {
+        const { accept } = await request.json()
+        state.answers.push(accept)
+        state.stock = {
+          ...state.stock,
+          name: accept ? OFFICIAL : state.stock.name,
+          regulatory: { ...state.stock.regulatory, name_offer_pending: false },
+        }
+        return HttpResponse.json(state.stock)
+      }),
+    )
+    return state
+  }
+
+  beforeEach(() => {
+    reachableRef.current = true
+  })
+
+  it('asks with the current and the official name', async () => {
+    serve()
+    renderDetail()
+    expect(await screen.findByText('Use the official name?')).toBeInTheDocument()
+    expect(screen.getByText(/according to AEMPS \(CIMA\)/)).toBeInTheDocument()
+    const row = screen.getByTestId('stock-values-row')
+    expect(row).toHaveTextContent('Name')
+    expect(within(row).getByTestId('stock-values-current')).toHaveTextContent('Water filter')
+    expect(within(row).getByTestId('stock-values-next')).toHaveTextContent(OFFICIAL)
+  })
+
+  it('accepting renames the stock and the offer does not come back', async () => {
+    const state = serve()
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('stock-values-update'))
+
+    await waitFor(() => expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument())
+    expect(state.answers).toEqual([true])
+    // Twice once renamed: the header now carries it, next to the medicine
+    // information section that always shows the official name.
+    await waitFor(() => expect(screen.getAllByText(OFFICIAL)).toHaveLength(2))
+    expect(screen.queryByText('Water filter')).not.toBeInTheDocument()
+  })
+
+  it('keeping the name answers no and the offer does not come back', async () => {
+    const state = serve()
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('stock-values-keep'))
+
+    await waitFor(() => expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument())
+    expect(state.answers).toEqual([false])
+    expect(screen.getByText('Water filter')).toBeInTheDocument()
+  })
+
+  it.each(['pending', 'error', 'not_found'])('does not ask while the fetch is %s', async (fetchStatus) => {
+    serve({}, { fetch_status: fetchStatus })
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('never asks a guest', async () => {
+    serve({ is_owner: false })
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('waits offline, since the answer is not queueable', async () => {
+    reachableRef.current = false
+    serve()
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('answers no by itself when the names already match', async () => {
+    const state = serve({ name: OFFICIAL })
+    renderDetail()
+    await waitFor(() => expect(state.answers).toEqual([false]))
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('closing with Escape answers nothing and hides the offer for this visit', async () => {
+    const state = serve()
+    renderDetail()
+    await screen.findByTestId('stock-values-confirm')
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument())
+    expect(state.answers).toEqual([])
+  })
+
+  it('a dropped connection on answer hides the offer without an error toast', async () => {
+    serve()
+    server.use(mockNetworkError('post', '/stock/1/regulatory/name-offer/'))
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('stock-values-update'))
+
+    await waitFor(() => expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a refused answer is reported and the offer hidden', async () => {
+    serve()
+    server.use(
+      http.post(`${BASE}/stock/1/regulatory/name-offer/`, () =>
+        HttpResponse.json({ detail: 'Nope.' }, { status: 400 }),
+      ),
+    )
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('stock-values-update'))
+
+    expect(await screen.findByText('Nope.')).toBeInTheDocument()
+    expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
+  })
+
+  it('waits for an open lot question and asks afterwards', async () => {
+    // The stock first has no offer; the scan opens the lot question; the offer
+    // then becomes pending while that question is still on screen.
+    const GS = '\u001d'
+    const yymmdd = (iso) => iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10)
+    const state = serve({ gtin: '09506000134376', default_lot_quantity: 10 }, { name_offer_pending: false })
+    server.use(http.post(`${BASE}/stock/1/lots/`, () => HttpResponse.json({ id: 900, quantity: 6 }, { status: 201 })))
+    server.use(http.patch(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, regulatory: summary() })))
+    payloadRef.current = `0109506000134376${'17'}${yymmdd(daysFromNow(200))}10LOT-X${GS}21SN-1`
+    const { user, queryClient } = renderDetail()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(await screen.findByTestId('stub-decode'))
+    const qty = screen.getByPlaceholderText('0')
+    await user.clear(qty)
+    await user.type(qty, '6')
+    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    expect(await screen.findByText('Update the product?')).toBeInTheDocument()
+
+    // The server raises the offer (as a fetch finishing would) and the cache
+    // learns it — the later refetch after the lot save must agree.
+    state.stock = { ...state.stock, regulatory: summary() }
+    act(() => {
+      queryClient.setQueryData(['stock', 1], (prev) => ({ ...prev, regulatory: summary() }))
+    })
+    expect(screen.getAllByTestId('stock-values-confirm')).toHaveLength(1)
+    expect(screen.queryByText('Use the official name?')).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId('stock-values-keep'))
+    expect(await screen.findByText('Use the official name?')).toBeInTheDocument()
+  })
+})
+
+describe('StockDetailPage — dialogs dismissed and connection lost while open', () => {
+  const tree = () => (
+    <Routes>
+      <Route path="/inventory/:id" element={<StockDetailPage />} />
+      <Route path="/inventory" element={<div>Inventory home</div>} />
+    </Routes>
+  )
+  const render = () => renderWithProviders(tree(), { initialEntries: ['/inventory/1'] })
+
+  const trackDeletes = () => {
+    const calls = { stock: 0, lot: 0 }
+    server.use(
+      http.delete(`${BASE}/stock/1/`, () => ((calls.stock += 1), new HttpResponse(null, { status: 204 }))),
+      http.delete(`${BASE}/stock/1/lots/:lotId/`, () => ((calls.lot += 1), new HttpResponse(null, { status: 204 }))),
+    )
+    return calls
+  }
+
+  const lastDeleteButton = () => {
+    const buttons = screen.getAllByRole('button', { name: /Delete/ })
+    return buttons[buttons.length - 1]
+  }
+
+  beforeEach(() => {
+    reachableRef.current = true
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
+  })
+
+  it('cancelling the delete-stock confirmation deletes nothing', async () => {
+    const calls = trackDeletes()
+    const { user } = render()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.stock).toBe(0)
+  })
+
+  it('losing the connection before confirming the stock delete refuses it', async () => {
+    const calls = trackDeletes()
+    const { user, rerender } = render()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    reachableRef.current = false
+    rerender(tree())
+    await user.click(within(screen.getByRole('dialog')).getAllByRole('button')[1])
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    expect(calls.stock).toBe(0)
+  })
+
+  it('cancelling the delete-batch confirmation deletes nothing', async () => {
+    const calls = trackDeletes()
+    const { user } = render()
+    await screen.findByText('Water filter')
+    await user.click(lastDeleteButton())
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.lot).toBe(0)
+  })
+
+  it('losing the connection before confirming the batch delete refuses it', async () => {
+    const calls = trackDeletes()
+    const { user, rerender } = render()
+    await screen.findByText('Water filter')
+    await user.click(lastDeleteButton())
+    reachableRef.current = false
+    rerender(tree())
+    await user.click(within(screen.getByRole('dialog')).getAllByRole('button')[1])
+
+    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
+    expect(calls.lot).toBe(0)
+  })
+
+  it('closing the batch picker consumes nothing', async () => {
+    let consumed = false
+    server.use(http.post(`${BASE}/stock/1/consume/`, () => ((consumed = true), HttpResponse.json(stock))))
+    const { user } = render()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(consumed).toBe(false)
+  })
+
+  it('consuming from the batch picker closes it', async () => {
+    let body = null
+    server.use(
+      http.post(`${BASE}/stock/1/consume/`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json(stock)
+      }),
+    )
+    const { user } = render()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByTestId('consume-one'))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Consume 1' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(body).toMatchObject({ quantity: 1 })
+  })
+})
+
+describe('StockDetailPage — partial cached data', () => {
+  it('renders a stock whose cached entry carries no lots array', async () => {
+    const { lots: _omitted, ...withoutLots } = stock
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(withoutLots)))
+    renderDetail()
+    expect(await screen.findByText('Water filter')).toBeInTheDocument()
+    expect(screen.queryByText('LOT-A')).not.toBeInTheDocument()
+  })
+})
+
+describe('StockDetailPage — medicine information section (T113)', () => {
+  const OFFICIAL = 'FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO'
+  const summary = (over = {}) => ({
+    source: 'aemps',
+    code: '728514',
+    display_name: 'AEMPS (CIMA)',
+    attribution: 'AEMPS — CIMA',
+    language: 'es',
+    official_name: OFFICIAL,
+    fetch_status: 'ok',
+    fetched_at: '2026-11-10T01:00:00Z',
+    marketed: true,
+    status: 'authorised',
+    supply_severity: null,
+    name_offer_pending: false,
+    ...over,
+  })
+  const detailOf = (regulatory) => ({
+    ...regulatory,
+    agency_url: 'https://cima.aemps.es/x',
+    presentation_name: OFFICIAL,
+    supply_problems: [],
+    safety_notices: [],
+  })
+
+  /**
+   * A server whose stock moves through states: each GET returns the next one
+   * (the last repeats). Counts detail GETs too, to see when the page refetches.
+   */
+  const serveSequence = (regulatoryStates, { onRefresh, name = OFFICIAL } = {}) => {
+    const state = { gets: 0, detailGets: 0, current: { ...stock, name, regulatory: regulatoryStates[0] } }
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => {
+        state.current = {
+          ...state.current,
+          regulatory: regulatoryStates[Math.min(state.gets, regulatoryStates.length - 1)],
+        }
+        state.gets += 1
+        return HttpResponse.json(state.current)
+      }),
+      http.get(`${BASE}/stock/1/regulatory/`, () => {
+        state.detailGets += 1
+        return HttpResponse.json(detailOf(state.current.regulatory))
+      }),
+      http.post(`${BASE}/stock/1/regulatory/refresh/`, () => {
+        state.current = { ...state.current, regulatory: onRefresh(state.current.regulatory) }
+        return HttpResponse.json(state.current, { status: 202 })
+      }),
+    )
+    return state
+  }
+
+  beforeEach(() => {
+    reachableRef.current = true
+  })
+
+  it('is absent for a stock with no national code', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('regulatory-section')).not.toBeInTheDocument()
+  })
+
+  it('adds no number input above the lot form (E2E `addLot` contract)', async () => {
+    serveSequence([summary()])
+    renderDetail()
+    const section = await screen.findByTestId('regulatory-section')
+    expect(section.querySelectorAll('input[type="number"]')).toHaveLength(0)
+  })
+
+  it('polls while the first fetch is pending and shows the data once it is in', async () => {
+    const state = serveSequence([
+      summary({ fetch_status: 'pending', fetched_at: null, official_name: null }),
+      summary(),
+    ])
+    renderDetail()
+    expect(await screen.findByTestId('regulatory-pending')).toBeInTheDocument()
+    expect(await screen.findByTestId('regulatory-official-name', {}, { timeout: 6000 })).toHaveTextContent(OFFICIAL)
+    expect(screen.queryByTestId('regulatory-pending')).not.toBeInTheDocument()
+    // Polling stops once the fetch is over: no further GET over the next interval.
+    const gets = state.gets
+    await new Promise((resolve) => setTimeout(resolve, 3500))
+    expect(state.gets).toBe(gets)
+  }, 15000)
+
+  it('a refresh polls until the new data lands, refetches the detail and asks about the name again', async () => {
+    const fresh = summary({ fetched_at: '2026-11-11T09:00:00Z', name_offer_pending: true })
+    // The user keeps their own name, so the renewed offer has something to ask.
+    const state = serveSequence([summary(), fresh], {
+      name: 'Water filter',
+      onRefresh: (current) => ({ ...current, fetch_status: 'pending', name_offer_pending: true }),
+    })
+    const { user } = renderDetail()
+    await screen.findByTestId('regulatory-official-name')
+    await waitFor(() => expect(state.detailGets).toBe(1))
+    // The page has fetched once; the next GET answers with the fresh state.
+    expect(state.gets).toBe(1)
+
+    await user.click(screen.getByTestId('regulatory-refresh'))
+    expect(await screen.findByTestId('regulatory-pending')).toBeInTheDocument()
+
+    // No offer while the fetch is in flight: there is no new official data yet.
+    expect(screen.queryByText('Use the official name?')).not.toBeInTheDocument()
+
+    // The fetch lands: polling stops, the detail is refetched for the new
+    // `fetched_at`, and the offer — a new fetch is a new offer — is asked.
+    expect(await screen.findByText('Use the official name?', {}, { timeout: 6000 })).toBeInTheDocument()
+    expect(screen.queryByTestId('regulatory-pending')).not.toBeInTheDocument()
+    await waitFor(() => expect(state.detailGets).toBe(2))
+  }, 15000)
 })

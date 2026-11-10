@@ -12,15 +12,23 @@
  *   values equal     → nothing at all
  *   values differ    → ask the user
  *
- * The two fields differ in reach. `default_lot_quantity` reconciles on every
- * lot save, scanned or hand-typed, because the quantity in the form is exactly
- * what the field means: what to prefill next time. `gtin` is read from the
- * symbol, so a hand-typed lot has nothing to say about it and must leave the
- * stored code alone.
+ * The fields differ in reach. `default_lot_quantity` reconciles on every lot
+ * save, scanned or hand-typed, because the quantity in the form is exactly
+ * what the field means: what to prefill next time. `gtin` and
+ * `national_code` are read from the symbol, so a hand-typed lot has nothing to
+ * say about them and must leave the stored codes alone.
+ *
+ * `national_code` (the Spanish CN) comes only from packs coded with the
+ * manufacturer's own GTIN, which carry the CN in AI 712. An NTIN-coded pack
+ * (`0847000…`) embeds the CN in its GTIN and the backend derives it from
+ * there, so this helper says nothing about the CN for those — sending it too
+ * would only be redundant. Codes are compared on their 6 canonical digits.
  *
  * Pure and synchronous: no React, no I/O, no side effects. The caller decides
  * what to do with the answer — this only reports.
  */
+
+import { spanishCnFromGtin, spanishCnFromNhrn } from './gs1'
 
 /** Stored values count as blank when they have never been set. */
 function isBlank(value) {
@@ -38,7 +46,7 @@ function isUsableQuantity(value) {
 
 /**
  * @param {object} args
- * @param {object|null|undefined} args.stock - the stock as cached (`gtin`, `default_lot_quantity`).
+ * @param {object|null|undefined} args.stock - the stock as cached (`gtin`, `national_code`, `default_lot_quantity`).
  * @param {object|null} args.scan - the `parseGs1` result, or null for a hand-typed lot.
  * @param {number} args.quantity - the quantity being submitted.
  * @returns {{ silent: object, discrepant: Array<{field: string, current: *, next: *}> }}
@@ -58,6 +66,14 @@ export function reconcileStockFromLot({ stock, scan, quantity }) {
     const current = stock?.gtin
     if (isBlank(current)) silent.gtin = scannedGtin
     else if (current !== scannedGtin) discrepant.push({ field: 'gtin', current, next: scannedGtin })
+  }
+
+  // Only from AI 712, and only when the GTIN is not an NTIN (see above).
+  const scannedCn = spanishCnFromGtin(scannedGtin ?? '') ? null : spanishCnFromNhrn(scan?.nhrn)
+  if (scannedCn) {
+    const current = stock?.national_code
+    if (isBlank(current)) silent.national_code = scannedCn
+    else if (current !== scannedCn) discrepant.push({ field: 'national_code', current, next: scannedCn })
   }
 
   if (isUsableQuantity(quantity)) {

@@ -1,0 +1,125 @@
+{
+  "nregistro": "80298",
+  "nombre": "GRIPPOSTAD CON IBUPROFENO 200 MG/5 MG COMPRIMIDOS RECUBIERTOS CON PELICULA",
+  "pactivos": "IBUPROFENO, FENILEFRINA HIDROCLORURO",
+  "labtitular": "Laboratorio Stada S.L.",
+  "labcomercializador": "Laboratorio Stada S.L.",
+  "cpresc": "Sin Receta",
+  "estado": {
+    "aut": 1444860000000,
+    "rev": 1761310802000
+  },
+  "comerc": false,
+  "receta": false,
+  "generico": false,
+  "conduc": true,
+  "triangulo": false,
+  "huerfano": false,
+  "biosimilar": false,
+  "nosustituible": {
+    "id": 0,
+    "nombre": "N/A"
+  },
+  "psum": false,
+  "notas": true,
+  "materialesInf": false,
+  "ema": false,
+  "docs": [
+    {
+      "tipo": 1,
+      "url": "https://cima.aemps.es/cima/pdfs/ft/80298/FT_80298.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/ft/80298/FT_80298.html",
+      "secc": true,
+      "fecha": 1755815169000
+    },
+    {
+      "tipo": 2,
+      "url": "https://cima.aemps.es/cima/pdfs/p/80298/P_80298.pdf",
+      "urlHtml": "https://cima.aemps.es/cima/dochtml/p/80298/P_80298.html",
+      "secc": true,
+      "fecha": 1757974417000
+    }
+  ],
+  "fotos": [
+    {
+      "tipo": "materialas",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/materialas/80298/80298_materialas.jpg",
+      "fecha": 1761308878000
+    },
+    {
+      "tipo": "formafarmac",
+      "url": "https://cima.aemps.es/cima/fotos/thumbnails/formafarmac/80298/80298_formafarmac.jpg",
+      "fecha": 1761308878000
+    }
+  ],
+  "atcs": [
+    {
+      "codigo": "R05X",
+      "nombre": "OTROS PREPARADOS PARA EL RESFRIADO",
+      "nivel": 3
+    },
+    {
+      "codigo": "R05X_",
+      "nombre": "OTROS PREPARADOS COMBINADOS PARA EL RESFRIADO",
+      "nivel": 4
+    }
+  ],
+  "principiosActivos": [
+    {
+      "id": 1769,
+      "codigo": "1769A",
+      "nombre": "IBUPROFENO",
+      "cantidad": "200.00",
+      "unidad": "mg",
+      "orden": 1
+    },
+    {
+      "id": 328,
+      "codigo": "328CH",
+      "nombre": "FENILEFRINA HIDROCLORURO",
+      "cantidad": "5.00",
+      "unidad": "mg",
+      "orden": 2
+    }
+  ],
+  "excipientes": [
+    {
+      "id": 3949,
+      "nombre": "FUMARATO DE ESTEARILO Y SODIO",
+      "cantidad": "6.79",
+      "unidad": "mg",
+      "orden": 5
+    }
+  ],
+  "viasAdministracion": [
+    {
+      "id": 48,
+      "nombre": "VÍA ORAL"
+    }
+  ],
+  "presentaciones": [
+    {
+      "cn": "708201",
+      "nombre": "GRIPPOSTAD CON IBUPROFENO 200 MG/5 MG COMPRIMIDOS RECUBIERTOS CON PELICULA , 24 comprimidos",
+      "estado": {
+        "aut": null,
+        "rev": 1761310802000
+      },
+      "comerc": false,
+      "psum": false
+    }
+  ],
+  "formaFarmaceutica": {
+    "id": 42,
+    "nombre": "COMPRIMIDO RECUBIERTO CON PELÍCULA"
+  },
+  "formaFarmaceuticaSimplificada": {
+    "id": 10,
+    "nombre": "COMPRIMIDO"
+  },
+  "vtm": {
+    "id": 161961000140106,
+    "nombre": "ibuprofeno + fenilefrina"
+  },
+  "dosis": "200 mg/5 mg"
+}

@@ -79,6 +79,30 @@ class Stock(models.Model):
         validators=[MinValueValidator(1)],
         help_text="Quantity to prefill when adding a lot. Null when not yet known.",
     )
+    # The regulatory identity of the product. `national_code` is user data and
+    # the source of truth: derived from an NTIN, read from a scan's AI 712, or
+    # typed by the owner. `presentation` is only a link derived from it, so a
+    # pruned catalogue row is rebuilt from the code at the next sync.
+    national_code = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="National code of the pack (Spain: the 6-digit CN). Empty when unknown.",
+    )
+    national_code_source = models.CharField(
+        max_length=16,
+        blank=True,
+        help_text="Agency the national code belongs to (e.g. 'aemps'). Empty with no code.",
+    )
+    presentation = models.ForeignKey(
+        "regulatory.Presentation",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stocks",
+    )
+    # Server-side so the offer survives devices and outlives the asynchronous
+    # fetch it waits for. Set on a first link and by "Refresh info".
+    name_offer_pending = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -85,6 +85,38 @@ export function isValidGtin(gtin) {
   return (10 - (sum % 10)) % 10 === Number(gtin[13])
 }
 
+/** Prefix of an NTIN, the Spanish product code that embeds the 7-digit CN. */
+const NTIN_PREFIX = '0847000'
+
+/**
+ * The Spanish national code (CN) inside an NTIN-coded GTIN, or null.
+ *
+ * Only an NTIN (`0847000` + the 7-digit CN) carries the CN in the product code;
+ * a pack coded with the manufacturer's own GTIN carries it in AI 712 instead
+ * (see `spanishCnFromNhrn`). Mirrors `code_from_gtin` in
+ * `backend/apps/regulatory/clients/aemps.py`, which stays the authority: this
+ * copy only lets the form show the derived code before saving.
+ */
+export function spanishCnFromGtin(gtin) {
+  if (typeof gtin !== 'string' || !isValidGtin(gtin) || !gtin.startsWith(NTIN_PREFIX)) return null
+  return gtin.slice(7, 13)
+}
+
+/**
+ * The Spanish CN from a scanned NHRN, or null.
+ *
+ * AI 712 holds the CN as 7 digits — 6 plus a check digit, which AEMPS makes
+ * mandatory there. That check digit is the GS1 one of `0847000` + the 6 digits
+ * (T109 research), so the full NTIN is validated with `isValidGtin` instead of
+ * repeating the arithmetic. A misread value returns null rather than a CN that
+ * would link the stock to another medicine. Same rule as `normalize_code` in
+ * `backend/apps/regulatory/clients/aemps.py`.
+ */
+export function spanishCnFromNhrn(nhrn) {
+  if (nhrn?.ai !== '712' || typeof nhrn.value !== 'string' || !/^\d{7}$/.test(nhrn.value)) return null
+  return isValidGtin(NTIN_PREFIX + nhrn.value) ? nhrn.value.slice(0, 6) : null
+}
+
 /**
  * Converts a GS1 `YYMMDD` date to `YYYY-MM-DD`, or null when it is not a usable
  * date.

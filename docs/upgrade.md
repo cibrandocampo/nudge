@@ -1,5 +1,28 @@
 # Upgrading Nudge
 
+## Regulatory data (CIMA) — link existing stocks once
+
+The release that introduces the official medicine data from CIMA (AEMPS) links
+each stock to its medicine through its national code. Stocks created from now
+on are linked when they are saved. **Stocks created before the upgrade need a
+one-off command**, run after the new images are up and the migrations have
+applied:
+
+```bash
+docker compose exec backend python manage.py link_regulatory_stocks
+```
+
+- It gives every stock with a Spanish NTIN (a GTIN starting `0847000`) its
+  national code, links it and schedules its first fetch in the background.
+  Stocks whose GTIN is the manufacturer's own are skipped: their code is read
+  from the DataMatrix the next time one of their lots is scanned, or the owner
+  can type it in the stock form.
+- `--dry-run` lists what it would link without changing anything.
+- It is safe to run more than once, and it sends no notifications.
+- The backend needs outbound HTTPS to `cima.aemps.es`. To keep it offline,
+  set `REGULATORY_FETCH_ENABLED=False` (see
+  [configuration.md](configuration.md#regulatory-data-cima)).
+
 ## v1.x → v2.0.0 — Breaking change: Postgres 16 → 17
 
 v2.0.0 ships Postgres 17. Postgres refuses to start on a data directory

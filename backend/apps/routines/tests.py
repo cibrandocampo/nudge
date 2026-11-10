@@ -5194,3 +5194,456 @@ class UserStockPinTest(APITestCase):
             self.assertEqual(res.status_code, 200)
         self.assertEqual(len(pinned.captured_queries), baseline)
         self.assertEqual(sum(1 for row in res.data["results"] if row["is_pinned"]), settings.STOCK_MAX_PINNED_ITEMS)
+
+
+# ── Regulatory data on the stock API (T111) ───────────────────────────────────
+
+
+def _regulatory_fixture(name):
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "regulatory" / "test_data" / "aemps" / name
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _apply_fiasp(presentation):
+    """Store the recorded FIASP answer: active supply problem, no notices."""
+    from apps.regulatory import services
+    from apps.regulatory.clients import aemps
+
+    data = aemps.parse_presentation(
+        "728514",
+        _regulatory_fixture("medicamento_728514.json"),
+        psuministro=_regulatory_fixture("psuministro_728514.json"),
+    )
+    return services.apply_presentation(presentation.pk, data)
+
+
+def _linked_stock(user, code="728514", fetched=True, name="Insulin"):
+    """A stock linked to a presentation, as a save through the API leaves it."""
+    from apps.regulatory.models import Presentation
+
+    presentation, _ = Presentation.objects.get_or_create(source="aemps", code=code)
+    if fetched and code == "728514":
+        _apply_fiasp(presentation)
+        presentation.refresh_from_db()  # the service wrote through its own locked copy
+    stock = Stock.objects.create(
+        user=user, name=name, national_code=code, national_code_source="aemps", presentation=presentation
+    )
+    return stock
+
+
+class StockNationalCodeValidationTests(APITestCase):
+    """`StockSerializer.validate` — one rule per test."""
+
+    NTIN = "08470007285144"  # FIASP: CN 728514.4 inside
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+        self.stock = make_stock(self.user)
+        self.url = f"/api/stock/{self.stock.pk}/"
+
+    def patch(self, body):
+        return self.client.patch(self.url, body, format="json")
+
+    def test_an_ntin_derives_the_code(self):
+        response = self.patch({"gtin": self.NTIN})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.data["national_code"], response.data["national_code_source"]), ("728514", "aemps"))
+
+    def test_a_code_contradicting_the_ntin_is_rejected(self):
+        response = self.patch({"gtin": self.NTIN, "national_code": "661426"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["national_code"][0].code, "national_code_mismatch")
+
+    def test_the_same_code_as_the_ntin_is_accepted(self):
+        response = self.patch({"gtin": self.NTIN, "national_code": "728514.4"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["national_code"], "728514")
+
+    def test_a_typed_code_without_gtin_is_normalised(self):
+        response = self.patch({"national_code": "728514.4"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.data["national_code"], response.data["national_code_source"]), ("728514", "aemps"))
+
+    def test_an_ai_712_value_is_accepted(self):
+        # What the scan reconcile sends for a manufacturer-GTIN pack (T112).
+        response = self.patch({"gtin": "05705244020856", "national_code": "6614266"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["national_code"], "661426")
+
+    def test_an_invalid_code_is_rejected(self):
+        response = self.patch({"national_code": "728514.5"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["national_code"][0].code, "invalid_national_code")
+
+    def test_clearing_the_gtin_keeps_the_code(self):
+        self.patch({"gtin": self.NTIN})
+        response = self.patch({"gtin": ""})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["national_code"], "728514")
+
+    def test_an_empty_code_without_gtin_clears_it_and_its_source(self):
+        self.patch({"national_code": "728514"})
+        response = self.patch({"national_code": ""})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.data["national_code"], response.data["national_code_source"]), ("", ""))
+
+    def test_the_source_cannot_be_written(self):
+        response = self.patch({"national_code_source": "other"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["national_code_source"], "")
+
+    def test_a_guest_cannot_write_the_code(self):
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.client.force_authenticate(guest)
+        self.assertEqual(self.patch({"national_code": "728514"}).status_code, 403)
+
+
+class StockRegulatoryLinkTests(APITestCase):
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+
+    def test_creating_with_an_ntin_links_raises_the_offer_and_enqueues_once(self):
+        with (
+            patch("apps.regulatory.tasks.fetch_presentation.delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.post("/api/stock/", {"name": "Insulin", "gtin": "08470007285144"}, format="json")
+        self.assertEqual(response.status_code, 201)
+        stock = Stock.objects.get(pk=response.data["id"])
+        self.assertIsNotNone(stock.presentation)
+        self.assertTrue(stock.name_offer_pending)
+        delay.assert_called_once_with(stock.presentation_id)
+        self.assertEqual(response.data["regulatory"]["fetch_status"], "pending")
+        self.assertTrue(response.data["regulatory"]["name_offer_pending"])
+
+    def test_patching_the_code_links_the_new_presentation(self):
+        stock = make_stock(self.user)
+        with patch("apps.regulatory.tasks.fetch_presentation.delay"), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.patch(f"/api/stock/{stock.pk}/", {"national_code": "661426"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["regulatory"]["code"], "661426")
+        self.assertEqual(response.data["regulatory"]["fetch_status"], "pending")
+        stock.refresh_from_db()
+        self.assertEqual(stock.presentation.code, "661426")
+
+    def test_a_patch_without_a_code_change_enqueues_nothing(self):
+        stock = make_stock(self.user)
+        with (
+            patch("apps.regulatory.tasks.fetch_presentation.delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.patch(f"/api/stock/{stock.pk}/", {"name": "Renamed"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        delay.assert_not_called()
+        self.assertIsNone(response.data["regulatory"])
+
+    def test_the_patch_answer_carries_the_new_updated_at(self):
+        stock = make_stock(self.user)
+        with patch("apps.regulatory.tasks.fetch_presentation.delay"), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.patch(f"/api/stock/{stock.pk}/", {"national_code": "661426"}, format="json")
+        stock.refresh_from_db()
+        # The client uses it for the next If-Unmodified-Since: it must be the
+        # value after the link was saved, not before.
+        self.assertEqual(response.data["updated_at"], StockSerializer(stock).data["updated_at"])
+
+
+class StockRegulatorySummaryTests(APITestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.stock = _linked_stock(self.owner)
+        Stock.objects.filter(pk=self.stock.pk).update(name_offer_pending=True)
+
+    def summary(self, user):
+        self.client.force_authenticate(user)
+        return self.client.get(f"/api/stock/{self.stock.pk}/").data["regulatory"]
+
+    def test_summary_of_a_fetched_presentation(self):
+        summary = self.summary(self.owner)
+        self.assertEqual(
+            {key: summary[key] for key in ("source", "code", "fetch_status", "marketed", "status", "supply_severity")},
+            {
+                "source": "aemps",
+                "code": "728514",
+                "fetch_status": "ok",
+                "marketed": True,
+                "status": "authorised",
+                "supply_severity": "danger",
+            },
+        )
+        self.assertEqual(summary["official_name"], "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO")
+        self.assertEqual(summary["display_name"], "AEMPS (CIMA)")
+        self.assertEqual(summary["language"], "es")
+        self.assertIn("AEMPS", summary["attribution"])
+        self.assertIsNotNone(summary["fetched_at"])
+
+    def test_the_owner_sees_the_pending_offer(self):
+        self.assertTrue(self.summary(self.owner)["name_offer_pending"])
+
+    def test_a_guest_never_sees_it_pending(self):
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.assertFalse(self.summary(guest)["name_offer_pending"])
+
+    def test_a_pending_presentation_has_no_official_data(self):
+        stock = _linked_stock(self.owner, code="661426", name="Ibuprofen")
+        self.client.force_authenticate(self.owner)
+        summary = self.client.get(f"/api/stock/{stock.pk}/").data["regulatory"]
+        self.assertEqual(summary["fetch_status"], "pending")
+        self.assertIsNone(summary["official_name"])
+        self.assertIsNone(summary["status"])
+
+    def test_an_unknown_source_has_no_client_constants(self):
+        from apps.regulatory.models import Presentation
+
+        Presentation.objects.filter(pk=self.stock.presentation_id).update(source="other")
+        summary = self.summary(self.owner)
+        self.assertIsNone(summary["display_name"])
+        self.assertIsNone(summary["attribution"])
+
+    def test_serialising_without_a_request_treats_the_reader_as_owner(self):
+        stock = Stock.objects.select_related("presentation__medicine").get(pk=self.stock.pk)
+        self.assertTrue(StockSerializer(stock).data["regulatory"]["name_offer_pending"])
+
+
+class StockRegulatoryDetailTests(APITestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.client.force_authenticate(self.owner)
+        self.stock = _linked_stock(self.owner)
+        self.url = f"/api/stock/{self.stock.pk}/regulatory/"
+
+    def test_owner_gets_the_detail(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["agency_url"], "https://cima.aemps.es/cima/publico/detalle.html?nregistro=1161160012"
+        )
+        self.assertTrue(response.data["presentation_name"].endswith("5 cartuchos de 1,6 ml"))
+        problem = response.data["supply_problems"][0]
+        self.assertEqual((problem["native_type"], problem["severity"], problem["active"]), ("1", "danger", True))
+
+    def test_a_guest_gets_it_too(self):
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.client.force_authenticate(guest)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_a_stranger_gets_404(self):
+        self.client.force_authenticate(make_user(username="stranger"))
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_a_stock_without_code_answers_no_national_code(self):
+        stock = make_stock(self.owner)
+        response = self.client.get(f"/api/stock/{stock.pk}/regulatory/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data, {"code": "no_national_code"})
+
+    def test_active_problem_first_then_past_ones_newest_first(self):
+        from apps.regulatory.models import SupplyProblem
+
+        presentation = self.stock.presentation
+        now = timezone.now()
+        SupplyProblem.objects.create(
+            presentation=presentation, native_type="4", severity="danger", resolved_at=now - timedelta(days=30)
+        )
+        SupplyProblem.objects.create(
+            presentation=presentation, native_type="5", severity="warning", resolved_at=now - timedelta(days=2)
+        )
+        types = [p["native_type"] for p in self.client.get(self.url).data["supply_problems"]]
+        self.assertEqual(types, ["1", "5", "4"])
+
+    def test_safety_notices_newest_first(self):
+        from apps.regulatory.models import SafetyNotice
+
+        medicine = self.stock.presentation.medicine
+        old = SafetyNotice.objects.create(source="aemps", reference="A", published_on=date(2019, 3, 19))
+        new = SafetyNotice.objects.create(source="aemps", reference="B", published_on=date(2026, 9, 16))
+        undated = SafetyNotice.objects.create(source="aemps", reference="C")
+        medicine.safety_notices.add(old, new, undated)
+        references = [n["reference"] for n in self.client.get(self.url).data["safety_notices"]]
+        self.assertEqual(references, ["B", "A", "C"])
+
+    def test_a_pending_presentation_has_empty_lists(self):
+        stock = _linked_stock(self.owner, code="661426", name="Ibuprofen")
+        data = self.client.get(f"/api/stock/{stock.pk}/regulatory/").data
+        self.assertEqual((data["agency_url"], data["supply_problems"], data["safety_notices"]), ("", [], []))
+
+
+@override_settings(REGULATORY_FETCH_ENABLED=True)
+class StockRegulatoryRefreshTests(APITestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.client.force_authenticate(self.owner)
+        self.stock = _linked_stock(self.owner)
+        self.url = f"/api/stock/{self.stock.pk}/regulatory/refresh/"
+
+    def refresh(self):
+        with (
+            patch("apps.regulatory.tasks.fetch_presentation.delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.post(self.url, format="json")
+        return response, delay
+
+    def test_owner_refresh_enqueues_and_raises_the_offer(self):
+        response, delay = self.refresh()
+        self.assertEqual(response.status_code, 202)
+        delay.assert_called_once_with(self.stock.presentation_id)
+        self.assertTrue(response.data["regulatory"]["name_offer_pending"])
+        self.stock.refresh_from_db()
+        self.assertTrue(self.stock.name_offer_pending)
+
+    def test_an_enqueued_fetch_marks_the_presentation_pending(self):
+        from apps.regulatory.models import Presentation
+
+        response, _ = self.refresh()
+        self.assertEqual(response.data["regulatory"]["fetch_status"], "pending")
+        self.assertEqual(Presentation.objects.get(pk=self.stock.presentation_id).fetch_status, "pending")
+
+    @override_settings(REGULATORY_FETCH_ENABLED=False)
+    def test_with_fetching_disabled_nothing_is_marked_or_enqueued(self):
+        # Nothing would ever clear a `pending` mark, so none is made.
+        response, delay = self.refresh()
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data["regulatory"]["fetch_status"], "ok")
+        self.assertTrue(response.data["regulatory"]["name_offer_pending"])
+        delay.assert_not_called()
+
+    def test_refresh_does_not_touch_updated_at(self):
+        before = Stock.objects.get(pk=self.stock.pk).updated_at
+        self.refresh()
+        self.assertEqual(Stock.objects.get(pk=self.stock.pk).updated_at, before)
+
+    def test_a_second_refresh_within_a_minute_does_not_fetch_again(self):
+        from apps.regulatory.models import Presentation
+
+        Presentation.objects.filter(pk=self.stock.presentation_id).update(
+            last_attempt_at=timezone.now() - timedelta(seconds=20)
+        )
+        response, delay = self.refresh()
+        self.assertEqual(response.status_code, 202)
+        delay.assert_not_called()
+        self.assertEqual(response.data["regulatory"]["fetch_status"], "ok")
+
+    def test_an_older_attempt_fetches_again(self):
+        from apps.regulatory.models import Presentation
+
+        Presentation.objects.filter(pk=self.stock.presentation_id).update(
+            last_attempt_at=timezone.now() - timedelta(minutes=5)
+        )
+        _, delay = self.refresh()
+        delay.assert_called_once()
+
+    def test_a_guest_cannot_refresh(self):
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.client.force_authenticate(guest)
+        response, delay = self.refresh()
+        self.assertEqual(response.status_code, 403)
+        delay.assert_not_called()
+
+    def test_a_stock_without_code_answers_400(self):
+        stock = make_stock(self.owner)
+        response = self.client.post(f"/api/stock/{stock.pk}/regulatory/refresh/", format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, {"code": "no_national_code"})
+
+
+class StockRegulatoryNameOfferTests(APITestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.client.force_authenticate(self.owner)
+        self.stock = _linked_stock(self.owner)
+        Stock.objects.filter(pk=self.stock.pk).update(name_offer_pending=True)
+        self.url = f"/api/stock/{self.stock.pk}/regulatory/name-offer/"
+
+    def answer(self, body):
+        return self.client.post(self.url, body, format="json")
+
+    def test_accepting_renames_and_clears_the_offer(self):
+        before = Stock.objects.get(pk=self.stock.pk).updated_at
+        response = self.answer({"accept": True})
+        self.assertEqual(response.status_code, 200)
+        stock = Stock.objects.get(pk=self.stock.pk)
+        self.assertEqual(stock.name, "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO")
+        self.assertFalse(stock.name_offer_pending)
+        self.assertGreater(stock.updated_at, before)  # a real edit
+        self.assertEqual(response.data["name"], stock.name)
+
+    def test_declining_clears_the_offer_without_editing(self):
+        before = Stock.objects.get(pk=self.stock.pk).updated_at
+        response = self.answer({"accept": False})
+        self.assertEqual(response.status_code, 200)
+        stock = Stock.objects.get(pk=self.stock.pk)
+        self.assertEqual(stock.name, "Insulin")
+        self.assertFalse(stock.name_offer_pending)
+        self.assertEqual(stock.updated_at, before)
+        self.assertFalse(response.data["regulatory"]["name_offer_pending"])
+
+    def test_accepting_without_an_official_name_is_a_conflict(self):
+        stock = _linked_stock(self.owner, code="661426", name="Ibuprofen")
+        response = self.client.post(f"/api/stock/{stock.pk}/regulatory/name-offer/", {"accept": True}, format="json")
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data, {"code": "official_name_unavailable"})
+
+    def test_accepting_without_any_code_is_a_conflict(self):
+        stock = make_stock(self.owner)
+        response = self.client.post(f"/api/stock/{stock.pk}/regulatory/name-offer/", {"accept": True}, format="json")
+        self.assertEqual(response.status_code, 409)
+
+    def test_an_invalid_body_is_rejected(self):
+        for body in ({}, {"accept": "yes"}, {"accept": 1}):
+            with self.subTest(body=body):
+                response = self.answer(body)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.data, {"code": "invalid_body"})
+
+    def test_a_guest_cannot_answer(self):
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.client.force_authenticate(guest)
+        self.assertEqual(self.answer({"accept": True}).status_code, 403)
+
+
+class StockListRegulatoryQueryBudgetTests(APITestCase):
+    """The regulatory summary must come from joins only (T111).
+
+    `BUDGET_STOCK_LIST` stays as it was: `presentation__medicine` is a
+    `select_related`, and `supply_severity` is denormalised on the presentation
+    precisely so the list never reads `SupplyProblem`.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(self.user)
+
+    def _list_queries(self):
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get("/api/stock/")
+        self.assertEqual(response.status_code, 200)
+        return ctx
+
+    def test_linked_stocks_add_no_queries(self):
+        _linked_stock(self.user)
+        one = len(self._list_queries())
+        for code in ("661426", "934554", "656538"):
+            _linked_stock(self.user, code=code, name=code)
+        make_stock(self.user, name="Unlinked")
+        self.assertEqual(len(self._list_queries()), one)
+        self.assertEqual(one, QueryBudgetTests.BUDGET_STOCK_LIST)
+
+    def test_the_list_never_selects_agency_payloads(self):
+        _linked_stock(self.user)
+        # The listing query itself (not the paginator's COUNT): the one joining
+        # the catalogue.
+        joined = [q["sql"] for q in self._list_queries() if 'JOIN "regulatory_presentation"' in q["sql"]]
+        self.assertEqual(len(joined), 1)
+        stock_query = joined[0]
+        self.assertNotIn('"regulatory_presentation"."raw"', stock_query)
+        self.assertNotIn('"regulatory_medicine"."raw"', stock_query)

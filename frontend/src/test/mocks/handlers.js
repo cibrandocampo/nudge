@@ -94,12 +94,28 @@ export const handlers = [
       // starts in until a scan or the product form fills it.
       gtin: '',
       default_lot_quantity: null,
+      // Regulatory identity (T111): no national code, so no summary.
+      national_code: '',
+      national_code_source: '',
+      regulatory: null,
       shared_with: [],
       shared_with_details: [],
       is_owner: true,
       owner_id: 1,
       owner_display_name: 'Test User',
     }),
+  ),
+
+  // Regulatory detail and refresh (T113). A stock without a national code
+  // answers 404 no_national_code; tests that show the section override these.
+  http.get(`${BASE}/stock/:id/regulatory/`, () => HttpResponse.json({ code: 'no_national_code' }, { status: 404 })),
+  http.post(`${BASE}/stock/:id/regulatory/refresh/`, ({ params }) =>
+    HttpResponse.json({ id: Number(params.id), name: 'Filters', regulatory: null }, { status: 202 }),
+  ),
+
+  // Official-name offer (T112): answered with the stock as the server returns it.
+  http.post(`${BASE}/stock/:id/regulatory/name-offer/`, ({ params }) =>
+    HttpResponse.json({ id: Number(params.id), name: 'Filters', regulatory: null }),
   ),
 
   http.get(`${BASE}/stock-consumptions/`, () => HttpResponse.json({ results: [], next: null })),

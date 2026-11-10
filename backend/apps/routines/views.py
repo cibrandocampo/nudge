@@ -16,6 +16,9 @@ from apps.core.mixins import OptimisticLockingMixin
 from apps.core.permissions import IsOwner
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
+from apps.regulatory import services as regulatory_services
+from apps.regulatory.models import Presentation
+from apps.regulatory.serializers import RegulatoryDetailSerializer
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import (
@@ -30,6 +33,9 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# "Refresh info" pressed again within this window reuses the fetch in flight.
+REFRESH_MIN_INTERVAL = timedelta(seconds=60)
 
 
 class StockGroupViewSet(viewsets.ModelViewSet):
@@ -62,7 +68,10 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         return (
             Stock.objects.filter(Q(user=self.request.user) | Q(shared_with=self.request.user))
             .distinct()
-            .select_related("group", "user")
+            # The regulatory summary comes from joins only (query budget); the
+            # agency payloads are never needed by the list, so they are deferred.
+            .select_related("group", "user", "presentation__medicine")
+            .defer("presentation__raw", "presentation__medicine__raw")
             .prefetch_related(
                 "lots",
                 "shared_with",
@@ -83,13 +92,23 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         )
 
     def get_permissions(self):
-        if self.action in ("update", "partial_update", "destroy"):
+        if self.action in ("update", "partial_update", "destroy", "regulatory_refresh", "regulatory_name_offer"):
             return [IsAuthenticated(), IsOwner()]
         return super().get_permissions()
 
     def perform_create(self, serializer):
         stock = serializer.save(user=self.request.user)
+        if stock.national_code:
+            regulatory_services.link_stock(stock, offer_name=True, touch_updated_at=True)
         logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
+
+    def perform_update(self, serializer):
+        # Linked here, before `update()` serialises the response: the PATCH
+        # answer must already carry the new (pending) regulatory summary.
+        previous_code = serializer.instance.national_code
+        stock = serializer.save()
+        if stock.national_code != previous_code:
+            regulatory_services.link_stock(stock, offer_name=True, touch_updated_at=True)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -218,6 +237,67 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         stock.refresh_from_db()
         stock = Stock.objects.prefetch_related("lots").get(pk=stock.pk)
         return Response(StockSerializer(stock).data)
+
+    @action(detail=True, methods=["get"], url_path="regulatory")
+    def regulatory(self, request, pk=None):
+        """Everything known about the stock's medicine. Owner and guests alike."""
+        stock = self.get_object()
+        if stock.presentation_id is None:
+            return Response({"code": "no_national_code"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(RegulatoryDetailSerializer(stock, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=["post"], url_path="regulatory/refresh")
+    def regulatory_refresh(self, request, pk=None):
+        """Handle "Refresh info": fetch again and ask about the official name again.
+
+        The flag is written with ``QuerySet.update()``: it is not the owner
+        editing the stock, and bumping ``updated_at`` would make queued offline
+        edits fail with 412. A fetch already attempted in the last minute is
+        not repeated — the answer would be the same.
+
+        An enqueued fetch marks the presentation ``pending``: that is how the
+        client learns a fetch is in flight (it polls while pending) and when it
+        is over (the task writes ``ok`` / ``not_found`` / ``error``). With
+        fetching disabled nothing would ever clear it, so nothing is marked.
+        """
+        stock = self.get_object()
+        if stock.presentation_id is None:
+            return Response({"code": "no_national_code"}, status=status.HTTP_400_BAD_REQUEST)
+
+        Stock.objects.filter(pk=stock.pk).update(name_offer_pending=True)
+        presentation = stock.presentation
+        recent = presentation.last_attempt_at and timezone.now() - presentation.last_attempt_at < REFRESH_MIN_INTERVAL
+        if settings.REGULATORY_FETCH_ENABLED and not recent:
+            Presentation.objects.filter(pk=presentation.pk).update(fetch_status=Presentation.FetchStatus.PENDING)
+            regulatory_services.enqueue_fetch(presentation.pk)
+
+        stock = self.get_queryset().get(pk=stock.pk)
+        return Response(self.get_serializer(stock).data, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["post"], url_path="regulatory/name-offer")
+    def regulatory_name_offer(self, request, pk=None):
+        """The owner's answer to "use the official name?".
+
+        Accepting is a real edit of the stock (its name changes), so it bumps
+        ``updated_at``; declining only clears the question and does not.
+        """
+        stock = self.get_object()
+        accept = request.data.get("accept")
+        if not isinstance(accept, bool):
+            return Response({"code": "invalid_body"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if accept:
+            medicine = stock.presentation.medicine if stock.presentation_id else None
+            if medicine is None:
+                return Response({"code": "official_name_unavailable"}, status=status.HTTP_409_CONFLICT)
+            stock.name = medicine.name
+            stock.name_offer_pending = False
+            stock.save(update_fields=["name", "name_offer_pending", "updated_at"])
+        else:
+            Stock.objects.filter(pk=stock.pk).update(name_offer_pending=False)
+
+        stock = self.get_queryset().get(pk=stock.pk)
+        return Response(self.get_serializer(stock).data)
 
 
 class StockLotViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
