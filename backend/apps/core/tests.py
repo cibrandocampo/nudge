@@ -16,7 +16,7 @@ from apps.core.mixins import SharedWithMixin, parse_http_date
 from apps.core.permissions import IsOwner
 from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import PushSubscription
-from apps.routines.exceptions import DomainError, InsufficientStock, InvalidLotSelection
+from apps.routines.exceptions import DomainError, InsufficientStock, InvalidLotSelection, LotUnavailable
 from apps.routines.models import (
     Routine,
     RoutineEntry,
@@ -853,6 +853,14 @@ class DomainExceptionHandlerTest(TestCase):
         response = self._dispatch(InvalidLotSelection("One or more lot_ids are invalid."))
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data, {"lot_selections": ["One or more lot_ids are invalid."]})
+
+    def test_lot_unavailable_is_a_422_with_its_code_and_sorted_ids(self):
+        response = self._dispatch(LotUnavailable({9, 4}))
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.data,
+            {"detail": "Lot no longer available.", "code": "lot_unavailable", "lot_ids": [4, 9]},
+        )
 
     def test_drf_exceptions_keep_drf_default_handling(self):
         # Untouched by the domain mapping: exactly what DRF's own handler

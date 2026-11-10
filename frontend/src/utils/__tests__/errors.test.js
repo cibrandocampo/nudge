@@ -40,6 +40,13 @@ describe('errorToastMessage', () => {
     expect(t).toHaveBeenCalledWith('errors.insufficientStock', err.body)
   })
 
+  it('translates the body.code "lot_unavailable" instead of showing its English detail', () => {
+    const t = vi.fn((key) => `[${key}]`)
+    const err = new Error('HTTP 422')
+    err.body = { detail: 'Lot no longer available.', code: 'lot_unavailable', lot_ids: [10] }
+    expect(errorToastMessage(err, t)).toBe('[errors.lotUnavailable]')
+  })
+
   it('falls back to body.detail when the code is unknown but a detail string exists', () => {
     const t = vi.fn((key) => key)
     const err = new Error('HTTP 400')

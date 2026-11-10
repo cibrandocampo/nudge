@@ -469,6 +469,7 @@
   "errors.stockShareFailed": "Non se puido compartir o stock asociado. A rutina tampouco se gardou — téntao de novo.",
   "errors.routineSavedAfterStockShared": "O stock compartiuse, pero a rutina non se puido gardar. Volve tentar gardar a rutina.",
   "errors.insufficientStock": "Non hai stock dabondo (precisa {{required}}, dispoñible {{available}}).",
+  "errors.lotUnavailable": "O lote xa non está dispoñible.",
   "toast.error.generic": "Algo fallou",
   "toast.success.generic": "Feito",
   "offline.banner": "Sen conexión co servidor. Os teus cambios en rutinas e stocks gárdanse localmente e sincronizaranse ao reconectar.",

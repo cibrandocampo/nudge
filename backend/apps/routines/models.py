@@ -9,7 +9,7 @@ from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
-from .exceptions import InsufficientStock, InvalidLotSelection
+from .exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
 
 
 class StockGroup(models.Model):
@@ -161,6 +161,8 @@ class Stock(models.Model):
             InvalidLotSelection when the selections do not sum to `quantity`,
             repeat a lot_id, carry a negative quantity or name a lot of
             another stock. `apps.core.exception_handler` turns it into a 400.
+            LotUnavailable when a selected lot no longer exists (emptied and
+            deleted since it was picked); the handler turns it into a 422.
             InsufficientStock when the lots cannot cover `quantity` (FEFO) or a
             selection asks a lot for more than it holds. The handler turns it
             into a 422; the method is atomic, so no lot keeps a partial
@@ -184,7 +186,11 @@ class Stock(models.Model):
             valid_ids = set(self.lots.filter(id__in=lot_ids).values_list("id", flat=True))
             invalid = set(lot_ids) - valid_ids
             if invalid:
-                raise InvalidLotSelection("One or more lot_ids are invalid.")
+                # A lot of another stock is a bad request; one that no longer
+                # exists was emptied (and deleted) after the user picked it.
+                if StockLot.objects.filter(id__in=invalid).exists():
+                    raise InvalidLotSelection("One or more lot_ids are invalid.")
+                raise LotUnavailable(invalid)
             for sel in lot_selections:
                 qty = sel["quantity"]
                 if qty == 0:

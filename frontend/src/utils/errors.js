@@ -7,6 +7,7 @@ import { OfflineError } from '../api/errors'
 // to `body.detail` (always English) → fallbackKey.
 const ERROR_CODE_I18N_KEYS = {
   insufficient_stock: 'errors.insufficientStock',
+  lot_unavailable: 'errors.lotUnavailable',
 }
 
 /**
