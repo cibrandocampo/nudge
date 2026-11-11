@@ -113,6 +113,19 @@ export const handlers = [
     HttpResponse.json({ id: Number(params.id), name: 'Filters', regulatory: null }, { status: 202 }),
   ),
 
+  // Sanitised leaflet (T116): two small sections, as the backend serves them.
+  http.get(`${BASE}/stock/:id/leaflet/`, () =>
+    HttpResponse.json({
+      sections: [
+        { key: '0', title: 'Introducción', html: '<p>Lea todo el prospecto.</p>' },
+        { key: '1', title: 'Qué es Fiasp', html: '<p>Fiasp es una insulina.</p>' },
+      ],
+      source_url: 'https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html',
+      fetched_at: '2026-11-10T01:00:00Z',
+      language: 'es',
+    }),
+  ),
+
   // Official-name offer (T112): answered with the stock as the server returns it.
   http.post(`${BASE}/stock/:id/regulatory/name-offer/`, ({ params }) =>
     HttpResponse.json({ id: Number(params.id), name: 'Filters', regulatory: null }),

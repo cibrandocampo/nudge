@@ -7,6 +7,7 @@ import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
+import LeafletAccordion from './LeafletAccordion'
 import LinkifiedText from './LinkifiedText'
 import { useToast } from './useToast'
 import buttons from '../styles/buttons.module.css'
@@ -199,6 +200,8 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                 </ul>
               </div>
             )}
+
+            {status === 'ok' && <LeafletAccordion stockId={stock.id} summary={summary} />}
           </>
         )}
 

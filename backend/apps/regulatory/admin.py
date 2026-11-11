@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Medicine, Presentation, SafetyNotice, SupplyProblem
+from .models import EventDelivery, Medicine, MedicineLeaflet, Presentation, RegulatoryEvent, SafetyNotice, SupplyProblem
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -57,3 +57,37 @@ class SafetyNoticeAdmin(ReadOnlyAdmin):
     list_display = ["reference", "title", "source", "published_on"]
     list_filter = ["source"]
     search_fields = ["reference", "title"]
+
+
+@admin.register(MedicineLeaflet)
+class MedicineLeafletAdmin(ReadOnlyAdmin):
+    """Which leaflets are stored and how fresh — the HTML itself is the app's to show."""
+
+    list_display = ["medicine", "section_count", "fetched_at"]
+    search_fields = ["medicine__code", "medicine__name"]
+    exclude = ["sections"]
+    readonly_fields = ["section_titles"]
+
+    @admin.display(description="Sections")
+    def section_count(self, leaflet):
+        return len(leaflet.sections)
+
+    @admin.display(description="Section titles")
+    def section_titles(self, leaflet):
+        return " · ".join(section.get("title", "") for section in leaflet.sections) or "—"
+
+
+@admin.register(RegulatoryEvent)
+class RegulatoryEventAdmin(ReadOnlyAdmin):
+    list_display = ["detected_at", "kind", "presentation"]
+    list_filter = ["kind"]
+    search_fields = ["presentation__code", "presentation__name"]
+    list_select_related = ["presentation"]
+
+
+@admin.register(EventDelivery)
+class EventDeliveryAdmin(ReadOnlyAdmin):
+    list_display = ["event", "user", "stock", "created_at", "delivered_at"]
+    list_filter = ["event__kind"]
+    search_fields = ["user__email", "stock__name"]
+    list_select_related = ["event__presentation", "user", "stock"]

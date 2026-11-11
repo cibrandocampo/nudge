@@ -17,8 +17,8 @@ from apps.core.permissions import IsOwner
 from apps.notifications.models import NotificationState
 from apps.notifications.push import notify_routine_shared, notify_stock_shared
 from apps.regulatory import services as regulatory_services
-from apps.regulatory.models import Presentation
-from apps.regulatory.serializers import RegulatoryDetailSerializer
+from apps.regulatory.models import MedicineLeaflet, Presentation
+from apps.regulatory.serializers import MedicineLeafletSerializer, RegulatoryDetailSerializer
 
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import (
@@ -269,10 +269,25 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         recent = presentation.last_attempt_at and timezone.now() - presentation.last_attempt_at < REFRESH_MIN_INTERVAL
         if settings.REGULATORY_FETCH_ENABLED and not recent:
             Presentation.objects.filter(pk=presentation.pk).update(fetch_status=Presentation.FetchStatus.PENDING)
-            regulatory_services.enqueue_fetch(presentation.pk)
+            regulatory_services.enqueue_refresh(presentation)
 
         stock = self.get_queryset().get(pk=stock.pk)
         return Response(self.get_serializer(stock).data, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=["get"], url_path="leaflet")
+    def leaflet(self, request, pk=None):
+        """The sanitised patient leaflet of the stock's medicine. Owner and guests alike.
+
+        Loaded here and only here: the list never joins the leaflet table.
+        """
+        stock = self.get_object()
+        medicine = stock.presentation.medicine if stock.presentation_id else None
+        if medicine is None:
+            return Response({"code": "no_national_code"}, status=status.HTTP_404_NOT_FOUND)
+        leaflet = MedicineLeaflet.objects.filter(medicine=medicine).select_related("medicine").first()
+        if leaflet is None:
+            return Response({"code": "leaflet_pending"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(MedicineLeafletSerializer(leaflet).data)
 
     @action(detail=True, methods=["post"], url_path="regulatory/name-offer")
     def regulatory_name_offer(self, request, pk=None):

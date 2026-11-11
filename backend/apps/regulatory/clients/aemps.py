@@ -25,6 +25,10 @@ Behaviour of CIMA this module relies on (verified live on 2026-11-10, see
   canonical texts are the meaning (``SEVERITY_BY_TYPE`` follows them).
 * A safety notice's ``referencia`` is free text with irregular formatting,
   but stable and unique per notice.
+* The leaflet comes by sections: ``docSegmentado/secciones/2`` lists them
+  (``seccion``, ``titulo``, ``orden``) and ``docSegmentado/contenido/2`` returns each one —
+  as HTML only when asked with ``Accept: text/html``, plain text otherwise. A
+  medicine with no sectioned leaflet answers 200 with an ``error`` object.
 * Reuse is allowed citing the origin and the date of the data (AEMPS legal
   notice), hence ``ATTRIBUTION`` and the "updated on" date the UI shows.
 """
@@ -309,6 +313,70 @@ def parse_recorded(cn: str, directory) -> PresentationData | NotFound:
     )
 
 
+def _section_key(entry) -> str:
+    if not isinstance(entry, dict) or entry.get("seccion") in (None, ""):
+        raise UpstreamPayloadError(f"Unexpected leaflet section: {entry!r}")
+    return str(entry["seccion"])
+
+
+def _no_leaflet(secciones) -> bool:
+    """Whether a ``docSegmentado/secciones`` answer means "no sectioned leaflet".
+
+    CIMA says so in three ways: 204, an empty list, or a 200 carrying
+    ``{"error": "No existen secciones para el medicamento indicado"}``. Any
+    other error object is not trusted to mean the same — it would wipe the
+    stored leaflet.
+    """
+    if not secciones:
+        return True
+    if isinstance(secciones, dict):
+        return "No existen secciones" in str(secciones.get("error") or "")
+    return False
+
+
+def parse_leaflet(secciones, contenidos: dict[str, str]) -> list[dict]:
+    """The leaflet in the standard shape: ``[{key, title, html}]`` in reading order.
+
+    ``secciones`` is the answer of ``docSegmentado/secciones/2`` and
+    ``contenidos`` maps each section key to its HTML. The HTML is returned as
+    CIMA wrote it: sanitising is not an agency's concern.
+    """
+    if not isinstance(secciones, list):
+        raise UpstreamPayloadError("Unexpected leaflet sections payload")
+    sections = []
+    for entry in secciones:
+        key = _section_key(entry)
+        order = entry.get("orden")
+        if isinstance(order, bool) or not isinstance(order, int):
+            raise UpstreamPayloadError(f"Leaflet section {key} without its order")
+        if not isinstance(contenidos.get(key), str):
+            raise UpstreamPayloadError(f"Leaflet section {key} without its content")
+        sections.append((order, {"key": key, "title": str(entry.get("titulo") or "").strip(), "html": contenidos[key]}))
+    return [section for _, section in sorted(sections, key=lambda pair: pair[0])]
+
+
+def parse_recorded_leaflet(medicine_code: str, directory) -> list[dict] | None:
+    """Parse a leaflet recorded on disk, as ``fetch_leaflet`` would parse it live.
+
+    Layout (see the fixtures README): ``secciones_<nregistro>.json`` and one
+    ``contenido_<nregistro>_<seccion>.html`` per section.
+    """
+    directory = Path(directory)
+    path = directory / f"secciones_{medicine_code}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"No recorded CIMA leaflet for {medicine_code} in {directory}")
+    secciones = json.loads(path.read_text(encoding="utf-8"))
+    if _no_leaflet(secciones):
+        return None
+    if not isinstance(secciones, list):
+        raise UpstreamPayloadError("Unexpected leaflet sections payload")
+    contenidos = {}
+    for entry in secciones:
+        key = _section_key(entry)
+        contenidos[key] = (directory / f"contenido_{medicine_code}_{key}.html").read_text(encoding="utf-8")
+    return parse_leaflet(secciones, contenidos)
+
+
 # ── Network ───────────────────────────────────────────────────────────────────
 
 
@@ -320,11 +388,11 @@ def _throttle():
     _last_call = time.monotonic()
 
 
-def _get_json(path: str, params: dict | None = None):
+def _get(path: str, params: dict | None, accept: str):
     """GET a CIMA resource. ``None`` means 204 (CIMA's "nothing here")."""
     _throttle()
     try:
-        response = _session.get(BASE_URL + path, params=params, timeout=TIMEOUT)
+        response = _session.get(BASE_URL + path, params=params, headers={"Accept": accept}, timeout=TIMEOUT)
     except requests.RequestException as exc:
         raise UpstreamUnavailable(f"CIMA unreachable ({path}): {exc}") from exc
     if response.status_code == 204:
@@ -333,6 +401,14 @@ def _get_json(path: str, params: dict | None = None):
         raise UpstreamUnavailable(f"CIMA answered {response.status_code} ({path})")
     if response.status_code != 200:
         raise UpstreamPayloadError(f"CIMA answered {response.status_code} ({path})")
+    return response
+
+
+def _get_json(path: str, params: dict | None = None):
+    """A CIMA resource as decoded JSON; ``None`` on 204."""
+    response = _get(path, params, "application/json")
+    if response is None:
+        return None
     try:
         return response.json()
     except ValueError as exc:
@@ -357,3 +433,33 @@ def fetch(cn: str) -> PresentationData | NotFound:
         nregistro = str(_require(medicamento, "nregistro", str | int))
         notas = _get_json(f"notas/{nregistro}") or []
     return parse_presentation(cn, medicamento, psuministro=psuministro, notas=notas)
+
+
+def _get_text(path: str, params: dict | None = None) -> str:
+    """A CIMA resource as HTML; an empty string on 204.
+
+    ``docSegmentado/contenido`` answers plain text unless HTML is asked for.
+    """
+    response = _get(path, params, "text/html")
+    return "" if response is None else response.text
+
+
+def fetch_leaflet(medicine_code: str) -> list[dict] | None:
+    """The patient leaflet of a medicine by sections: one call plus one per section.
+
+    ``None`` when CIMA has no sectioned leaflet for it — the medicine's
+    ``leaflet_url`` is then the only way to read it.
+    """
+    if not settings.REGULATORY_FETCH_ENABLED:
+        raise FetchDisabled("Regulatory fetching is disabled (REGULATORY_FETCH_ENABLED)")
+    params = {"nregistro": medicine_code}
+    secciones = _get_json(f"docSegmentado/secciones/{LEAFLET_DOC_TYPE}", params)
+    if _no_leaflet(secciones):
+        return None
+    if not isinstance(secciones, list):
+        raise UpstreamPayloadError("Unexpected leaflet sections payload")
+    contenidos = {}
+    for entry in secciones:
+        key = _section_key(entry)
+        contenidos[key] = _get_text(f"docSegmentado/contenido/{LEAFLET_DOC_TYPE}", {**params, "seccion": key})
+    return parse_leaflet(secciones, contenidos)

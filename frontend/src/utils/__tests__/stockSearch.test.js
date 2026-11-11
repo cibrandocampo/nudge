@@ -170,3 +170,17 @@ describe('buildFilterChips', () => {
     expect(buildFilterChips(undefined, undefined, '')).toEqual([{ id: 'all', kind: 'all', name: null, count: 0 }])
   })
 })
+
+describe('the attention chip and regulatory alerts', () => {
+  it('includes a product whose only alert is regulatory', () => {
+    const population = [
+      stock({ id: 1, name: 'Healthy' }),
+      stock({
+        id: 2,
+        name: 'Fast-acting insulin',
+        regulatory: { fetch_status: 'ok', fetched_at: '2026-11-10T01:00:00Z', supply_severity: 'danger' },
+      }),
+    ]
+    expect(names(filterStocks(population, GROUPS, 'attention', ''))).toEqual(['Fast-acting insulin'])
+  })
+})

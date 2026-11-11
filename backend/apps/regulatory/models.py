@@ -16,8 +16,10 @@ Two rules shape what is stored:
   sync deletes what no stock references any more.
 """
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class Severity(models.TextChoices):
@@ -42,6 +44,9 @@ class Medicine(models.Model):
     suspended_on = models.DateField(null=True, blank=True)
     revoked_on = models.DateField(null=True, blank=True)
     agency_url = models.URLField(max_length=500, blank=True)
+    leaflet_url = models.URLField(
+        max_length=500, blank=True, help_text="The agency's own page of the leaflet: the fallback link."
+    )
     raw = models.JSONField(default=dict, blank=True)
     fetched_at = models.DateTimeField()
 
@@ -162,3 +167,74 @@ class SafetyNotice(models.Model):
 
     def __str__(self):
         return f"{self.reference} ({self.source})"
+
+
+class MedicineLeaflet(models.Model):
+    """The patient leaflet of a medicine, by sections, already sanitised.
+
+    A table of its own so that no list query ever loads it through a join: a
+    leaflet weighs tens of kilobytes. ``sections`` is ``[{key, title, html}]``
+    in reading order; an empty list means the agency has no sectioned leaflet,
+    and the client shows ``source_url`` instead.
+    """
+
+    medicine = models.OneToOneField(Medicine, on_delete=models.CASCADE, related_name="leaflet")
+    sections = models.JSONField(default=list, blank=True)
+    source_url = models.URLField(max_length=500, blank=True)
+    fetched_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"Leaflet of {self.medicine}"
+
+
+class RegulatoryEvent(models.Model):
+    """A change in what the agency says about a followed presentation.
+
+    Detected by comparing a fetch against the stored state (never on a first
+    fetch: that is the baseline). ``payload`` speaks the model's language —
+    ``native_type``, ``severity``, ``reference``… — never an agency's fields.
+    """
+
+    class Kind(models.TextChoices):
+        SUPPLY_STARTED = "supply_started", "Supply problem started"
+        SUPPLY_CHANGED = "supply_changed", "Supply problem changed"
+        SUPPLY_RESOLVED = "supply_resolved", "Supply problem resolved"
+        SAFETY_NOTICE_ADDED = "safety_notice_added", "Safety notice added"
+        MARKETING_STOPPED = "marketing_stopped", "No longer marketed"
+        MARKETING_RESUMED = "marketing_resumed", "Marketed again"
+        AUTHORIZATION_SUSPENDED = "authorization_suspended", "Authorisation suspended"
+        AUTHORIZATION_REVOKED = "authorization_revoked", "Authorisation revoked"
+        AUTHORIZATION_REINSTATED = "authorization_reinstated", "Authorisation reinstated"
+
+    presentation = models.ForeignKey(Presentation, on_delete=models.CASCADE, related_name="events")
+    kind = models.CharField(max_length=32, choices=Kind.choices)
+    payload = models.JSONField(default=dict, blank=True)
+    detected_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [models.Index(fields=["presentation", "-detected_at"], name="regulatory_event_recent")]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} — {self.presentation}"
+
+
+class EventDelivery(models.Model):
+    """One user to tell about one event, through one of their stocks.
+
+    Created when the event is detected, for whoever holds a stock of the
+    presentation *then* (owner or guest): linking a stock later brings no past
+    events. ``delivered_at`` stays null until the daily push includes it.
+    """
+
+    event = models.ForeignKey(RegulatoryEvent, on_delete=models.CASCADE, related_name="deliveries")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="regulatory_deliveries")
+    stock = models.ForeignKey("routines.Stock", on_delete=models.CASCADE, related_name="regulatory_deliveries")
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["event", "user"], name="one_delivery_per_event_and_user")]
+        indexes = [models.Index(fields=["user", "delivered_at"], name="regulatory_delivery_pending")]
+
+    def __str__(self):
+        return f"{self.event} → {self.user}"
