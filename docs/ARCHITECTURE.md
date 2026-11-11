@@ -445,7 +445,8 @@ Five containers on a shared bridge network (`nudge_net`):
 | db | postgres:17-alpine | — (internal only) |
 | redis | redis:8-alpine | — (internal only) |
 | backend | `./backend` Dockerfile | — (internal :8000) |
-| celery | `./backend` Dockerfile | — |
+| celery | `./backend` Dockerfile (worker) | — |
+| beat | `./backend` Dockerfile (scheduler, one instance) | — |
 | frontend | `./frontend` Dockerfile (multi-stage) | 80 |
 
 The frontend Dockerfile is multi-stage:
@@ -637,16 +638,25 @@ frontend is served from (e.g. `https://nudge.naseira.es`).
 
 ### Celery worker + Beat
 
-The production compose runs a **single Celery container** with the `-B` flag, which
-embeds the Beat scheduler inside the worker process. This is intentional: the project
-targets fewer than 100 users, and the periodic tasks (`check_notifications`) are
-lightweight and near-atomic, so a dedicated Beat container adds complexity without
-meaningful benefit.
+Two containers from the backend image: `celery` runs the worker (tasks only)
+and `beat` runs the scheduler (`celery -A nudge beat`), which sends the
+periodic tasks — `check_notifications` every 5 minutes, the daily regulatory
+sync, the cleanups.
 
-If the project were to scale beyond ~1 000 users, it would be advisable to **separate
-Beat into its own container** (`celery -A nudge beat`) and run one or more workers
-without the `-B` flag. This avoids duplicate task scheduling when running multiple
-workers and ensures the scheduler survives independently of worker restarts.
+Until 2026-11 Beat ran embedded in the worker (`-B`), chosen for simplicity at
+this scale. It failed in a way that choice could not see: the embedded
+scheduler died (`sqlite3.OperationalError: locking protocol` from its schedule
+store) while the worker stayed up, so the container looked healthy and every
+scheduled job had silently stopped. In its own container a dead scheduler
+exits, and `restart: unless-stopped` brings it back; its healthcheck also turns
+unhealthy if the schedule file stops being rewritten.
+
+- **Exactly one Beat.** Never scale `beat`, and never add `-B` to the worker:
+  a second scheduler sends every periodic task twice.
+- **Schedule store.** `nudge.celery.DumbDbmScheduler` (`CELERY_BEAT_SCHEDULER`)
+  keeps Celery's persistent schedule in `dbm.dumb` files on `/tmp`, instead of
+  the `dbm.sqlite3` that `shelve` picks by default since Python 3.13 — the store
+  behind that crash.
 
 ### Security headers
 

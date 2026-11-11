@@ -137,7 +137,7 @@ jobs:
       - name: Start the dev stack
         run: >
           docker compose --env-file .env -f dev/docker-compose.yml --profile preview
-          up -d --build db redis mailpit backend celery frontend frontend-preview
+          up -d --build db redis mailpit backend celery beat frontend frontend-preview
       # The backend migrates and creates the admin before serving; the preview
       # runs `vite build` first. Wait for all three to answer.
       - name: Wait for backend, dev server and preview

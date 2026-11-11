@@ -232,6 +232,9 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
+# Beat keeps its schedule in dbm.dumb files, not Python 3.13's default SQLite
+# store, which crashed the embedded beat (see `nudge/celery.py`).
+CELERY_BEAT_SCHEDULER = "nudge.celery:DumbDbmScheduler"
 
 CELERY_BEAT_SCHEDULE = {
     "check-notifications": {

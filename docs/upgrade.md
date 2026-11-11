@@ -1,5 +1,27 @@
 # Upgrading Nudge
 
+## Celery Beat in its own container
+
+The periodic-task scheduler used to run inside the `celery` worker (`-B`). It
+now has its own service, `beat`, so Docker restarts it if it ever dies — before,
+a crashed scheduler left the worker running and every notification silently
+stopped. **`docker compose pull` does not update your `docker-compose.yml`**:
+download the new one, keep your `.env`, and recreate the stack:
+
+```bash
+curl -O https://raw.githubusercontent.com/cibrandocampo/nudge/main/docker-compose.yml
+docker compose pull
+docker compose up -d --remove-orphans
+docker compose ps celery beat   # both running; beat turns healthy within minutes
+```
+
+- The new image works with the old compose file too (the worker still embeds
+  the scheduler there), but without the self-healing `beat` service.
+- If you edited your compose file, port the change by hand: drop `-B` and
+  `--schedule` from the `celery` command, and add the `beat` service. Run
+  exactly one `beat`, and never `-B` next to it, or every periodic task is
+  sent twice.
+
 ## Regulatory data (CIMA) — link existing stocks once
 
 The release that introduces the official medicine data from CIMA (AEMPS) links
