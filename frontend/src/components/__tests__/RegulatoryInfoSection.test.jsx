@@ -22,6 +22,7 @@ const summary = (over = {}) => ({
   marketed: true,
   status: 'authorised',
   supply_severity: 'danger',
+  affects_driving: true,
   name_offer_pending: false,
   ...over,
 })
@@ -74,7 +75,7 @@ describe('RegulatoryInfoSection — fetch states', () => {
     renderSection({ regulatory: summary({ fetch_status: 'not_found', official_name: null, status: null }) })
     expect(screen.getByTestId('regulatory-not-found')).toHaveTextContent('AEMPS (CIMA) has no medicine')
     expect(screen.queryByTestId('regulatory-chips')).not.toBeInTheDocument()
-    expect(screen.queryByText(/for guidance only/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('regulatory-source')).not.toBeInTheDocument()
   })
 
   it('an error without previous data says it could not reach the source', () => {
@@ -91,13 +92,14 @@ describe('RegulatoryInfoSection — fetch states', () => {
 })
 
 describe('RegulatoryInfoSection — data', () => {
-  it('shows the official name, the presentation and the source line', async () => {
+  it('shows the official name under its label, and the presentation', async () => {
     serveDetail()
     renderSection()
+    expect(screen.getByText('Official name:')).toBeInTheDocument()
     expect(screen.getByTestId('regulatory-official-name')).toHaveTextContent(OFFICIAL)
     // Only what the presentation adds: the official name is not printed twice.
     expect(await screen.findByText('5 cartuchos de 1,6 ml')).toBeInTheDocument()
-    expect(screen.getByText(/^Source: AEMPS \(CIMA\) · updated /)).toBeInTheDocument()
+    await screen.findByTestId('leaflet-sections')
   })
 
   it('shows a presentation name that does not extend the official one in full', async () => {
@@ -111,6 +113,7 @@ describe('RegulatoryInfoSection — data', () => {
     const { container } = renderSection()
     await screen.findByRole('link', { name: 'View on AEMPS (CIMA)' })
     expect(within(container).getAllByText(OFFICIAL)).toHaveLength(1)
+    await screen.findByTestId('leaflet-sections')
   })
 
   it('shows the presentation in full while the official name is unknown', async () => {
@@ -150,26 +153,66 @@ describe('RegulatoryInfoSection — data', () => {
     expect(screen.getByTestId('regulatory-status-chip')).toHaveTextContent(label)
   })
 
-  it('the active problem shows its translated type, verbatim note in its language, and dates', async () => {
+  it.each([
+    [true, 'May affect driving', 'danger'],
+    [false, 'Does not affect driving', 'ok'],
+  ])('driving chip when affects_driving is %s', (affects, label, tone) => {
+    renderSection({ regulatory: summary({ affects_driving: affects }) })
+    const chip = screen.getByRole('button', { name: label })
+    expect(chip).toHaveAttribute('data-tone', tone)
+  })
+
+  it('with everything in order every chip is green', () => {
+    renderSection({ regulatory: summary({ supply_severity: null, affects_driving: false }) })
+    const chips = within(screen.getByTestId('regulatory-chips')).getAllByRole('button')
+    expect(chips).toHaveLength(4)
+    for (const chip of chips) expect(chip).toHaveAttribute('data-tone', 'ok')
+  })
+
+  it.each([
+    [{ marketed: false }, 'regulatory-marketed-chip', 'warning'],
+    [{ status: 'suspended' }, 'regulatory-status-chip', 'danger'],
+  ])('a chip out of order takes its tone (%o)', (over, testId, tone) => {
+    renderSection({ regulatory: summary(over) })
+    expect(screen.getByTestId(testId)).toHaveAttribute('data-tone', tone)
+  })
+
+  it('no driving chip when the agency does not say', () => {
+    renderSection({ regulatory: summary({ affects_driving: null }) })
+    expect(screen.queryByTestId('regulatory-driving-chip')).not.toBeInTheDocument()
+  })
+
+  it('the active problem shows its translated type, the rest of the note in its language, and dates', async () => {
     serveDetail()
     renderSection()
     const problem = await screen.findByTestId('regulatory-active-problem')
     expect(problem).toHaveAttribute('data-tone', 'danger')
     expect(within(problem).getByText('See the AEMPS information note')).toBeInTheDocument()
-    const note = within(problem).getByText(/Consultar Nota Informativa/)
-    expect(note).toHaveAttribute('lang', 'es')
+    // The label that only introduced the address goes with it.
+    expect(within(problem).queryByText(/Consultar Nota Informativa/)).not.toBeInTheDocument()
+    expect(within(problem).getByText('<b>bold</b> for details.')).toHaveAttribute('lang', 'es')
     expect(within(problem).getByText(/^Since /)).toBeInTheDocument()
     expect(within(problem).getByText(/^Expected end: /)).toBeInTheDocument()
   })
 
-  it("links the note's URL and never interprets its markup", async () => {
+  it("opens the note's address from a button, never shows it, and never interprets the markup", async () => {
     serveDetail()
     const { container } = renderSection()
-    const link = await screen.findByRole('link', { name: 'https://www.aemps.gob.es/informa/insulinas/' })
+    const problem = await screen.findByTestId('regulatory-active-problem')
+    const link = within(problem).getByRole('link', { name: 'Open the notice' })
+    expect(link).toHaveAttribute('href', 'https://www.aemps.gob.es/informa/insulinas/')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(problem).not.toHaveTextContent('https://')
     expect(container.querySelector('b')).toBeNull()
-    expect(screen.getByText(/<b>bold<\/b>/)).toBeInTheDocument()
+  })
+
+  it('a note made only of an address leaves just the button', async () => {
+    serveDetail(detail({ supply_problems: [activeProblem({ note: 'Consultar Nota Informativa: https://a.es/x/' })] }))
+    renderSection()
+    const problem = await screen.findByTestId('regulatory-active-problem')
+    expect(within(problem).getByRole('link', { name: 'Open the notice' })).toHaveAttribute('href', 'https://a.es/x/')
+    expect(problem).not.toHaveTextContent('Consultar')
   })
 
   it('an unknown supply type falls back to the generic label', async () => {
@@ -231,25 +274,74 @@ describe('RegulatoryInfoSection — data', () => {
     )
     renderSection({ regulatory: summary({ supply_severity: null }) })
     const notices = await screen.findByTestId('regulatory-notices')
-    const link = within(notices).getByRole('link', { name: 'Vitamina D' })
-    expect(link).toHaveAttribute('href', 'https://aemps.gob.es/a')
-    expect(link).toHaveAttribute('lang', 'es')
+    const [first] = within(notices).getAllByRole('listitem')
+    // The title is text in the agency's language; opening it is a button.
+    expect(within(first).getByText('Vitamina D')).toHaveAttribute('lang', 'es')
+    expect(within(first).getByRole('link', { name: 'Open the notice' })).toHaveAttribute(
+      'href',
+      'https://aemps.gob.es/a',
+    )
     expect(within(notices).getAllByRole('listitem')).toHaveLength(2)
   })
 
-  it('links to the agency page and cites the source', async () => {
+  it('offers no button for a notice whose address is not a web one', async () => {
+    serveDetail(
+      detail({
+        supply_problems: [],
+        safety_notices: [
+          { reference: 'A', native_kind: '1', title: 'Rara', url: 'javascript:alert(1)', published_on: null },
+        ],
+      }),
+    )
+    renderSection({ regulatory: summary({ supply_severity: null }) })
+    const notices = await screen.findByTestId('regulatory-notices')
+    expect(within(notices).getByText('Rara')).toBeInTheDocument()
+    expect(within(notices).queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('ends with the source, its date and the guidance note, and a button to the agency page', async () => {
     serveDetail()
     renderSection()
-    const link = await screen.findByRole('link', { name: 'View on AEMPS (CIMA)' })
-    expect(link).toHaveAttribute('href', 'https://cima.aemps.es/cima/publico/detalle.html?nregistro=1161160012')
-    expect(screen.getByText(/Information from Agencia Española de Medicamentos/)).toBeInTheDocument()
+    const source = screen.getByTestId('regulatory-source')
+    expect(source).toHaveTextContent(
+      /^Source: AEMPS \(CIMA\) · updated .+\. For guidance only: if in doubt, ask a health professional\.$/,
+    )
+    // The agency's full name, which its legal notice asks reusers to cite.
+    expect(source).toHaveAttribute('title', summary().attribution)
+    const button = await screen.findByRole('link', { name: 'View on AEMPS (CIMA)' })
+    expect(button).toHaveAttribute('href', 'https://cima.aemps.es/cima/publico/detalle.html?nregistro=1161160012')
+    await screen.findByTestId('leaflet-sections')
+  })
+
+  it('offers no agency button until the agency page is known', async () => {
+    // No detail yet (the default handler answers 404): there is no page to open.
+    renderSection()
+    expect(screen.getByTestId('regulatory-source')).toHaveTextContent(/^Source: AEMPS \(CIMA\) · updated /)
+    expect(screen.queryByTestId('regulatory-agency-link')).not.toBeInTheDocument()
+    await screen.findByTestId('leaflet-sections')
+  })
+
+  it('shows the leaflet before the safety notices', async () => {
+    serveDetail(
+      detail({
+        safety_notices: [
+          { reference: 'R1', native_kind: '1', title: 'Nota', url: 'https://www.aemps.gob.es/n', published_on: null },
+        ],
+      }),
+    )
+    renderSection()
+    const notices = await screen.findByTestId('regulatory-notices')
+    const leaflet = screen.getByTestId('leaflet')
+    expect(leaflet.compareDocumentPosition(notices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await screen.findByTestId('leaflet-sections')
   })
 })
 
 describe('RegulatoryInfoSection — refresh', () => {
   it('is offered to the owner only', () => {
     const { unmount } = renderSection()
-    expect(screen.getByTestId('regulatory-refresh')).toHaveTextContent('Refresh info')
+    // An icon button: its name is its label.
+    expect(screen.getByRole('button', { name: 'Refresh info' })).toBe(screen.getByTestId('regulatory-refresh'))
     unmount()
     renderSection({ isOwner: false })
     expect(screen.queryByTestId('regulatory-refresh')).not.toBeInTheDocument()
@@ -303,7 +395,8 @@ describe('RegulatoryInfoSection — leaflet', () => {
   it('offers the leaflet once the agency has answered with data', async () => {
     serveDetail()
     renderSection()
-    expect(screen.getByTestId('leaflet-toggle')).toHaveTextContent('Patient leaflet')
+    expect(screen.getByTestId('leaflet-title')).toHaveTextContent('Patient leaflet')
+    expect(await screen.findByTestId('leaflet-sections')).toBeInTheDocument()
     await screen.findByTestId('regulatory-active-problem')
   })
 
@@ -316,7 +409,7 @@ describe('RegulatoryInfoSection — leaflet', () => {
     ]) {
       serveDetail()
       const { unmount } = renderSection({ regulatory })
-      expect(screen.queryByTestId('leaflet-toggle')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('leaflet')).not.toBeInTheDocument()
       // Let the detail request settle before the next render.
       await waitFor(() => expect(screen.getByTestId('regulatory-section')).toBeInTheDocument())
       unmount()

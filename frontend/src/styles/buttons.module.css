@@ -122,6 +122,20 @@
   opacity: 0.7;
 }
 
+/* An icon button inside a white card: bordered like `.btnSecondary`, so it
+   reads as enabled next to the card's text buttons (the plain `.btnIcon` grey
+   looks disabled on white). */
+.btnIconOutline {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text-2);
+}
+
+.btnIconOutline:hover:not(:disabled) {
+  background: var(--c-border-inner);
+  color: var(--c-text);
+}
+
 .btnIconAction {
   color: var(--c-text-3);
   background: rgba(0, 0, 0, 0.03);

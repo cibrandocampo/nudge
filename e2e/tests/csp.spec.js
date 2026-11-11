@@ -73,7 +73,6 @@ test.describe('content security policy', () => {
     await goToStockDetail(page, 'fastInsulin')
     // The seed leaves this stock's name offer pending.
     await page.getByTestId('stock-values-keep').click()
-    await page.getByTestId('leaflet-toggle').click()
     await page.getByRole('button', { name: 'Contenido del envase e información adicional' }).click()
     const html = page.getByTestId('leaflet-section-html')
     await expect(html.locator('img')).toHaveCount(1)

@@ -131,7 +131,8 @@ Regulatory catalogue (`apps/regulatory`) — agency-neutral tables, holding
 **only** what some stock is linked to:
 
 ```
-Medicine        (source, code)  name, authorized_on / suspended_on / revoked_on, agency_url, leaflet_url, raw
+Medicine        (source, code)  name, authorized_on / suspended_on / revoked_on, agency_url, leaflet_url,
+                                leaflet_pdf_url, affects_driving, raw
  ├── presentations → [Presentation]
  └── leaflet → MedicineLeaflet  sections [{key, title, html}] (sanitised), source_url, fetched_at
 Presentation    (source, code)  name, marketed, supply_severity, fetch_status, fetched_at, raw
@@ -162,9 +163,11 @@ and fields, and it returns the standard shape of `clients/types.py`.
 - **Leaflet.** Fetched by sections (`fetch_leaflet` task: when a medicine is
   first seen, monthly in the sync, and on "Refresh info"), sanitised once on
   storage with an `nh3` allowlist (`apps/regulatory/sanitize.py`: no styles,
-  scripts, handlers or remote images) and stored in its own table, so no list
-  query loads it. The product page renders it as an accordion; it is the only
-  remote HTML in the app.
+  scripts, handlers or remote images; spacer paragraphs dropped and bullet
+  paragraphs turned into real lists) and stored in its own table, so no list
+  query loads it. The product page renders it as an accordion, with the
+  agency's PDF to download beside its title; it is the only remote HTML in
+  the app.
 - **Change detection.** `apply_presentation` compares the stored state with
   each new answer (supply started / changed / resolved, new safety notice,
   marketing stopped / resumed, authorisation suspended / revoked / reinstated)

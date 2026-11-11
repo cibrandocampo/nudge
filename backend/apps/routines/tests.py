@@ -5450,6 +5450,7 @@ class StockRegulatorySummaryTests(APITestCase):
                 "supply_severity": "danger",
             },
         )
+        self.assertIs(summary["affects_driving"], True)
         self.assertEqual(summary["official_name"], "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO")
         self.assertEqual(summary["display_name"], "AEMPS (CIMA)")
         self.assertEqual(summary["language"], "es")
@@ -5471,6 +5472,7 @@ class StockRegulatorySummaryTests(APITestCase):
         self.assertEqual(summary["fetch_status"], "pending")
         self.assertIsNone(summary["official_name"])
         self.assertIsNone(summary["status"])
+        self.assertIsNone(summary["affects_driving"])
 
     def test_an_unknown_source_has_no_client_constants(self):
         from apps.regulatory.models import Presentation
@@ -5829,6 +5831,7 @@ class StockLeafletTests(APITestCase):
             {
                 "sections": [{"key": "0", "title": "Introducción", "html": "<p>Lea todo el prospecto</p>"}],
                 "source_url": "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html",
+                "pdf_url": "https://cima.aemps.es/cima/pdfs/p/1161160012/P_1161160012.pdf",
                 "fetched_at": leaflet.fetched_at.isoformat().replace("+00:00", "Z"),
                 "language": "es",
             },

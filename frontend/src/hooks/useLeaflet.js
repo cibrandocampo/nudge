@@ -9,16 +9,17 @@ const LEAFLET_STALE_MS = 24 * 60 * 60 * 1000
 /**
  * The sanitised patient leaflet of a stock (`GET /stock/{id}/leaflet/`).
  *
- * `enabled` belongs to the caller: the leaflet weighs tens of kilobytes, so it
- * is asked for only once the user opens it. A `404 leaflet_pending` — the
- * backend has not downloaded it yet — is data (`{ pending: true }`), not an
- * error, and is never considered fresh: the next mount or retry asks again.
+ * Asked for as soon as the product page shows the section (its titles are on
+ * screen from the start); a day-long `staleTime` keeps that to about once a
+ * day per product. A `404 leaflet_pending` — the backend has not downloaded it
+ * yet — is data (`{ pending: true }`), not an error, and is never considered
+ * fresh: the next mount or retry asks again.
  *
  * When the regulatory summary's `fetched_at` moves (a refresh or the daily
  * sync brought new data) the leaflet is invalidated, as the detail is; the
  * first render does not count as a move.
  */
-export function useLeaflet(stockId, fetchedAt, { enabled }) {
+export function useLeaflet(stockId, fetchedAt) {
   const qc = useQueryClient()
   const queryKey = ['stock', Number(stockId), 'leaflet']
 
@@ -40,7 +41,6 @@ export function useLeaflet(stockId, fetchedAt, { enabled }) {
       err.status = res.status
       throw err
     },
-    enabled,
     staleTime: (query) => (query.state.data?.pending ? 0 : LEAFLET_STALE_MS),
   })
 }

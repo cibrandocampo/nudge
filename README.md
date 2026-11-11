@@ -62,7 +62,8 @@ What makes it more than a checklist:
 - **Knows the medicine.** For Spanish medicines, the national code on the box
   links the stock to its official record in CIMA, the AEMPS database: the
   official name, supply problems with what the agency advises, safety notices,
-  whether it is still marketed, and the patient leaflet to read in the app —
+  whether it is still marketed, whether it can affect driving, and the patient
+  leaflet to read in the app or download as a PDF —
   refreshed every day. Any change comes in one push at your daily time, and an
   active problem stays in the inventory's alerts.
 - **Offline-first, honestly.** Mutations queue in IndexedDB, sync when the

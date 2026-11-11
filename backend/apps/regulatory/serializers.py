@@ -36,6 +36,7 @@ class RegulatorySummarySerializer(serializers.Serializer):
     fetched_at = serializers.DateTimeField(source="presentation.fetched_at")
     marketed = serializers.BooleanField(source="presentation.marketed", allow_null=True)
     status = serializers.SerializerMethodField()
+    affects_driving = serializers.SerializerMethodField()
     supply_severity = serializers.CharField(source="presentation.supply_severity", allow_null=True)
     name_offer_pending = serializers.SerializerMethodField()
 
@@ -59,6 +60,10 @@ class RegulatorySummarySerializer(serializers.Serializer):
     def get_status(self, stock):
         medicine = stock.presentation.medicine
         return medicine.status if medicine else None
+
+    def get_affects_driving(self, stock):
+        medicine = stock.presentation.medicine
+        return medicine.affects_driving if medicine else None
 
     def get_name_offer_pending(self, stock):
         # The offer is the owner's to answer; a guest never sees it pending.
@@ -136,13 +141,18 @@ class RegulatoryDetailSerializer(RegulatorySummarySerializer):
 
 
 class MedicineLeafletSerializer(serializers.ModelSerializer):
-    """The sanitised leaflet sections; ``source_url`` is the fallback when there are none."""
+    """The sanitised leaflet sections; ``source_url`` is the fallback when there are none.
+
+    ``pdf_url`` is the whole leaflet as a file to download, empty when the agency
+    publishes none.
+    """
 
     language = serializers.SerializerMethodField()
+    pdf_url = serializers.URLField(source="medicine.leaflet_pdf_url", read_only=True)
 
     class Meta:
         model = MedicineLeaflet
-        fields = ["sections", "source_url", "fetched_at", "language"]
+        fields = ["sections", "source_url", "pdf_url", "fetched_at", "language"]
 
     def get_language(self, leaflet):
         client = CLIENTS_BY_SOURCE.get(leaflet.medicine.source)
