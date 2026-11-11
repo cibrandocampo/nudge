@@ -18,6 +18,7 @@ TYPE_TEST = "test"
 TYPE_CONTACT_ADDED = "contact_added"
 TYPE_ROUTINE_SHARED = "routine_shared"
 TYPE_STOCK_SHARED = "stock_shared"
+TYPE_REGULATORY_DIGEST = "regulatory_digest"
 
 _MSGS = {
     "en": {
@@ -39,6 +40,18 @@ _MSGS = {
         "routine_shared_body": "{owner} shared this routine with you",
         "stock_shared_title": "{name}",
         "stock_shared_body": "{owner} shared this item with you",
+        "regulatory_digest_title_one": "News about your medicine",
+        "regulatory_digest_title_many": "News about your medicines",
+        "regulatory_digest_body_many": "{count} changes in your medicines: {names}",
+        "regulatory_event_supply_started": "supply problem",
+        "regulatory_event_supply_changed": "supply problem updated",
+        "regulatory_event_supply_resolved": "supply restored",
+        "regulatory_event_safety_notice_added": "new safety notice",
+        "regulatory_event_marketing_stopped": "no longer marketed",
+        "regulatory_event_marketing_resumed": "marketed again",
+        "regulatory_event_authorization_suspended": "authorisation suspended",
+        "regulatory_event_authorization_revoked": "authorisation revoked",
+        "regulatory_event_authorization_reinstated": "authorisation restored",
     },
     "es": {
         "daily_one": "1 tarea hoy",
@@ -59,6 +72,18 @@ _MSGS = {
         "routine_shared_body": "{owner} ha compartido esta rutina contigo",
         "stock_shared_title": "{name}",
         "stock_shared_body": "{owner} ha compartido este artículo contigo",
+        "regulatory_digest_title_one": "Novedades de tu medicamento",
+        "regulatory_digest_title_many": "Novedades de tus medicamentos",
+        "regulatory_digest_body_many": "{count} cambios en tus medicamentos: {names}",
+        "regulatory_event_supply_started": "problema de suministro",
+        "regulatory_event_supply_changed": "cambios en el problema de suministro",
+        "regulatory_event_supply_resolved": "suministro restablecido",
+        "regulatory_event_safety_notice_added": "nueva nota de seguridad",
+        "regulatory_event_marketing_stopped": "ya no se comercializa",
+        "regulatory_event_marketing_resumed": "vuelve a comercializarse",
+        "regulatory_event_authorization_suspended": "autorización suspendida",
+        "regulatory_event_authorization_revoked": "autorización revocada",
+        "regulatory_event_authorization_reinstated": "autorización restablecida",
     },
     "gl": {
         "daily_one": "1 tarefa hoxe",
@@ -79,6 +104,18 @@ _MSGS = {
         "routine_shared_body": "{owner} compartiu esta rutina contigo",
         "stock_shared_title": "{name}",
         "stock_shared_body": "{owner} compartiu este artigo contigo",
+        "regulatory_digest_title_one": "Novidades do teu medicamento",
+        "regulatory_digest_title_many": "Novidades dos teus medicamentos",
+        "regulatory_digest_body_many": "{count} cambios nos teus medicamentos: {names}",
+        "regulatory_event_supply_started": "problema de subministración",
+        "regulatory_event_supply_changed": "cambios no problema de subministración",
+        "regulatory_event_supply_resolved": "subministración restablecida",
+        "regulatory_event_safety_notice_added": "nova nota de seguridade",
+        "regulatory_event_marketing_stopped": "xa non se comercializa",
+        "regulatory_event_marketing_resumed": "volve comercializarse",
+        "regulatory_event_authorization_suspended": "autorización suspendida",
+        "regulatory_event_authorization_revoked": "autorización revogada",
+        "regulatory_event_authorization_reinstated": "autorización restablecida",
     },
 }
 
@@ -267,3 +304,26 @@ def notify_stock_shared(stock, new_user):
         body=_m(new_user, "stock_shared_body", owner=stock.user.display_name),
         type=TYPE_STOCK_SHARED,
     )
+
+
+# A notification shows a few lines at most: name this many stocks, then "…".
+DIGEST_MAX_NAMES = 3
+
+
+def notify_regulatory_digest(user, lines: list, data: dict):
+    """The day's regulatory changes in one notification.
+
+    ``lines`` are ``(stock_name, event_kind)`` pairs, already deduplicated by
+    the caller; the stock name is the user's own, the one they recognise. One
+    change is spelled out; several are counted, naming the stocks.
+    """
+    if len(lines) == 1:
+        name, kind = lines[0]
+        title = _m(user, "regulatory_digest_title_one")
+        body = f"{name}: {_m(user, f'regulatory_event_{kind}')}"
+    else:
+        names = list(dict.fromkeys(name for name, _ in lines))
+        shown = ", ".join(names[:DIGEST_MAX_NAMES]) + ("…" if len(names) > DIGEST_MAX_NAMES else "")
+        title = _m(user, "regulatory_digest_title_many")
+        body = _m(user, "regulatory_digest_body_many", count=len(lines), names=shown)
+    send_push_notification(user, title=title, body=body, type=TYPE_REGULATORY_DIGEST, data=data)

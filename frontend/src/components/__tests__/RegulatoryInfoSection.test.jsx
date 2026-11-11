@@ -298,3 +298,28 @@ describe('RegulatoryInfoSection — refresh', () => {
     expect(await screen.findByText('Nope.')).toBeInTheDocument()
   })
 })
+
+describe('RegulatoryInfoSection — leaflet', () => {
+  it('offers the leaflet once the agency has answered with data', async () => {
+    serveDetail()
+    renderSection()
+    expect(screen.getByTestId('leaflet-toggle')).toHaveTextContent('Patient leaflet')
+    await screen.findByTestId('regulatory-active-problem')
+  })
+
+  it('does not offer it in any other state', async () => {
+    for (const regulatory of [
+      summary({ fetch_status: 'pending', fetched_at: null, official_name: null }),
+      summary({ fetch_status: 'pending' }),
+      summary({ fetch_status: 'not_found', official_name: null, status: null }),
+      summary({ fetch_status: 'error' }),
+    ]) {
+      serveDetail()
+      const { unmount } = renderSection({ regulatory })
+      expect(screen.queryByTestId('leaflet-toggle')).not.toBeInTheDocument()
+      // Let the detail request settle before the next render.
+      await waitFor(() => expect(screen.getByTestId('regulatory-section')).toBeInTheDocument())
+      unmount()
+    }
+  })
+})

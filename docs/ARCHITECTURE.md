@@ -131,11 +131,14 @@ Regulatory catalogue (`apps/regulatory`) — agency-neutral tables, holding
 **only** what some stock is linked to:
 
 ```
-Medicine        (source, code)  name, authorized_on / suspended_on / revoked_on, agency_url, raw
- └── presentations → [Presentation]
+Medicine        (source, code)  name, authorized_on / suspended_on / revoked_on, agency_url, leaflet_url, raw
+ ├── presentations → [Presentation]
+ └── leaflet → MedicineLeaflet  sections [{key, title, html}] (sanitised), source_url, fetched_at
 Presentation    (source, code)  name, marketed, supply_severity, fetch_status, fetched_at, raw
  └── supply_problems → [SupplyProblem]  native_type, severity, note, dates, resolved_at
 SafetyNotice    (source, reference)  title, url, published_on ←→ medicines (M2M)
+RegulatoryEvent presentation, kind (9 kinds), payload (model terms), detected_at
+ └── deliveries → [EventDelivery]  user, stock, delivered_at (unique per event + user)
 ```
 
 ### Regulatory data (CIMA / AEMPS)
@@ -154,7 +157,28 @@ and fields, and it returns the standard shape of `clients/types.py`.
   A presentation's first fetch is its baseline (`fetched_at`).
 - **Daily refresh.** Beat runs `sync_regulatory_data` at 03:00 UTC (`crontab`):
   relinks stocks with a code, refreshes every linked presentation one by one,
-  and prunes rows no stock has used for 30 days.
+  fetches leaflets that are missing or older than 30 days, prunes rows no
+  stock has used for 30 days, and drops deliveries nobody received in 30 days.
+- **Leaflet.** Fetched by sections (`fetch_leaflet` task: when a medicine is
+  first seen, monthly in the sync, and on "Refresh info"), sanitised once on
+  storage with an `nh3` allowlist (`apps/regulatory/sanitize.py`: no styles,
+  scripts, handlers or remote images) and stored in its own table, so no list
+  query loads it. The product page renders it as an accordion; it is the only
+  remote HTML in the app.
+- **Change detection.** `apply_presentation` compares the stored state with
+  each new answer (supply started / changed / resolved, new safety notice,
+  marketing stopped / resumed, authorisation suspended / revoked / reinstated)
+  and records a `RegulatoryEvent`, with one `EventDelivery` per user holding
+  a stock of that presentation at that moment. A first fetch, or the first
+  `ok` after a `not_found`, is a silent baseline; a reworded note is no event.
+- **Daily digest.** `check_notifications` sends each user's pending
+  deliveries as one push at their `daily_notification_time` (a safety notice
+  counted once), then marks them delivered. Its `data` opens the product
+  (`stock_id`) or the inventory (`path`); `src/swRouting.js` decides.
+- **Inventory.** An active supply problem, a medicine no longer marketed or a
+  suspended / revoked authorisation joins the alert banner and the Attention
+  filter (`utils/stockAlerts.js`), from the summary on the list — no extra
+  request.
 - **Switch.** `REGULATORY_FETCH_ENABLED=False` keeps the backend off the
   network (CI, E2E, tests); codes are still validated.
 - **Seed.** `seed` applies recorded CIMA answers
@@ -237,6 +261,7 @@ The legacy endpoint `POST /api/auth/token/` (username + password) is kept operat
 | GET | `/api/stock/{id}/regulatory/` | Official medicine data: supply problems, safety notices, agency link |
 | POST | `/api/stock/{id}/regulatory/refresh/` | Owner: fetch again and re-ask the official-name question (`202`) |
 | POST | `/api/stock/{id}/regulatory/name-offer/` | Owner: `{accept}` — adopt or decline the official name |
+| GET | `/api/stock/{id}/leaflet/` | Sanitised leaflet sections, `source_url`, `language`; `404` `leaflet_pending` / `no_national_code` |
 | POST | `/api/push/subscribe/` | Register push endpoint |
 | DELETE | `/api/push/unsubscribe/` | Remove push endpoint |
 | POST | `/api/push/test/` | Send instant test notification |

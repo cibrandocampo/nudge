@@ -5502,6 +5502,25 @@ class StockRegulatoryDetailTests(APITestCase):
         problem = response.data["supply_problems"][0]
         self.assertEqual((problem["native_type"], problem["severity"], problem["active"]), ("1", "danger", True))
 
+    def test_events_come_newest_first_and_at_most_twenty(self):
+        from apps.regulatory.models import RegulatoryEvent
+
+        start = timezone.now() - timedelta(days=30)
+        for day in range(25):
+            RegulatoryEvent.objects.create(
+                presentation=self.stock.presentation,
+                kind="supply_changed",
+                payload={"day": day},
+                detected_at=start + timedelta(days=day),
+            )
+        events = self.client.get(self.url).data["events"]
+        self.assertEqual(len(events), 20)
+        self.assertEqual([event["payload"]["day"] for event in events], list(range(24, 4, -1)))
+        self.assertEqual(set(events[0]), {"kind", "payload", "detected_at"})
+
+    def test_no_events_is_an_empty_list(self):
+        self.assertEqual(self.client.get(self.url).data["events"], [])
+
     def test_a_guest_gets_it_too(self):
         guest = make_user(username="guest")
         self.stock.shared_with.add(guest)
@@ -5560,10 +5579,53 @@ class StockRegulatoryRefreshTests(APITestCase):
     def refresh(self):
         with (
             patch("apps.regulatory.tasks.fetch_presentation.delay") as delay,
+            patch("apps.regulatory.tasks.fetch_leaflet.delay") as leaflet_delay,
             self.captureOnCommitCallbacks(execute=True),
         ):
             response = self.client.post(self.url, format="json")
+        self.leaflet_delay = leaflet_delay
         return response, delay
+
+    def test_refresh_also_enqueues_a_stored_leaflet(self):
+        from apps.regulatory import services
+
+        services.apply_leaflet(self.stock.presentation.medicine_id, None)
+        self.refresh()
+        self.leaflet_delay.assert_called_once_with(self.stock.presentation.medicine_id)
+
+    def test_a_missing_leaflet_is_left_to_the_presentation_fetch(self):
+        self.refresh()
+        self.leaflet_delay.assert_not_called()
+
+    def test_a_missing_leaflet_is_fetched_once_per_refresh(self):
+        # End to end through the eager presentation task: the refresh and the
+        # applied answer must not both enqueue the same leaflet.
+        from apps.regulatory.clients import aemps
+        from apps.regulatory.models import Presentation
+
+        Presentation.objects.filter(pk=self.stock.presentation_id).update(last_attempt_at=None)
+        with (
+            patch.object(
+                aemps,
+                "fetch",
+                return_value=aemps.parse_presentation(
+                    "728514",
+                    _regulatory_fixture("medicamento_728514.json"),
+                    psuministro=_regulatory_fixture("psuministro_728514.json"),
+                ),
+            ),
+            patch("apps.regulatory.tasks.fetch_leaflet.delay") as leaflet_delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.assertEqual(self.client.post(self.url, format="json").status_code, 202)
+        leaflet_delay.assert_called_once_with(self.stock.presentation.medicine_id)
+
+    def test_a_presentation_without_medicine_enqueues_no_leaflet(self):
+        stock = _linked_stock(self.owner, code="661426", fetched=False, name="Pending")
+        self.url = f"/api/stock/{stock.pk}/regulatory/refresh/"
+        _, delay = self.refresh()
+        delay.assert_called_once_with(stock.presentation_id)
+        self.leaflet_delay.assert_not_called()
 
     def test_owner_refresh_enqueues_and_raises_the_offer(self):
         response, delay = self.refresh()
@@ -5604,6 +5666,7 @@ class StockRegulatoryRefreshTests(APITestCase):
         self.assertEqual(response.status_code, 202)
         delay.assert_not_called()
         self.assertEqual(response.data["regulatory"]["fetch_status"], "ok")
+        self.leaflet_delay.assert_not_called()
 
     def test_an_older_attempt_fetches_again(self):
         from apps.regulatory.models import Presentation
@@ -5712,6 +5775,24 @@ class StockListRegulatoryQueryBudgetTests(APITestCase):
         self.assertEqual(len(self._list_queries()), one)
         self.assertEqual(one, QueryBudgetTests.BUDGET_STOCK_LIST)
 
+    def test_the_list_never_reads_regulatory_events(self):
+        from apps.regulatory.models import RegulatoryEvent
+
+        stock = _linked_stock(self.user)
+        RegulatoryEvent.objects.create(presentation=stock.presentation, kind="supply_started")
+        queries = self._list_queries()
+        self.assertEqual(len(queries), QueryBudgetTests.BUDGET_STOCK_LIST)
+        self.assertFalse([q["sql"] for q in queries if "regulatory_regulatoryevent" in q["sql"]])
+
+    def test_the_list_never_touches_the_leaflet_table(self):
+        from apps.regulatory import services
+
+        stock = _linked_stock(self.user)
+        services.apply_leaflet(stock.presentation.medicine_id, [{"key": "0", "title": "t", "html": "<p>x</p>"}])
+        queries = self._list_queries()
+        self.assertEqual(len(queries), QueryBudgetTests.BUDGET_STOCK_LIST)
+        self.assertFalse([q["sql"] for q in queries if "regulatory_medicineleaflet" in q["sql"]])
+
     def test_the_list_never_selects_agency_payloads(self):
         _linked_stock(self.user)
         # The listing query itself (not the paginator's COUNT): the one joining
@@ -5721,3 +5802,72 @@ class StockListRegulatoryQueryBudgetTests(APITestCase):
         stock_query = joined[0]
         self.assertNotIn('"regulatory_presentation"."raw"', stock_query)
         self.assertNotIn('"regulatory_medicine"."raw"', stock_query)
+
+
+class StockLeafletTests(APITestCase):
+    """`GET /api/stock/{id}/leaflet/` — the sanitised leaflet of the stock's medicine."""
+
+    SECTIONS = [{"key": "0", "title": "Introducción", "html": '<p style="x">Lea todo el prospecto</p>'}]
+
+    def setUp(self):
+        self.owner = make_user()
+        self.client.force_authenticate(self.owner)
+        self.stock = _linked_stock(self.owner)
+        self.url = f"/api/stock/{self.stock.pk}/leaflet/"
+
+    def store_leaflet(self, sections=SECTIONS):
+        from apps.regulatory import services
+
+        return services.apply_leaflet(self.stock.presentation.medicine_id, sections)
+
+    def test_returns_the_sanitised_sections_with_their_source(self):
+        leaflet = self.store_leaflet()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data,
+            {
+                "sections": [{"key": "0", "title": "Introducción", "html": "<p>Lea todo el prospecto</p>"}],
+                "source_url": "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html",
+                "fetched_at": leaflet.fetched_at.isoformat().replace("+00:00", "Z"),
+                "language": "es",
+            },
+        )
+
+    def test_no_sectioned_leaflet_returns_only_the_source_url(self):
+        self.store_leaflet(None)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sections"], [])
+        self.assertTrue(response.data["source_url"])
+
+    def test_a_medicine_without_leaflet_yet_is_pending(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data, {"code": "leaflet_pending"})
+
+    def test_a_stock_without_code_answers_no_national_code(self):
+        stock = make_stock(self.owner, name="Plain")
+        response = self.client.get(f"/api/stock/{stock.pk}/leaflet/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data, {"code": "no_national_code"})
+
+    def test_a_presentation_without_medicine_answers_no_national_code(self):
+        stock = _linked_stock(self.owner, code="661426", fetched=False, name="Pending")
+        response = self.client.get(f"/api/stock/{stock.pk}/leaflet/")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data, {"code": "no_national_code"})
+
+    def test_a_guest_gets_it_too(self):
+        self.store_leaflet()
+        guest = make_user(username="guest")
+        self.stock.shared_with.add(guest)
+        self.client.force_authenticate(guest)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_a_stranger_gets_404(self):
+        self.store_leaflet()
+        self.client.force_authenticate(make_user(username="stranger"))
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("sections", response.data)

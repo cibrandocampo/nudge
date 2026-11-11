@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.regulatory.models import EventDelivery, Medicine, Presentation, RegulatoryEvent
 from apps.routines.models import Routine, RoutineEntry, Stock
 
 from .models import NotificationState, PushSubscription
@@ -14,6 +15,7 @@ from .push import (
     TYPE_CONTACT_ADDED,
     TYPE_DAILY,
     TYPE_DUE,
+    TYPE_REGULATORY_DIGEST,
     TYPE_REMINDER,
     TYPE_ROUTINE_SHARED,
     TYPE_STOCK_SHARED,
@@ -21,6 +23,7 @@ from .push import (
     notify_contact_added,
     notify_daily_heads_up,
     notify_due,
+    notify_regulatory_digest,
     notify_reminder,
     notify_routine_shared,
     notify_stock_shared,
@@ -30,9 +33,11 @@ from .push import (
 from .tasks import (
     _check_daily_heads_up,
     _check_due_notification,
+    _check_regulatory_digest,
     _check_reminder,
     _get_or_create_state,
     _is_due_today,
+    _within_daily_window,
     check_notifications,
 )
 
@@ -1660,3 +1665,278 @@ class SharedRoutineNotificationTest(TestCase):
             _check_due_notification(self.routine, now)
             # Only owner should be notified
             mock_notify.assert_called_once_with(self.routine, target_user=self.owner)
+
+
+# ── Daily window (shared by the heads-up and the regulatory digest) ───────────
+
+
+class WithinDailyWindowTest(TestCase):
+    def setUp(self):
+        self.user = make_user(tz="UTC", daily_time="08:30")
+
+    def at(self, hour, minute):
+        return datetime(2026, 11, 11, hour, minute, tzinfo=ZoneInfo("UTC"))
+
+    def test_at_the_configured_time(self):
+        self.assertTrue(_within_daily_window(self.user, self.at(8, 30)))
+
+    def test_on_both_edges_of_the_tolerance(self):
+        self.assertTrue(_within_daily_window(self.user, self.at(8, 25)))
+        self.assertTrue(_within_daily_window(self.user, self.at(8, 35)))
+
+    def test_outside_the_tolerance(self):
+        self.assertFalse(_within_daily_window(self.user, self.at(8, 24)))
+        self.assertFalse(_within_daily_window(self.user, self.at(8, 36)))
+
+
+# ── Regulatory digest ─────────────────────────────────────────────────────────
+
+
+def make_medicine(code="1161160012"):
+    return Medicine.objects.create(source="aemps", code=code, name=f"Medicine {code}", fetched_at=timezone.now())
+
+
+def make_followed_presentation(medicine, code="728514"):
+    return Presentation.objects.create(source="aemps", code=code, medicine=medicine, fetched_at=timezone.now())
+
+
+def make_delivery(user, stock, presentation, kind=RegulatoryEvent.Kind.SUPPLY_STARTED, payload=None):
+    event = RegulatoryEvent.objects.create(presentation=presentation, kind=kind, payload=payload or {})
+    return EventDelivery.objects.create(event=event, user=user, stock=stock)
+
+
+class CheckRegulatoryDigestTest(TestCase):
+    def setUp(self):
+        self.user = make_user(tz="UTC", daily_time="08:30")
+        self.medicine = make_medicine()
+        self.presentation = make_followed_presentation(self.medicine)
+        self.stock = Stock.objects.create(user=self.user, name="Insulina rápida", presentation=self.presentation)
+        self.now = datetime(2026, 11, 11, 8, 30, tzinfo=ZoneInfo("UTC"))
+
+    def run_digest(self, user=None, now=None):
+        now = now or self.now
+        with patch("apps.notifications.push.send_push_notification") as send:
+            _check_regulatory_digest(user or self.user, now, now)
+        return send
+
+    def set_language(self, language):
+        User.objects.filter(pk=self.user.pk).update(language=language)
+        self.user.refresh_from_db()
+
+    def test_outside_the_window_sends_nothing(self):
+        delivery = make_delivery(self.user, self.stock, self.presentation)
+        send = self.run_digest(now=self.now.replace(hour=10))
+        send.assert_not_called()
+        delivery.refresh_from_db()
+        self.assertIsNone(delivery.delivered_at)
+
+    def test_without_deliveries_sends_nothing(self):
+        self.run_digest().assert_not_called()
+
+    def test_one_change_is_spelled_out_in_spanish(self):
+        self.set_language("es")
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.SUPPLY_RESOLVED)
+        send = self.run_digest()
+        send.assert_called_once_with(
+            self.user,
+            title="Novedades de tu medicamento",
+            body="Insulina rápida: suministro restablecido",
+            type=TYPE_REGULATORY_DIGEST,
+            data={"stock_id": self.stock.pk},
+        )
+
+    def test_one_change_is_spelled_out_in_galician(self):
+        self.set_language("gl")
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.MARKETING_STOPPED)
+        kwargs = self.run_digest().call_args.kwargs
+        self.assertEqual(kwargs["title"], "Novidades do teu medicamento")
+        self.assertEqual(kwargs["body"], "Insulina rápida: xa non se comercializa")
+
+    def test_several_changes_on_several_stocks_are_counted(self):
+        other = Stock.objects.create(user=self.user, name="Hidroferol", presentation=self.presentation)
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.SUPPLY_STARTED)
+        make_delivery(self.user, other, self.presentation, RegulatoryEvent.Kind.AUTHORIZATION_SUSPENDED)
+        kwargs = self.run_digest().call_args.kwargs
+        self.assertEqual(kwargs["title"], "News about your medicines")
+        self.assertEqual(kwargs["body"], "2 changes in your medicines: Insulina rápida, Hidroferol")
+        self.assertEqual(kwargs["data"], {"path": "/inventory"})
+
+    def test_several_changes_on_one_stock_open_that_stock(self):
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.SUPPLY_STARTED)
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.MARKETING_STOPPED)
+        kwargs = self.run_digest().call_args.kwargs
+        self.assertEqual(kwargs["body"], "2 changes in your medicines: Insulina rápida")
+        self.assertEqual(kwargs["data"], {"stock_id": self.stock.pk})
+
+    def test_one_notice_on_two_presentations_of_a_medicine_counts_once(self):
+        sibling = make_followed_presentation(self.medicine, code="728515")
+        other = Stock.objects.create(user=self.user, name="Insulina repuesto", presentation=sibling)
+        notice = {"reference": "MUH/FV/1/2026", "title": "Nota", "url": "", "published_on": None}
+        make_delivery(self.user, self.stock, self.presentation, RegulatoryEvent.Kind.SAFETY_NOTICE_ADDED, notice)
+        make_delivery(self.user, other, sibling, RegulatoryEvent.Kind.SAFETY_NOTICE_ADDED, notice)
+        kwargs = self.run_digest().call_args.kwargs
+        self.assertEqual(kwargs["title"], "News about your medicine")
+        self.assertEqual(kwargs["body"], "Insulina rápida: new safety notice")
+        self.assertFalse(EventDelivery.objects.filter(delivered_at__isnull=True).exists())
+
+    def test_two_different_notices_are_two_changes(self):
+        for reference in ("A", "B"):
+            make_delivery(
+                self.user,
+                self.stock,
+                self.presentation,
+                RegulatoryEvent.Kind.SAFETY_NOTICE_ADDED,
+                {"reference": reference},
+            )
+        self.assertTrue(self.run_digest().call_args.kwargs["body"].startswith("2 changes"))
+
+    def test_sent_deliveries_are_marked_and_not_sent_again(self):
+        delivery = make_delivery(self.user, self.stock, self.presentation)
+        self.run_digest().assert_called_once()
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.delivered_at, self.now)
+        self.run_digest(now=self.now.replace(minute=33)).assert_not_called()
+
+    def test_a_failed_send_leaves_them_pending(self):
+        delivery = make_delivery(self.user, self.stock, self.presentation)
+        with patch("apps.notifications.push.send_push_notification", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                _check_regulatory_digest(self.user, self.now, self.now)
+        delivery.refresh_from_db()
+        self.assertIsNone(delivery.delivered_at)
+
+    def test_a_user_only_gets_their_own_deliveries(self):
+        other_user = make_user(username="other", tz="UTC", daily_time="08:30")
+        other_stock = Stock.objects.create(user=other_user, name="Ajena", presentation=self.presentation)
+        theirs = make_delivery(other_user, other_stock, self.presentation)
+        make_delivery(self.user, self.stock, self.presentation)
+        kwargs = self.run_digest().call_args.kwargs
+        self.assertNotIn("Ajena", kwargs["body"])
+        theirs.refresh_from_db()
+        self.assertIsNone(theirs.delivered_at)
+
+
+class NotifyRegulatoryDigestTest(TestCase):
+    def setUp(self):
+        self.user = make_user()
+
+    def body(self, lines):
+        with patch("apps.notifications.push.send_push_notification") as send:
+            notify_regulatory_digest(self.user, lines, {"path": "/inventory"})
+        return send.call_args.kwargs["body"]
+
+    def test_names_at_most_three_stocks_then_an_ellipsis(self):
+        lines = [(name, "supply_started") for name in ("A", "B", "C", "D")]
+        self.assertEqual(self.body(lines), "4 changes in your medicines: A, B, C…")
+
+    def test_a_stock_with_several_changes_is_named_once(self):
+        lines = [("A", "supply_started"), ("A", "marketing_stopped"), ("B", "supply_resolved")]
+        self.assertEqual(self.body(lines), "3 changes in your medicines: A, B")
+
+    def test_every_event_kind_has_a_text_in_every_language(self):
+        from .push import _MSGS
+
+        for language, messages in _MSGS.items():
+            for kind in RegulatoryEvent.Kind.values:
+                with self.subTest(language=language, kind=kind):
+                    self.assertTrue(messages[f"regulatory_event_{kind}"])
+
+
+class PushMessageParityTest(TestCase):
+    def test_the_three_languages_have_the_same_keys(self):
+        from .push import _MSGS
+
+        self.assertEqual(set(_MSGS), {"en", "es", "gl"})
+        self.assertEqual(set(_MSGS["es"]), set(_MSGS["en"]))
+        self.assertEqual(set(_MSGS["gl"]), set(_MSGS["en"]))
+
+
+class CheckNotificationsRegulatoryDigestTest(TestCase):
+    def setUp(self):
+        now = timezone.now()
+        self.user = make_user(username="digest", tz="UTC", daily_time=now.strftime("%H:%M"))
+        make_subscription(self.user)
+        presentation = make_followed_presentation(make_medicine())
+        stock = Stock.objects.create(user=self.user, name="Insulina", presentation=presentation)
+        make_delivery(self.user, stock, presentation)
+
+    def test_a_user_at_their_time_with_a_pending_change_gets_one_digest(self):
+        with (
+            patch("apps.notifications.tasks.notify_regulatory_digest") as digest,
+            patch("apps.notifications.tasks.notify_daily_heads_up"),
+        ):
+            check_notifications()
+        digest.assert_called_once()
+        self.assertEqual(digest.call_args.args[0], self.user)
+
+    def test_a_failing_digest_does_not_stop_the_run(self):
+        other = make_user(username="routine_owner")
+        make_routine(other, interval_hours=1)
+        make_subscription(other, endpoint="https://example.com/push/2")
+        with (
+            patch("apps.notifications.tasks.notify_regulatory_digest", side_effect=RuntimeError("boom")),
+            patch("apps.notifications.tasks.notify_daily_heads_up"),
+            patch("apps.notifications.tasks.notify_reminder"),
+            patch("apps.notifications.tasks.notify_due") as due,
+            self.assertLogs("apps.notifications.tasks", level="ERROR") as logs,
+        ):
+            check_notifications()
+        self.assertIn("Error sending the regulatory digest", logs.output[0])
+        due.assert_called_once()
+
+
+class CheckNotificationsEdgeCasesTest(TestCase):
+    """Paths of the main loop the tests above leave untested (covered in T118)."""
+
+    def test_a_subscribed_user_with_an_invalid_timezone_is_skipped(self):
+        user = make_user(username="badtz_sub")
+        make_subscription(user)
+        make_routine(user, interval_hours=1)
+        User.objects.filter(pk=user.pk).update(timezone="Not/Valid")
+        with patch("apps.notifications.tasks.notify_due") as due:
+            check_notifications()
+        due.assert_not_called()
+
+    def test_a_shared_routine_is_processed_once(self):
+        owner = make_user(username="owner_sub")
+        guest = make_user(username="guest_sub")
+        make_subscription(owner, endpoint="https://example.com/push/owner")
+        make_subscription(guest, endpoint="https://example.com/push/guest")
+        routine = make_routine(owner, interval_hours=1)
+        routine.shared_with.add(guest)
+        with (
+            patch("apps.notifications.tasks._check_due_notification") as check_due,
+            patch("apps.notifications.tasks._check_reminder"),
+            patch("apps.notifications.tasks.notify_daily_heads_up"),
+        ):
+            check_notifications()
+        check_due.assert_called_once()
+
+    def test_a_failing_routine_is_logged_and_the_run_goes_on(self):
+        user = make_user(username="failing_sub")
+        make_subscription(user)
+        make_routine(user, name="First", interval_hours=1)
+        make_routine(user, name="Second", interval_hours=1)
+        with (
+            patch("apps.notifications.tasks._check_due_notification", side_effect=RuntimeError("boom")) as check_due,
+            patch("apps.notifications.tasks.notify_daily_heads_up"),
+            self.assertLogs("apps.notifications.tasks", level="ERROR") as logs,
+        ):
+            check_notifications()
+        self.assertEqual(check_due.call_count, 2)
+        self.assertIn("Error processing routine", logs.output[0])
+
+    def test_a_reminder_recipient_with_an_invalid_timezone_is_skipped(self):
+        frozen = CheckReminderCadenceAndQuietHoursTest.FROZEN_NOW
+        with patch("django.utils.timezone.now", return_value=frozen):
+            owner = make_user(username="valid-owner", tz="UTC")
+            guest = make_user(username="badtz-guest", tz="UTC")
+            User.objects.filter(pk=guest.pk).update(timezone="Not/Valid")
+            routine = CheckReminderCadenceAndQuietHoursTest._make_overdue_routine(
+                owner, interval_minutes=60, respect_quiet_hours=True, last_reminder_offset_hours=-2
+            )
+            routine.shared_with.add(guest)
+            routine = Routine.objects.get(pk=routine.pk)
+            with patch("apps.notifications.tasks.notify_reminder") as reminder:
+                _check_reminder(routine, timezone.now())
+        self.assertEqual([call.kwargs["target_user"] for call in reminder.call_args_list], [owner])

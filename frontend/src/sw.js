@@ -3,6 +3,7 @@ import { ExpirationPlugin } from 'workbox-expiration'
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
+import { notificationTargetUrl } from './swRouting'
 
 // Remove caches from older Workbox versions that are no longer needed.
 cleanupOutdatedCaches()
@@ -178,13 +179,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const routineId = event.notification.data?.routine_id
-  const url =
-    event.action === 'mark-done' && routineId
-      ? `/routines/${routineId}?action=mark-done`
-      : routineId
-        ? `/routines/${routineId}`
-        : '/'
+  const url = notificationTargetUrl(event.notification.data, event.action)
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

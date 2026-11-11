@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStockAlerts, lotsByExpirySeverity, worstSeverity } from '../stockAlerts'
+import { buildStockAlerts, lotsByExpirySeverity, needsAttention, regulatoryLabels, worstSeverity } from '../stockAlerts'
 
 // UTC-midnight today, the same instant every caller of these helpers uses.
 const TODAY = new Date(new Date().toISOString().slice(0, 10))
@@ -232,5 +232,127 @@ describe('buildStockAlerts', () => {
       TODAY,
     )
     expect(alerts.map((a) => a.stock.name)).toEqual(['Bandages', 'Warfarin', 'Aspirin', 'Zinc'])
+  })
+})
+
+// ── Regulatory alerts (T119) ────────────────────────────────────────────────
+
+const regulatory = (over = {}) => ({
+  fetch_status: 'ok',
+  fetched_at: '2026-11-10T01:00:00Z',
+  supply_severity: null,
+  marketed: true,
+  status: 'authorised',
+  ...over,
+})
+
+const labelOf = (over) => regulatoryLabels(stock({ regulatory: regulatory(over) }))
+
+describe('regulatoryLabels', () => {
+  it('a healthy medicine says nothing', () => {
+    expect(labelOf({})).toEqual([])
+  })
+
+  it('an active supply problem is danger', () => {
+    expect(labelOf({ supply_severity: 'danger' })).toEqual([
+      { key: 'inventory.alertSupplyProblem', params: {}, tone: 'danger' },
+    ])
+  })
+
+  it('a limited supply is warning', () => {
+    expect(labelOf({ supply_severity: 'warning' })).toEqual([
+      { key: 'inventory.alertSupplyLimited', params: {}, tone: 'warning' },
+    ])
+  })
+
+  it('a medicine no longer marketed is warning', () => {
+    expect(labelOf({ marketed: false })).toEqual([{ key: 'inventory.alertNotMarketed', params: {}, tone: 'warning' }])
+  })
+
+  it('an unknown marketing state says nothing', () => {
+    expect(labelOf({ marketed: null })).toEqual([])
+  })
+
+  it('a suspended authorisation is danger', () => {
+    expect(labelOf({ status: 'suspended' })).toEqual([
+      { key: 'inventory.alertAuthorizationSuspended', params: {}, tone: 'danger' },
+    ])
+  })
+
+  it('a revoked authorisation is danger', () => {
+    expect(labelOf({ status: 'revoked' })).toEqual([
+      { key: 'inventory.alertAuthorizationRevoked', params: {}, tone: 'danger' },
+    ])
+  })
+
+  it('several verdicts come in a fixed order', () => {
+    const keysOf = labelOf({ supply_severity: 'warning', marketed: false, status: 'revoked' }).map((l) => l.key)
+    expect(keysOf).toEqual([
+      'inventory.alertSupplyLimited',
+      'inventory.alertNotMarketed',
+      'inventory.alertAuthorizationRevoked',
+    ])
+  })
+
+  it('no data means no alert: never fetched, not found, or no regulatory link', () => {
+    expect(labelOf({ supply_severity: 'danger', fetched_at: null })).toEqual([])
+    expect(labelOf({ supply_severity: 'danger', fetch_status: 'not_found' })).toEqual([])
+    expect(regulatoryLabels(stock({ regulatory: null }))).toEqual([])
+    expect(regulatoryLabels(stock())).toEqual([])
+    expect(regulatoryLabels(undefined)).toEqual([])
+  })
+
+  it('a refresh in flight or a failed one keeps the last good verdict', () => {
+    for (const fetch_status of ['pending', 'error']) {
+      expect(labelOf({ supply_severity: 'danger', fetch_status })).toHaveLength(1)
+    }
+  })
+})
+
+describe('regulatory alerts in the shared gates', () => {
+  const insulin = stock({ name: 'Insulin', regulatory: regulatory({ supply_severity: 'danger' }) })
+
+  it('a regulatory alert alone makes a stock need attention', () => {
+    expect(needsAttention(insulin)).toBe(true)
+    expect(needsAttention(stock({ regulatory: regulatory() }))).toBe(false)
+  })
+
+  it('worstSeverity rises to danger with an active supply problem', () => {
+    expect(worstSeverity([stock(), insulin])).toBe('danger')
+  })
+
+  it('worstSeverity is warning with a regulatory warning only', () => {
+    expect(worstSeverity([stock({ regulatory: regulatory({ marketed: false }) })])).toBe('warning')
+  })
+
+  it('a regulatory danger still outranks an earlier warning', () => {
+    expect(worstSeverity([stock({ stock_severity: 'low' }), insulin])).toBe('danger')
+  })
+
+  it('a regulatory-only stock gets its own banner entry', () => {
+    const [entry] = buildStockAlerts([insulin], TODAY)
+    expect(entry.severity).toBe('danger')
+    expect(keys(entry)).toEqual(['inventory.alertSupplyProblem'])
+  })
+
+  it('stock and expiry labels keep their order and come first', () => {
+    const [entry] = buildStockAlerts(
+      [
+        stock({
+          stock_severity: 'critical',
+          quantity_available: 0,
+          expiry_severity: 'reached',
+          lots: [{ id: 1, quantity: 1, expiry_date: PAST }],
+          regulatory: regulatory({ supply_severity: 'warning', status: 'suspended' }),
+        }),
+      ],
+      TODAY,
+    )
+    expect(keys(entry)).toEqual([
+      'inventory.alertCriticalStock',
+      'inventory.alertExpiryReached',
+      'inventory.alertSupplyLimited',
+      'inventory.alertAuthorizationSuspended',
+    ])
   })
 })

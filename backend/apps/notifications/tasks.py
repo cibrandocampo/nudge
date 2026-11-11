@@ -9,10 +9,11 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
+from apps.regulatory.models import EventDelivery, RegulatoryEvent
 from apps.routines.models import Routine, RoutineEntry
 
 from .models import NotificationState
-from .push import notify_daily_heads_up, notify_due, notify_reminder, notify_test
+from .push import notify_daily_heads_up, notify_due, notify_regulatory_digest, notify_reminder, notify_test
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ def check_notifications():
     """
     Runs every 5 minutes. For each active user:
       1. Daily heads-up  — once per day at the user's configured local time.
+      1b. Regulatory digest — the medicine changes detected since the last one,
+          in a notification of its own at the same time.
       2. Due notification — when a routine becomes overdue, once per cycle.
       3. Reminder        — every routine.reminder_interval_minutes while overdue,
                            gated by routine.reminder_mode ('daily' skips entirely)
@@ -82,6 +85,10 @@ def check_notifications():
         logger.debug("Checking user %s (%d active routines).", user.username, len(all_routines))
 
         _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines)
+        try:
+            _check_regulatory_digest(user, now_utc, now_local)
+        except Exception:
+            logger.exception("Error sending the regulatory digest to user %s.", user.id)
 
         for routine in all_routines:
             if routine.id in processed_routines:
@@ -156,6 +163,12 @@ def _is_due_today(routine, now_local, user_tz):
     return next_due_local.date() <= now_local.date()
 
 
+def _within_daily_window(user, now_local):
+    """Whether ``now_local`` is the user's daily notification time, ±DAILY_WINDOW_MINUTES."""
+    target_dt = datetime.combine(now_local.date(), user.daily_notification_time, tzinfo=now_local.tzinfo)
+    return abs((now_local - target_dt).total_seconds()) <= DAILY_WINDOW_MINUTES * 60
+
+
 def _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines=None):
     """
     Send the daily heads-up if:
@@ -163,16 +176,12 @@ def _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines=None):
       - At least one routine is due today.
       - It hasn't been sent yet today for those routines.
     """
-    target = user.daily_notification_time
-    target_dt = datetime.combine(now_local.date(), target, tzinfo=now_local.tzinfo)
-    diff_seconds = abs((now_local - target_dt).total_seconds())
-
-    if diff_seconds > DAILY_WINDOW_MINUTES * 60:
+    if not _within_daily_window(user, now_local):
         logger.debug(
             "Daily heads-up: not in time window for user %s (now=%s, target=%s).",
             user.username,
             now_local.strftime("%H:%M"),
-            target.strftime("%H:%M"),
+            user.daily_notification_time.strftime("%H:%M"),
         )
         return
 
@@ -209,6 +218,57 @@ def _check_daily_heads_up(user, now_utc, now_local, user_tz, all_routines=None):
             state = states[routine.id]
             state.last_daily_notification = today_local
             state.save(update_fields=["last_daily_notification"])
+
+
+def _digest_lines(deliveries):
+    """``(stock_name, kind)`` per change, a safety notice counted once.
+
+    A notice belongs to the medicine, so T117 records it on every followed
+    presentation of that medicine: the user may hold several of its deliveries
+    for what is one piece of news. They are grouped by medicine and reference.
+    """
+    lines, seen = [], set()
+    for delivery in deliveries:
+        event = delivery.event
+        if event.kind == RegulatoryEvent.Kind.SAFETY_NOTICE_ADDED:
+            key = ("notice", event.presentation.medicine_id, event.payload.get("reference"))
+        else:
+            key = ("event", event.pk)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append((delivery.stock.name, event.kind))
+    return lines
+
+
+def _check_regulatory_digest(user, now_utc, now_local):
+    """Send the user's pending regulatory changes, once, at their daily time.
+
+    The pending deliveries are locked for the whole send: two runs in the same
+    window cannot both see them pending. Marking them delivered is the dedup —
+    a second run finds nothing. If sending raises, the transaction rolls back
+    and they stay pending for the next day's window (stale ones expire after a
+    month, T117) rather than being lost. A push that ``send_push_notification``
+    itself absorbs (an unreachable endpoint, no VAPID keys) counts as sent, as
+    it does for every other notification.
+    """
+    if not _within_daily_window(user, now_local):
+        return
+    with transaction.atomic():
+        deliveries = list(
+            EventDelivery.objects.select_for_update(of=("self",))
+            .filter(user=user, delivered_at__isnull=True)
+            .select_related("event__presentation", "stock")
+            .order_by("created_at", "pk")
+        )
+        if not deliveries:
+            return
+        stock_ids = {delivery.stock_id for delivery in deliveries}
+        data = {"stock_id": stock_ids.pop()} if len(stock_ids) == 1 else {"path": "/inventory"}
+        lines = _digest_lines(deliveries)
+        notify_regulatory_digest(user, lines, data)
+        EventDelivery.objects.filter(pk__in=[delivery.pk for delivery in deliveries]).update(delivered_at=now_utc)
+        logger.info("Regulatory digest sent to user %s (%d changes).", user.username, len(lines))
 
 
 def _check_due_notification(routine, now_utc):
