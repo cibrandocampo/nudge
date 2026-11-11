@@ -9,6 +9,7 @@ docker compose logs -f
 # Single service
 docker compose logs -f backend
 docker compose logs -f celery
+docker compose logs -f beat
 docker compose logs -f frontend
 docker compose logs -f db
 ```
@@ -18,6 +19,7 @@ docker compose logs -f db
 ```bash
 docker compose restart backend
 docker compose restart celery
+docker compose restart beat
 ```
 
 ## Full restart (keeps data)
@@ -56,8 +58,11 @@ docker compose restart backend
 
 ### Celery tasks not running / push not sent
 
-1. Check that Celery is running: `docker compose ps celery`
-2. Check Celery logs for errors: `docker compose logs celery`
+1. Check that the worker **and** the scheduler are running and healthy:
+   `docker compose ps celery beat`. Nothing periodic (notifications, the daily
+   regulatory sync) happens without `beat`; if it is missing, your
+   `docker-compose.yml` predates it — see [upgrade.md](upgrade.md).
+2. Check their logs for errors: `docker compose logs celery beat`
 3. Verify Redis is healthy: `docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping` (should return `PONG`)
 
 ### Database migration errors on startup

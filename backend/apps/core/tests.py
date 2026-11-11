@@ -884,3 +884,52 @@ class DomainExceptionHandlerTest(TestCase):
         from django.conf import settings
 
         self.assertEqual(settings.REST_FRAMEWORK["EXCEPTION_HANDLER"], "apps.core.exception_handler.exception_handler")
+
+
+class BeatSchedulerTests(TestCase):
+    """Beat's schedule store must not be Python 3.13's SQLite dbm (it crashed the embedded beat)."""
+
+    def scheduler(self, path):
+        from nudge.celery import DumbDbmScheduler, app
+
+        return DumbDbmScheduler(app=app, schedule_filename=str(path))
+
+    def test_the_app_uses_the_dumb_dbm_scheduler(self):
+        from django.conf import settings
+
+        from nudge.celery import app
+
+        self.assertEqual(settings.CELERY_BEAT_SCHEDULER, "nudge.celery:DumbDbmScheduler")
+        self.assertEqual(app.conf.beat_scheduler, "nudge.celery:DumbDbmScheduler")
+
+    def test_the_schedule_is_stored_with_dbm_dumb_and_read_back(self):
+        import dbm
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "celerybeat-schedule"
+            scheduler = self.scheduler(path)
+            scheduler.sync()
+            scheduler.close()
+            self.assertEqual(dbm.whichdb(str(path)), "dbm.dumb")
+            self.assertFalse(Path(f"{path}-wal").exists())
+
+            reopened = self.scheduler(path)
+            self.assertIn("check-notifications", reopened.schedule)
+            reopened.close()
+
+    def test_a_leftover_sqlite_schedule_does_not_get_in_the_way(self):
+        # Containers that ran the old scheduler keep its SQLite file at the same path.
+        import dbm.sqlite3
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "celerybeat-schedule"
+            with dbm.sqlite3.open(str(path), "c") as old:
+                old[b"tz"] = b"stale"
+            scheduler = self.scheduler(path)
+            scheduler.sync()
+            self.assertIn("check-notifications", scheduler.schedule)
+            scheduler.close()

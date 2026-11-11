@@ -96,7 +96,9 @@ services:
     image: cibrandocampo/nudge-backend:${DOCKER_NUDGE_VERSION:-stable}
     container_name: "${PROJECT_NAME:-nudge}-celery"
     init: true
-    command: celery -A nudge worker -B --loglevel=${CELERY_LOG_LEVEL:-info} --schedule /tmp/celerybeat-schedule
+    # The worker only runs tasks; the schedule lives in `beat` below. Never add
+    # `-B` here: a second scheduler would send every periodic task twice.
+    command: celery -A nudge worker --loglevel=${CELERY_LOG_LEVEL:-info}
     env_file: .env
     environment:
       # Same hardening as the backend service — celery loads the same
@@ -124,6 +126,49 @@ services:
       resources:
         limits:
           memory: 512M
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  # The periodic-task scheduler (notifications every 5 minutes, the daily
+  # regulatory sync, cleanups), alone in its container so Docker restarts it if
+  # it dies — embedded in the worker, a crashed scheduler went unnoticed while
+  # the worker stayed up. Exactly one instance: never scale this service.
+  beat:
+    image: cibrandocampo/nudge-backend:${DOCKER_NUDGE_VERSION:-stable}
+    container_name: "${PROJECT_NAME:-nudge}-beat"
+    init: true
+    command: celery -A nudge beat --loglevel=${CELERY_LOG_LEVEL:-info} --schedule /tmp/celerybeat-schedule
+    env_file: .env
+    environment:
+      # Same Django settings as the worker, same hardening.
+      DJANGO_DEBUG: "False"
+      E2E_SEED_ALLOWED: ""
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nudge}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nudge}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+    networks:
+      - nudge_net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Beat rewrites its schedule each time it sends a task, at least every
+      # 5 minutes (check_notifications): an older file means it is stuck.
+      test: ["CMD-SHELL", "find /tmp/celerybeat-schedule.dat -mmin -10 | grep -q ."]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 6m
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     read_only: true
     security_opt:
       - no-new-privileges:true
