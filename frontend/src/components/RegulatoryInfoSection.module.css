@@ -21,15 +21,26 @@
   gap: 0.15rem;
 }
 
-/* Agency names are long and upper case: wrap anywhere rather than overflow. */
-.officialName {
-  font-weight: 600;
-  color: var(--c-text);
+/* "Official name: …" — the agency's long upper-case name, kept lighter than
+   the product's own name in the card above. */
+.officialLine {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-.presentation,
-.sourceLine {
+/* The label reads first (dark), the agency's value after it (grey). */
+.officialNameLabel {
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.officialName {
+  color: var(--c-text-2);
+}
+
+.presentation {
   font-size: 0.8rem;
   color: var(--c-text-3);
   overflow-wrap: anywhere;
@@ -51,30 +62,16 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.55rem;
-  border: 1px solid var(--c-border);
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--c-text-2);
-}
-
-/* Tones are doubled for specificity: they must win over `.chip` (and over
-   `.problem`) whatever order the bundler emits them in — the T039 lesson in
+/* Tones are doubled for specificity: they must win over `IconChip`'s own colours (and
+   over `.problem`) whatever order the bundler emits them in — the T039 lesson in
    `StockRow.module.css`. */
 .toneOk.toneOk {
   border-color: var(--c-border-success);
   color: var(--c-success);
-}
-
-.toneNeutral.toneNeutral {
-  color: var(--c-text-2);
 }
 
 .toneWarning.toneWarning {
@@ -125,10 +122,13 @@
   gap: 0.35rem;
 }
 
+/* A block's heading ("Patient leaflet", "Safety notices"): above the leaflet's
+   section titles in size, so the hierarchy reads at a glance. `LeafletAccordion`
+   repeats these values for its own title. */
 .blockTitle {
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--c-text-2);
+  color: var(--c-text);
 }
 
 /* The page's collapsible pattern: a plain button with a chevron. */
@@ -157,7 +157,7 @@
 }
 
 .pastItem,
-.notice {
+.noticeText {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
@@ -165,24 +165,59 @@
   overflow-wrap: anywhere;
 }
 
+/* A notice: its title and date, and a button that opens it on the agency's site. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.noticeOpen {
+  flex-shrink: 0;
+}
+
+.problemOpen {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+}
+
 .footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--c-border-inner);
+}
+
+/* Source, date and guidance: legible, but quiet enough that the eye stays on
+   the data above. */
+.sourceNote {
+  flex: 1 1 14rem;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--c-text-3);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
-}
-
-.sourceLink {
-  font-size: 0.85rem;
-}
-
-.refresh {
   margin-left: auto;
 }
 
-.hint,
-.disclaimer {
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 32px;
+  text-decoration: none;
+}
+
+.hint {
   margin: 0;
   font-size: 0.75rem;
   color: var(--c-text-3);

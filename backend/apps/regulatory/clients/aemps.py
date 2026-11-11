@@ -235,11 +235,28 @@ def _parse_notice(notice) -> SafetyNoticeData:
     )
 
 
-def _leaflet_url(medicamento: dict) -> str:
+def _leaflet_doc(medicamento: dict) -> dict:
     for doc in medicamento.get("docs") or ():
         if isinstance(doc, dict) and doc.get("tipo") == LEAFLET_DOC_TYPE:
-            return str(doc.get("urlHtml") or doc.get("url") or "")
-    return ""
+            return doc
+    return {}
+
+
+def _leaflet_url(medicamento: dict) -> str:
+    doc = _leaflet_doc(medicamento)
+    return str(doc.get("urlHtml") or doc.get("url") or "")
+
+
+def leaflet_pdf_url(medicamento: dict) -> str:
+    """The leaflet as a PDF to download; CIMA gives it as the doc's `url`."""
+    url = str(_leaflet_doc(medicamento).get("url") or "")
+    return url if url.startswith("https://") else ""
+
+
+def affects_driving(medicamento: dict) -> bool | None:
+    """CIMA's `conduc`: whether the medicine can affect the ability to drive."""
+    conduc = medicamento.get("conduc")
+    return conduc if isinstance(conduc, bool) else None
 
 
 def parse_presentation(cn: str, medicamento, psuministro=None, notas=None) -> PresentationData | NotFound:
@@ -273,6 +290,8 @@ def parse_presentation(cn: str, medicamento, psuministro=None, notas=None) -> Pr
         revoked_on=_madrid_date(estado.get("rev")),
         agency_url=f"{PUBLIC_URL}detalle.html?{urlencode({'nregistro': nregistro})}",
         leaflet_url=_leaflet_url(medicamento),
+        leaflet_pdf_url=leaflet_pdf_url(medicamento),
+        affects_driving=affects_driving(medicamento),
         safety_notices=tuple(_parse_notice(n) for n in notas or ()),
         raw=medicamento,
     )

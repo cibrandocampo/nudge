@@ -80,6 +80,8 @@ class MedicineData:
     revoked_on: date | None
     agency_url: str
     leaflet_url: str
+    leaflet_pdf_url: str
+    affects_driving: bool | None
     safety_notices: tuple[SafetyNoticeData, ...]
     raw: dict = field(repr=False)
 

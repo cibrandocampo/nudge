@@ -61,6 +61,19 @@ _WEB_LINK_RE = re.compile(r"https?://", re.IGNORECASE)
 _IMG_RE = re.compile(r'<img((?:\s+[\w-]+="[^"]*")*)\s*/?>')
 
 
+# A list typed as paragraphs: "<p>•&nbsp;&nbsp;…&nbsp; Text</p>", one per item
+# (word-processor output). The bullet is a bullet or a dash followed by
+# spacing; a hyphen is left alone, it starts too many real sentences ("-5 °C").
+_FAKE_ITEM = r"<p>\s*[•·▪–](?:&nbsp;|\s)+((?:(?!</p>).)*)</p>"
+_FAKE_ITEM_RE = re.compile(_FAKE_ITEM, re.DOTALL)
+_FAKE_LIST_RE = re.compile(rf"(?:{_FAKE_ITEM}\s*)+", re.DOTALL)
+
+# A paragraph with nothing to read: spacing, line breaks, or an empty bold or
+# italic run. Word processors use them as vertical spacers; the stylesheet
+# already spaces paragraphs, so each one only adds a gap.
+_EMPTY_P_RE = re.compile(r"<p>(?:\s|&nbsp;|<br\s*/?>|<(strong|b|em|i|u)>(?:\s|&nbsp;)*</\1>)*</p>\s*")
+
+
 def _filter_attribute(tag, attribute, value):
     """Keep only inline images and web links; ``None`` drops the attribute."""
     if tag == "img" and attribute == "src":
@@ -74,12 +87,36 @@ def _drop_image_without_source(match):
     return match.group(0) if ' src="' in match.group(1) else ""
 
 
+def _real_list(match):
+    items = "".join(f"<li>{item.strip()}</li>" for item in _FAKE_ITEM_RE.findall(match.group(0)))
+    return f"<ul>{items}</ul>"
+
+
+def tidy_leaflet_html(html: str) -> str:
+    """Layout fixes on sanitised HTML: no spacer paragraphs, real lists.
+
+    Idempotent, so it can also be run again over leaflets already stored.
+    """
+    return lists_from_bullet_paragraphs(_EMPTY_P_RE.sub("", html))
+
+
+def lists_from_bullet_paragraphs(html: str) -> str:
+    """Consecutive bullet paragraphs turned into one real ``<ul>``.
+
+    Runs on sanitised HTML (nh3 output), so its ``<p>`` tags carry no
+    attributes. The leaflet then reads as the lists it already has, instead of
+    a bullet followed by a wide run of non-breaking spaces.
+    """
+    return _FAKE_LIST_RE.sub(_real_list, html)
+
+
 def sanitize_leaflet_html(html: str) -> str:
     """The leaflet HTML reduced to the allowlist above.
 
     Links open in a new tab with ``rel="noopener noreferrer"``. An image whose
     source is not an inline raster image is removed entirely rather than left
-    as a broken ``<img>``.
+    as a broken ``<img>``. Empty spacer paragraphs are dropped and paragraphs
+    typed as list items become a real list.
     """
     cleaned = nh3.clean(
         html,
@@ -91,4 +128,4 @@ def sanitize_leaflet_html(html: str) -> str:
         link_rel="noopener noreferrer",
         set_tag_attribute_values={"a": {"target": "_blank"}},
     )
-    return _IMG_RE.sub(_drop_image_without_source, cleaned)
+    return tidy_leaflet_html(_IMG_RE.sub(_drop_image_without_source, cleaned))

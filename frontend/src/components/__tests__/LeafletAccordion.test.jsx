@@ -7,6 +7,7 @@ import LeafletAccordion from '../LeafletAccordion'
 
 const BASE = 'http://localhost/api'
 const SOURCE_URL = 'https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html'
+const PDF_URL = 'https://cima.aemps.es/cima/pdfs/p/1161160012/P_1161160012.pdf'
 
 const summary = (over = {}) => ({
   display_name: 'AEMPS (CIMA)',
@@ -20,6 +21,7 @@ const leaflet = (over = {}) => ({
     { key: '1', title: 'Qué es Fiasp', html: '<p>Fiasp es una insulina.</p><table><tr><td>1</td></tr></table>' },
   ],
   source_url: SOURCE_URL,
+  pdf_url: PDF_URL,
   fetched_at: '2026-11-10T01:00:00Z',
   language: 'es',
   ...over,
@@ -48,10 +50,6 @@ const broken = () => new HttpResponse('upstream exploded', { status: 500 })
 const renderAccordion = (props = {}) =>
   renderWithProviders(<LeafletAccordion stockId={7} summary={summary()} {...props} />)
 
-async function openLeaflet(user) {
-  await user.click(screen.getByTestId('leaflet-toggle'))
-}
-
 const sectionToggle = (name) => screen.getByRole('button', { name })
 
 beforeEach(() => {
@@ -64,21 +62,10 @@ afterEach(() => {
 })
 
 describe('LeafletAccordion — loading', () => {
-  it('asks for nothing while closed', async () => {
+  it('shows its title and loads the sections with a single request', async () => {
     const calls = serveLeaflet(ok())
     renderAccordion()
-    expect(screen.getByTestId('leaflet-toggle')).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByTestId('leaflet-toggle')).toHaveTextContent('Patient leaflet')
-    // Give a stray request every chance to land.
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(calls.count).toBe(0)
-  })
-
-  it('opening it makes a single request', async () => {
-    const calls = serveLeaflet(ok())
-    const { user } = renderAccordion()
-    await openLeaflet(user)
-    expect(screen.getByTestId('leaflet-toggle')).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('leaflet-title')).toHaveTextContent('Patient leaflet')
     expect(await screen.findByTestId('leaflet-sections')).toBeInTheDocument()
     expect(calls.count).toBe(1)
   })
@@ -92,24 +79,11 @@ describe('LeafletAccordion — loading', () => {
       await held
       return HttpResponse.json(leaflet())
     })
-    const { user } = renderAccordion()
-    await openLeaflet(user)
+    renderAccordion()
     expect(screen.getByTestId('leaflet-loading')).toHaveTextContent('Loading the leaflet…')
     release()
     await screen.findByTestId('leaflet-sections')
     expect(screen.queryByTestId('leaflet-loading')).not.toBeInTheDocument()
-  })
-
-  it('closing and reopening reuses what was loaded', async () => {
-    const calls = serveLeaflet(ok())
-    const { user } = renderAccordion()
-    await openLeaflet(user)
-    await screen.findByTestId('leaflet-sections')
-    await openLeaflet(user)
-    expect(screen.queryByTestId('leaflet-sections')).not.toBeInTheDocument()
-    await openLeaflet(user)
-    expect(screen.getByTestId('leaflet-sections')).toBeInTheDocument()
-    expect(calls.count).toBe(1)
   })
 })
 
@@ -117,7 +91,6 @@ describe('LeafletAccordion — states', () => {
   it('a leaflet not downloaded yet is pending, not an error, and can be asked again', async () => {
     const calls = serveLeaflet(pending, ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     expect(await screen.findByTestId('leaflet-pending')).toHaveTextContent('The leaflet is not available yet.')
     expect(screen.queryByTestId('leaflet-error')).not.toBeInTheDocument()
 
@@ -129,7 +102,6 @@ describe('LeafletAccordion — states', () => {
   it('a failure says so and retries on demand', async () => {
     const calls = serveLeaflet(broken, ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     const error = await screen.findByTestId('leaflet-error')
     expect(error).toHaveTextContent('Could not load the leaflet.')
 
@@ -140,25 +112,46 @@ describe('LeafletAccordion — states', () => {
 
   it('another 404 is an error, not pending', async () => {
     serveLeaflet(() => HttpResponse.json({ code: 'no_national_code' }, { status: 404 }))
-    const { user } = renderAccordion()
-    await openLeaflet(user)
+    renderAccordion()
     expect(await screen.findByTestId('leaflet-error')).toBeInTheDocument()
   })
 
   it('without sections only the link to the source is offered', async () => {
     serveLeaflet(ok(leaflet({ sections: [] })))
-    const { user } = renderAccordion()
-    await openLeaflet(user)
+    renderAccordion()
     expect(await screen.findByTestId('leaflet-source-link')).toBeInTheDocument()
     expect(screen.queryByTestId('leaflet-sections')).not.toBeInTheDocument()
   })
 
   it('without a source page there is no link', async () => {
-    serveLeaflet(ok(leaflet({ source_url: '' })))
-    const { user } = renderAccordion()
-    await openLeaflet(user)
+    serveLeaflet(ok(leaflet({ sections: [], source_url: '' })))
+    renderAccordion()
+    await screen.findByTestId('leaflet')
+    await waitFor(() => expect(screen.queryByTestId('leaflet-loading')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('leaflet-source-link')).not.toBeInTheDocument()
+  })
+
+  it('with sections the source link is left to the card: no second agency button', async () => {
+    serveLeaflet(ok())
+    renderAccordion()
     await screen.findByTestId('leaflet-sections')
     expect(screen.queryByTestId('leaflet-source-link')).not.toBeInTheDocument()
+  })
+
+  it('the PDF to download sits beside the title', async () => {
+    serveLeaflet(ok())
+    renderAccordion()
+    const download = await screen.findByRole('link', { name: 'Download the leaflet (PDF)' })
+    expect(download).toHaveAttribute('href', PDF_URL)
+    expect(download).toHaveAttribute('target', '_blank')
+    expect(download).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('no PDF, no download button', async () => {
+    serveLeaflet(ok(leaflet({ pdf_url: '' })))
+    renderAccordion()
+    await screen.findByTestId('leaflet-sections')
+    expect(screen.queryByTestId('leaflet-download')).not.toBeInTheDocument()
   })
 })
 
@@ -166,7 +159,6 @@ describe('LeafletAccordion — sections', () => {
   it('opening a section shows its HTML in the leaflet language', async () => {
     serveLeaflet(ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     await user.click(await screen.findByRole('button', { name: 'Introducción' }))
     const html = screen.getByTestId('leaflet-section-html')
     expect(html).toHaveAttribute('lang', 'es')
@@ -176,7 +168,6 @@ describe('LeafletAccordion — sections', () => {
   it('opening another section closes the first', async () => {
     serveLeaflet(ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     await user.click(await screen.findByRole('button', { name: 'Introducción' }))
     await user.click(sectionToggle('Qué es Fiasp'))
     const panels = screen.getAllByTestId('leaflet-section-html')
@@ -188,7 +179,6 @@ describe('LeafletAccordion — sections', () => {
   it('clicking an open section closes it', async () => {
     serveLeaflet(ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     await user.click(await screen.findByRole('button', { name: 'Introducción' }))
     await user.click(sectionToggle('Introducción'))
     expect(screen.queryByTestId('leaflet-section-html')).not.toBeInTheDocument()
@@ -197,7 +187,6 @@ describe('LeafletAccordion — sections', () => {
   it('aria-expanded and aria-controls point at the open panel', async () => {
     serveLeaflet(ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     const toggle = await screen.findByRole('button', { name: 'Qué es Fiasp' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await user.click(toggle)
@@ -208,7 +197,6 @@ describe('LeafletAccordion — sections', () => {
   it('the opened section is brought into view and focused', async () => {
     serveLeaflet(ok())
     const { user } = renderAccordion()
-    await openLeaflet(user)
     await user.click(await screen.findByRole('button', { name: 'Introducción' }))
     const toggle = sectionToggle('Qué es Fiasp')
     toggle.scrollIntoView.mockClear()
@@ -218,9 +206,8 @@ describe('LeafletAccordion — sections', () => {
   })
 
   it('the source link opens a new tab without opener', async () => {
-    serveLeaflet(ok())
-    const { user } = renderAccordion()
-    await openLeaflet(user)
+    serveLeaflet(ok(leaflet({ sections: [] })))
+    renderAccordion()
     const link = await screen.findByTestId('leaflet-source-link')
     expect(link).toHaveTextContent('View the leaflet on AEMPS (CIMA)')
     expect(link).toHaveAttribute('href', SOURCE_URL)
@@ -232,8 +219,7 @@ describe('LeafletAccordion — sections', () => {
 describe('LeafletAccordion — freshness', () => {
   it('a new fetched_at in the summary asks for the leaflet again', async () => {
     const calls = serveLeaflet(ok(), ok(leaflet({ sections: [{ key: '0', title: 'Nueva', html: '<p>x</p>' }] })))
-    const { user, rerender } = renderAccordion()
-    await openLeaflet(user)
+    const { rerender } = renderAccordion()
     await screen.findByRole('button', { name: 'Introducción' })
 
     rerender(<LeafletAccordion stockId={7} summary={summary({ fetched_at: '2026-11-11T01:00:00Z' })} />)
@@ -243,8 +229,7 @@ describe('LeafletAccordion — freshness', () => {
 
   it('the same fetched_at does not', async () => {
     const calls = serveLeaflet(ok())
-    const { user, rerender } = renderAccordion()
-    await openLeaflet(user)
+    const { rerender } = renderAccordion()
     await screen.findByTestId('leaflet-sections')
     rerender(<LeafletAccordion stockId={7} summary={summary()} />)
     await waitFor(() => expect(screen.getByTestId('leaflet-sections')).toBeInTheDocument())

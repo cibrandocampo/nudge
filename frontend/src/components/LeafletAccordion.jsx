@@ -10,20 +10,19 @@ import s from './LeafletAccordion.module.css'
  * The patient leaflet, read inside the app: one button per section, one
  * section open at a time.
  *
- * Nothing is asked for until the user opens "Leaflet" — then the whole leaflet
- * comes in one request and stays in the persisted cache, so it reads offline
- * afterwards. With no sections (the agency publishes none) only the link to
- * the agency's own page is offered.
+ * The section titles are on screen from the start — the leaflet is a main
+ * feature, not a fold to discover — so the whole leaflet comes in one request
+ * as the page opens and stays in the persisted cache, readable offline
+ * afterwards. The PDF to download sits beside the title. With no sections
+ * (the agency publishes none) the link to the agency's own page is offered
+ * instead: with sections it would only repeat the card's own agency link.
  */
 export default function LeafletAccordion({ stockId, summary }) {
   const { t } = useTranslation()
   const idPrefix = useId()
-  const [open, setOpen] = useState(false)
   const [openKey, setOpenKey] = useState(null)
   const headers = useRef({})
-  const { data, isError, refetch, isFetching } = useLeaflet(stockId, summary.fetched_at, {
-    enabled: open,
-  })
+  const { data, isError, refetch, isFetching } = useLeaflet(stockId, summary.fetched_at)
 
   // Opening a section closes the previous one, which may sit above it: bring
   // the new header back under the user's eye and give it the focus.
@@ -99,14 +98,15 @@ export default function LeafletAccordion({ stockId, summary }) {
             })}
           </ul>
         )}
-        {data.source_url && (
+        {sections.length === 0 && data.source_url && (
           <a
-            className={s.sourceLink}
+            className={cx(buttons.btn, buttons.btnSecondary, s.sourceLink)}
             href={data.source_url}
             target="_blank"
             rel="noopener noreferrer"
             data-testid="leaflet-source-link"
           >
+            <Icon name="external-link" size="sm" />
             {t('regulatory.leaflet.viewSource', { source: summary.display_name })}
           </a>
         )}
@@ -129,17 +129,25 @@ export default function LeafletAccordion({ stockId, summary }) {
 
   return (
     <div className={s.leaflet} data-testid="leaflet">
-      <button
-        type="button"
-        className={s.header}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        data-testid="leaflet-toggle"
-      >
-        {t('regulatory.leaflet.title')}
-        <Icon name={open ? 'chevron-up' : 'chevron-down'} size="sm" />
-      </button>
-      {open && body}
+      <div className={s.titleRow}>
+        <span className={s.title} data-testid="leaflet-title">
+          {t('regulatory.leaflet.title')}
+        </span>
+        {data?.pdf_url && (
+          <a
+            className={cx(buttons.btnIcon, buttons.btnIconOutline)}
+            href={data.pdf_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('regulatory.leaflet.download')}
+            title={t('regulatory.leaflet.download')}
+            data-testid="leaflet-download"
+          >
+            <Icon name="download" size="sm" />
+          </a>
+        )}
+      </div>
+      {body}
     </div>
   )
 }

@@ -142,6 +142,8 @@ def _apply_medicine(source, data, now):
             "revoked_on": data.revoked_on,
             "agency_url": data.agency_url,
             "leaflet_url": data.leaflet_url,
+            "leaflet_pdf_url": data.leaflet_pdf_url,
+            "affects_driving": data.affects_driving,
             "raw": data.raw,
             "fetched_at": now,
         },

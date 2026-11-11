@@ -33,7 +33,7 @@ test.describe('Regulatory data on the product page', () => {
     await expect(offer(page)).toHaveCount(0)
 
     await expect(section(page).getByTestId('regulatory-official-name')).toHaveText(REG.fastInsulin.officialName)
-    await expect(section(page).getByText('Source: AEMPS (CIMA)', { exact: false })).toBeVisible()
+    await expect(section(page).getByTestId('regulatory-source')).toContainText('Source: AEMPS (CIMA)')
     await expect(section(page).getByTestId('regulatory-supply-chip')).toHaveAttribute('data-tone', 'danger')
     const problem = section(page).getByTestId('regulatory-active-problem')
     await expect(problem).toContainText('See the AEMPS information note')

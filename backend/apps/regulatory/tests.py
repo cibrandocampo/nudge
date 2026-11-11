@@ -46,7 +46,7 @@ from apps.regulatory.models import (
     SafetyNotice,
     SupplyProblem,
 )
-from apps.regulatory.sanitize import sanitize_leaflet_html
+from apps.regulatory.sanitize import sanitize_leaflet_html, tidy_leaflet_html
 from apps.routines.models import Stock
 
 User = get_user_model()
@@ -189,6 +189,8 @@ class ParsePresentationTests(SimpleTestCase):
         self.assertIsNone(medicine.revoked_on)
         self.assertEqual(medicine.agency_url, "https://cima.aemps.es/cima/publico/detalle.html?nregistro=1161160012")
         self.assertEqual(medicine.leaflet_url, "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html")
+        self.assertEqual(medicine.leaflet_pdf_url, "https://cima.aemps.es/cima/pdfs/p/1161160012/P_1161160012.pdf")
+        self.assertIs(medicine.affects_driving, True)
         self.assertEqual(medicine.safety_notices, ())
 
     def test_raw_payloads_travel_along(self):
@@ -201,6 +203,7 @@ class ParsePresentationTests(SimpleTestCase):
         data = aemps.parse_presentation(HIDROFEROL_CN, load("medicamento_934554.json"), notas=load("notas_55315.json"))
 
         self.assertIsNone(data.supply)
+        self.assertIs(data.medicine.affects_driving, False)
         self.assertEqual(len(data.medicine.safety_notices), 2)
         notice = data.medicine.safety_notices[0]
         self.assertEqual(notice.reference, "MUH (FV), 03/2026")
@@ -228,6 +231,22 @@ class ParsePresentationTests(SimpleTestCase):
         medicamento["docs"] = [doc for doc in medicamento["docs"] if doc["tipo"] != 2]
         data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
         self.assertEqual(data.medicine.leaflet_url, "")
+        self.assertEqual(data.medicine.leaflet_pdf_url, "")
+
+    def test_a_leaflet_pdf_that_is_not_https_is_dropped(self):
+        medicamento, psuministro = fiasp()
+        leaflet = next(doc for doc in medicamento["docs"] if doc["tipo"] == 2)
+        leaflet["url"] = "javascript:alert(1)"
+        data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
+        self.assertEqual(data.medicine.leaflet_pdf_url, "")
+
+    def test_driving_is_unknown_when_the_agency_omits_it(self):
+        for value in (None, "S"):
+            with self.subTest(conduc=value):
+                medicamento, psuministro = fiasp()
+                medicamento["conduc"] = value
+                data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
+                self.assertIsNone(data.medicine.affects_driving)
 
     def test_leaflet_falls_back_to_pdf_without_html(self):
         medicamento, psuministro = fiasp()
@@ -740,6 +759,8 @@ class ApplyPresentationTests(TestCase):
         self.assertEqual(medicine.name, "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO")
         self.assertEqual(medicine.status, Medicine.Status.AUTHORISED)
         self.assertEqual(medicine.raw["nregistro"], "1161160012")
+        self.assertIs(medicine.affects_driving, True)
+        self.assertTrue(medicine.leaflet_pdf_url.endswith("/P_1161160012.pdf"))
         self.assertTrue(presentation.name.endswith("5 cartuchos de 1,6 ml"))
         self.assertIs(presentation.marketed, True)
         self.assertEqual(presentation.fetch_status, Presentation.FetchStatus.OK)
@@ -1251,6 +1272,40 @@ class SeedRegulatoryDataTests(TestCase):
 
 class SanitizeLeafletHtmlTests(SimpleTestCase):
     """One test per vector: what the sanitiser must remove, and what it must keep."""
+
+    def test_bullet_paragraphs_become_one_real_list(self):
+        html = (
+            "<p>Intro:</p>"
+            '<p style="x">•&nbsp;&nbsp;&nbsp; <strong>Uno</strong></p>\n'
+            "<p>–\u00a0\u00a0 Dos</p>"
+            "<p>Fin.</p>"
+        )
+        self.assertEqual(
+            sanitize_leaflet_html(html),
+            "<p>Intro:</p><ul><li><strong>Uno</strong></li><li>Dos</li></ul><p>Fin.</p>",
+        )
+
+    def test_a_paragraph_starting_with_a_hyphen_or_a_bullet_word_is_left_alone(self):
+        for html in ("<p>-5 °C como mínimo</p>", "<p>•Pegado</p>"):
+            with self.subTest(html=html):
+                self.assertEqual(sanitize_leaflet_html(html), html)
+
+    def test_spacer_paragraphs_are_dropped(self):
+        html = (
+            "<p>&nbsp;</p>\n<p>Texto</p>\n<p><strong>&nbsp;</strong></p><p> <br> </p><p></p><p><em> </em></p><p>Fin</p>"
+        )
+        self.assertEqual(sanitize_leaflet_html(html), "<p>Texto</p>\n<p>Fin</p>")
+
+    def test_a_paragraph_with_an_image_or_text_is_never_a_spacer(self):
+        image = '<p><img src="data:image/png;base64,iVBORw0KGgo=" alt=""></p>'
+        self.assertEqual(sanitize_leaflet_html(image), image)
+        self.assertEqual(
+            sanitize_leaflet_html("<p><strong>&nbsp;Nota</strong></p>"), "<p><strong>&nbsp;Nota</strong></p>"
+        )
+
+    def test_tidying_twice_changes_nothing(self):
+        once = sanitize_leaflet_html("<p>&nbsp;</p><p>•&nbsp; a</p><p>•&nbsp; b</p>")
+        self.assertEqual(tidy_leaflet_html(once), once)
 
     def test_script_is_removed_with_its_content(self):
         self.assertEqual(sanitize_leaflet_html("<p>a</p><script>alert(1)</script>"), "<p>a</p>")
@@ -2039,3 +2094,53 @@ class EventAdminTests(TestCase):
                     self.client.get(reverse(f"admin:regulatory_{model}_changelist")), "Supply problem resolved"
                 )
                 self.assertEqual(self.client.get(reverse(f"admin:regulatory_{model}_add")).status_code, 403)
+
+
+class BackfillDrivingAndLeafletPdfTests(TestCase):
+    """Migration 0004 fills the new columns from the payload already stored."""
+
+    def test_reads_the_stored_payload(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        migration = import_module("apps.regulatory.migrations.0004_medicine_driving_and_leaflet_pdf")
+        medicamento, _ = fiasp()
+        fiasp_medicine = Medicine.objects.create(
+            source="aemps", code="1", name="Fiasp", raw=medicamento, fetched_at=timezone.now()
+        )
+        bare = Medicine.objects.create(source="aemps", code="2", name="Bare", raw={}, fetched_at=timezone.now())
+
+        migration.backfill_from_raw(django_apps, None)
+
+        fiasp_medicine.refresh_from_db()
+        bare.refresh_from_db()
+        self.assertIs(fiasp_medicine.affects_driving, True)
+        self.assertTrue(fiasp_medicine.leaflet_pdf_url.endswith("/P_1161160012.pdf"))
+        self.assertIsNone(bare.affects_driving)
+        self.assertEqual(bare.leaflet_pdf_url, "")
+
+
+class TidyStoredLeafletsTests(TestCase):
+    """Migration 0005 tidies the leaflets already stored: no spacers, real lists."""
+
+    def test_rewrites_stored_sections(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        migration = import_module("apps.regulatory.migrations.0005_leaflet_tidy_layout")
+        medicamento, _ = fiasp()
+        medicine = Medicine.objects.create(
+            source="aemps", code="1", name="Fiasp", raw=medicamento, fetched_at=timezone.now()
+        )
+        leaflet = MedicineLeaflet.objects.create(
+            medicine=medicine,
+            sections=[{"key": "0", "title": "T", "html": "<p>&nbsp;</p><p>•&nbsp;&nbsp; a</p><p>•&nbsp; b</p>"}],
+            fetched_at=timezone.now(),
+        )
+
+        migration.tidy_stored_leaflets(django_apps, None)
+
+        leaflet.refresh_from_db()
+        self.assertEqual(leaflet.sections, [{"key": "0", "title": "T", "html": "<ul><li>a</li><li>b</li></ul>"}])

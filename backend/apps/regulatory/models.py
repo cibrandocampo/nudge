@@ -9,8 +9,9 @@ Two rules shape what is stored:
 
 * **Columns for what the code uses, ``raw`` for the rest.** A column exists
   only when something queries, diffs or shows it. Everything else the agency
-  returns stays in ``raw``, so a later iteration that wants the holder or the
-  driving warning reads it from there instead of fetching again.
+  returns stays in ``raw``, so a later iteration that wants the holder reads it
+  from there instead of fetching again (the driving warning and the leaflet
+  PDF started that way).
 * **Only what Nudge uses.** The catalogue holds the presentations some stock is
   linked to, and their medicines — never a mirror of the agency. The daily
   sync deletes what no stock references any more.
@@ -46,6 +47,10 @@ class Medicine(models.Model):
     agency_url = models.URLField(max_length=500, blank=True)
     leaflet_url = models.URLField(
         max_length=500, blank=True, help_text="The agency's own page of the leaflet: the fallback link."
+    )
+    leaflet_pdf_url = models.URLField(max_length=500, blank=True, help_text="The leaflet as a PDF to download.")
+    affects_driving = models.BooleanField(
+        null=True, blank=True, help_text="Whether it can affect the ability to drive; null = the agency does not say."
     )
     raw = models.JSONField(default=dict, blank=True)
     fetched_at = models.DateTimeField()
