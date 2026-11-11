@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test'
-import { freshSession, goToStockDetail, waitForServiceWorkerReady } from './helpers.js'
+import { freshSession, goToStockDetail, resetSeed, waitForServiceWorkerReady } from './helpers.js'
 
 /**
  * T055 — the app runs under the production Content Security Policy.
@@ -60,6 +60,23 @@ test.describe('content security policy', () => {
       await page.waitForLoadState('networkidle')
     }
     await goToStockDetail(page, 'metformin')
+    await page.waitForLoadState('networkidle')
+    expect(cspViolations).toEqual([])
+  })
+
+  test('the leaflet renders under the CSP', async ({ page, context, cspViolations }) => {
+    // The agency's HTML is the one third-party markup in the app: sanitised
+    // server-side, unstyled, with its images as data: URIs. The seed carries
+    // FIASP's real leaflet; its last section has the pack image and a table.
+    await resetSeed(context)
+    await freshSession(page, context, { loginAs: 'user1' })
+    await goToStockDetail(page, 'fastInsulin')
+    // The seed leaves this stock's name offer pending.
+    await page.getByTestId('stock-values-keep').click()
+    await page.getByRole('button', { name: 'Contenido del envase e información adicional' }).click()
+    const html = page.getByTestId('leaflet-section-html')
+    await expect(html.locator('img')).toHaveCount(1)
+    await expect(html.locator('table').first()).toBeVisible()
     await page.waitForLoadState('networkidle')
     expect(cspViolations).toEqual([])
   })

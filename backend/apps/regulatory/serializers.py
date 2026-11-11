@@ -8,7 +8,7 @@ from django.db.models import F
 from rest_framework import serializers
 
 from .clients import aemps
-from .models import SafetyNotice, SupplyProblem
+from .models import MedicineLeaflet, RegulatoryEvent, SafetyNotice, SupplyProblem
 
 # One entry because there is one agency. Picking the right constants by
 # `source` is all this dict does — on purpose there is no client registry.
@@ -36,6 +36,7 @@ class RegulatorySummarySerializer(serializers.Serializer):
     fetched_at = serializers.DateTimeField(source="presentation.fetched_at")
     marketed = serializers.BooleanField(source="presentation.marketed", allow_null=True)
     status = serializers.SerializerMethodField()
+    affects_driving = serializers.SerializerMethodField()
     supply_severity = serializers.CharField(source="presentation.supply_severity", allow_null=True)
     name_offer_pending = serializers.SerializerMethodField()
 
@@ -59,6 +60,10 @@ class RegulatorySummarySerializer(serializers.Serializer):
     def get_status(self, stock):
         medicine = stock.presentation.medicine
         return medicine.status if medicine else None
+
+    def get_affects_driving(self, stock):
+        medicine = stock.presentation.medicine
+        return medicine.affects_driving if medicine else None
 
     def get_name_offer_pending(self, stock):
         # The offer is the owner's to answer; a guest never sees it pending.
@@ -87,6 +92,12 @@ class SupplyProblemSerializer(serializers.ModelSerializer):
         return problem.resolved_at is None
 
 
+class RegulatoryEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RegulatoryEvent
+        fields = ["kind", "payload", "detected_at"]
+
+
 class SafetyNoticeSerializer(serializers.ModelSerializer):
     class Meta:
         model = SafetyNotice
@@ -96,10 +107,15 @@ class SafetyNoticeSerializer(serializers.ModelSerializer):
 class RegulatoryDetailSerializer(RegulatorySummarySerializer):
     """Everything the product page shows about the stock's medicine."""
 
+    # The latest changes detected on the presentation. No screen shows them yet;
+    # the daily push (and a later history view) build on them.
+    EVENT_LIMIT = 20
+
     agency_url = serializers.SerializerMethodField()
     presentation_name = serializers.CharField(source="presentation.name")
     supply_problems = serializers.SerializerMethodField()
     safety_notices = serializers.SerializerMethodField()
+    events = serializers.SerializerMethodField()
 
     def get_agency_url(self, stock):
         medicine = stock.presentation.medicine
@@ -118,3 +134,26 @@ class RegulatoryDetailSerializer(RegulatorySummarySerializer):
             return []
         notices = medicine.safety_notices.order_by(F("published_on").desc(nulls_last=True), "reference")
         return SafetyNoticeSerializer(notices, many=True).data
+
+    def get_events(self, stock):
+        events = stock.presentation.events.order_by("-detected_at", "-pk")[: self.EVENT_LIMIT]
+        return RegulatoryEventSerializer(events, many=True).data
+
+
+class MedicineLeafletSerializer(serializers.ModelSerializer):
+    """The sanitised leaflet sections; ``source_url`` is the fallback when there are none.
+
+    ``pdf_url`` is the whole leaflet as a file to download, empty when the agency
+    publishes none.
+    """
+
+    language = serializers.SerializerMethodField()
+    pdf_url = serializers.URLField(source="medicine.leaflet_pdf_url", read_only=True)
+
+    class Meta:
+        model = MedicineLeaflet
+        fields = ["sections", "source_url", "pdf_url", "fetched_at", "language"]
+
+    def get_language(self, leaflet):
+        client = CLIENTS_BY_SOURCE.get(leaflet.medicine.source)
+        return client.LANGUAGE if client else None

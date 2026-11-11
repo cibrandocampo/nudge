@@ -33,10 +33,20 @@ from apps.regulatory.clients.types import (
     SEVERITY_WARNING,
     FetchDisabled,
     NotFound,
+    SafetyNoticeData,
     UpstreamPayloadError,
     UpstreamUnavailable,
 )
-from apps.regulatory.models import Medicine, Presentation, SafetyNotice, SupplyProblem
+from apps.regulatory.models import (
+    EventDelivery,
+    Medicine,
+    MedicineLeaflet,
+    Presentation,
+    RegulatoryEvent,
+    SafetyNotice,
+    SupplyProblem,
+)
+from apps.regulatory.sanitize import sanitize_leaflet_html, tidy_leaflet_html
 from apps.routines.models import Stock
 
 User = get_user_model()
@@ -49,12 +59,33 @@ SUSPENDED_CN = "656538"
 REVOKED_CN = "708201"
 
 
+# A safety net under every test of this module: a request that escapes the
+# patches below fails loudly instead of quietly reaching the agency.
+_network_guard = mock.patch.object(aemps._session, "get", side_effect=AssertionError("A test reached the network"))
+
+
+def setUpModule():
+    _network_guard.start()
+
+
+def tearDownModule():
+    _network_guard.stop()
+
+
 def load(name):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 def fiasp():
     return load("medicamento_728514.json"), load("psuministro_728514.json")
+
+
+FIASP_NREGISTRO = "1161160012"
+HIDROFEROL_NREGISTRO = "55315"
+
+
+def fiasp_leaflet():
+    return aemps.parse_recorded_leaflet(FIASP_NREGISTRO, FIXTURES)
 
 
 # ── Codes ─────────────────────────────────────────────────────────────────────
@@ -158,6 +189,8 @@ class ParsePresentationTests(SimpleTestCase):
         self.assertIsNone(medicine.revoked_on)
         self.assertEqual(medicine.agency_url, "https://cima.aemps.es/cima/publico/detalle.html?nregistro=1161160012")
         self.assertEqual(medicine.leaflet_url, "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html")
+        self.assertEqual(medicine.leaflet_pdf_url, "https://cima.aemps.es/cima/pdfs/p/1161160012/P_1161160012.pdf")
+        self.assertIs(medicine.affects_driving, True)
         self.assertEqual(medicine.safety_notices, ())
 
     def test_raw_payloads_travel_along(self):
@@ -170,6 +203,7 @@ class ParsePresentationTests(SimpleTestCase):
         data = aemps.parse_presentation(HIDROFEROL_CN, load("medicamento_934554.json"), notas=load("notas_55315.json"))
 
         self.assertIsNone(data.supply)
+        self.assertIs(data.medicine.affects_driving, False)
         self.assertEqual(len(data.medicine.safety_notices), 2)
         notice = data.medicine.safety_notices[0]
         self.assertEqual(notice.reference, "MUH (FV), 03/2026")
@@ -197,6 +231,22 @@ class ParsePresentationTests(SimpleTestCase):
         medicamento["docs"] = [doc for doc in medicamento["docs"] if doc["tipo"] != 2]
         data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
         self.assertEqual(data.medicine.leaflet_url, "")
+        self.assertEqual(data.medicine.leaflet_pdf_url, "")
+
+    def test_a_leaflet_pdf_that_is_not_https_is_dropped(self):
+        medicamento, psuministro = fiasp()
+        leaflet = next(doc for doc in medicamento["docs"] if doc["tipo"] == 2)
+        leaflet["url"] = "javascript:alert(1)"
+        data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
+        self.assertEqual(data.medicine.leaflet_pdf_url, "")
+
+    def test_driving_is_unknown_when_the_agency_omits_it(self):
+        for value in (None, "S"):
+            with self.subTest(conduc=value):
+                medicamento, psuministro = fiasp()
+                medicamento["conduc"] = value
+                data = aemps.parse_presentation(FIASP_CN, medicamento, psuministro=psuministro)
+                self.assertIsNone(data.medicine.affects_driving)
 
     def test_leaflet_falls_back_to_pdf_without_html(self):
         medicamento, psuministro = fiasp()
@@ -431,7 +481,10 @@ class GetJsonTests(SimpleTestCase):
         with mock.patch.object(aemps._session, "get", return_value=response(200, {"ok": 1})) as get:
             self.assertEqual(aemps._get_json("medicamento", {"cn": FIASP_CN}), {"ok": 1})
         get.assert_called_once_with(
-            "https://cima.aemps.es/cima/rest/medicamento", params={"cn": FIASP_CN}, timeout=aemps.TIMEOUT
+            "https://cima.aemps.es/cima/rest/medicamento",
+            params={"cn": FIASP_CN},
+            headers={"Accept": "application/json"},
+            timeout=aemps.TIMEOUT,
         )
 
     def test_session_identifies_the_app_without_personal_data(self):
@@ -706,6 +759,8 @@ class ApplyPresentationTests(TestCase):
         self.assertEqual(medicine.name, "FIASP 100 UNIDADES/ML PUMPCART SOLUCION INYECTABLE EN CARTUCHO")
         self.assertEqual(medicine.status, Medicine.Status.AUTHORISED)
         self.assertEqual(medicine.raw["nregistro"], "1161160012")
+        self.assertIs(medicine.affects_driving, True)
+        self.assertTrue(medicine.leaflet_pdf_url.endswith("/P_1161160012.pdf"))
         self.assertTrue(presentation.name.endswith("5 cartuchos de 1,6 ml"))
         self.assertIs(presentation.marketed, True)
         self.assertEqual(presentation.fetch_status, Presentation.FetchStatus.OK)
@@ -916,6 +971,10 @@ class FetchPresentationTaskTests(TestCase):
 class SyncRegulatoryDataTests(TestCase):
     def setUp(self):
         self.user = make_user()
+        # The leaflet step runs after every refresh; its own tests patch it per case.
+        patcher = mock.patch.object(aemps, "fetch_leaflet", return_value=None)
+        self.fetch_leaflet = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def linked(self, code, data=None):
         presentation = Presentation.objects.create(source="aemps", code=code)
@@ -970,7 +1029,7 @@ class SyncRegulatoryDataTests(TestCase):
     def test_a_presentation_deleted_mid_run_is_skipped(self):
         self.linked(FIASP_CN)
 
-        def vanish(presentation_id):
+        def vanish(presentation_id, **kwargs):
             raise Presentation.DoesNotExist
 
         with mock.patch.object(services, "refresh_presentation", side_effect=vanish):
@@ -1041,13 +1100,13 @@ class AdminTests(TestCase):
         self.presentation = Presentation.objects.get(pk=presentation.pk)
 
     def test_changelists_render(self):
-        for model in ("medicine", "presentation", "supplyproblem", "safetynotice"):
+        for model in ("medicine", "presentation", "supplyproblem", "safetynotice", "medicineleaflet"):
             with self.subTest(model=model):
                 response = self.client.get(reverse(f"admin:regulatory_{model}_changelist"))
                 self.assertEqual(response.status_code, 200)
 
     def test_rows_cannot_be_added(self):
-        for model in ("medicine", "presentation", "supplyproblem", "safetynotice"):
+        for model in ("medicine", "presentation", "supplyproblem", "safetynotice", "medicineleaflet"):
             with self.subTest(model=model):
                 response = self.client.get(reverse(f"admin:regulatory_{model}_add"))
                 self.assertEqual(response.status_code, 403)
@@ -1140,15 +1199,34 @@ class SeedRegulatoryDataTests(TestCase):
     def setUp(self):
         with (
             mock.patch.object(aemps, "fetch") as fetch,
+            mock.patch.object(aemps, "fetch_leaflet") as fetch_leaflet,
             mock.patch.object(tasks.fetch_presentation, "delay") as delay,
+            mock.patch.object(tasks.fetch_leaflet, "delay") as leaflet_delay,
             self.captureOnCommitCallbacks(execute=True),
         ):
             call_command("seed", stdout=io.StringIO())
         self.fetch, self.delay = fetch, delay
+        self.fetch, self.delay = fetch, delay
+        self.fetch_leaflet, self.leaflet_delay = fetch_leaflet, leaflet_delay
 
     def test_never_reaches_the_agency(self):
         self.fetch.assert_not_called()
         self.delay.assert_not_called()
+        self.fetch_leaflet.assert_not_called()
+        self.leaflet_delay.assert_not_called()
+
+    def test_insulin_and_hidroferol_carry_their_recorded_leaflets(self):
+        leaflets = MedicineLeaflet.objects.select_related("medicine")
+        self.assertEqual(
+            sorted((leaflet.medicine.code, len(leaflet.sections)) for leaflet in leaflets),
+            [(FIASP_NREGISTRO, 7), (HIDROFEROL_NREGISTRO, 7)],
+        )
+        # Applied through the service: already sanitised.
+        self.assertFalse(any("style=" in section["html"] for leaflet in leaflets for section in leaflet.sections))
+
+    def test_ibuprofen_has_no_leaflet_until_refreshed(self):
+        ibuprofen = Stock.objects.get(name="Ibuprofen 600mg")
+        self.assertFalse(MedicineLeaflet.objects.filter(medicine=ibuprofen.presentation.medicine).exists())
 
     def test_links_the_three_regulatory_stocks_with_a_baseline(self):
         linked = Stock.objects.filter(presentation__isnull=False)
@@ -1186,3 +1264,883 @@ class SeedRegulatoryDataTests(TestCase):
         self.assertEqual(Presentation.objects.count(), 3)
         self.assertEqual(Medicine.objects.count(), 3)
         self.assertEqual(SafetyNotice.objects.count(), 3)
+        self.assertEqual(MedicineLeaflet.objects.count(), 2)
+
+
+# ── Leaflet: sanitising ───────────────────────────────────────────────────────
+
+
+class SanitizeLeafletHtmlTests(SimpleTestCase):
+    """One test per vector: what the sanitiser must remove, and what it must keep."""
+
+    def test_bullet_paragraphs_become_one_real_list(self):
+        html = (
+            "<p>Intro:</p>"
+            '<p style="x">•&nbsp;&nbsp;&nbsp; <strong>Uno</strong></p>\n'
+            "<p>–\u00a0\u00a0 Dos</p>"
+            "<p>Fin.</p>"
+        )
+        self.assertEqual(
+            sanitize_leaflet_html(html),
+            "<p>Intro:</p><ul><li><strong>Uno</strong></li><li>Dos</li></ul><p>Fin.</p>",
+        )
+
+    def test_a_paragraph_starting_with_a_hyphen_or_a_bullet_word_is_left_alone(self):
+        for html in ("<p>-5 °C como mínimo</p>", "<p>•Pegado</p>"):
+            with self.subTest(html=html):
+                self.assertEqual(sanitize_leaflet_html(html), html)
+
+    def test_spacer_paragraphs_are_dropped(self):
+        html = (
+            "<p>&nbsp;</p>\n<p>Texto</p>\n<p><strong>&nbsp;</strong></p><p> <br> </p><p></p><p><em> </em></p><p>Fin</p>"
+        )
+        self.assertEqual(sanitize_leaflet_html(html), "<p>Texto</p>\n<p>Fin</p>")
+
+    def test_a_paragraph_with_an_image_or_text_is_never_a_spacer(self):
+        image = '<p><img src="data:image/png;base64,iVBORw0KGgo=" alt=""></p>'
+        self.assertEqual(sanitize_leaflet_html(image), image)
+        self.assertEqual(
+            sanitize_leaflet_html("<p><strong>&nbsp;Nota</strong></p>"), "<p><strong>&nbsp;Nota</strong></p>"
+        )
+
+    def test_tidying_twice_changes_nothing(self):
+        once = sanitize_leaflet_html("<p>&nbsp;</p><p>•&nbsp; a</p><p>•&nbsp; b</p>")
+        self.assertEqual(tidy_leaflet_html(once), once)
+
+    def test_script_is_removed_with_its_content(self):
+        self.assertEqual(sanitize_leaflet_html("<p>a</p><script>alert(1)</script>"), "<p>a</p>")
+
+    def test_an_image_with_an_event_handler_and_a_remote_source_is_removed(self):
+        self.assertEqual(sanitize_leaflet_html("<img src=x onerror=alert(1)>text"), "text")
+
+    def test_a_javascript_link_loses_its_href(self):
+        cleaned = sanitize_leaflet_html('<a href="javascript:alert(1)">x</a>')
+        self.assertNotIn("href", cleaned)
+        self.assertNotIn("javascript", cleaned)
+
+    def test_a_data_link_loses_its_href(self):
+        cleaned = sanitize_leaflet_html('<a href="data:text/html,&lt;script&gt;">x</a>')
+        self.assertNotIn("href", cleaned)
+        self.assertNotIn("data:", cleaned)
+
+    def test_embedding_and_foreign_content_is_removed_with_its_content(self):
+        for markup in (
+            '<iframe src="https://example.com">frame</iframe>',
+            "<svg onload=alert(1)><circle/>vector</svg>",
+            "<style>p { color: red }</style>",
+            "<math><mi>x</mi></math>",
+            '<object data="x">obj</object>',
+            '<form action="https://example.com"><input name="q">form</form>',
+        ):
+            with self.subTest(markup=markup):
+                self.assertEqual(sanitize_leaflet_html(f"{markup}<p>kept</p>"), "<p>kept</p>")
+
+    def test_style_class_and_id_are_removed(self):
+        self.assertEqual(sanitize_leaflet_html('<p style="color:red" class="x" id="y">a</p>'), "<p>a</p>")
+
+    def test_style_only_spans_are_unwrapped(self):
+        self.assertEqual(sanitize_leaflet_html('<p><span style="font-size:11pt">text</span></p>'), "<p>text</p>")
+
+    def test_an_inline_raster_image_is_kept(self):
+        markup = '<img src="data:image/png;base64,iVBORw0KGgo=" alt="pack">'
+        self.assertEqual(sanitize_leaflet_html(markup), markup)
+
+    def test_a_jpg_data_image_is_kept(self):
+        # CIMA writes `image/jpg`, not `image/jpeg`.
+        self.assertIn('src="data:image/jpg;base64,', sanitize_leaflet_html('<img src="data:image/jpg;base64,/9j/">'))
+
+    def test_a_remote_image_is_removed_entirely(self):
+        self.assertEqual(sanitize_leaflet_html('<p>a<img src="https://example.com/x.png" alt="q"></p>'), "<p>a</p>")
+
+    def test_an_svg_data_image_is_removed_entirely(self):
+        self.assertEqual(sanitize_leaflet_html('<img src="data:image/svg+xml;base64,PHN2Zz4=">'), "")
+
+    def test_an_image_alt_with_a_bracket_is_kept_intact(self):
+        cleaned = sanitize_leaflet_html('<img src="data:image/gif;base64,R0lG" alt="a>b">')
+        self.assertEqual(cleaned, '<img src="data:image/gif;base64,R0lG" alt="a&gt;b">')
+
+    def test_web_links_open_in_a_new_tab_without_opener(self):
+        cleaned = sanitize_leaflet_html('<a href="https://www.aemps.gob.es/">AEMPS</a>')
+        self.assertIn('href="https://www.aemps.gob.es/"', cleaned)
+        self.assertIn('rel="noopener noreferrer"', cleaned)
+        self.assertIn('target="_blank"', cleaned)
+
+    def test_tables_keep_their_spans(self):
+        cleaned = sanitize_leaflet_html('<table><tr><td colspan="2" rowspan="3" style="x">c</td></tr></table>')
+        self.assertEqual(cleaned, '<table><tbody><tr><td colspan="2" rowspan="3">c</td></tr></tbody></table>')
+
+    def test_the_real_fiasp_leaflet_is_clean_and_readable(self):
+        cleaned = "".join(sanitize_leaflet_html(section["html"]) for section in fiasp_leaflet())
+        self.assertNotRegex(cleaned, r"style=")
+        self.assertNotRegex(cleaned, r"\son\w+=")
+        self.assertNotRegex(cleaned, r"(?i)javascript:")
+        self.assertIn("Qué es Fiasp", cleaned)
+        # Its pack image survives as a data URI.
+        self.assertIn('<img src="data:image/jpg;base64,', cleaned)
+
+
+# ── Leaflet: client ───────────────────────────────────────────────────────────
+
+
+SECCIONES = [
+    {"seccion": "1", "titulo": "Qué es", "orden": 2},
+    {"seccion": "0", "titulo": " Introducción ", "orden": 1},
+]
+
+
+class ParseLeafletTests(SimpleTestCase):
+    def test_sections_come_in_reading_order_with_keys_and_titles(self):
+        sections = aemps.parse_leaflet(SECCIONES, {"0": "<p>intro</p>", "1": "<p>what</p>"})
+        self.assertEqual(
+            sections,
+            [
+                {"key": "0", "title": "Introducción", "html": "<p>intro</p>"},
+                {"key": "1", "title": "Qué es", "html": "<p>what</p>"},
+            ],
+        )
+
+    def test_html_is_returned_as_the_agency_wrote_it(self):
+        raw = '<p style="margin:0"><script>x</script></p>'
+        self.assertEqual(aemps.parse_leaflet(SECCIONES[:1], {"1": raw})[0]["html"], raw)
+
+    def test_untrusted_shapes_raise(self):
+        cases = {
+            "not a list": ({"seccion": "0"}, {}),
+            "entry not a dict": (["0"], {}),
+            "entry without key": ([{"titulo": "x", "orden": 1}], {}),
+            "order missing": ([{"seccion": "0", "titulo": "x"}], {"0": ""}),
+            "order not a number": ([{"seccion": "0", "orden": True}], {"0": ""}),
+            "content missing": ([{"seccion": "0", "orden": 1}], {}),
+        }
+        for label, (secciones, contenidos) in cases.items():
+            with self.subTest(label), self.assertRaises(UpstreamPayloadError):
+                aemps.parse_leaflet(secciones, contenidos)
+
+    def test_recorded_fiasp_leaflet(self):
+        sections = fiasp_leaflet()
+        self.assertEqual([section["key"] for section in sections], [str(n) for n in range(7)])
+        self.assertEqual(sections[1]["title"], "Qué es Fiasp y para qué se utiliza")
+
+    def test_recorded_leaflet_missing_on_disk(self):
+        with self.assertRaises(FileNotFoundError):
+            aemps.parse_recorded_leaflet("999", FIXTURES)
+
+    def test_recorded_answers_without_sections(self):
+        for payload, expected in (
+            ([], None),
+            ({"error": "No existen secciones para el medicamento indicado"}, None),
+        ):
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as directory:
+                (Path(directory) / "secciones_1.json").write_text(json.dumps(payload), encoding="utf-8")
+                self.assertEqual(aemps.parse_recorded_leaflet("1", directory), expected)
+
+    def test_recorded_unknown_error_object_raises(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "secciones_1.json").write_text(json.dumps({"error": "busy"}), encoding="utf-8")
+            with self.assertRaises(UpstreamPayloadError):
+                aemps.parse_recorded_leaflet("1", directory)
+
+
+def text_response(status, text=""):
+    resp = mock.Mock(status_code=status)
+    resp.text = text
+    return resp
+
+
+@override_settings(REGULATORY_FETCH_ENABLED=True)
+class FetchLeafletTests(SimpleTestCase):
+    def setUp(self):
+        patcher = mock.patch.object(aemps, "_throttle")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_lists_the_sections_then_asks_each_one_as_html(self):
+        answers = [response(200, SECCIONES), text_response(200, "<p>what</p>"), text_response(200, "<p>intro</p>")]
+        with mock.patch.object(aemps._session, "get", side_effect=answers) as get:
+            sections = aemps.fetch_leaflet(FIASP_NREGISTRO)
+        base = "https://cima.aemps.es/cima/rest/docSegmentado/"
+        self.assertEqual(
+            get.call_args_list,
+            [
+                mock.call(
+                    base + "secciones/2",
+                    params={"nregistro": FIASP_NREGISTRO},
+                    headers={"Accept": "application/json"},
+                    timeout=aemps.TIMEOUT,
+                ),
+                mock.call(
+                    base + "contenido/2",
+                    params={"nregistro": FIASP_NREGISTRO, "seccion": "1"},
+                    headers={"Accept": "text/html"},
+                    timeout=aemps.TIMEOUT,
+                ),
+                mock.call(
+                    base + "contenido/2",
+                    params={"nregistro": FIASP_NREGISTRO, "seccion": "0"},
+                    headers={"Accept": "text/html"},
+                    timeout=aemps.TIMEOUT,
+                ),
+            ],
+        )
+        self.assertEqual([section["html"] for section in sections], ["<p>intro</p>", "<p>what</p>"])
+
+    def test_no_sectioned_leaflet_is_none(self):
+        for answer in (
+            response(204),
+            response(200, []),
+            response(200, {"error": "No existen secciones para el medicamento indicado"}),
+        ):
+            with self.subTest(status=answer.status_code), mock.patch.object(aemps._session, "get", return_value=answer):
+                self.assertIsNone(aemps.fetch_leaflet(FIASP_NREGISTRO))
+
+    def test_another_error_object_is_untrusted(self):
+        with mock.patch.object(aemps._session, "get", return_value=response(200, {"error": "busy"})):
+            with self.assertRaises(UpstreamPayloadError):
+                aemps.fetch_leaflet(FIASP_NREGISTRO)
+
+    def test_an_empty_section_is_an_empty_string(self):
+        answers = [response(200, SECCIONES[:1]), text_response(204)]
+        with mock.patch.object(aemps._session, "get", side_effect=answers):
+            self.assertEqual(aemps.fetch_leaflet(FIASP_NREGISTRO)[0]["html"], "")
+
+    def test_an_unreachable_section_is_unavailable(self):
+        answers = [response(200, SECCIONES[:1]), text_response(503)]
+        with mock.patch.object(aemps._session, "get", side_effect=answers):
+            with self.assertRaises(UpstreamUnavailable):
+                aemps.fetch_leaflet(FIASP_NREGISTRO)
+
+    @override_settings(REGULATORY_FETCH_ENABLED=False)
+    def test_disabled_fetching_raises_before_any_call(self):
+        with mock.patch.object(aemps._session, "get") as get, self.assertRaises(FetchDisabled):
+            aemps.fetch_leaflet(FIASP_NREGISTRO)
+        get.assert_not_called()
+
+
+# ── Leaflet: storage, tasks and triggers ──────────────────────────────────────
+
+
+def stored_fiasp_medicine():
+    presentation = make_presentation()
+    return services.apply_presentation(presentation.pk, fiasp_data(), enqueue_leaflet=False).medicine
+
+
+class ApplyLeafletTests(TestCase):
+    def setUp(self):
+        self.medicine = stored_fiasp_medicine()
+
+    def test_stores_the_sections_sanitised(self):
+        leaflet = services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        leaflet.refresh_from_db()
+        self.assertEqual(len(leaflet.sections), 7)
+        self.assertEqual(leaflet.sections[1]["key"], "1")
+        self.assertFalse(any("style=" in section["html"] for section in leaflet.sections))
+        self.assertIsNotNone(leaflet.fetched_at)
+
+    def test_the_source_url_is_the_medicine_leaflet_page(self):
+        leaflet = services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        self.assertEqual(leaflet.source_url, "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html")
+
+    def test_a_second_answer_updates_instead_of_duplicating(self):
+        services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        services.apply_leaflet(self.medicine.pk, [{"key": "0", "title": "Only", "html": "<p>x</p>"}])
+        self.assertEqual(MedicineLeaflet.objects.count(), 1)
+        self.assertEqual(MedicineLeaflet.objects.get().sections, [{"key": "0", "title": "Only", "html": "<p>x</p>"}])
+
+    def test_no_sectioned_leaflet_is_stored_as_no_sections(self):
+        leaflet = services.apply_leaflet(self.medicine.pk, None)
+        self.assertEqual(leaflet.sections, [])
+        self.assertEqual(str(leaflet), f"Leaflet of {self.medicine}")
+
+
+class LeafletTriggerTests(TestCase):
+    """When a leaflet fetch is scheduled from a presentation's answer."""
+
+    def apply(self, presentation, **kwargs):
+        with (
+            mock.patch.object(tasks.fetch_leaflet, "delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            services.apply_presentation(presentation.pk, fiasp_data(), **kwargs)
+        return delay
+
+    def test_a_new_medicine_enqueues_its_leaflet(self):
+        delay = self.apply(make_presentation())
+        delay.assert_called_once_with(Medicine.objects.get(code=FIASP_NREGISTRO).pk)
+
+    def test_a_medicine_with_a_leaflet_does_not(self):
+        medicine = stored_fiasp_medicine()
+        services.apply_leaflet(medicine.pk, None)
+        self.apply(Presentation.objects.get()).assert_not_called()
+
+    def test_a_known_medicine_still_without_leaflet_does(self):
+        stored_fiasp_medicine()
+        self.apply(Presentation.objects.get()).assert_called_once()
+
+    def test_the_caller_can_opt_out(self):
+        self.apply(make_presentation(), enqueue_leaflet=False).assert_not_called()
+
+    def test_the_medicine_keeps_its_leaflet_page(self):
+        self.assertEqual(
+            stored_fiasp_medicine().leaflet_url, "https://cima.aemps.es/cima/dochtml/p/1161160012/P_1161160012.html"
+        )
+
+
+class FetchLeafletTaskTests(TestCase):
+    def setUp(self):
+        self.medicine = stored_fiasp_medicine()
+
+    def test_success_stores_the_leaflet(self):
+        with mock.patch.object(aemps, "fetch_leaflet", return_value=fiasp_leaflet()) as fetch:
+            tasks.fetch_leaflet.delay(self.medicine.pk)
+        fetch.assert_called_once_with(FIASP_NREGISTRO)
+        self.assertEqual(len(MedicineLeaflet.objects.get(medicine=self.medicine).sections), 7)
+
+    def test_unavailable_schedules_a_retry_with_backoff(self):
+        class RetryScheduled(Exception):
+            pass
+
+        error = UpstreamUnavailable("down")
+        with (
+            mock.patch.object(aemps, "fetch_leaflet", side_effect=error),
+            mock.patch.object(tasks.fetch_leaflet, "retry", side_effect=RetryScheduled) as retry,
+        ):
+            with self.assertRaises(RetryScheduled):
+                tasks.fetch_leaflet.apply(args=[self.medicine.pk], retries=1)
+        retry.assert_called_once_with(exc=error, countdown=60)
+
+    def test_giving_up_keeps_the_previous_leaflet(self):
+        services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        with (
+            mock.patch.object(aemps, "fetch_leaflet", side_effect=UpstreamUnavailable("down")),
+            self.assertLogs("apps.regulatory.tasks", level="ERROR") as logs,
+        ):
+            result = tasks.fetch_leaflet.apply(args=[self.medicine.pk], retries=tasks.MAX_RETRIES)
+        self.assertTrue(result.successful())
+        self.assertIn("giving up on medicine", logs.output[0])
+        self.assertEqual(len(MedicineLeaflet.objects.get(medicine=self.medicine).sections), 7)
+
+    def test_an_untrusted_payload_is_logged_and_the_leaflet_kept(self):
+        services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        with (
+            mock.patch.object(aemps, "fetch_leaflet", side_effect=UpstreamPayloadError("bad")) as fetch,
+            self.assertLogs("apps.regulatory.services", level="ERROR") as logs,
+        ):
+            tasks.fetch_leaflet.apply(args=[self.medicine.pk])
+        fetch.assert_called_once()
+        self.assertIn("Untrusted leaflet payload", logs.output[0])
+        self.assertEqual(len(MedicineLeaflet.objects.get(medicine=self.medicine).sections), 7)
+
+    def test_disabled_fetching_stores_nothing(self):
+        # Test settings switch fetching off: the real client raises FetchDisabled.
+        tasks.fetch_leaflet.apply(args=[self.medicine.pk])
+        self.assertFalse(MedicineLeaflet.objects.exists())
+
+    def test_a_deleted_medicine_is_ignored(self):
+        self.assertTrue(tasks.fetch_leaflet.apply(args=[self.medicine.pk + 1000]).successful())
+
+
+@override_settings(REGULATORY_FETCH_ENABLED=True)
+class SyncLeafletTests(TestCase):
+    def setUp(self):
+        user = make_user()
+        presentation = make_presentation()
+        Stock.objects.filter(pk=make_stock(user, national_code=FIASP_CN).pk).update(presentation=presentation)
+        self.medicine = services.apply_presentation(presentation.pk, fiasp_data(), enqueue_leaflet=False).medicine
+        patcher = mock.patch.object(aemps, "fetch", return_value=fiasp_data())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def aged(self, days):
+        services.apply_leaflet(self.medicine.pk, None)
+        MedicineLeaflet.objects.update(fetched_at=timezone.now() - timedelta(days=days))
+
+    def sync(self, **fetch_leaflet):
+        with mock.patch.object(aemps, "fetch_leaflet", **fetch_leaflet) as fetch:
+            summary = tasks.sync_regulatory_data()
+        return summary, fetch
+
+    def test_a_missing_leaflet_is_fetched(self):
+        summary, fetch = self.sync(return_value=fiasp_leaflet())
+        fetch.assert_called_once_with(FIASP_NREGISTRO)
+        self.assertEqual(summary["leaflets"], 1)
+        self.assertEqual(len(MedicineLeaflet.objects.get().sections), 7)
+
+    def test_a_31_day_old_leaflet_is_refreshed(self):
+        self.aged(31)
+        _, fetch = self.sync(return_value=fiasp_leaflet())
+        fetch.assert_called_once()
+        self.assertEqual(len(MedicineLeaflet.objects.get().sections), 7)
+
+    def test_a_29_day_old_leaflet_is_left(self):
+        self.aged(29)
+        summary, fetch = self.sync(return_value=fiasp_leaflet())
+        fetch.assert_not_called()
+        self.assertEqual(summary["leaflets"], 0)
+
+    def test_a_medicine_no_stock_uses_is_skipped(self):
+        Stock.objects.all().delete()
+        _, fetch = self.sync(return_value=None)
+        fetch.assert_not_called()
+
+    def test_an_unavailable_leaflet_is_counted_and_the_old_one_kept(self):
+        self.aged(31)
+        summary, _ = self.sync(side_effect=UpstreamUnavailable("down"))
+        self.assertEqual((summary["leaflets"], summary["leaflet_errors"]), (0, 1))
+        self.assertTrue(MedicineLeaflet.objects.exists())
+
+    def test_a_medicine_deleted_mid_run_is_skipped(self):
+        def vanish(medicine_id):
+            raise Medicine.DoesNotExist
+
+        with mock.patch.object(services, "refresh_leaflet", side_effect=vanish):
+            summary = tasks.sync_regulatory_data()
+        self.assertEqual((summary["leaflets"], summary["leaflet_errors"]), (0, 0))
+
+    def test_the_presentation_refresh_does_not_enqueue_leaflets(self):
+        with (
+            mock.patch.object(tasks.fetch_leaflet, "delay") as delay,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.sync(return_value=None)
+        delay.assert_not_called()
+
+
+class LeafletAdminTests(TestCase):
+    def setUp(self):
+        admin_user = User.objects.create_superuser(username="root", password="pass", email="root@example.com")
+        self.client.force_login(admin_user)
+        self.medicine = stored_fiasp_medicine()
+
+    def test_the_list_shows_counts_not_html(self):
+        services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        response = self.client.get(reverse("admin:regulatory_medicineleaflet_changelist"))
+        self.assertContains(response, '<td class="field-section_count">7</td>', html=False)
+        self.assertNotContains(response, "Qué es Fiasp y para qué se utiliza")
+
+    def test_the_detail_lists_section_titles_read_only(self):
+        leaflet = services.apply_leaflet(self.medicine.pk, fiasp_leaflet())
+        response = self.client.get(reverse("admin:regulatory_medicineleaflet_change", args=[leaflet.pk]))
+        self.assertContains(response, "Qué es Fiasp y para qué se utiliza")
+        self.assertNotContains(response, 'name="_save"')
+
+    def test_an_empty_leaflet_shows_a_dash(self):
+        leaflet = services.apply_leaflet(self.medicine.pk, None)
+        response = self.client.get(reverse("admin:regulatory_medicineleaflet_change", args=[leaflet.pk]))
+        self.assertContains(response, "—")
+
+
+# ── Change detection ──────────────────────────────────────────────────────────
+
+Kind = RegulatoryEvent.Kind
+SUPPLY_1 = {"native_type": "1", "severity": "danger", "expected_end_on": "2027-02-28"}
+
+
+def snap(supply=None, marketed=True, status="authorised", notices=()):
+    return services.Snapshot(
+        supply=supply,
+        marketed=marketed,
+        status=status,
+        notices={ref: {"reference": ref, "title": f"T {ref}", "url": "", "published_on": None} for ref in notices},
+    )
+
+
+class DiffTests(SimpleTestCase):
+    """`_diff`, one row of the detection table per test — no database."""
+
+    def test_identical_snapshots_have_no_events(self):
+        self.assertEqual(services._diff(snap(SUPPLY_1, notices=["a"]), snap(SUPPLY_1, notices=["a"])), [])
+
+    def test_a_problem_appearing_is_supply_started(self):
+        self.assertEqual(services._diff(snap(), snap(SUPPLY_1)), [(Kind.SUPPLY_STARTED, {"after": SUPPLY_1})])
+
+    def test_a_new_type_is_supply_changed(self):
+        after = {**SUPPLY_1, "native_type": "4", "severity": "danger"}
+        self.assertEqual(
+            services._diff(snap(SUPPLY_1), snap(after)), [(Kind.SUPPLY_CHANGED, {"before": SUPPLY_1, "after": after})]
+        )
+
+    def test_a_new_expected_end_is_supply_changed(self):
+        after = {**SUPPLY_1, "expected_end_on": "2027-06-30"}
+        self.assertEqual(services._diff(snap(SUPPLY_1), snap(after))[0][0], Kind.SUPPLY_CHANGED)
+
+    def test_a_problem_going_away_is_supply_resolved(self):
+        self.assertEqual(services._diff(snap(SUPPLY_1), snap()), [(Kind.SUPPLY_RESOLVED, {"before": SUPPLY_1})])
+
+    def test_each_new_notice_is_one_event(self):
+        changes = services._diff(snap(notices=["a"]), snap(notices=["a", "c", "b"]))
+        self.assertEqual([kind for kind, _ in changes], [Kind.SAFETY_NOTICE_ADDED] * 2)
+        self.assertEqual([payload["reference"] for _, payload in changes], ["b", "c"])
+        self.assertEqual(set(changes[0][1]), {"reference", "title", "url", "published_on"})
+
+    def test_a_notice_no_longer_listed_is_not_an_event(self):
+        self.assertEqual(services._diff(snap(notices=["a"]), snap()), [])
+
+    def test_marketing_stopped(self):
+        self.assertEqual(services._diff(snap(marketed=True), snap(marketed=False)), [(Kind.MARKETING_STOPPED, {})])
+
+    def test_marketing_resumed(self):
+        self.assertEqual(services._diff(snap(marketed=False), snap(marketed=True)), [(Kind.MARKETING_RESUMED, {})])
+
+    def test_marketed_to_or_from_unknown_is_not_an_event(self):
+        for before, after in ((None, True), (None, False), (True, None), (False, None)):
+            with self.subTest(before=before, after=after):
+                self.assertEqual(services._diff(snap(marketed=before), snap(marketed=after)), [])
+
+    def test_suspension(self):
+        self.assertEqual(
+            services._diff(snap(), snap(status="suspended")),
+            [(Kind.AUTHORIZATION_SUSPENDED, {"before": "authorised"})],
+        )
+
+    def test_revocation(self):
+        for before in ("authorised", "suspended"):
+            with self.subTest(before=before):
+                self.assertEqual(
+                    services._diff(snap(status=before), snap(status="revoked")),
+                    [(Kind.AUTHORIZATION_REVOKED, {"before": before})],
+                )
+
+    def test_reinstatement(self):
+        for before in ("suspended", "revoked"):
+            with self.subTest(before=before):
+                self.assertEqual(
+                    services._diff(snap(status=before), snap(status="authorised")),
+                    [(Kind.AUTHORIZATION_REINSTATED, {"before": before})],
+                )
+
+    def test_no_previous_status_is_not_an_event(self):
+        self.assertEqual(services._diff(snap(status=None), snap(status="suspended")), [])
+
+    def test_several_changes_come_in_a_stable_order(self):
+        changes = services._diff(
+            snap(SUPPLY_1, marketed=True, status="authorised"),
+            snap(None, marketed=False, status="suspended", notices=["n"]),
+        )
+        self.assertEqual(
+            [kind for kind, _ in changes],
+            [Kind.SUPPLY_RESOLVED, Kind.SAFETY_NOTICE_ADDED, Kind.MARKETING_STOPPED, Kind.AUTHORIZATION_SUSPENDED],
+        )
+
+
+class SnapshotTests(TestCase):
+    def test_reads_the_stored_state_in_model_terms(self):
+        presentation = make_presentation()
+        services.apply_presentation(presentation.pk, fiasp_data(), enqueue_leaflet=False)
+        snapshot = services._snapshot(Presentation.objects.get(pk=presentation.pk))
+        self.assertEqual(snapshot.supply["native_type"], "1")
+        self.assertEqual(snapshot.supply["severity"], SEVERITY_DANGER)
+        self.assertIsInstance(snapshot.supply["expected_end_on"], str)
+        self.assertEqual((snapshot.marketed, snapshot.status, snapshot.notices), (True, "authorised", {}))
+
+    def test_an_unfetched_presentation_is_empty(self):
+        self.assertEqual(services._snapshot(make_presentation()), snap(marketed=None, status=None))
+
+
+def with_notice(data, reference="NEW/2026"):
+    """`data` with one more safety notice on its medicine."""
+    notice = SafetyNoticeData(
+        reference=reference, native_kind="1", title="New notice", url="https://www.aemps.gob.es/n", published_on=None
+    )
+    medicine = dataclasses.replace(data.medicine, safety_notices=(*data.medicine.safety_notices, notice))
+    return dataclasses.replace(data, medicine=medicine)
+
+
+def with_medicine(data, **fields):
+    return dataclasses.replace(data, medicine=dataclasses.replace(data.medicine, **fields))
+
+
+class ApplyPresentationEventsTests(TestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.guest = make_user(username="guest")
+        self.presentation = make_presentation()
+        self.stock = make_stock(self.owner, national_code=FIASP_CN)
+        Stock.objects.filter(pk=self.stock.pk).update(presentation=self.presentation)
+        self.stock.shared_with.add(self.guest)
+
+    def apply(self, data, presentation=None):
+        services.apply_presentation((presentation or self.presentation).pk, data, enqueue_leaflet=False)
+
+    def kinds(self):
+        return list(RegulatoryEvent.objects.order_by("pk").values_list("kind", flat=True))
+
+    def test_the_first_application_is_a_silent_baseline(self):
+        self.apply(fiasp_data())
+        self.assertFalse(RegulatoryEvent.objects.exists())
+        self.assertFalse(EventDelivery.objects.exists())
+
+    def test_the_same_state_twice_changes_nothing(self):
+        self.apply(fiasp_data())
+        self.apply(fiasp_data())
+        self.assertFalse(RegulatoryEvent.objects.exists())
+
+    def test_a_resolved_problem_is_told_to_owner_and_guest(self):
+        self.apply(fiasp_data())
+        self.apply(without_supply(fiasp_data()))
+        event = RegulatoryEvent.objects.get()
+        self.assertEqual(event.kind, Kind.SUPPLY_RESOLVED)
+        self.assertEqual(event.payload["before"]["native_type"], "1")
+        self.assertEqual(
+            sorted(event.deliveries.values_list("user__username", "stock_id")),
+            [("guest", self.stock.pk), ("owner", self.stock.pk)],
+        )
+        self.assertTrue(all(delivery.delivered_at is None for delivery in event.deliveries.all()))
+
+    def test_a_new_type_is_supply_changed(self):
+        self.apply(fiasp_data())
+        data = fiasp_data()
+        self.apply(dataclasses.replace(data, supply=dataclasses.replace(data.supply, native_type="4")))
+        event = RegulatoryEvent.objects.get()
+        self.assertEqual(event.kind, Kind.SUPPLY_CHANGED)
+        self.assertEqual((event.payload["before"]["native_type"], event.payload["after"]["native_type"]), ("1", "4"))
+
+    def test_a_reworded_note_is_not_an_event(self):
+        self.apply(fiasp_data())
+        data = fiasp_data()
+        self.apply(dataclasses.replace(data, supply=dataclasses.replace(data.supply, note="Otra redacción")))
+        self.assertFalse(RegulatoryEvent.objects.exists())
+        self.assertEqual(SupplyProblem.objects.get().note, "Otra redacción")
+
+    def test_a_problem_appearing_is_supply_started(self):
+        self.apply(without_supply(fiasp_data()))
+        self.apply(fiasp_data())
+        self.assertEqual(self.kinds(), [Kind.SUPPLY_STARTED])
+
+    def test_marketing_stopped_and_resumed(self):
+        self.apply(fiasp_data())
+        self.apply(dataclasses.replace(fiasp_data(), marketed=False))
+        self.apply(fiasp_data())
+        self.assertEqual(self.kinds(), [Kind.MARKETING_STOPPED, Kind.MARKETING_RESUMED])
+
+    def test_suspension_revocation_and_reinstatement(self):
+        self.apply(fiasp_data())
+        self.apply(with_medicine(fiasp_data(), suspended_on=date(2026, 11, 1)))
+        self.apply(with_medicine(fiasp_data(), revoked_on=date(2026, 11, 5)))
+        self.apply(fiasp_data())
+        self.assertEqual(
+            self.kinds(),
+            [Kind.AUTHORIZATION_SUSPENDED, Kind.AUTHORIZATION_REVOKED, Kind.AUTHORIZATION_REINSTATED],
+        )
+        self.assertEqual(
+            [event.payload for event in RegulatoryEvent.objects.order_by("pk")],
+            [{"before": "authorised"}, {"before": "suspended"}, {"before": "revoked"}],
+        )
+
+    def test_not_found_after_ok_is_silent(self):
+        self.apply(fiasp_data())
+        self.apply(NOT_FOUND)
+        self.assertFalse(RegulatoryEvent.objects.exists())
+
+    def test_ok_after_not_found_is_a_fresh_baseline(self):
+        # The NotFound closed the problem without the shortage ending: seeing
+        # it again is not a new problem.
+        self.apply(fiasp_data())
+        self.apply(NOT_FOUND)
+        self.apply(fiasp_data())
+        self.assertFalse(RegulatoryEvent.objects.exists())
+        self.apply(without_supply(fiasp_data()))
+        self.assertEqual(self.kinds(), [Kind.SUPPLY_RESOLVED])
+
+    def test_an_error_keeps_the_baseline(self):
+        self.apply(fiasp_data())
+        services.record_fetch_error(self.presentation.pk, "down")
+        self.apply(without_supply(fiasp_data()))
+        self.assertEqual(self.kinds(), [Kind.SUPPLY_RESOLVED])
+
+    def test_payloads_use_model_names_only(self):
+        self.apply(without_supply(fiasp_data()))
+        self.apply(fiasp_data())
+        self.assertEqual(
+            set(RegulatoryEvent.objects.get().payload["after"]), {"native_type", "severity", "expected_end_on"}
+        )
+
+
+class SafetyNoticeEventTests(TestCase):
+    """A notice belongs to the medicine: one event per followed presentation, once."""
+
+    def setUp(self):
+        self.owner = make_user()
+        self.main = make_presentation(code=HIDROFEROL_CN)
+        self.sibling = make_presentation(code="999999")
+        for presentation in (self.main, self.sibling):
+            stock = make_stock(self.owner, name=presentation.code, national_code=presentation.code)
+            Stock.objects.filter(pk=stock.pk).update(presentation=presentation)
+            services.apply_presentation(presentation.pk, hidroferol_data(), enqueue_leaflet=False)
+
+    def test_a_new_notice_is_recorded_on_every_followed_presentation(self):
+        services.apply_presentation(self.main.pk, with_notice(hidroferol_data()), enqueue_leaflet=False)
+        events = RegulatoryEvent.objects.order_by("presentation_id")
+        self.assertEqual(
+            [(event.presentation_id, event.kind) for event in events],
+            [
+                (self.main.pk, Kind.SAFETY_NOTICE_ADDED),
+                (self.sibling.pk, Kind.SAFETY_NOTICE_ADDED),
+            ],
+        )
+        self.assertEqual(events[0].payload["reference"], "NEW/2026")
+
+    def test_applying_the_sibling_next_does_not_repeat_it(self):
+        services.apply_presentation(self.main.pk, with_notice(hidroferol_data()), enqueue_leaflet=False)
+        services.apply_presentation(self.sibling.pk, with_notice(hidroferol_data()), enqueue_leaflet=False)
+        self.assertEqual(RegulatoryEvent.objects.count(), 2)
+
+    def test_a_sibling_without_baseline_or_stocks_gets_no_event(self):
+        unfetched = make_presentation(code="888888")
+        Presentation.objects.filter(pk=unfetched.pk).update(medicine=Medicine.objects.get())
+        stock = make_stock(self.owner, name="unfetched", national_code="888888")
+        Stock.objects.filter(pk=stock.pk).update(presentation=unfetched)
+        unfollowed = make_presentation(code="777777", fetched_at=timezone.now())
+        Presentation.objects.filter(pk=unfollowed.pk).update(medicine=Medicine.objects.get())
+
+        services.apply_presentation(self.main.pk, with_notice(hidroferol_data()), enqueue_leaflet=False)
+        self.assertEqual(
+            sorted(RegulatoryEvent.objects.values_list("presentation_id", flat=True)), [self.main.pk, self.sibling.pk]
+        )
+
+
+class EventDeliveryTests(TestCase):
+    def setUp(self):
+        self.owner = make_user()
+        self.presentation = make_presentation()
+
+    def link(self, user, name):
+        stock = make_stock(user, name=name, national_code=FIASP_CN)
+        Stock.objects.filter(pk=stock.pk).update(presentation=self.presentation)
+        return stock
+
+    def resolve(self):
+        services.apply_presentation(self.presentation.pk, fiasp_data(), enqueue_leaflet=False)
+        services.apply_presentation(self.presentation.pk, without_supply(fiasp_data()), enqueue_leaflet=False)
+        return RegulatoryEvent.objects.get()
+
+    def test_two_stocks_of_one_user_make_one_delivery_through_the_first(self):
+        first = self.link(self.owner, "Pens")
+        self.link(self.owner, "Spare pens")
+        event = self.resolve()
+        self.assertEqual(list(event.deliveries.values_list("user_id", "stock_id")), [(self.owner.pk, first.pk)])
+
+    def test_a_guest_of_two_stocks_is_told_once(self):
+        guest = make_user(username="guest")
+        first = self.link(self.owner, "Pens")
+        second = self.link(self.owner, "Spare pens")
+        second.shared_with.add(guest)
+        first.shared_with.add(guest)
+        event = self.resolve()
+        self.assertEqual(event.deliveries.get(user=guest).stock_id, first.pk)
+
+    def test_sharing_after_the_event_brings_no_delivery_for_it(self):
+        stock = self.link(self.owner, "Pens")
+        event = self.resolve()
+        guest = make_user(username="late")
+        stock.shared_with.add(guest)
+        self.assertFalse(event.deliveries.filter(user=guest).exists())
+
+    def test_deleting_the_stock_takes_its_deliveries(self):
+        stock = self.link(self.owner, "Pens")
+        self.resolve()
+        stock.delete()
+        self.assertFalse(EventDelivery.objects.exists())
+        self.assertTrue(RegulatoryEvent.objects.exists())
+
+    def test_one_delivery_per_event_and_user(self):
+        self.link(self.owner, "Pens")
+        event = self.resolve()
+        stock = Stock.objects.get()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            EventDelivery.objects.create(event=event, user=self.owner, stock=stock)
+
+    def test_str_names_event_and_user(self):
+        self.link(self.owner, "Pens")
+        delivery = self.resolve().deliveries.get()
+        self.assertIn("Supply problem resolved", str(delivery))
+        self.assertIn("owner", str(delivery))
+
+
+@override_settings(REGULATORY_FETCH_ENABLED=False)
+class ExpireDeliveriesTests(TestCase):
+    def test_drops_only_unsent_deliveries_older_than_thirty_days(self):
+        owner = make_user()
+        presentation = make_presentation()
+        stock = make_stock(owner, national_code=FIASP_CN)
+        Stock.objects.filter(pk=stock.pk).update(presentation=presentation)
+        event = RegulatoryEvent.objects.create(presentation=presentation, kind=Kind.SUPPLY_STARTED)
+        now = timezone.now()
+        users = {name: make_user(username=name) for name in ("old", "recent", "sent")}
+        for name, (days, delivered) in {"old": (31, None), "recent": (29, None), "sent": (60, now)}.items():
+            delivery = EventDelivery.objects.create(event=event, user=users[name], stock=stock, delivered_at=delivered)
+            EventDelivery.objects.filter(pk=delivery.pk).update(created_at=now - timedelta(days=days))
+
+        summary = tasks.sync_regulatory_data()
+
+        self.assertEqual(summary["expired_deliveries"], 1)
+        self.assertEqual(sorted(EventDelivery.objects.values_list("user__username", flat=True)), ["recent", "sent"])
+
+
+class EventAdminTests(TestCase):
+    def setUp(self):
+        admin_user = User.objects.create_superuser(username="root", password="pass", email="root@example.com")
+        self.client.force_login(admin_user)
+        owner = make_user()
+        presentation = make_presentation()
+        stock = make_stock(owner, national_code=FIASP_CN)
+        Stock.objects.filter(pk=stock.pk).update(presentation=presentation)
+        services.apply_presentation(presentation.pk, fiasp_data(), enqueue_leaflet=False)
+        services.apply_presentation(presentation.pk, without_supply(fiasp_data()), enqueue_leaflet=False)
+
+    def test_changelists_render_read_only(self):
+        for model in ("regulatoryevent", "eventdelivery"):
+            with self.subTest(model=model):
+                self.assertContains(
+                    self.client.get(reverse(f"admin:regulatory_{model}_changelist")), "Supply problem resolved"
+                )
+                self.assertEqual(self.client.get(reverse(f"admin:regulatory_{model}_add")).status_code, 403)
+
+
+class BackfillDrivingAndLeafletPdfTests(TestCase):
+    """Migration 0004 fills the new columns from the payload already stored."""
+
+    def test_reads_the_stored_payload(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        migration = import_module("apps.regulatory.migrations.0004_medicine_driving_and_leaflet_pdf")
+        medicamento, _ = fiasp()
+        fiasp_medicine = Medicine.objects.create(
+            source="aemps", code="1", name="Fiasp", raw=medicamento, fetched_at=timezone.now()
+        )
+        bare = Medicine.objects.create(source="aemps", code="2", name="Bare", raw={}, fetched_at=timezone.now())
+
+        migration.backfill_from_raw(django_apps, None)
+
+        fiasp_medicine.refresh_from_db()
+        bare.refresh_from_db()
+        self.assertIs(fiasp_medicine.affects_driving, True)
+        self.assertTrue(fiasp_medicine.leaflet_pdf_url.endswith("/P_1161160012.pdf"))
+        self.assertIsNone(bare.affects_driving)
+        self.assertEqual(bare.leaflet_pdf_url, "")
+
+
+class TidyStoredLeafletsTests(TestCase):
+    """Migration 0005 tidies the leaflets already stored: no spacers, real lists."""
+
+    def test_rewrites_stored_sections(self):
+        from importlib import import_module
+
+        from django.apps import apps as django_apps
+
+        migration = import_module("apps.regulatory.migrations.0005_leaflet_tidy_layout")
+        medicamento, _ = fiasp()
+        medicine = Medicine.objects.create(
+            source="aemps", code="1", name="Fiasp", raw=medicamento, fetched_at=timezone.now()
+        )
+        leaflet = MedicineLeaflet.objects.create(
+            medicine=medicine,
+            sections=[{"key": "0", "title": "T", "html": "<p>&nbsp;</p><p>•&nbsp;&nbsp; a</p><p>•&nbsp; b</p>"}],
+            fetched_at=timezone.now(),
+        )
+
+        migration.tidy_stored_leaflets(django_apps, None)
+
+        leaflet.refresh_from_db()
+        self.assertEqual(leaflet.sections, [{"key": "0", "title": "T", "html": "<ul><li>a</li><li>b</li></ul>"}])

@@ -1,0 +1,37 @@
+[
+  {
+    "seccion": "0",
+    "titulo": "Introducción",
+    "orden": 1
+  },
+  {
+    "seccion": "1",
+    "titulo": "Qué es Hidroferol 0,1 mg/ml gotas orales en solución y para qué se utiliza",
+    "orden": 2
+  },
+  {
+    "seccion": "2",
+    "titulo": "Qué necesita saber antes de empezar a tomar Hidroferol 0,1 mg/ml gotas orales en solución",
+    "orden": 3
+  },
+  {
+    "seccion": "3",
+    "titulo": "Cómo tomar Hidroferol 0,1 mg/ml gotas orales en solución",
+    "orden": 4
+  },
+  {
+    "seccion": "4",
+    "titulo": "Posibles efectos adversos",
+    "orden": 5
+  },
+  {
+    "seccion": "5",
+    "titulo": "Conservación de Hidroferol 0,1 mg/ml gotas orales en solución",
+    "orden": 6
+  },
+  {
+    "seccion": "6",
+    "titulo": "Contenido del envase e información adicional",
+    "orden": 7
+  }
+]

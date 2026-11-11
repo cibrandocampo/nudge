@@ -123,3 +123,28 @@ describe('InventoryAlertBanner', () => {
     expect(screen.queryByTestId('inventory-alert-row')).not.toBeInTheDocument()
   })
 })
+
+describe('InventoryAlertBanner — regulatory alerts', () => {
+  it('lists a product with a supply problem under its label', async () => {
+    const user = userEvent.setup()
+    renderBanner([
+      stock({
+        id: 12,
+        name: 'Fast-acting insulin',
+        regulatory: {
+          fetch_status: 'ok',
+          fetched_at: '2026-11-10T01:00:00Z',
+          supply_severity: 'danger',
+          marketed: true,
+          status: 'authorised',
+        },
+      }),
+    ])
+    expect(screen.getByText(/1 product needs attention/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button'))
+    const row = screen.getByTestId('inventory-alert-row')
+    expect(row).toHaveAttribute('href', '/inventory/12')
+    expect(within(row).getByText('Fast-acting insulin')).toBeInTheDocument()
+    expect(within(row).getByText('Supply problem')).toBeInTheDocument()
+  })
+})

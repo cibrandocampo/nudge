@@ -1,0 +1,146 @@
+.leaflet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Same heading as "Safety notices" (`.blockTitle` in RegulatoryInfoSection):
+   larger than the section titles below it. */
+/* The title, and the PDF to download at its right. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--c-text-2);
+}
+
+.stateError {
+  color: var(--c-warning);
+}
+
+.retry {
+  font-size: 0.8rem;
+}
+
+.sections {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+.sectionItem + .sectionItem {
+  border-top: 1px solid var(--c-border-inner);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  color: var(--c-primary);
+  cursor: pointer;
+  /* Clear the sticky app header when scrolled to the top of the viewport. */
+  scroll-margin-top: calc(48px + 0.5rem);
+}
+
+.sectionTitle {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* ── The agency's HTML ─────────────────────────────────────────────────────
+   It arrives sanitised and unstyled (no `style` or `class` attributes), so
+   everything it looks like comes from these descendant rules. */
+.leafletHtml {
+  padding: 0 0.75rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--c-text);
+  overflow-wrap: anywhere;
+}
+
+.leafletHtml p,
+.leafletHtml ul,
+.leafletHtml ol {
+  margin: 0 0 0.5rem;
+}
+
+.leafletHtml ul,
+.leafletHtml ol {
+  padding-left: 1.25rem;
+}
+
+.leafletHtml li {
+  margin-bottom: 0.25rem;
+}
+
+.leafletHtml h1,
+.leafletHtml h2,
+.leafletHtml h3,
+.leafletHtml h4,
+.leafletHtml h5,
+.leafletHtml h6 {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.leafletHtml img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* A wide table scrolls inside its own box instead of widening the page. */
+.leafletHtml table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 0.5rem;
+}
+
+.leafletHtml td,
+.leafletHtml th {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--c-border);
+  vertical-align: top;
+}
+
+.leafletHtml a {
+  color: var(--c-primary);
+  text-decoration: underline;
+}
+
+/* A button, not an inline link: the full leaflet on the agency's site. */
+.sourceLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  text-decoration: none;
+}

@@ -24,7 +24,40 @@ export function lotsByExpirySeverity(stock, today) {
 }
 
 /**
- * Whether a stock needs the user's attention on either severity axis.
+ * Labels for what the regulatory agency says about the stock's medicine.
+ *
+ * The third axis next to stock and expiry: an active supply problem, a
+ * medicine no longer marketed, a suspended or revoked authorisation — states
+ * that last, unlike a safety notice, which is news (the push and the product
+ * page carry those). Built from the summary's model fields only.
+ *
+ * Only when there is data: never fetched (`fetched_at` null) or `not_found`
+ * says nothing. Any other status keeps the last good data — a refresh in
+ * flight (`pending`) or a failed one (`error`) must not make the alert blink.
+ */
+export function regulatoryLabels(stock) {
+  const regulatory = stock?.regulatory
+  if (!regulatory?.fetched_at || regulatory.fetch_status === 'not_found') return []
+  const labels = []
+  if (regulatory.supply_severity === 'danger') {
+    labels.push({ key: 'inventory.alertSupplyProblem', params: {}, tone: 'danger' })
+  } else if (regulatory.supply_severity === 'warning') {
+    labels.push({ key: 'inventory.alertSupplyLimited', params: {}, tone: 'warning' })
+  }
+  if (regulatory.marketed === false) {
+    labels.push({ key: 'inventory.alertNotMarketed', params: {}, tone: 'warning' })
+  }
+  if (regulatory.status === 'suspended') {
+    labels.push({ key: 'inventory.alertAuthorizationSuspended', params: {}, tone: 'danger' })
+  } else if (regulatory.status === 'revoked') {
+    labels.push({ key: 'inventory.alertAuthorizationRevoked', params: {}, tone: 'danger' })
+  }
+  return labels
+}
+
+/**
+ * Whether a stock needs the user's attention on any axis: stock, expiry or
+ * what the regulatory agency says (`regulatoryLabels`).
  *
  * The single definition of "in trouble" in the app: the alert banner counts
  * the products it will list with it, and the inventory's Atención filter chip
@@ -36,7 +69,8 @@ export function needsAttention(stock) {
     stock?.stock_severity === 'critical' ||
     stock?.stock_severity === 'low' ||
     stock?.expiry_severity === 'reached' ||
-    stock?.expiry_severity === 'soon'
+    stock?.expiry_severity === 'soon' ||
+    regulatoryLabels(stock).length > 0
   )
 }
 
@@ -46,13 +80,16 @@ export function needsAttention(stock) {
  *
  * Lets a collapsed group still say that something inside needs attention,
  * which is what makes collapsing safe to do. Same vocabulary as the labels
- * above — anything red on either axis is danger, anything amber is warning.
+ * above — anything red on any axis is danger, anything amber is warning.
  */
 export function worstSeverity(stocks) {
   let warning = false
   for (const stock of stocks ?? []) {
     if (stock?.stock_severity === 'critical' || stock?.expiry_severity === 'reached') return 'danger'
     if (stock?.stock_severity === 'low' || stock?.expiry_severity === 'soon') warning = true
+    const tones = regulatoryLabels(stock).map((label) => label.tone)
+    if (tones.includes('danger')) return 'danger'
+    if (tones.length > 0) warning = true
   }
   return warning ? 'warning' : null
 }
@@ -133,6 +170,10 @@ export function buildStockAlerts(stocks, today) {
         tone: 'warning',
       })
     }
+
+    // The agency's verdicts come last: stock and expiry are what the user acts
+    // on today, and keep the order they always had.
+    labels.push(...regulatoryLabels(stock))
 
     // An expiry severity the lots no longer back leaves nothing to say. The
     // server judges against its own `date.today()` and the client against UTC

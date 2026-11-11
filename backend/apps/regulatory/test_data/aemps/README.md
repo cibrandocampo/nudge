@@ -26,3 +26,19 @@ Added in T111 for the seed:
 |------|---------|------|
 | `medicamento_661426.json` | `GET medicamento?cn=661426` | Ibuprofeno Cinfa 600 mg, 40 comprimidos (`nregistro` 70039). Marketed, no supply problem. NTIN `08470006614266`; CN check digit 6 (T109 research §1) |
 | `notas_70039.json` | `GET notas/70039` | Its safety notice |
+
+Added in T115 for the leaflet, recorded with
+`curl -H "Accept: text/html" …` (without that header CIMA answers plain
+text):
+
+| File | Request | Case |
+|------|---------|------|
+| `secciones_1161160012.json` | `GET docSegmentado/secciones/2?nregistro=1161160012` | FIASP: 7 sections, from «Introducción» to «Contenido del envase e información adicional» |
+| `contenido_1161160012_<s>.html` | `GET docSegmentado/contenido/2?nregistro=1161160012&seccion=<s>`, `<s>` = 0–6 | Its sections as CIMA writes them: ~110 KB, about a thousand `style=""` attributes, one pack image as a `data:image/jpg` URI, links to `ema.europa.eu` |
+| `secciones_55315.json` | `GET docSegmentado/secciones/2?nregistro=55315` | Hidroferol 0,1 mg/ml gotas: 7 sections |
+| `contenido_55315_<s>.html` | `GET docSegmentado/contenido/2?nregistro=55315&seccion=<s>`, `<s>` = 0–6 | Its sections, with a `data:` image and links to `aemps.gob.es` and `notificaram.es` |
+
+A medicine without a sectioned leaflet answers **200** with
+`{"error": "No existen secciones para el medicamento indicado"}` (verified with
+an unknown `nregistro`), not 204; the tests build that case in a temporary
+directory.

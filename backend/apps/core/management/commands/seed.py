@@ -54,7 +54,7 @@ from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import NotificationState, PushSubscription
 from apps.regulatory import services as regulatory
 from apps.regulatory.clients import aemps
-from apps.regulatory.models import Medicine, Presentation, SafetyNotice, SupplyProblem
+from apps.regulatory.models import Medicine, MedicineLeaflet, Presentation, SafetyNotice, SupplyProblem
 from apps.routines.models import (
     Routine,
     RoutineEntry,
@@ -151,6 +151,7 @@ class Command(BaseCommand):
         SupplyProblem.objects.all().delete()
         Presentation.objects.all().delete()
         SafetyNotice.objects.all().delete()
+        MedicineLeaflet.objects.all().delete()
         Medicine.objects.all().delete()
         StockGroup.objects.all().delete()
         PushSubscription.objects.all().delete()
@@ -583,12 +584,19 @@ class Command(BaseCommand):
         - Fast-acting insulin: active supply problem, official-name offer pending.
         - Hidroferol drops: two safety notices, typed national code.
         - Ibuprofen 600mg: ordinary marketed medicine, code from its NTIN.
+
+        The insulin and Hidroferol also get their recorded leaflets. Ibuprofen
+        has none, so its leaflet is fetched the first time it is refreshed.
         """
         for key in ("fast_insulin", "hidroferol", "ibuprofen"):
             code = stocks[key].national_code
             data = aemps.parse_recorded(code, _CIMA_FIXTURES)
             presentation = Presentation.objects.create(source=aemps.SOURCE, code=code)
-            regulatory.apply_presentation(presentation.pk, data)
+            # No background leaflet fetch: the seed must never reach the agency.
+            presentation = regulatory.apply_presentation(presentation.pk, data, enqueue_leaflet=False)
+            if key != "ibuprofen":
+                medicine = presentation.medicine
+                regulatory.apply_leaflet(medicine.pk, aemps.parse_recorded_leaflet(medicine.code, _CIMA_FIXTURES))
             # Background-style write: the seeded `updated_at` stays as created.
             Stock.objects.filter(pk=stocks[key].pk).update(presentation=presentation)
 

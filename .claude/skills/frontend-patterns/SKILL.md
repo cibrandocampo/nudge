@@ -97,6 +97,12 @@ has proven itself and the abstraction earns its keep.
   button variants with documented convention (in-card / form-level /
   top-bar triggers). No more hardcoded `width: 36px; height: 36px;` in
   page-local CSS.
+  `.btnIconOutline` is the bordered white variant for icon buttons inside a
+  white card, where the plain grey `.btnIcon` reads as disabled.
+- **`IconChip`** (`components/IconChip.jsx`) — a status chip that shows only
+  its icon and unfolds its text on tap, hover (devices that can hover) or
+  keyboard focus; the text stays in the DOM as its accessible name. The tone
+  class comes from the caller: green good, amber warning, red problem.
 - **`--shadow-sm/md/lg` and `--radius-sm/lg/xl/xxl`** tokens in
   `index.css` — no more raw `0 6px 20px rgba(...)` or `border-radius:
   12px` in module CSS.
