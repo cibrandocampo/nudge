@@ -85,8 +85,8 @@ test.describe('content security policy', () => {
     await freshSession(page, context, { loginAs: 'user1' })
     await goToStockDetail(page, 'metformin')
     const wasm = page.waitForResponse((r) => r.url().endsWith('.wasm'))
-    await page.getByTestId('add-lot-toggle').click()
-    await page.getByTestId('scan-lot').click()
+    // "Automatic" opens the camera straight from the stock page.
+    await page.getByTestId('add-lot-scan').click()
     await expect(page.getByTestId('scan-video')).toBeVisible()
     const wasmUrl = (await wasm).url()
     // A blocked compile does surface as the scan-error panel, but

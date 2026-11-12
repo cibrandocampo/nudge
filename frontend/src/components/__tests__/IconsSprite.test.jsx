@@ -12,3 +12,12 @@ describe('IconsSprite', () => {
     expect(wrapper.innerHTML.length).toBeGreaterThan(0)
   })
 })
+
+describe('icon sprite symbols', () => {
+  it('has the QR code icon used by the automatic lot entry', () => {
+    const { container } = render(<IconsSprite />)
+    const symbol = container.querySelector('symbol#i-qr-code')
+    expect(symbol).not.toBeNull()
+    expect(symbol.getAttribute('viewBox')).toBe('0 0 24 24')
+  })
+})

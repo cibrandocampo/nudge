@@ -1,11 +1,3 @@
-.scanBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  width: 100%;
-}
-
 .addLotForm {
   display: flex;
   flex-direction: column;
@@ -74,25 +66,30 @@
   flex: 1;
 }
 
-/* The form's resting state: a full-width button under the lot list, sharing
-   the list's card. Not a `shared.btn` — it reads as a row of the card, which
-   is why it carries the card's inner border rather than a button's. */
-.addLotToggle {
+/* The resting state: a heading over the two ways in, sharing the lot list's
+   card — hence the card's inner border on top rather than a box of its own. */
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem 1rem;
+  border-top: 1px solid var(--c-border-inner);
+}
+
+/* Equal columns whatever the labels, so neither way in reads as the default.
+   With only "Manual" it simply takes the whole row. */
+.entryButtons {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 0.5rem;
+}
+
+.entryBtn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.625rem 0.75rem;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--c-border-inner);
-  color: var(--c-text-2);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  width: 100%;
-}
-.addLotToggle:hover {
-  background: var(--c-border-inner);
-  color: var(--c-text);
+  min-width: 0;
+  white-space: nowrap;
 }

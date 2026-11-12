@@ -443,12 +443,11 @@ async function main() {
     await login(pageS, USER_EMAIL, PASS)
     await pageS.goto(`${BASE}/inventory/${metformin.id}`)
     await pageS.waitForLoadState('networkidle')
-    // The add-lot form is collapsed behind "Add batch" until asked for, and the
-    // scan button lives inside it — reach the scanner the way a user does.
-    const addLotToggle = pageS.getByTestId('add-lot-toggle')
-    await addLotToggle.waitFor({ state: 'visible', timeout: 10_000 })
-    await addLotToggle.click()
-    const scanButton = pageS.getByTestId('scan-lot')
+    // "Automatic", one of the two ways into adding a lot, opens the camera
+    // straight from the stock page — reach the scanner the way a user does.
+    // It only renders once the browser lists a camera, which the fake capture
+    // device provides.
+    const scanButton = pageS.getByTestId('add-lot-scan')
     await scanButton.waitFor({ state: 'visible', timeout: 10_000 })
     await scanButton.click()
 
