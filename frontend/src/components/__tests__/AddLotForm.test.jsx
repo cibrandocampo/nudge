@@ -16,16 +16,28 @@ vi.mock('../../hooks/useScannerAvailable', () => ({
 
 // The real modal needs a camera and a WebAssembly decoder, neither of which
 // jsdom has. This stub exposes the two things the form talks to it about:
-// a decoded payload and a close.
+// a decoded payload, a close and the hand-over to typing it by hand.
 const decodedRef = { current: '' }
 vi.mock('../BarcodeScannerModal', () => ({
-  default: ({ onDecoded, onClose }) => (
+  default: ({ onDecoded, onClose, onManual }) => (
     <div data-testid="scanner">
       <button type="button" onClick={() => onDecoded(decodedRef.current)}>
         emit
       </button>
       <button type="button" onClick={onClose}>
         close scanner
+      </button>
+      <button type="button" onClick={onManual}>
+        by hand
+      </button>
+      {/* What the real modal does with a read it accepts: hand it over, then close. */}
+      <button
+        type="button"
+        onClick={() => {
+          if (onDecoded(decodedRef.current) !== false) onClose()
+        }}
+      >
+        accept
       </button>
     </div>
   ),
@@ -50,7 +62,8 @@ function renderForm(overrides = {}) {
   return { ...utils, props, user: userEvent.setup() }
 }
 
-const openForm = async (user) => user.click(screen.getByTestId('add-lot-toggle'))
+const openForm = async (user) => user.click(screen.getByTestId('add-lot-manual'))
+const startScan = async (user) => user.click(screen.getByTestId('add-lot-scan'))
 // The batch number and the serial start folded (T049), so a test that types
 // into either has to open them first — exactly as a user does.
 const revealFields = async (user) => user.click(screen.getByTestId('more-fields'))
@@ -62,14 +75,36 @@ beforeEach(() => {
 })
 
 describe('AddLotForm', () => {
-  it('rests as a single button and opens the fields on click', async () => {
-    const { user } = renderForm()
+  it('rests as a heading over the Automatic and Manual buttons', () => {
+    scannerAvailableRef.current = true
+    renderForm()
 
-    expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
+    expect(screen.getByText('Add batch')).toBeInTheDocument()
+    expect(screen.getByTestId('add-lot-scan')).toHaveTextContent('Automatic')
+    expect(screen.getByTestId('add-lot-manual')).toHaveTextContent('Manual')
+    expect(screen.getByTestId('add-lot-scan').querySelector('use')).toHaveAttribute('href', '#i-qr-code')
+    expect(screen.getByTestId('add-lot-manual').querySelector('use')).toHaveAttribute('href', '#i-pencil')
+    expect(screen.queryByTestId('qty-input')).not.toBeInTheDocument()
+  })
+
+  it('offers only Manual where no scanner is available', () => {
+    renderForm()
+
+    expect(screen.getByTestId('add-lot-manual')).toBeInTheDocument()
+    expect(screen.queryByTestId('add-lot-scan')).not.toBeInTheDocument()
+  })
+
+  it('Manual opens an empty form with Cancel and Save, and no scan button in it', async () => {
+    scannerAvailableRef.current = true
+    const { user } = renderForm()
     await openForm(user)
 
-    expect(screen.getByPlaceholderText('0')).toBeInTheDocument()
-    expect(screen.queryByTestId('add-lot-toggle')).not.toBeInTheDocument()
+    expect(screen.getByTestId('qty-input')).toHaveValue(null)
+    expect(screen.getByTestId('expiry-input')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.queryByTestId('add-lot-entry')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-lot-scan')).not.toBeInTheDocument()
   })
 
   it('starts the quantity from the product default, so the common case is a confirmation', async () => {
@@ -90,7 +125,7 @@ describe('AddLotForm', () => {
     // by type — the same way the page spec does it.
     fireEvent.change(container.querySelector('input[type="date"]'), { target: { value: '2027-01-31' } })
     fireEvent.change(screen.getByPlaceholderText('e.g. L4021A'), { target: { value: '  LOT-Z  ' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -109,9 +144,9 @@ describe('AddLotForm', () => {
     const { user } = renderForm()
     await openForm(user)
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '4' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(screen.getByTestId('add-lot-toggle')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('add-lot-manual')).toBeInTheDocument())
     // Reopening starts clean, not from the previous lot.
     await openForm(user)
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
@@ -125,14 +160,14 @@ describe('AddLotForm', () => {
 
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '4' } })
     fireEvent.change(screen.getByPlaceholderText('e.g. L4021A'), { target: { value: 'LOT-Z' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     // The form is still open, still holding what the user typed, and usable
     // again — the whole point of the promise contract.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add batch' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
     expect(screen.getByPlaceholderText('0')).toHaveValue(4)
     expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-Z')
-    expect(screen.queryByTestId('add-lot-toggle')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-lot-entry')).not.toBeInTheDocument()
   })
 
   it('disables both actions while the submission is in flight', async () => {
@@ -141,13 +176,13 @@ describe('AddLotForm', () => {
     const { user } = renderForm({ onSubmit })
     await openForm(user)
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByRole('button', { name: 'Adding…' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
 
     release()
-    await waitFor(() => expect(screen.getByTestId('add-lot-toggle')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('add-lot-manual')).toBeInTheDocument())
   })
 
   it('discards the draft on cancel', async () => {
@@ -160,13 +195,20 @@ describe('AddLotForm', () => {
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
   })
 
-  it('refuses to open while the server is unreachable', async () => {
+  it('refuses both ways in while the server is unreachable', async () => {
     reachableRef.current = false
+    scannerAvailableRef.current = true
     const { user } = renderForm()
 
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    for (const testid of ['add-lot-scan', 'add-lot-manual']) {
+      const button = screen.getByTestId(testid)
+      expect(button).toHaveAttribute('aria-disabled', 'true')
+      expect(button).toHaveAttribute('title', expect.stringMatching(/not available offline/i))
+      await user.click(button)
+    }
 
-    expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('qty-input')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
     expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
   })
 
@@ -179,7 +221,7 @@ describe('AddLotForm', () => {
     // the mock cannot, so the re-render that picks up the new value comes from
     // touching a field — which is also what a user does before submitting.
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '2' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
     expect(onSubmit).not.toHaveBeenCalled()
@@ -222,20 +264,9 @@ describe('AddLotForm', () => {
     const lotInput = screen.getByPlaceholderText('e.g. L4021A')
     await user.click(lotInput)
     await user.keyboard('BRAND-NEW')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ lotNumber: 'BRAND-NEW' }))
-  })
-
-  it('offers the scanner only where a camera is available', async () => {
-    const { user } = renderForm()
-    await openForm(user)
-    expect(screen.queryByTestId('scan-lot')).not.toBeInTheDocument()
-
-    scannerAvailableRef.current = true
-    const second = renderForm()
-    await openForm(second.user)
-    expect(screen.getByTestId('scan-lot')).toBeInTheDocument()
   })
 
   it('fills the fields from a scan and carries the serial and raw payload to the caller', async () => {
@@ -243,15 +274,13 @@ describe('AddLotForm', () => {
     decodedRef.current = `10LOT-S${GS}21SN-9`
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const { user } = renderForm({ onSubmit })
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-S')
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-9')
 
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         lotNumber: 'LOT-S',
@@ -270,9 +299,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = `10LOT-S${GS}21SN-9`
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     // One convention across the form: the single required field carries the
@@ -317,7 +344,7 @@ describe('AddLotForm', () => {
     await openForm(user)
 
     await user.clear(screen.getByTestId('qty-input'))
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Enter a quantity')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
@@ -335,151 +362,27 @@ describe('AddLotForm', () => {
       stock: { ...baseStock, lots: [{ id: 10, quantity: 1, lot_number: 'LOT-A', serial_number: 'SN-DUP' }] },
       onSubmit,
     })
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('scan-blocker')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add batch' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
 
     await user.clear(screen.getByTestId('serial-input'))
 
     expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add batch' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
   })
 
   it('blocks a box whose expiry has already passed', async () => {
     scannerAvailableRef.current = true
     decodedRef.current = `17250101${'10LOT-OLD'}`
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
-    expect(screen.getByRole('button', { name: 'Add batch' })).toBeDisabled()
-  })
-
-  // ── Save and add another ──────────────────────────────────────────────────
-  // Six boxes from the hospital should not mean opening the form six times.
-
-  const saveAnother = (user) => user.click(screen.getByTestId('add-and-another'))
-
-  it('sends the same payload the primary Save would', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const { user } = renderForm({ onSubmit })
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-Z')
-    await saveAnother(user)
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ quantity: 3, lotNumber: 'LOT-Z' }))
-  })
-
-  it('stays open with every value cleared', async () => {
-    const { user } = renderForm({ onSubmit: vi.fn().mockResolvedValue(undefined) })
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-Z')
-    await user.type(screen.getByTestId('serial-input'), 'SN-Z')
-    await saveAnother(user)
-
-    // Still open — the toggle would be showing instead if it had closed.
-    expect(screen.queryByTestId('add-lot-toggle')).not.toBeInTheDocument()
-    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('')
-    expect(screen.getByTestId('serial-input')).toHaveValue('')
-  })
-
-  it('restores the quantity to the product default rather than blanking it', async () => {
-    const { user } = renderForm({
-      stock: { ...baseStock, default_lot_quantity: 5 },
-      onSubmit: vi.fn().mockResolvedValue(undefined),
-    })
-    await openForm(user)
-    expect(screen.getByPlaceholderText('0')).toHaveValue(5)
-
-    await saveAnother(user)
-    expect(screen.getByPlaceholderText('0')).toHaveValue(5)
-  })
-
-  // The one place the two pieces of state deliberately diverge: values go,
-  // visibility stays, so the next box does not need `+ campos` again.
-  it('keeps the fields revealed for the next box', async () => {
-    const { user } = renderForm({ onSubmit: vi.fn().mockResolvedValue(undefined) })
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '1')
-    await saveAnother(user)
-
-    expect(screen.getByPlaceholderText('e.g. L4021A')).toBeInTheDocument()
-    expect(screen.getByTestId('serial-input')).toBeInTheDocument()
-    expect(screen.queryByTestId('more-fields')).not.toBeInTheDocument()
-  })
-
-  it('returns focus to the quantity, ready for the next box', async () => {
-    const { user } = renderForm({ onSubmit: vi.fn().mockResolvedValue(undefined) })
-    await openForm(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '1')
-    await saveAnother(user)
-
-    expect(screen.getByPlaceholderText('0')).toHaveFocus()
-  })
-
-  // Same contract the primary button honours: a rejection loses nothing.
-  it('keeps every typed value when the caller rejects', async () => {
-    const onSubmit = vi.fn().mockRejectedValue(new Error('nope'))
-    const { user } = renderForm({ onSubmit })
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '4')
-    await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'LOT-KEEP')
-    await saveAnother(user)
-
-    expect(screen.getByPlaceholderText('0')).toHaveValue(4)
-    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-KEEP')
-  })
-
-  it('is refused by a blocker exactly as Save is', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const { user } = renderForm({
-      stock: { ...baseStock, lots: [{ id: 10, quantity: 1, lot_number: 'LOT-A', serial_number: 'SN-DUP' }] },
-      onSubmit,
-    })
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByPlaceholderText('0'), '1')
-    await user.type(screen.getByTestId('serial-input'), 'SN-DUP')
-
-    expect(screen.getByTestId('add-and-another')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add batch' })).toBeDisabled()
-    await saveAnother(user)
-    expect(onSubmit).not.toHaveBeenCalled()
-  })
-
-  it('refuses offline exactly as Save does', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const { user } = renderForm({ onSubmit })
-    await openForm(user)
-    reachableRef.current = false
-    // The mock cannot notify like the real `useSyncExternalStore` hook, so the
-    // re-render that picks up the new value comes from touching a field —
-    // which is also what a user does before submitting.
-    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '2' } })
-
-    await saveAnother(user)
-
-    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
-    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
   // ── Expiry inherited from the batch that was picked ───────────────────────
@@ -556,9 +459,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = `172806011${'0LOT-SCAN'}`
     const { user } = renderForm({ stock: twoBatches })
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('expiry-input')).toHaveValue('2028-06-01')
@@ -608,7 +509,7 @@ describe('AddLotForm', () => {
     await user.type(screen.getByPlaceholderText('0'), '2')
     await user.click(screen.getByPlaceholderText('e.g. L4021A'))
     await user.click(await screen.findByText('LOT-DATED'))
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ lotNumber: 'LOT-DATED', expiryDate: '2027-03-01' }))
   })
@@ -644,9 +545,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = '10LOT-ONLY'
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-ONLY')
@@ -659,9 +558,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = '21SN-ONLY'
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-ONLY')
@@ -673,9 +570,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = `10LOT-S${GS}21SN-9`
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-S')
@@ -688,9 +583,7 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = '10LOT-ONLY'
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
     // The batch number is already open; only the serial is left.
     expect(screen.getByTestId('more-fields')).toBeInTheDocument()
@@ -737,9 +630,7 @@ describe('AddLotForm', () => {
     const { user } = renderForm({
       stock: { ...baseStock, lots: [{ id: 10, quantity: 1, lot_number: 'LOT-A', serial_number: 'SN-DUP' }] },
     })
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('scan-blocker')).toBeInTheDocument()
@@ -757,7 +648,7 @@ describe('AddLotForm', () => {
 
     await user.type(screen.getByPlaceholderText('0'), '1')
     await user.type(screen.getByTestId('serial-input'), 'HAND-TYPED-1')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ serialNumber: 'HAND-TYPED-1' }))
   })
@@ -767,34 +658,15 @@ describe('AddLotForm', () => {
     decodedRef.current = `10LOT-S${GS}21SN-9`
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const { user } = renderForm({ onSubmit })
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
     expect(screen.getByTestId('serial-input')).toHaveValue('SN-9')
 
     await user.clear(screen.getByTestId('serial-input'))
     await user.type(screen.getByTestId('serial-input'), 'SN-CORRECTED')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ serialNumber: 'SN-CORRECTED' }))
-  })
-
-  // Same rule the other prefills follow: a scan fills what the code carries and
-  // leaves the rest of the form alone.
-  it('does not blank a typed serial when the code carries none', async () => {
-    scannerAvailableRef.current = true
-    decodedRef.current = '10LOT-NOSERIAL'
-    const { user } = renderForm()
-    await openForm(user)
-    await revealFields(user)
-
-    await user.type(screen.getByTestId('serial-input'), 'TYPED-FIRST')
-    await user.click(screen.getByTestId('scan-lot'))
-    await user.click(await screen.findByRole('button', { name: 'emit' }))
-
-    expect(screen.getByPlaceholderText('e.g. L4021A')).toHaveValue('LOT-NOSERIAL')
-    expect(screen.getByTestId('serial-input')).toHaveValue('TYPED-FIRST')
   })
 
   it('blocks a hand-typed serial the product already carries', async () => {
@@ -810,7 +682,7 @@ describe('AddLotForm', () => {
     await user.type(screen.getByTestId('serial-input'), 'SN-DUP')
 
     expect(screen.getByTestId('scan-blocker')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
@@ -863,13 +735,28 @@ describe('AddLotForm', () => {
 
     await user.type(screen.getByPlaceholderText('0'), '2')
     expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ serialNumber: '' }))
   })
 
   // 20 is the model's `max_length` and the GS1 AI 21 limit; past it the backend
   // answers 400.
+  it('sends a typed serial for a product that has no lots yet', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const { lots: _lots, ...noLots } = baseStock
+    const { user } = renderForm({ stock: noLots, onSubmit })
+    await openForm(user)
+    await revealFields(user)
+
+    await user.type(screen.getByTestId('qty-input'), '1')
+    await user.type(screen.getByTestId('serial-input'), 'SN-FIRST')
+    expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ serialNumber: 'SN-FIRST' }))
+  })
+
   it('caps the serial at twenty characters', async () => {
     const { user } = renderForm()
     await openForm(user)
@@ -885,13 +772,75 @@ describe('AddLotForm', () => {
     scannerAvailableRef.current = true
     decodedRef.current = 'not-a-gs1-code'
     const { user } = renderForm()
-    await openForm(user)
-
-    await user.click(screen.getByTestId('scan-lot'))
+    await startScan(user)
     await user.click(await screen.findByRole('button', { name: 'emit' }))
 
     expect(screen.getByTestId('scanner')).toBeInTheDocument()
-    // The form is untouched: an unreadable code fills nothing, so nothing unfolds.
+    // No form behind it: an unreadable code fills nothing and opens nothing.
+    expect(screen.queryByTestId('qty-input')).not.toBeInTheDocument()
+  })
+})
+
+describe('AddLotForm — Automatic, the camera first', () => {
+  beforeEach(() => {
+    scannerAvailableRef.current = true
+  })
+
+  it('opens the camera straight away, with no form behind it', async () => {
+    const { user } = renderForm()
+    await startScan(user)
+
+    expect(await screen.findByTestId('scanner')).toBeInTheDocument()
+    expect(screen.queryByTestId('qty-input')).not.toBeInTheDocument()
+  })
+
+  it('an accepted read opens the prefilled form, even though the modal closes right after', async () => {
+    decodedRef.current = `17280601${'10LOT-S'}`
+    const { user } = renderForm()
+    await startScan(user)
+    // The modal calls onDecoded and then onClose in the same handler; the
+    // close must not undo the move to the form.
+    await user.click(await screen.findByRole('button', { name: 'accept' }))
+
+    expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
+    expect(screen.getByTestId('expiry-input')).toHaveValue('2028-06-01')
+    expect(screen.getByTestId('lot-input')).toHaveValue('LOT-S')
+    expect(screen.getByTestId('qty-input')).toHaveValue(1)
+  })
+
+  it('closing the camera without a read goes back to the two buttons', async () => {
+    const { user } = renderForm()
+    await startScan(user)
+    await user.click(await screen.findByRole('button', { name: 'close scanner' }))
+
+    expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('qty-input')).not.toBeInTheDocument()
+    expect(screen.getByTestId('add-lot-scan')).toBeInTheDocument()
+    expect(screen.getByTestId('add-lot-manual')).toBeInTheDocument()
+  })
+
+  it('"Enter it by hand" swaps the camera for an empty form', async () => {
+    const { user } = renderForm({ stock: { ...baseStock, default_lot_quantity: 30 } })
+    await startScan(user)
+    await user.click(await screen.findByRole('button', { name: 'by hand' }))
+
+    expect(screen.queryByTestId('scanner')).not.toBeInTheDocument()
+    // Empty apart from the product's learned default, as Manual opens it.
+    expect(screen.getByTestId('qty-input')).toHaveValue(30)
+    expect(screen.getByTestId('expiry-input')).toHaveValue('')
+    expect(screen.queryByTestId('lot-input')).not.toBeInTheDocument()
+  })
+
+  it('a saved scan closes the form and the next open starts clean', async () => {
+    decodedRef.current = `10LOT-S${GS}21SN-9`
+    const { user } = renderForm()
+    await startScan(user)
+    await user.click(await screen.findByRole('button', { name: 'emit' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByTestId('add-lot-entry')).toBeInTheDocument())
+    await openForm(user)
     expect(screen.queryByTestId('serial-input')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('lot-input')).not.toBeInTheDocument()
   })
 })
