@@ -89,12 +89,8 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           >
             {quantity} {t('common.unit')}
           </span>
-          {(stock.quantity_expired ?? 0) > 0 && (
-            <span className={cards.stockQtyExpired}>
-              {' '}
-              ({t('inventory.expiredCount', { count: stock.quantity_expired })})
-            </span>
-          )}
+          {/* Expired units are a reason on line 2 ("1 expired"), not a
+              qualifier here: next to the quantity they squeezed the name. */}
         </span>
         <div className={s.actions} onClick={stop}>
           {/* Out of stock keeps the same button, greyed and disabled, so the
@@ -151,7 +147,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
               data-testid="row-reason"
               data-kind={reason.kind}
             >
-              {t(reason.key)}
+              {t(reason.key, reason.params)}
             </span>
           ))}
 

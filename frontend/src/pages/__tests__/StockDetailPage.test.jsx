@@ -571,33 +571,53 @@ describe('StockDetailPage', () => {
     expect(card.getAttribute('class') ?? '').toContain('cardBorderSuccess')
   })
 
-  // T167: header rendering — quantity_available + (N expired) suffix.
-  it('header shows quantity_available with (N expired) suffix when there are expired lots', async () => {
+  // T167: header rendering — quantity_available, and the expired count on the
+  // reason line below it (2026-11-18: no longer a suffix beside the total).
+  it('header shows quantity_available, and the expired count on its own reason line', async () => {
     const withExpired = {
       ...stock,
       quantity: 18,
       quantity_available: 13,
       quantity_expired: 5,
+      expiry_severity: 'reached',
     }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(withExpired)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
     // The qty span renders quantity_available (13), not the total (18).
-    const qty = container.querySelector('[class*="stockQty"]:not([class*="stockQtyExpired"])')
+    const qty = container.querySelector('[class*="stockQty"]')
     expect(qty.textContent).toMatch(/13/)
-    expect(qty.textContent).not.toMatch(/18/)
-    // The expired suffix span renders "(5 expired)".
-    const expiredSuffix = container.querySelector('[class*="stockQtyExpired"]')
-    expect(expiredSuffix).not.toBeNull()
-    expect(expiredSuffix.textContent).toMatch(/5 expired/)
+    expect(qty.textContent).not.toMatch(/18|expired/)
+    const reason = within(screen.getByTestId('stock-reasons')).getByTestId('stock-reason')
+    expect(reason).toHaveTextContent('5 expired')
+    expect(reason).toHaveAttribute('data-kind', 'expiry')
+    expect(reason).toHaveClass('reasonDanger')
   })
 
-  it('header omits the expired suffix when quantity_expired is 0', async () => {
-    const noExpired = { ...stock, quantity_available: 10, quantity_expired: 0 }
-    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(noExpired)))
-    const { container } = renderDetail()
+  it('header shows no reason line when nothing needs attention', async () => {
+    const healthy = {
+      ...stock,
+      quantity_available: 10,
+      quantity_expired: 0,
+      stock_severity: 'ok',
+      expiry_severity: 'none',
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(healthy)))
+    renderDetail()
     await screen.findByText('Water filter')
-    expect(container.querySelector('[class*="stockQtyExpired"]')).toBeNull()
+    expect(screen.queryByTestId('stock-reasons')).not.toBeInTheDocument()
+  })
+
+  it("header leaves the agency's verdicts to the medicine section", async () => {
+    const withSupplyProblem = {
+      ...stock,
+      quantity_available: 10,
+      regulatory: { fetch_status: 'ok', fetched_at: '2026-11-10T01:00:00Z', supply_severity: 'danger' },
+    }
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(withSupplyProblem)))
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('stock-reasons')).not.toBeInTheDocument()
   })
 
   // T167: per-lot expiry date tint + line-through on expired lot qty.

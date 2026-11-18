@@ -52,7 +52,7 @@ export function needsAttention(stock) {
 /**
  * Why a stock needs attention, as the words its inventory row shows:
  *
- *   [{ kind: 'stock' | 'expiry' | 'regulatory', key, tone: 'danger' | 'warning' }]
+ *   [{ kind: 'stock' | 'expiry' | 'regulatory', key, params?, tone: 'danger' | 'warning' }]
  *
  * The row replaces the "N products need attention" banner: the Atención chip
  * filters the list, and each row says its own reason, so the reason is where
@@ -80,7 +80,13 @@ export function stockRowReasons(stock) {
     }
   }
 
-  if (stock?.expiry_severity === 'reached') {
+  // Expired units are counted ("1 expired") when the backend reports them, so
+  // the count leaves line 1 — where it squeezed the name — and joins the
+  // reasons; with no count, the plain word.
+  const expired = stock?.quantity_expired ?? 0
+  if (expired > 0) {
+    reasons.push({ kind: 'expiry', key: 'inventory.expiredCount', params: { count: expired }, tone: 'danger' })
+  } else if (stock?.expiry_severity === 'reached') {
     reasons.push({ kind: 'expiry', key: 'inventory.rowExpiryReached', tone: 'danger' })
   } else if (stock?.expiry_severity === 'soon') {
     reasons.push({ kind: 'expiry', key: 'inventory.rowExpiringSoon', tone: 'warning' })

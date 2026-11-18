@@ -41,9 +41,13 @@ describe('StockRow — line 1', () => {
     expect(screen.getByText(/0 u\./)).toBeInTheDocument()
   })
 
-  it('qualifies the quantity with the expired count when there is one', () => {
-    renderRow({ quantity_expired: 3 })
-    expect(screen.getByText(/3 expired/)).toBeInTheDocument()
+  it('gives the expired count as a reason on line 2, not beside the quantity', () => {
+    renderRow({ quantity_expired: 3, expiry_severity: 'reached' })
+    expect(screen.getByTestId('row-quantity')).not.toHaveTextContent(/expired/)
+    const reason = screen.getByTestId('row-reason')
+    expect(reason).toHaveTextContent('3 expired')
+    expect(reason).toHaveClass('reasonDanger')
+    expect(screen.getByTestId('consumption-row')).toContainElement(reason)
   })
 
   it.each([

@@ -195,11 +195,6 @@
   font-size: 0.8rem;
 }
 
-.stockQtyExpired {
-  color: var(--c-text-3);
-  font-weight: 400;
-}
-
 .stockDepletion {
   color: var(--c-text-3);
 }

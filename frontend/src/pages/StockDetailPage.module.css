@@ -116,3 +116,22 @@
   background: var(--c-primary-hover);
   color: var(--c-surface);
 }
+
+/* The header's reason line (expired units, low stock, expiring), under the
+   total, as on the inventory row. Doubled selectors: the colours must beat
+   the subtitle's whatever the bundle order (see StockRow.module.css). */
+.headerReasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.reasonWarning.reasonWarning {
+  color: var(--c-warning);
+}
+
+.reasonDanger.reasonDanger {
+  color: var(--c-danger);
+}

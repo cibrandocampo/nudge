@@ -166,6 +166,12 @@ describe('stockRowReasons', () => {
     expect(stockRowReasons(stock({ expiry_severity: severity }))).toEqual([{ kind: 'expiry', key, tone }])
   })
 
+  it('counts expired units when the backend reports them, instead of the plain word', () => {
+    expect(stockRowReasons(stock({ expiry_severity: 'reached', quantity_expired: 2 }))).toEqual([
+      { kind: 'expiry', key: 'inventory.expiredCount', params: { count: 2 }, tone: 'danger' },
+    ])
+  })
+
   it('stock, then expiry, then the agency, each said once', () => {
     expect(
       reasonKeys({
