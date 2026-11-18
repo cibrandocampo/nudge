@@ -1,9 +1,12 @@
+/* The open form is a card of its own, below the lots table (not inside it). */
 .addLotForm {
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
   padding: 1rem;
-  border-top: 1px solid var(--c-border-inner);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
 }
 
 .addLotRow {
@@ -66,14 +69,12 @@
   flex: 1;
 }
 
-/* The resting state: a heading over the two ways in, sharing the lot list's
-   card — hence the card's inner border on top rather than a box of its own. */
+/* A section of its own under the lots table: its heading over the two ways
+   in (resting) or over the form card (open), spaced like the page sections. */
 .entry {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  padding: 0.875rem 1rem 1rem;
-  border-top: 1px solid var(--c-border-inner);
+  gap: 0.5rem;
 }
 
 /* Equal columns whatever the labels, so neither way in reads as the default.
@@ -85,11 +86,17 @@
   gap: 0.5rem;
 }
 
+/* Larger than the stock `.btn`: these are the only two controls in this
+   state and are tapped with a box in the other hand, so they get a full
+   touch target (≥48px) instead of the dense in-form size. */
 .entryBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   min-width: 0;
+  min-height: 3.25rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
   white-space: nowrap;
 }

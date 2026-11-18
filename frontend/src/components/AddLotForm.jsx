@@ -257,7 +257,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     }
     const entryButtonProps = {
       type: 'button',
-      className: cx(buttons.btn, buttons.btnSecondary, s.entryBtn, !reachable && buttons.disabled),
+      className: cx(buttons.btn, buttons.btnPrimary, s.entryBtn, !reachable && buttons.disabled),
       'aria-disabled': !reachable,
       title: !reachable ? t('offline.pageUnavailable') : undefined,
     }
@@ -269,12 +269,12 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         <div className={s.entryButtons}>
           {scannerAvailable && (
             <button {...entryButtonProps} onClick={enter(startScan)} data-testid="add-lot-scan">
-              <Icon name="qr-code" size="sm" />
+              <Icon name="qr-code" size="lg" />
               <span>{t('inventory.addLotScan')}</span>
             </button>
           )}
           <button {...entryButtonProps} onClick={enter(openForm)} data-testid="add-lot-manual">
-            <Icon name="pencil" size="sm" />
+            <Icon name="pencil" size="lg" />
             <span>{t('inventory.addLotManual')}</span>
           </button>
         </div>
@@ -294,132 +294,137 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={s.addLotForm}>
-      <div className={s.addLotRow}>
-        <FormField label={t('inventory.lotQty')} required error={qtyError}>
-          <input
-            ref={qtyRef}
-            className={cx(forms.input, s.addLotInput)}
-            type="number"
-            min={0}
-            placeholder="0"
-            data-testid="qty-input"
-            value={fields.qty}
-            onChange={(e) => {
-              setFields((f) => ({ ...f, qty: e.target.value }))
-              setQtyError(null)
-            }}
-          />
-        </FormField>
-        <FormField label={t('inventory.lotExpiry')}>
-          {/* Locked while inherited: one batch has one expiry, so a date that
+    <div className={s.entry}>
+      {/* Same heading as the resting state, so opening the form does not
+          change what the section is called. */}
+      <p className={layout.sectionTitle}>{t('inventory.addLot')}</p>
+      <form onSubmit={handleSubmit} className={s.addLotForm}>
+        <div className={s.addLotRow}>
+          <FormField label={t('inventory.lotQty')} required error={qtyError}>
+            <input
+              ref={qtyRef}
+              className={cx(forms.input, s.addLotInput)}
+              type="number"
+              min={0}
+              placeholder="0"
+              data-testid="qty-input"
+              value={fields.qty}
+              onChange={(e) => {
+                setFields((f) => ({ ...f, qty: e.target.value }))
+                setQtyError(null)
+              }}
+            />
+          </FormField>
+          <FormField label={t('inventory.lotExpiry')}>
+            {/* Locked while inherited: one batch has one expiry, so a date that
                 came from picking the batch is not the user's to edit. Typing in
                 the batch field unlocks it again. */}
-          <div className={expiryInherited ? forms.lockedInput : undefined}>
-            <input
-              className={cx(forms.input, s.addLotInput)}
-              type="date"
-              value={fields.expiry}
-              onChange={(e) => setFields((f) => ({ ...f, expiry: e.target.value }))}
-              readOnly={expiryInherited}
-              data-testid="expiry-input"
-            />
-            {expiryInherited && (
-              <span className={forms.lockBadge} title={t('inventory.expiryInherited')} data-testid="expiry-lock">
-                <Icon name="lock" size="sm" />
-              </span>
-            )}
-          </div>
-        </FormField>
-        {/* Folded fields are absent from the DOM rather than hidden with CSS,
+            <div className={expiryInherited ? forms.lockedInput : undefined}>
+              <input
+                className={cx(forms.input, s.addLotInput)}
+                type="date"
+                value={fields.expiry}
+                onChange={(e) => setFields((f) => ({ ...f, expiry: e.target.value }))}
+                readOnly={expiryInherited}
+                data-testid="expiry-input"
+              />
+              {expiryInherited && (
+                <span className={forms.lockBadge} title={t('inventory.expiryInherited')} data-testid="expiry-lock">
+                  <Icon name="lock" size="sm" />
+                </span>
+              )}
+            </div>
+          </FormField>
+          {/* Folded fields are absent from the DOM rather than hidden with CSS,
               so nothing unreachable sits in the tab order or the accessibility
               tree. */}
-        {disclosure.isRevealed('lot') && (
-          <FormField label={t('inventory.lotNumber')}>
-            {/* Free text with suggestions: a batch this product has never seen
+          {disclosure.isRevealed('lot') && (
+            <FormField label={t('inventory.lotNumber')}>
+              {/* Free text with suggestions: a batch this product has never seen
                   must be typeable, and the list is only a shortcut for the ones
                   it has. `Combobox` brings the keyboard navigation and the
                   `aria-activedescendant` the hand-rolled dropdown never had. */}
-            <Combobox
-              allowFreeText
-              value={fields.lotNumber}
-              // Every keystroke: a hand-typed batch number matches nothing and
-              // so inherits nothing, which is what releases the expiry.
-              onChange={(next) => {
-                setFields((f) => ({ ...f, lotNumber: next }))
-                setExpiryInherited(false)
-              }}
-              // Picking is an explicit act, so it overwrites a date the user
-              // had already typed. A batch with no expiry inherits nothing and
-              // locks nothing — there is no date to take.
-              onSelect={(picked) => {
-                setFields((f) => ({ ...f, lotNumber: picked.lot_number, expiry: picked.expiry_date ?? f.expiry }))
-                setExpiryInherited(picked.expiry_date != null)
-              }}
-              options={suggestions}
-              getLabel={(o) => o.lot_number}
-              getKey={(o) => o.lot_number}
-              // The expiry rides along in the list so the autofill is visibly
-              // sourced rather than arriving from nowhere.
-              renderOption={(o) => (
-                <span className={s.suggestion}>
-                  <span>{o.lot_number}</span>
-                  {o.expiry_date && <span className={s.suggestionExpiry}>{formatShortDate(o.expiry_date)}</span>}
-                </span>
-              )}
-              placeholder={t('inventory.lotNumberPlaceholder')}
-              inputClassName={s.addLotInput}
-              // `Combobox` spreads unknown props onto its input. The E2E
-              // helper used to find this field by its placeholder text, which
-              // broke the moment the copy became an example instead of the
-              // label — a testid cannot rot that way.
-              data-testid="lot-input"
-            />
-          </FormField>
-        )}
+              <Combobox
+                allowFreeText
+                value={fields.lotNumber}
+                // Every keystroke: a hand-typed batch number matches nothing and
+                // so inherits nothing, which is what releases the expiry.
+                onChange={(next) => {
+                  setFields((f) => ({ ...f, lotNumber: next }))
+                  setExpiryInherited(false)
+                }}
+                // Picking is an explicit act, so it overwrites a date the user
+                // had already typed. A batch with no expiry inherits nothing and
+                // locks nothing — there is no date to take.
+                onSelect={(picked) => {
+                  setFields((f) => ({ ...f, lotNumber: picked.lot_number, expiry: picked.expiry_date ?? f.expiry }))
+                  setExpiryInherited(picked.expiry_date != null)
+                }}
+                options={suggestions}
+                getLabel={(o) => o.lot_number}
+                getKey={(o) => o.lot_number}
+                // The expiry rides along in the list so the autofill is visibly
+                // sourced rather than arriving from nowhere.
+                renderOption={(o) => (
+                  <span className={s.suggestion}>
+                    <span>{o.lot_number}</span>
+                    {o.expiry_date && <span className={s.suggestionExpiry}>{formatShortDate(o.expiry_date)}</span>}
+                  </span>
+                )}
+                placeholder={t('inventory.lotNumberPlaceholder')}
+                inputClassName={s.addLotInput}
+                // `Combobox` spreads unknown props onto its input. The E2E
+                // helper used to find this field by its placeholder text, which
+                // broke the moment the copy became an example instead of the
+                // label — a testid cannot rot that way.
+                data-testid="lot-input"
+              />
+            </FormField>
+          )}
 
-        {/* An ordinary field the scanner happens to prefill, not a read-only
+          {/* An ordinary field the scanner happens to prefill, not a read-only
               artefact of the camera. A scratched code, a print too small to
               decode, or no camera at all must not stop the user registering the
               box — the backend has accepted a typed serial since day one. */}
-        {disclosure.isRevealed('serial') && (
-          <FormField label={t('inventory.lotSerial')}>
-            <input
-              className={cx(forms.input, s.addLotInput)}
-              type="text"
-              // The model caps `serial_number` at 20, which is the GS1 AI 21
-              // limit. Without the cap the backend answers 400.
-              maxLength={20}
-              placeholder={t('inventory.lotSerialPlaceholder')}
-              value={fields.serialNumber}
-              onChange={(e) => setFields((f) => ({ ...f, serialNumber: e.target.value }))}
-              data-testid="serial-input"
-            />
-          </FormField>
+          {disclosure.isRevealed('serial') && (
+            <FormField label={t('inventory.lotSerial')}>
+              <input
+                className={cx(forms.input, s.addLotInput)}
+                type="text"
+                // The model caps `serial_number` at 20, which is the GS1 AI 21
+                // limit. Without the cap the backend answers 400.
+                maxLength={20}
+                placeholder={t('inventory.lotSerialPlaceholder')}
+                value={fields.serialNumber}
+                onChange={(e) => setFields((f) => ({ ...f, serialNumber: e.target.value }))}
+                data-testid="serial-input"
+              />
+            </FormField>
+          )}
+        </div>
+
+        {disclosure.hasHidden && (
+          <button type="button" className={s.moreFieldsBtn} onClick={disclosure.revealAll} data-testid="more-fields">
+            <Icon name="plus" size="sm" />
+            <span>{t('inventory.moreFields')}</span>
+          </button>
         )}
-      </div>
 
-      {disclosure.hasHidden && (
-        <button type="button" className={s.moreFieldsBtn} onClick={disclosure.revealAll} data-testid="more-fields">
-          <Icon name="plus" size="sm" />
-          <span>{t('inventory.moreFields')}</span>
-        </button>
-      )}
+        {blocker && (
+          <p className={forms.error} data-testid="scan-blocker">
+            {t(blocker.key, blocker.args)}
+          </p>
+        )}
 
-      {blocker && (
-        <p className={forms.error} data-testid="scan-blocker">
-          {t(blocker.key, blocker.args)}
-        </p>
-      )}
-
-      <div className={s.addLotActions}>
-        <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
-          {t('common.cancel')}
-        </button>
-        <button type="submit" className={cx(buttons.btn, buttons.btnPrimary)} disabled={adding || Boolean(blocker)}>
-          {adding ? t('inventory.adding') : t('common.save')}
-        </button>
-      </div>
-    </form>
+        <div className={s.addLotActions}>
+          <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
+            {t('common.cancel')}
+          </button>
+          <button type="submit" className={cx(buttons.btn, buttons.btnPrimary)} disabled={adding || Boolean(blocker)}>
+            {adding ? t('inventory.adding') : t('common.save')}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
