@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLeaflet } from '../hooks/useLeaflet'
+import { useServerReachable } from '../hooks/useServerReachable'
 import cx from '../utils/cx'
 import Icon from './Icon'
 import buttons from '../styles/buttons.module.css'
@@ -17,11 +18,12 @@ import s from './LeafletAccordion.module.css'
  * (the agency publishes none) the link to the agency's own page is offered
  * instead: with sections it would only repeat the card's own agency link.
  */
-export default function LeafletAccordion({ stockId, summary }) {
+export default function LeafletAccordion({ stockId, summary, onAvailableChange }) {
   const { t } = useTranslation()
   const idPrefix = useId()
   const [openKey, setOpenKey] = useState(null)
   const headers = useRef({})
+  const reachable = useServerReachable()
   const { data, isError, refetch, isFetching } = useLeaflet(stockId, summary.fetched_at)
 
   // Opening a section closes the previous one, which may sit above it: bring
@@ -32,6 +34,22 @@ export default function LeafletAccordion({ stockId, summary }) {
     header.scrollIntoView({ block: 'start' })
     header.focus({ preventScroll: true })
   }, [openKey])
+
+  // There is a leaflet to read (its sections, or the agency link when it has
+  // none) — as opposed to loading, pending, failed or missing offline. The
+  // card shows its source note only then: no leaflet, no source line.
+  const available = Boolean(data) && !data.pending
+  useEffect(() => {
+    onAvailableChange?.(available)
+  }, [available, onAvailableChange])
+
+  // Back online after a failed or offline-skipped load: fetch it now, as the
+  // offline message promised, instead of waiting for the next visit.
+  const wasReachable = useRef(reachable)
+  useEffect(() => {
+    if (reachable && !wasReachable.current && !available) refetch()
+    wasReachable.current = reachable
+  }, [reachable, available, refetch])
 
   const sections = data?.sections ?? []
   const retryButton = (
@@ -47,7 +65,16 @@ export default function LeafletAccordion({ stockId, summary }) {
   )
 
   let body
-  if (data?.pending) {
+  if (!available && !reachable) {
+    // Offline with no copy on this device: say so plainly. Not an error, and
+    // no "Retry" — it cannot work until the connection is back, when the
+    // effect above downloads it by itself (UX-043).
+    body = (
+      <p className={s.state} data-testid="leaflet-offline">
+        {t('regulatory.leaflet.offline')}
+      </p>
+    )
+  } else if (data?.pending) {
     body = (
       <div className={s.state} data-testid="leaflet-pending">
         <span>{t('regulatory.leaflet.pending')}</span>

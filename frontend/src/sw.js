@@ -3,6 +3,7 @@ import { ExpirationPlugin } from 'workbox-expiration'
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
+import { FROM_CACHE_GATEWAY, markFromCache, offlineFallbackMarkerPlugin } from './swCacheFallback'
 import { notificationTargetUrl } from './swRouting'
 
 // Remove caches from older Workbox versions that are no longer needed.
@@ -46,18 +47,7 @@ const gatewayErrorFallbackPlugin = {
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       const cache = await caches.open('nudge-api-cache')
       const cached = await cache.match(request)
-      if (cached) {
-        // Headers from a cache hit are immutable; clone the response to
-        // attach the marker.
-        const headers = new Headers(cached.headers)
-        headers.set('X-From-Cache', '1')
-        const body = await cached.blob()
-        return new Response(body, {
-          status: cached.status,
-          statusText: cached.statusText,
-          headers,
-        })
-      }
+      if (cached) return markFromCache(cached, FROM_CACHE_GATEWAY)
     }
     return response
   },
@@ -78,6 +68,9 @@ registerRoute(
         maxEntries: 200,
         maxAgeSeconds: 7 * 24 * 60 * 60,
       }),
+      // Last, after ExpirationPlugin: marks every offline cache fallback so
+      // the api client does not count it as the backend answering (UX-044).
+      offlineFallbackMarkerPlugin,
     ],
   }),
 )

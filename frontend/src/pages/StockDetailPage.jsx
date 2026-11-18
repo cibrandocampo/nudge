@@ -30,6 +30,7 @@ import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { effectiveGroupId } from '../utils/stockGroup'
 import { reconcileStockFromLot } from '../utils/stockScanReconcile'
+import { stockRowReasons } from '../utils/stockAlerts'
 import { borderTokensFromStock } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import buttons from '../styles/buttons.module.css'
@@ -64,6 +65,9 @@ export default function StockDetailPage() {
   const [consumeOpen, setConsumeOpen] = useState(false)
 
   const tokens = borderTokensFromStock(stock)
+  // The header's own reason line: the inventory row's reasons minus the
+  // agency's, which the medicine section below already shows.
+  const headerReasons = stockRowReasons(stock).filter((reason) => reason.kind !== 'regulatory')
   const groupName = stock ? groups.find((g) => g.id === effectiveGroupId(stock))?.name : undefined
   // Local-midnight today for lot expiry comparison; matches the backend's
   // `date.today()` semantics (a lot expiring today reads as 'reached'). Shared
@@ -374,11 +378,6 @@ export default function StockDetailPage() {
                   <span className={cards.stockQty}>
                     {stock.quantity_available ?? stock.quantity ?? 0} {t('common.total')}
                   </span>
-                  {(stock.quantity_expired ?? 0) > 0 && (
-                    <span className={cards.stockQtyExpired}>
-                      ({t('inventory.expiredCount', { count: stock.quantity_expired })})
-                    </span>
-                  )}
                   {stock.estimated_depletion_date && (
                     <span
                       className={cx(
@@ -394,6 +393,24 @@ export default function StockDetailPage() {
                     </span>
                   )}
                 </span>
+                {/* Why it needs attention, on a line of its own under the
+                    total (as on the inventory row): expired units, low stock,
+                    expiring soon. The agency's verdicts have their own section
+                    below, so they are not repeated here. */}
+                {headerReasons.length > 0 && (
+                  <span className={s.headerReasons} data-testid="stock-reasons">
+                    {headerReasons.map((reason) => (
+                      <span
+                        key={reason.key}
+                        className={reason.tone === 'danger' ? s.reasonDanger : s.reasonWarning}
+                        data-testid="stock-reason"
+                        data-kind={reason.kind}
+                      >
+                        {t(reason.key, reason.params)}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </div>
               {/* The category pill lives in the header row, not inside the
                   subtitle. `cardCategoryPill` pushes itself right with

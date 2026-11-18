@@ -1,5 +1,6 @@
 import { publishRemoteVersion } from '../contexts/appVersionBridge'
 import { noteServerError, setReachable } from '../offline/reachability'
+import { FROM_CACHE_GATEWAY, FROM_CACHE_HEADER, FROM_CACHE_OFFLINE } from '../swCacheFallback'
 import { ConflictError, OfflineError } from './errors'
 import { randomUuid } from '../utils/uuid'
 
@@ -71,8 +72,15 @@ async function request(path, options = {}, retry = true) {
     throw new OfflineError(new Error(`Gateway ${res.status}`))
   }
   // Any other HTTP response (2xx, 3xx, 4xx, 500) proves the backend
-  // itself is reachable and answering.
-  setReachable(true)
+  // itself is reachable and answering — unless the service worker served
+  // it from its cache (X-From-Cache, see swCacheFallback.js). A cached
+  // read is the last copy, not an answer: counting it as "reachable" made
+  // the offline state flicker and re-offered online-only prompts (UX-044).
+  // Only a network response or the health poll flip back to reachable.
+  const servedFrom = res.headers?.get?.(FROM_CACHE_HEADER)
+  if (servedFrom === FROM_CACHE_OFFLINE) setReachable(false)
+  else if (servedFrom === FROM_CACHE_GATEWAY) noteServerError()
+  else setReachable(true)
 
   // Surface the backend's version (X-App-Version, set by the
   // AppVersionHeaderMiddleware) to the AppVersionProvider via the
@@ -81,12 +89,11 @@ async function request(path, options = {}, retry = true) {
   // navigation when they diverge. Header is absent in tests that
   // don't emit it — silently skip in that case.
   //
-  // Skip when the response was served from the SW's gateway-error
-  // fallback (X-From-Cache: 1): the cached X-App-Version may belong
+  // Skip when the service worker served the response from its cache
+  // (X-From-Cache, either marker): the cached X-App-Version may belong
   // to a previous deploy, and feeding it to the AppVersionProvider
   // would trigger a spurious forceReload() during a backend outage.
-  const fromCache = res.headers?.get?.('X-From-Cache')
-  if (!fromCache) {
+  if (!servedFrom) {
     const remoteVersion = res.headers?.get?.('X-App-Version')
     if (remoteVersion) publishRemoteVersion(remoteVersion)
   }
