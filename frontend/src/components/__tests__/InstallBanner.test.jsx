@@ -1,11 +1,12 @@
-import { screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../hooks/useInstallPrompt', () => ({
   useInstallPrompt: vi.fn(),
 }))
 
 import { useInstallPrompt } from '../../hooks/useInstallPrompt'
+import { __resetForTests, setReachable } from '../../offline/reachability'
 import { renderWithProviders } from '../../test/helpers'
 import InstallBanner from '../InstallBanner'
 
@@ -24,10 +25,24 @@ describe('InstallBanner', () => {
     vi.clearAllMocks()
   })
 
+  afterEach(() => {
+    // setReachable(false) starts the health poll; clear it and the state.
+    __resetForTests()
+  })
+
   it('renders nothing when canInstall=false', () => {
     mockHook({ canInstall: false })
     renderWithProviders(<InstallBanner />)
     expect(screen.queryByTestId('install-banner')).toBeNull()
+  })
+
+  it('gives way to the offline banner while the server is unreachable, and comes back with it', () => {
+    mockHook()
+    renderWithProviders(<InstallBanner />)
+    act(() => setReachable(false))
+    expect(screen.queryByTestId('install-banner')).toBeNull()
+    act(() => setReachable(true))
+    expect(screen.getByTestId('install-banner')).toBeInTheDocument()
   })
 
   it('renders the banner text when canInstall=true', () => {

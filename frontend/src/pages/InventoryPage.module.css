@@ -16,8 +16,75 @@
   margin-bottom: 0.75rem;
 }
 
-/* Pinned products. Deliberately quieter than a group section — no left rail,
-   no count — because it is a shortcut into the list below, not a category of
+/* A group is one card with its title inside (chosen 2026-11-18 over a 3 px
+   rail outside the left edge, which users read as decoration). The rows sit in
+   the same box as the title, so what belongs together shares one surface; a
+   folded group is a card with a chevron, plainly something to open. No
+   `overflow: hidden` here: it would break the sticky header. */
+.groupCard {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xxl);
+  margin-bottom: 0.9rem;
+}
+
+.groupCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-radius: var(--radius-xxl) var(--radius-xxl) 0 0;
+  font: inherit;
+  text-align: left;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+/* Folded: the header is the whole card, rounded all round. */
+.groupCardHeader[aria-expanded='false'] {
+  border-radius: var(--radius-xxl);
+}
+
+.groupCardName {
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCardCount {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-border-inner);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Severity dot and chevron, pushed to the far end of the header. */
+.groupCardEnd {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--c-text-2);
+}
+
+.groupCardRows {
+  border-top: 1px solid var(--c-border-inner);
+  border-radius: 0 0 var(--radius-xxl) var(--radius-xxl);
+  overflow: hidden;
+}
+
+/* Pinned products. Deliberately quieter than a group section — no card, no
+   count — because it is a shortcut into the list below, not a category of
    its own. */
 .pinnedSection {
   margin-bottom: 1.25rem;
@@ -43,10 +110,5 @@
   position: sticky;
   top: calc(48px + var(--inventory-bar-h, 0px));
   z-index: 30;
-  background: var(--c-bg);
-}
-
-/* Pushed to the far end of the header row, opposite the name. */
-.groupDot {
-  margin-left: auto;
+  background: var(--c-surface);
 }

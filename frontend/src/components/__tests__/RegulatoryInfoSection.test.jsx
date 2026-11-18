@@ -317,7 +317,7 @@ describe('RegulatoryInfoSection — data', () => {
   it('ends with the source, its date and the guidance note, and a button to the agency page', async () => {
     serveDetail()
     renderSection()
-    const source = screen.getByTestId('regulatory-source')
+    const source = await screen.findByTestId('regulatory-source')
     expect(source).toHaveTextContent(
       /^Source: AEMPS \(CIMA\) · updated .+\. For guidance only: if in doubt, ask a health professional\.$/,
     )
@@ -331,7 +331,7 @@ describe('RegulatoryInfoSection — data', () => {
   it('offers no agency button until the agency page is known', async () => {
     // No detail yet (the default handler answers 404): there is no page to open.
     renderSection()
-    expect(screen.getByTestId('regulatory-source')).toHaveTextContent(/^Source: AEMPS \(CIMA\) · updated /)
+    expect(await screen.findByTestId('regulatory-source')).toHaveTextContent(/^Source: AEMPS \(CIMA\) · updated /)
     expect(screen.queryByTestId('regulatory-agency-link')).not.toBeInTheDocument()
     await screen.findByTestId('leaflet-sections')
   })
@@ -413,6 +413,17 @@ describe('RegulatoryInfoSection — leaflet', () => {
     expect(screen.getByTestId('leaflet-title')).toHaveTextContent('Patient leaflet')
     expect(await screen.findByTestId('leaflet-sections')).toBeInTheDocument()
     await screen.findByTestId('regulatory-active-problem')
+  })
+
+  it('no leaflet to read, no source line: the note waits for the leaflet and stays away if it fails', async () => {
+    serveDetail()
+    server.use(http.get(`${BASE}/stock/7/leaflet/`, () => new HttpResponse('upstream exploded', { status: 500 })))
+    renderSection()
+    expect(await screen.findByTestId('leaflet-error')).toBeInTheDocument()
+    expect(screen.queryByTestId('regulatory-source')).not.toBeInTheDocument()
+    // The owner keeps the refresh button; the card keeps its agency link.
+    expect(screen.getByTestId('regulatory-refresh')).toBeInTheDocument()
+    expect(await screen.findByTestId('regulatory-agency-link')).toBeInTheDocument()
   })
 
   it('does not offer it in any other state', async () => {
