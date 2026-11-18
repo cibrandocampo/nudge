@@ -62,8 +62,8 @@
 }
 
 /* The lot rows themselves live in `components/StockLotsList.module.css`, next
- * to the component that renders them. `.lotsCard` above stays here: it wraps
- * both the list and the add-lot form, which is the page's composition. */
+ * to the component that renders them. `.lotsCard` above stays here: it is the
+ * page's frame around the list. */
 
 .entryList {
   display: flex;
@@ -102,4 +102,17 @@
 .pinnedIcon svg,
 .pinnedIcon.pinnedIcon svg {
   fill: currentColor;
+}
+
+/* Pinned: solid navy with a white glyph, like the consume button beside it —
+   an "on" state that cannot be mistaken for a disabled one. Unpinned it is a
+   plain outlined icon button. */
+.pinOn {
+  background: var(--c-primary);
+  color: var(--c-surface);
+}
+
+.pinOn:hover {
+  background: var(--c-primary-hover);
+  color: var(--c-surface);
 }

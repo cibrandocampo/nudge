@@ -416,7 +416,7 @@ export default function StockDetailPage() {
                 type="button"
                 className={cx(
                   buttons.btnIcon,
-                  isPinned && buttons.btnIconShared,
+                  isPinned ? s.pinOn : buttons.btnIconOutline,
                   (!reachable || pinCapReached) && buttons.disabled,
                   isPinned && s.pinnedIcon,
                 )}
@@ -502,13 +502,20 @@ export default function StockDetailPage() {
             </section>
           )}
 
-          <section className={s.section}>
-            <p className={layout.sectionTitle}>{t('stockDetail.lots')}</p>
-            <div className={s.lotsCard}>
-              <StockLotsList lots={stock.lots ?? []} today={today} reachable={reachable} onRemoveLot={askRemoveLot} />
+          {/* The lots table lists what there is; adding a lot is an action of
+              its own, so it sits below the table rather than inside it. With
+              no lots there is no table, only the way to add one. */}
+          {(stock.lots ?? []).length > 0 && (
+            <section className={s.section}>
+              <p className={layout.sectionTitle}>{t('stockDetail.lots')}</p>
+              <div className={s.lotsCard}>
+                <StockLotsList lots={stock.lots} today={today} reachable={reachable} onRemoveLot={askRemoveLot} />
+              </div>
+            </section>
+          )}
 
-              <AddLotForm stock={stock} today={today} onSubmit={handleAddLot} />
-            </div>
+          <section className={s.section}>
+            <AddLotForm stock={stock} today={today} onSubmit={handleAddLot} />
           </section>
 
           {consumptions.length > 0 && (

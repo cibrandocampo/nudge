@@ -56,6 +56,12 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
   const { data: detail } = useRegulatoryDetail(stock.id, summary)
   const refresh = useRefreshRegulatory()
   const [pastOpen, setPastOpen] = useState(false)
+  // One chip unfolded at a time: tapping another folds the open one.
+  const [openChip, setOpenChip] = useState(null)
+  const chipProps = (key) => ({
+    open: openChip === key,
+    onToggle: () => setOpenChip((current) => (current === key ? null : key)),
+  })
   const [offlineHint, setOfflineHint] = useState(false)
 
   const source = summary.display_name
@@ -134,6 +140,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                     : t('regulatory.supply.none')
                 }
                 className={TONE[summary.supply_severity] ?? s.toneOk}
+                {...chipProps('supply')}
                 data-testid="regulatory-supply-chip"
                 data-tone={summary.supply_severity ?? 'ok'}
               />
@@ -142,6 +149,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                   icon="shopping-cart"
                   label={t(summary.marketed ? 'regulatory.marketed.yes' : 'regulatory.marketed.no')}
                   className={summary.marketed ? s.toneOk : s.toneWarning}
+                  {...chipProps('marketed')}
                   data-testid="regulatory-marketed-chip"
                   data-tone={summary.marketed ? 'ok' : 'warning'}
                 />
@@ -151,6 +159,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                   icon={summary.status === 'authorised' ? 'badge-check' : 'badge'}
                   label={t(`regulatory.status.${summary.status}`)}
                   className={summary.status === 'authorised' ? s.toneOk : s.toneDanger}
+                  {...chipProps('status')}
                   data-testid="regulatory-status-chip"
                   data-tone={summary.status === 'authorised' ? 'ok' : 'danger'}
                 />
@@ -161,6 +170,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                   icon="car"
                   label={t(summary.affects_driving ? 'regulatory.driving.yes' : 'regulatory.driving.no')}
                   className={summary.affects_driving ? s.toneDanger : s.toneOk}
+                  {...chipProps('driving')}
                   data-testid="regulatory-driving-chip"
                   data-tone={summary.affects_driving ? 'danger' : 'ok'}
                 />

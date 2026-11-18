@@ -83,7 +83,7 @@ test.describe('Regulatory data on the product page', () => {
   test('a stock with a foreign GTIN has no medicine information', async ({ page }) => {
     await loginAsUser1(page)
     await goToStockDetail(page, 'metformin')
-    await expect(page.getByTestId('add-lot-toggle')).toBeVisible()
+    await expect(page.getByTestId('add-lot-manual')).toBeVisible()
     await expect(section(page)).toHaveCount(0)
   })
 

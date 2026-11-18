@@ -74,11 +74,11 @@ test.describe('Inventory', () => {
     await page.getByRole('button', { name: 'Create' }).click()
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
-    // Detail page still hosts lot CRUD. The form is collapsed behind a
-    // toggle button by default — open it first.
-    await page.getByTestId('add-lot-toggle').click()
+    // Detail page still hosts lot CRUD. The form opens from "Manual", one of
+    // the two ways in (the other is the camera).
+    await page.getByTestId('add-lot-manual').click()
     await page.getByPlaceholder('0').fill('3')
-    await page.getByRole('button', { name: 'Add batch' }).click()
+    await page.getByRole('button', { name: 'Save' }).click()
     // Wait for the optimistic lot to settle into the list.
     await expect(page.getByText('3 total', { exact: false })).toBeVisible({ timeout: 10_000 })
 
