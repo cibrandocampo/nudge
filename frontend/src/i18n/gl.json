@@ -456,6 +456,7 @@
   "regulatory.leaflet.loading": "Cargando o prospecto…",
   "regulatory.leaflet.pending": "O prospecto aínda non está dispoñible.",
   "regulatory.leaflet.error": "Non se puido cargar o prospecto.",
+  "regulatory.leaflet.offline": "O prospecto non está gardado neste dispositivo. Descargarase cando volva a conexión.",
   "regulatory.leaflet.retry": "Reintentar",
   "regulatory.leaflet.viewSource": "Ver o prospecto en {{source}}",
   "time.neverLogged": "Nunca rexistrado",

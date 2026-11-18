@@ -363,6 +363,37 @@ describe('api client', () => {
     expect(getReachable()).toBe(true)
   })
 
+  // ── Service-worker cache copies are not the backend answering (UX-044) ────
+  it('an offline cache copy (X-From-Cache: offline) flips reachability to false', async () => {
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ id: 1 }, { headers: { 'X-From-Cache': 'offline' } })),
+    )
+    const res = await api.get('/stock/1/')
+    expect(res.ok).toBe(true)
+    expect(getReachable()).toBe(false)
+  })
+
+  it('an offline cache copy never flips an unreachable app back to reachable', async () => {
+    server.use(mockNetworkError('get', '/dashboard/'))
+    await expect(api.get('/dashboard/')).rejects.toBeInstanceOf(OfflineError)
+    server.use(
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ id: 1 }, { headers: { 'X-From-Cache': 'offline' } })),
+    )
+    await api.get('/stock/1/')
+    expect(getReachable()).toBe(false)
+  })
+
+  it('a cache copy served for a gateway error counts as a server error, not as reachable', async () => {
+    const cachedFor502 = () => HttpResponse.json({ id: 1 }, { headers: { 'X-From-Cache': '1' } })
+    server.use(http.get(`${BASE}/stock/1/`, cachedFor502))
+    await api.get('/stock/1/')
+    // One hit stays under SERVER_ERROR_THRESHOLD, as a bare 502 would…
+    expect(getReachable()).toBe(true)
+    await api.get('/stock/1/')
+    // …and the second consecutive one flips it, exactly like two 502s.
+    expect(getReachable()).toBe(false)
+  })
+
   it('counts non-gateway 4xx/5xx responses as reachable (server is alive)', async () => {
     // 500 is intentionally treated as a regular response (likely an
     // endpoint bug, not a backend outage). Gateway statuses (502/503/504)

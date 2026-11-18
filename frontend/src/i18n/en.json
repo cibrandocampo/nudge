@@ -456,6 +456,7 @@
   "regulatory.leaflet.loading": "Loading the leaflet…",
   "regulatory.leaflet.pending": "The leaflet is not available yet.",
   "regulatory.leaflet.error": "Could not load the leaflet.",
+  "regulatory.leaflet.offline": "The leaflet is not saved on this device. It will download when the connection is back.",
   "regulatory.leaflet.retry": "Retry",
   "regulatory.leaflet.viewSource": "View the leaflet on {{source}}",
   "time.neverLogged": "Never logged",

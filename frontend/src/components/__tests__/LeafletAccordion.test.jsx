@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { __resetForTests, setReachable } from '../../offline/reachability'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import LeafletAccordion from '../LeafletAccordion'
@@ -59,6 +60,8 @@ beforeEach(() => {
 
 afterEach(() => {
   delete Element.prototype.scrollIntoView
+  // setReachable(false) starts the health poll; clear it and the state.
+  __resetForTests()
 })
 
 describe('LeafletAccordion — loading', () => {
@@ -108,6 +111,52 @@ describe('LeafletAccordion — states', () => {
     await user.click(within(error).getByRole('button', { name: 'Retry' }))
     expect(await screen.findByTestId('leaflet-sections')).toBeInTheDocument()
     expect(calls.count).toBe(2)
+  })
+
+  it('offline with no copy on the device: a plain note, not an error, and no retry', async () => {
+    // As on the phone: the request cannot reach the server at all.
+    const calls = serveLeaflet(() => HttpResponse.error())
+    act(() => setReachable(false))
+    renderAccordion()
+    await waitFor(() => expect(calls.count).toBe(1))
+    await act(async () => {})
+    expect(screen.getByTestId('leaflet-offline')).toHaveTextContent(
+      'The leaflet is not saved on this device. It will download when the connection is back.',
+    )
+    expect(screen.queryByTestId('leaflet-error')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('leaflet-loading')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('leaflet-retry')).not.toBeInTheDocument()
+  })
+
+  it('downloads it by itself when the connection comes back after a failed load', async () => {
+    const calls = serveLeaflet(broken, ok())
+    renderAccordion()
+    await screen.findByTestId('leaflet-error')
+    act(() => setReachable(false))
+    expect(screen.getByTestId('leaflet-offline')).toBeInTheDocument()
+    act(() => setReachable(true))
+    expect(await screen.findByTestId('leaflet-sections')).toBeInTheDocument()
+    expect(calls.count).toBe(2)
+  })
+
+  it('a leaflet already on the device stays readable offline', async () => {
+    serveLeaflet(ok())
+    renderAccordion()
+    await screen.findByTestId('leaflet-sections')
+    act(() => setReachable(false))
+    expect(screen.getByTestId('leaflet-sections')).toBeInTheDocument()
+    expect(screen.queryByTestId('leaflet-offline')).not.toBeInTheDocument()
+  })
+
+  it('reports whether there is a leaflet to read', async () => {
+    serveLeaflet(pending, ok())
+    const onAvailableChange = vi.fn()
+    const { user } = renderAccordion({ onAvailableChange })
+    await screen.findByTestId('leaflet-pending')
+    expect(onAvailableChange).toHaveBeenLastCalledWith(false)
+    await user.click(screen.getByTestId('leaflet-retry'))
+    await screen.findByTestId('leaflet-sections')
+    expect(onAvailableChange).toHaveBeenLastCalledWith(true)
   })
 
   it('another 404 is an error, not pending', async () => {
