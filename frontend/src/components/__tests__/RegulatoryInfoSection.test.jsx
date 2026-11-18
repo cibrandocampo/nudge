@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { server } from '../../test/mocks/server'
@@ -160,6 +161,20 @@ describe('RegulatoryInfoSection — data', () => {
     renderSection({ regulatory: summary({ affects_driving: affects }) })
     const chip = screen.getByRole('button', { name: label })
     expect(chip).toHaveAttribute('data-tone', tone)
+  })
+
+  it('unfolds one chip at a time: opening another folds the open one', async () => {
+    const user = userEvent.setup()
+    renderSection({ regulatory: summary({ supply_severity: null, affects_driving: true }) })
+    const driving = screen.getByTestId('regulatory-driving-chip')
+    const status = screen.getByTestId('regulatory-status-chip')
+    await user.click(driving)
+    expect(driving).toHaveAttribute('aria-expanded', 'true')
+    await user.click(status)
+    expect(status).toHaveAttribute('aria-expanded', 'true')
+    expect(driving).toHaveAttribute('aria-expanded', 'false')
+    await user.click(status)
+    expect(status).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('with everything in order every chip is green', () => {

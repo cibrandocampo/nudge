@@ -816,3 +816,64 @@ describe('BarcodeScannerModal torn down mid-start', () => {
     expect(readBarcodes).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('BarcodeScannerModal — enter it by hand', () => {
+  it('offers no way out when the caller does not ask for one, live or on error', async () => {
+    mockCamera()
+    const { unmount } = renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(screen.queryByTestId('scan-manual-fallback')).not.toBeInTheDocument()
+    unmount()
+
+    mockCameraFailure('NotFoundError')
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    expect(await screen.findByTestId('scan-error')).toBeInTheDocument()
+    expect(screen.queryByTestId('scan-manual-fallback')).not.toBeInTheDocument()
+  })
+
+  it('offers it under the error message, and hands over without closing', async () => {
+    mockCameraFailure('NotAllowedError')
+    const onManual = vi.fn()
+    const onClose = vi.fn()
+    const { user } = renderWithProviders(
+      <BarcodeScannerModal onDecoded={vi.fn()} onClose={onClose} onManual={onManual} />,
+    )
+
+    // The live view renders first; wait for the error panel that replaces it.
+    await screen.findByTestId('scan-error')
+    const button = screen.getByTestId('scan-manual-fallback')
+    expect(button).toHaveTextContent('Enter it by hand')
+    await user.click(button)
+
+    expect(onManual).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('offers it while the camera is running, and hands over without closing', async () => {
+    mockCamera()
+    const onManual = vi.fn()
+    const onClose = vi.fn()
+    const { user } = renderWithProviders(
+      <BarcodeScannerModal onDecoded={vi.fn()} onClose={onClose} onManual={onManual} notice="Code not recognised" />,
+    )
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+    expect(screen.getByTestId('scan-video')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('scan-manual-fallback'))
+
+    expect(onManual).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('releases the camera when the caller closes it after the hand-over', async () => {
+    mockCamera()
+    const { user, unmount } = renderWithProviders(
+      <BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} onManual={() => unmount()} />,
+    )
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+
+    await user.click(screen.getByTestId('scan-manual-fallback'))
+
+    await waitFor(() => tracks.forEach((track) => expect(track.stop).toHaveBeenCalled()))
+  })
+})

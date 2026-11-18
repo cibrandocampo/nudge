@@ -163,7 +163,7 @@ describe('StockDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Delete stock' }))
     await expectNewToast()
 
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     await expectNewToast()
 
     // The first "Delete"-named button is the topbar "Delete stock"; the
@@ -193,12 +193,12 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     // Typing only '-' keeps qty as empty string in the number input, which
     // parseInt turns into NaN and the handler short-circuits.
     const qtyInput = screen.getByPlaceholderText('0')
     await user.type(qtyInput, '-')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(postSpy).not.toHaveBeenCalled()
   })
 
@@ -212,13 +212,13 @@ describe('StockDetailPage', () => {
     )
     const { user, container } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     await user.click(screen.getByTestId('more-fields'))
     await user.type(screen.getByPlaceholderText('0'), '7')
     const dateInput = container.querySelector('input[type="date"]')
     await user.type(dateInput, '2027-12-31')
     await user.type(screen.getByPlaceholderText('e.g. L4021A'), 'FILT-Z')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(postBody?.quantity).toBe(7))
     expect(postBody.lot_number).toBe('FILT-Z')
   })
@@ -226,7 +226,7 @@ describe('StockDetailPage', () => {
   it('suggests existing lot numbers and fills the input on selection', async () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     await user.click(screen.getByTestId('more-fields'))
     const lotInput = screen.getByPlaceholderText('e.g. L4021A')
     await user.click(lotInput)
@@ -457,9 +457,9 @@ describe('StockDetailPage', () => {
     server.use(http.post(`${BASE}/stock/1/lots/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
   })
 
@@ -848,8 +848,7 @@ describe('StockDetailPage', () => {
 
   const openScanner = async (user) => {
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
-    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(screen.getByTestId('add-lot-scan'))
     await user.click(await screen.findByTestId('stub-decode'))
   }
 
@@ -869,9 +868,8 @@ describe('StockDetailPage', () => {
     scannerAvailableRef.current = false
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
-
-    expect(screen.queryByTestId('scan-lot')).not.toBeInTheDocument()
+    expect(screen.getByTestId('add-lot-manual')).toBeInTheDocument()
+    expect(screen.queryByTestId('add-lot-scan')).not.toBeInTheDocument()
   })
 
   it('fills quantity, expiry, lot number and the serial chip from a scan', async () => {
@@ -892,7 +890,7 @@ describe('StockDetailPage', () => {
     const captured = captureCreateLot()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(captured.body).not.toBeNull())
     expect(captured.body).toMatchObject({
@@ -911,7 +909,7 @@ describe('StockDetailPage', () => {
     await openScanner(user)
     await user.clear(screen.getByTestId('serial-input'))
     expect(screen.getByTestId('serial-input')).toHaveValue('')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(captured.body).not.toBeNull())
     expect(captured.body.serial_number).toBe('')
@@ -946,7 +944,7 @@ describe('StockDetailPage', () => {
     const captured = captureCreateLot()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(captured.body).not.toBeNull())
     expect(captured.body.serial_number).toBe('')
@@ -957,9 +955,9 @@ describe('StockDetailPage', () => {
     const captured = captureCreateLot()
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     await user.type(screen.getByPlaceholderText('0'), '3')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(captured.body).not.toBeNull())
     expect(captured.body.raw_scan).toBe('')
@@ -969,7 +967,7 @@ describe('StockDetailPage', () => {
     stockWith({ default_lot_quantity: 5 })
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     expect(screen.getByPlaceholderText('0')).toHaveValue(5)
   })
 
@@ -989,7 +987,7 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(patch.body).not.toBeNull())
     expect(patch.body).toEqual({ gtin: GTIN, default_lot_quantity: 1 })
@@ -1004,7 +1002,7 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(lot.calls).toBe(1))
     expect(patch.calls).toBe(0)
@@ -1021,7 +1019,7 @@ describe('StockDetailPage', () => {
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByTestId('stock-values-confirm')).toBeInTheDocument()
     expect(lot.calls).toBe(0)
@@ -1042,7 +1040,7 @@ describe('StockDetailPage', () => {
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await user.click(await screen.findByTestId('stock-values-keep'))
 
@@ -1062,7 +1060,7 @@ describe('StockDetailPage', () => {
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await user.click(await screen.findByTestId('stock-values-update'))
 
@@ -1076,11 +1074,11 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await user.click(await screen.findByTestId('stock-values-update'))
     await waitFor(() => expect(patch.body).not.toBeNull())
@@ -1095,7 +1093,7 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(patch.body).not.toBeNull())
     expect(patch.body).toEqual({ default_lot_quantity: 1 })
@@ -1108,7 +1106,7 @@ describe('StockDetailPage', () => {
     server.use(http.patch(`${BASE}/stock/1/`, () => HttpResponse.json({ detail: 'nope' }, { status: 500 })))
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(lot.calls).toBe(1))
   })
@@ -1123,7 +1121,7 @@ describe('StockDetailPage', () => {
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(lot.calls).toBe(1))
     expect(screen.queryByTestId('stock-values-confirm')).not.toBeInTheDocument()
@@ -1137,8 +1135,8 @@ describe('StockDetailPage', () => {
 
     expect(screen.getByTestId('scanner')).toBeInTheDocument()
     expect(screen.getByTestId('scan-notice')).toHaveTextContent('Code not recognised')
-    // The form was left exactly as it was.
-    expect(screen.getByPlaceholderText('0')).toHaveValue(null)
+    // Nothing opens behind the camera: an unreadable code fills no form.
+    expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
   })
 
   it('refuses to add an expired pack', async () => {
@@ -1148,7 +1146,7 @@ describe('StockDetailPage', () => {
     await openScanner(user)
 
     expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/expired/i)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(captured.calls).toBe(0)
   })
 
@@ -1160,26 +1158,18 @@ describe('StockDetailPage', () => {
     await openScanner(user)
 
     expect(screen.getByTestId('scan-blocker')).toHaveTextContent(/already registered/i)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(captured.calls).toBe(0)
   })
 
   it('fills only what a partial payload carries, leaving the rest alone', async () => {
     payloadRef.current = `10LOT-ONLY`
     const { user } = renderDetail()
-    await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
-
-    // An expiry the user typed before scanning must survive a code that says
-    // nothing about it.
-    const expiryInput = document.querySelector('input[type="date"]')
-    fireEvent.change(expiryInput, { target: { value: futureIso } })
-
-    await user.click(screen.getByTestId('scan-lot'))
-    await user.click(await screen.findByTestId('stub-decode'))
+    await openScanner(user)
 
     expect(screen.getByDisplayValue('LOT-ONLY')).toBeInTheDocument()
-    expect(expiryInput).toHaveValue(futureIso)
+    // The code says nothing about the expiry, so the field stays empty.
+    expect(document.querySelector('input[type="date"]')).toHaveValue('')
     expect(screen.getByPlaceholderText('0')).toHaveValue(1)
     expect(screen.queryByTestId('serial-input')).not.toBeInTheDocument()
     expect(screen.queryByTestId('scan-blocker')).not.toBeInTheDocument()
@@ -1203,10 +1193,10 @@ describe('StockDetailPage', () => {
     await screen.findByText('Water filter')
     // Opening the form has its own guard, so the only way to reach the one
     // inside the submit handler is to lose the network while it is open.
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     reachableRef.current = false
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '2' } })
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
     expect(captured.calls).toBe(0)
@@ -1310,14 +1300,14 @@ describe('StockDetailPage', () => {
   it('cancel in the add-lot form closes it and clears the qty input', async () => {
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     const qty = screen.getByPlaceholderText('0')
     await user.type(qty, '7')
     expect(qty).toHaveValue(7)
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     // Form is gone and re-opening it shows an empty qty (state was reset).
     expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument()
-    await user.click(screen.getByTestId('add-lot-toggle'))
+    await user.click(screen.getByTestId('add-lot-manual'))
     expect(screen.getByPlaceholderText('0')).toHaveValue(null)
   })
 
@@ -1334,7 +1324,7 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(patch.body).not.toBeNull())
     expect(patch.body).toEqual({ national_code: '661426' })
@@ -1348,7 +1338,7 @@ describe('StockDetailPage', () => {
     const patch = capturePatch()
     const { user } = renderDetail()
     await openScanner(user)
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     const row = await screen.findByTestId('stock-values-row')
     expect(row).toHaveTextContent('National code (CN)')
@@ -1674,13 +1664,12 @@ describe('StockDetailPage — official-name offer (T112)', () => {
     payloadRef.current = `0109506000134376${'17'}${yymmdd(daysFromNow(200))}10LOT-X${GS}21SN-1`
     const { user, queryClient } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByTestId('add-lot-toggle'))
-    await user.click(screen.getByTestId('scan-lot'))
+    await user.click(screen.getByTestId('add-lot-scan'))
     await user.click(await screen.findByTestId('stub-decode'))
     const qty = screen.getByPlaceholderText('0')
     await user.clear(qty)
     await user.type(qty, '6')
-    await user.click(screen.getByRole('button', { name: 'Add batch' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Update the product?')).toBeInTheDocument()
 
     // The server raises the offer (as a fetch finishing would) and the cache

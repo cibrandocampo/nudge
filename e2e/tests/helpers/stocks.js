@@ -31,8 +31,9 @@ export async function deleteStock(page, stockKeyOrName) {
  */
 export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', lotNumber = '' }) {
   await goToStockDetail(page, stockKeyOrName)
-  // The add-lot form is collapsed by default behind a toggle button.
-  await page.getByTestId('add-lot-toggle').click()
+  // The stock detail offers two ways in, Automatic (camera) and Manual; the
+  // helper types the values, so it takes Manual.
+  await page.getByTestId('add-lot-manual').click()
   await page.locator('input[type="number"]').first().fill(String(quantity))
   if (expiryDate) await page.locator('input[type="date"]').first().fill(expiryDate)
   if (lotNumber) {
@@ -45,13 +46,13 @@ export async function addLot(page, stockKeyOrName, { quantity, expiryDate = '', 
     await lotInput.fill(lotNumber)
     // The lot-number input opens a custom Combobox listbox on focus
     // (PR #56). The popover is anchored to the input and overlaps the
-    // "Add batch" button below; if it stays open Playwright's click
+    // "Save" button below; if it stays open Playwright's click
     // lands on the listbox option and never reaches the submit. Escape
     // dismisses it via the component's `useEscapeKey` hook (`blur`
     // alone does not — closing is gated on `useClickOutside`).
     await lotInput.press('Escape')
   }
-  await page.getByRole('button', { name: 'Add batch' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
 
   // Saving a lot whose quantity disagrees with what the product has learned
   // (`default_lot_quantity`) raises the product-values question — the modal

@@ -210,8 +210,14 @@ async function enableContinuousFocus(track) {
  *   onClose            — dismissal (also called right after an accepted read)
  *   notice             — message shown under the viewport, e.g. why the last
  *                        read was rejected
+ *   onManual           — optional way out to typing the data by hand: when
+ *                        given, an "Enter it by hand" button shows under the
+ *                        error message and under the live viewport (a
+ *                        scratched or unreadable code, a box with none). It
+ *                        does not call `onClose`; the caller decides what
+ *                        follows. Unmounting the modal releases the camera.
  */
-export default function BarcodeScannerModal({ onDecoded, onClose, notice = null }) {
+export default function BarcodeScannerModal({ onDecoded, onClose, notice = null, onManual = null }) {
   const { t } = useTranslation()
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -481,6 +487,18 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
     setDeviceId(cameras[(at + 1) % cameras.length].deviceId)
   }
 
+  const manualButton = onManual ? (
+    <button
+      type="button"
+      className={cx(buttons.btn, buttons.btnSecondary, s.manualBtn)}
+      onClick={() => onManual()}
+      data-testid="scan-manual-fallback"
+    >
+      <Icon name="pencil" size="sm" />
+      {t('scan.manualFallback')}
+    </button>
+  ) : null
+
   const errorMessage = error
     ? {
         insecure: t('scan.errorInsecure'),
@@ -494,9 +512,12 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
   return (
     <ModalFrame onClose={onClose} title={t('scan.title')} size="lg">
       {errorMessage ? (
-        <p className={forms.error} data-testid="scan-error">
-          {errorMessage}
-        </p>
+        <>
+          <p className={forms.error} data-testid="scan-error">
+            {errorMessage}
+          </p>
+          {manualButton}
+        </>
       ) : (
         <>
           <div className={s.viewport}>
@@ -510,6 +531,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null 
           ) : (
             <p className={s.hint}>{t('scan.hint')}</p>
           )}
+          {manualButton}
           {cameras.length > 1 && (
             <p className={cx(s.cameraHint, switchRefused && forms.error)} data-testid="scan-camera-hint">
               {switchRefused ? t('scan.cameraRefused') : t('scan.cameraHint')}

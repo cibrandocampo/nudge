@@ -14,6 +14,7 @@ import { parseIntSafe } from '../utils/number'
 import { formatShortDate } from '../utils/time'
 import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
+import layout from '../styles/layout.module.css'
 import s from './AddLotForm.module.css'
 
 // The two fields that start folded. Quantity and expiry are always on screen.
@@ -24,17 +25,27 @@ const FOLDABLE = ['lot', 'serial']
 const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'))
 
 /**
- * The add-lot form of the stock detail: collapsed to a single "Add lot" button
- * until opened, then quantity, expiry and lot number, optionally filled by
- * scanning the box.
+ * The add-lot entry of the stock detail. It asks *how* before showing *what*:
+ * an "Add lot" heading over two equal buttons, "Automatic" (the camera) and
+ * "Manual". Either way the same form follows — quantity, expiry, folded lot and
+ * serial — filled by the scan or left empty. Without a usable scanner only
+ * "Manual" is offered.
+ *
+ * One `mode` drives it:
+ *
+ *   closed   ──Automatic──▶ scanning ──read accepted──▶ form (prefilled)
+ *                             ├──close / Esc──────────▶ closed
+ *                             └──"Enter it by hand"───▶ form (empty)
+ *   closed   ──Manual─────────────────────────────────▶ form (empty)
+ *   form     ──Cancel / save resolved─────────────────▶ closed
  *
  * The component owns **input state and validation** — the fields, the scanner,
- * the scan blockers, the lot-number suggestions and whether the form is open.
+ * the scan blockers, the lot-number suggestions and the entry mode.
  * It owns no mutation: `onSubmit` receives the payload and returns a promise,
  * and **that promise decides what happens next**:
  *
  *   - resolves → the lot is in (or queued offline). The form clears itself and
- *     collapses back to its button.
+ *     collapses back to the two entry buttons.
  *   - rejects  → nothing was created. Every typed value stays exactly where it
  *     is, so the user can fix one field instead of retyping four.
  *
@@ -62,7 +73,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const { showToast } = useToast()
   const reachable = useServerReachable()
 
-  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState('closed')
   const [fields, setFields] = useState({ qty: '', expiry: '', lotNumber: '', serialNumber: '' })
   const [adding, setAdding] = useState(false)
   // Shown under the quantity when it is missing. The browser's own `required`
@@ -71,17 +82,11 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   const [qtyError, setQtyError] = useState(null)
   // What the barcode contributed *beyond* the visible fields. The serial is not
   // here: it is a field the user can type, which the scanner merely prefills.
-  const [scannerOpen, setScannerOpen] = useState(false)
   const [scanNotice, setScanNotice] = useState(null)
   const [scanned, setScanned] = useState({ rawScan: '', parsed: null })
   // A past expiry is a property of the code that was read, so it is set once by
   // the scan. The duplicate serial is not — see `duplicateSerial` below.
   const [expiredBlocker, setExpiredBlocker] = useState(null)
-  // Which of the two save buttons was pressed. A ref rather than state because
-  // it is read once, inside the submit that the click itself triggers, and must
-  // not cause a render. Both buttons stay `type="submit"`, so either goes
-  // through `handleSubmit` and its validation.
-  const keepOpenRef = useRef(false)
   const qtyRef = useRef(null)
   const scannerAvailable = useScannerAvailable()
   const disclosure = useFieldDisclosure(FOLDABLE)
@@ -93,9 +98,8 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   // Set only by picking from the list, never by typing and never by a scan.
   const [expiryInherited, setExpiryInherited] = useState(false)
 
-  // The product's learned default, as a form value. Adding a second lot in a
-  // row must start from the same place as the first, so `resetForm` restores
-  // it rather than blanking the field.
+  // The product's learned default, as a form value. Every open starts from it,
+  // so the common case is confirming a number rather than typing one.
   const defaultQty = stock?.default_lot_quantity ? String(stock.default_lot_quantity) : ''
 
   // The serial the form currently holds, wherever it came from — typed, scanned,
@@ -127,18 +131,35 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     setExpiryInherited(false)
   }
 
+  // Back to the two entry buttons with nothing left behind: values, scan
+  // output, blockers and the fields the last lot revealed. The next open starts
+  // clean whichever way it is entered.
   const close = () => {
     resetForm()
-    // Visibility belongs to the open form, not to the values: T051's
-    // save-and-continue clears the fields and keeps the flags, so the reset
-    // lives here rather than in `resetForm`.
     disclosure.reset()
-    setOpen(false)
+    setMode('closed')
   }
 
+  // Every way into the form starts from the product's learned default.
+  const openForm = () => {
+    setFields((f) => ({ ...f, qty: defaultQty }))
+    setMode('form')
+  }
+
+  const startScan = () => {
+    setScanNotice(null)
+    setMode('scanning')
+  }
+
+  // The modal calls `onClose` right after an accepted read, by which time
+  // `handleDecoded` has already moved on to the form. Only a dismissal while
+  // still scanning goes back to the buttons.
+  const closeScanner = () => setMode((m) => (m === 'scanning' ? 'closed' : m))
+
   /**
-   * A successful camera read. Returning `false` rejects it and leaves the
-   * scanner running — the user is still pointing at the box.
+   * A successful camera read. Accepting it opens the form with what the code
+   * carried; returning `false` rejects it and leaves the scanner running — the
+   * user is still pointing at the box — with the form never touched.
    */
   const handleDecoded = (raw) => {
     const parsed = parseGs1(raw)
@@ -147,8 +168,8 @@ export default function AddLotForm({ stock, today, onSubmit }) {
       return false
     }
 
-    // A scan fills what the code carries and leaves the rest of the form as the
-    // user typed it — a partial payload must never blank a field. The quantity
+    // A scan fills only what the code carries; a partial payload never blanks
+    // a field (the form is empty by now, so this is a guard, not a merge). The quantity
     // falls back to one box only when the product has no learned default:
     // otherwise a scan would overwrite the user's own preference on every read.
     setFields((f) => ({
@@ -178,13 +199,12 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     } else {
       setExpiredBlocker(null)
     }
+    setMode('form')
     return true
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const keepOpen = keepOpenRef.current
-    keepOpenRef.current = false
     // Gated here as well as on the button: a blocker must not be bypassable by
     // submitting the form.
     if (blocker) return
@@ -217,15 +237,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         parsed: scanned.parsed,
       })
       setAdding(false)
-      if (keepOpen) {
-        // The next box is a different box, so every value clears — but the
-        // fields the user needed for this one stay revealed, which is why the
-        // disclosure reset lives in `close()` and not in `resetForm()`.
-        resetForm()
-        qtyRef.current?.focus()
-      } else {
-        close()
-      }
+      close()
     } catch {
       // The caller already told the user what went wrong. All this has to do is
       // hand the form back with everything still in it.
@@ -233,48 +245,60 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     }
   }
 
-  if (!open) {
+  if (mode !== 'form') {
+    // Offline, both buttons stay visible but refuse with the page's toast, as
+    // every other server-backed control on this page does.
+    const enter = (start) => () => {
+      if (!reachable) {
+        showToast({ type: 'error', message: t('offline.pageUnavailable') })
+        return
+      }
+      start()
+    }
+    const entryButtonProps = {
+      type: 'button',
+      className: cx(buttons.btn, buttons.btnPrimary, s.entryBtn, !reachable && buttons.disabled),
+      'aria-disabled': !reachable,
+      title: !reachable ? t('offline.pageUnavailable') : undefined,
+    }
     return (
-      <button
-        type="button"
-        className={cx(s.addLotToggle, !reachable && buttons.disabled)}
-        onClick={() => {
-          if (!reachable) {
-            showToast({ type: 'error', message: t('offline.pageUnavailable') })
-            return
-          }
-          // Start from the product's learned default, so the common
-          // case is confirming a number rather than typing one.
-          setFields((f) => ({ ...f, qty: defaultQty }))
-          setOpen(true)
-        }}
-        aria-disabled={!reachable}
-        title={!reachable ? t('offline.pageUnavailable') : undefined}
-        data-testid="add-lot-toggle"
-      >
-        <Icon name="plus" size="sm" />
-        <span>{t('inventory.addLot')}</span>
-      </button>
+      <div className={s.entry} data-testid="add-lot-entry">
+        <p className={layout.sectionTitle}>{t('inventory.addLot')}</p>
+        {/* Same weight on purpose, whatever the product: which one is the
+            shortcut depends on the box in the user's hand, not on the data. */}
+        <div className={s.entryButtons}>
+          {scannerAvailable && (
+            <button {...entryButtonProps} onClick={enter(startScan)} data-testid="add-lot-scan">
+              <Icon name="qr-code" size="lg" />
+              <span>{t('inventory.addLotScan')}</span>
+            </button>
+          )}
+          <button {...entryButtonProps} onClick={enter(openForm)} data-testid="add-lot-manual">
+            <Icon name="pencil" size="lg" />
+            <span>{t('inventory.addLotManual')}</span>
+          </button>
+        </div>
+
+        {mode === 'scanning' && (
+          <Suspense fallback={null}>
+            <BarcodeScannerModal
+              onDecoded={handleDecoded}
+              onClose={closeScanner}
+              onManual={openForm}
+              notice={scanNotice}
+            />
+          </Suspense>
+        )}
+      </div>
     )
   }
 
   return (
-    <>
+    <div className={s.entry}>
+      {/* Same heading as the resting state, so opening the form does not
+          change what the section is called. */}
+      <p className={layout.sectionTitle}>{t('inventory.addLot')}</p>
       <form onSubmit={handleSubmit} className={s.addLotForm}>
-        {scannerAvailable && (
-          <button
-            type="button"
-            className={cx(buttons.btn, buttons.btnSecondary, s.scanBtn)}
-            onClick={() => {
-              setScanNotice(null)
-              setScannerOpen(true)
-            }}
-            data-testid="scan-lot"
-          >
-            <Icon name="scan-line" size="sm" />
-            {t('scan.button')}
-          </button>
-        )}
         <div className={s.addLotRow}>
           <FormField label={t('inventory.lotQty')} required error={qtyError}>
             <input
@@ -396,30 +420,11 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
             {t('common.cancel')}
           </button>
-          {/* Same gating as Save in every respect — a blocker or being offline
-              refuses both. It differs only in not closing afterwards. */}
-          <button
-            type="submit"
-            className={cx(buttons.btn, buttons.btnSecondary)}
-            onClick={() => {
-              keepOpenRef.current = true
-            }}
-            disabled={adding || Boolean(blocker)}
-            data-testid="add-and-another"
-          >
-            {t('inventory.addAndAnother')}
-          </button>
           <button type="submit" className={cx(buttons.btn, buttons.btnPrimary)} disabled={adding || Boolean(blocker)}>
-            {adding ? t('inventory.adding') : t('inventory.addLot')}
+            {adding ? t('inventory.adding') : t('common.save')}
           </button>
         </div>
       </form>
-
-      {scannerOpen && (
-        <Suspense fallback={null}>
-          <BarcodeScannerModal onDecoded={handleDecoded} onClose={() => setScannerOpen(false)} notice={scanNotice} />
-        </Suspense>
-      )}
-    </>
+    </div>
   )
 }
