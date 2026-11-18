@@ -55,13 +55,28 @@ describe('StockRow — line 1', () => {
     expect(screen.queryByText(/expired/)).not.toBeInTheDocument()
   })
 
-  it('offers the consume button only when there is something to consume', () => {
-    const { unmount } = renderRow({ quantity_available: 2 })
-    expect(screen.getByRole('button', { name: /consume 1 unit/i })).toBeInTheDocument()
-    unmount()
+  it('offers the consume button when there is something to consume', () => {
+    renderRow({ quantity_available: 2 })
+    const button = screen.getByRole('button', { name: /consume 1 unit/i })
+    expect(button).toBeEnabled()
+    expect(button).not.toHaveClass('consumeEmpty')
+    expect(screen.getByTestId('row-quantity')).not.toHaveClass('qtyOut')
+  })
 
-    renderRow({ quantity_available: 0 })
+  it('out of stock keeps the same button, grey and disabled, and shows the zero in red', async () => {
+    const onConsume = vi.fn()
+    const { user } = renderRow({ quantity: 0, quantity_available: 0, stock_severity: 'critical' }, { onConsume })
+    const button = screen.getByRole('button', { name: 'No units left to consume' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveClass('consumeEmpty')
     expect(screen.queryByRole('button', { name: /consume 1 unit/i })).not.toBeInTheDocument()
+    await user.click(button)
+    expect(onConsume).not.toHaveBeenCalled()
+
+    const qty = screen.getByTestId('row-quantity')
+    expect(qty).toHaveTextContent('0 u.')
+    expect(qty).toHaveClass('qtyOut')
+    expect(qty).toHaveAttribute('data-out-of-stock', 'true')
   })
 
   it('calls onConsume without navigating when the consume button is pressed', async () => {
@@ -139,6 +154,22 @@ describe('StockRow — line 2', () => {
     expect(screen.queryByTestId('depletion-date')).not.toBeInTheDocument()
   })
 
+  it('appears without a rate when there is a reason to give, and says it', () => {
+    renderRow({ regulatory: { fetch_status: 'ok', fetched_at: '2026-11-10T01:00:00Z', supply_severity: 'danger' } })
+    expect(screen.getByTestId('consumption-row')).toBeInTheDocument()
+    const reason = screen.getByTestId('row-reason')
+    expect(reason).toHaveTextContent('supply problem')
+    expect(reason).toHaveAttribute('data-kind', 'regulatory')
+    expect(reason).toHaveClass('reasonDanger')
+  })
+
+  it('names a low stock with units left and no date', () => {
+    renderRow({ stock_severity: 'low', quantity_available: 2 })
+    const reason = screen.getByTestId('row-reason')
+    expect(reason).toHaveTextContent('low stock')
+    expect(reason).toHaveClass('reasonWarning')
+  })
+
   it('reports the own rate as a monthly figure', () => {
     renderRow({ daily_consumption_own: 0.04 })
     expect(screen.getByTestId('consumption-row')).toBeInTheDocument()
@@ -170,7 +201,6 @@ describe('StockRow — line 2', () => {
   it('shows the depletion date, right-aligned, when there is stock left', () => {
     renderRow({ daily_consumption_own: 0.1, estimated_depletion_date: '2026-10-27' })
     expect(screen.getByTestId('depletion-date')).toBeInTheDocument()
-    expect(screen.queryByTestId('out-of-stock-footer')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -194,14 +224,14 @@ describe('StockRow — line 2', () => {
     }
   })
 
-  it('replaces the date with an out-of-stock note when nothing is available', () => {
+  it('out of stock shows no date and no word: the red quantity says it', () => {
     renderRow({
       daily_consumption_own: 0.1,
       quantity_available: 0,
       quantity: 0,
       estimated_depletion_date: '2026-10-27',
     })
-    expect(screen.getByTestId('out-of-stock-footer')).toBeInTheDocument()
+    expect(screen.queryByTestId('row-reason')).not.toBeInTheDocument()
     expect(screen.queryByTestId('depletion-date')).not.toBeInTheDocument()
   })
 
@@ -209,21 +239,20 @@ describe('StockRow — line 2', () => {
     renderRow({ daily_consumption_own: 0.1, estimated_depletion_date: null })
     expect(screen.getByTestId('consumption-row')).toBeInTheDocument()
     expect(screen.queryByTestId('depletion-date')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('out-of-stock-footer')).not.toBeInTheDocument()
   })
 })
 
 describe('StockRow — expiry warning', () => {
   it('warns once when expiry has been reached', () => {
     renderRow({ daily_consumption_own: 0.1, expiry_severity: 'reached' })
-    const warnings = screen.getAllByTestId('row-expiry-warning')
+    const warnings = screen.getAllByTestId('row-reason')
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toHaveTextContent('expired')
   })
 
   it('warns once when expiry is near', () => {
     renderRow({ daily_consumption_own: 0.1, expiry_severity: 'soon' })
-    const warnings = screen.getAllByTestId('row-expiry-warning')
+    const warnings = screen.getAllByTestId('row-reason')
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toHaveTextContent('expiring')
   })
@@ -232,20 +261,20 @@ describe('StockRow — expiry warning', () => {
     // `expiry_severity` is a single backend verdict, but the row must not
     // depend on that to stay at one warning.
     renderRow({ daily_consumption_own: 0.1, expiry_severity: 'reached' })
-    expect(screen.getAllByTestId('row-expiry-warning')).toHaveLength(1)
+    expect(screen.getAllByTestId('row-reason')).toHaveLength(1)
     expect(screen.queryByText('expiring')).not.toBeInTheDocument()
   })
 
   it('shows no warning when expiry is healthy', () => {
     renderRow({ daily_consumption_own: 0.1, expiry_severity: 'none' })
-    expect(screen.queryByTestId('row-expiry-warning')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('row-reason')).not.toBeInTheDocument()
   })
 
   it('is independent of stock severity, which the dot carries', () => {
     // A critically low stock whose batches are all fine gets no expiry
     // warning: the two axes were decoupled on purpose.
     renderRow({ daily_consumption_own: 0.1, stock_severity: 'critical', expiry_severity: 'none' })
-    expect(screen.queryByTestId('row-expiry-warning')).not.toBeInTheDocument()
+    expect(document.querySelector('[data-testid="row-reason"][data-kind="expiry"]')).toBeNull()
   })
 })
 

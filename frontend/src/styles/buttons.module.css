@@ -136,16 +136,6 @@
   color: var(--c-text);
 }
 
-.btnIconAction {
-  color: var(--c-text-3);
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.btnIconAction:hover {
-  color: var(--c-text-2);
-  background: rgba(0, 0, 0, 0.07);
-}
-
 .btnIconDone {
   color: var(--c-surface);
   background: var(--c-primary);

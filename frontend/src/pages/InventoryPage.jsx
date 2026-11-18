@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import EmptyCard from '../components/EmptyCard'
 import Icon from '../components/Icon'
-import InventoryAlertBanner from '../components/InventoryAlertBanner'
 import InventorySearchBar from '../components/InventorySearchBar'
 import LotPickerModal from '../components/LotPickerModal'
 import Spinner from '../components/Spinner'
@@ -151,11 +150,6 @@ export default function InventoryPage() {
 
   if (isLoading) return <Spinner />
 
-  // UTC midnight of today for the `lotExpirySeverity` helper. Mirrors the
-  // pattern used by StockRow / StockDetailPage so all three call sites use
-  // the same `today` semantics.
-  const today = new Date(new Date().toISOString().slice(0, 10))
-
   // Filtering is client-side by design: `useStockList` holds the whole
   // collection with no pagination and the cache is persisted, so this is
   // instant and works offline without a round trip.
@@ -252,16 +246,15 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* Hidden while filtering: the banner is a summary of the whole
-          inventory, and a summary that disagrees with the list under it is
-          worse than no summary. T095's Destacados section hides on the same
-          condition. */}
-      {!isFiltering && <InventoryAlertBanner stocks={stocks} today={today} />}
+      {/* No "N products need attention" banner: the Atención chip above filters
+          them in one tap, and each row says its own reason (StockRow,
+          `stockRowReasons`). */}
 
       {/* Pinned products, repeated here and left in their group below. The
           duplication is the point: it removes a scroll from the most frequent
           action for four items, and taking them out of their group would make
-          "Diabetes (5)" a lie. Hidden while filtering, like the banner. */}
+          "Diabetes (5)" a lie. Hidden while filtering: it is a shortcut over
+          the whole inventory, not part of a filtered result. */}
       {!isFiltering && pinnedStocks.length > 0 && (
         <div className={s.pinnedSection} data-testid="pinned-section">
           <h2 className={s.pinnedTitle}>
@@ -290,27 +283,33 @@ export default function InventoryPage() {
         : sections.map((section) => {
             const severity = worstSeverity(section.stocks)
             return (
-              <div key={section.key} className={cards.group} data-testid="group-box" data-section={section.key}>
+              // A group is one card with its title inside: what belongs together
+              // shares a box (it replaced a 3 px rail outside the left edge,
+              // which read as decoration, not as grouping), and a folded group
+              // stays a card with a chevron — clearly something to open.
+              <div key={section.key} className={s.groupCard} data-testid="group-box" data-section={section.key}>
                 <button
                   type="button"
-                  className={cx(cards.groupHeader, s.groupHeaderSticky)}
+                  className={cx(s.groupCardHeader, s.groupHeaderSticky)}
                   onClick={() => toggleCollapse(section.key)}
                   aria-expanded={!collapsed[section.key]}
                 >
-                  <Icon name={collapsed[section.key] ? 'chevron-right' : 'chevron-down'} size="sm" />
-                  <span className={cards.groupName}>{section.label}</span>
-                  <span className={cards.groupCount}>({section.stocks.length})</span>
-                  {/* Survives collapsing, which is the point: folding a group
-                      must not hide that something inside is red. */}
-                  {severity && (
-                    <span
-                      className={cx(cards.dot, severity === 'danger' ? cards.dotDanger : cards.dotWarning, s.groupDot)}
-                      data-testid="group-severity-dot"
-                      data-severity={severity}
-                    />
-                  )}
+                  <span className={s.groupCardName}>{section.label}</span>
+                  <span className={s.groupCardCount}>{section.stocks.length}</span>
+                  <span className={s.groupCardEnd}>
+                    {/* Survives collapsing, which is the point: folding a group
+                        must not hide that something inside is red. */}
+                    {severity && (
+                      <span
+                        className={cx(cards.dot, severity === 'danger' ? cards.dotDanger : cards.dotWarning)}
+                        data-testid="group-severity-dot"
+                        data-severity={severity}
+                      />
+                    )}
+                    <Icon name={collapsed[section.key] ? 'chevron-right' : 'chevron-down'} size="sm" />
+                  </span>
                 </button>
-                {!collapsed[section.key] && rowList(section.stocks)}
+                {!collapsed[section.key] && <div className={s.groupCardRows}>{section.stocks.map(renderStockRow)}</div>}
               </div>
             )
           })}

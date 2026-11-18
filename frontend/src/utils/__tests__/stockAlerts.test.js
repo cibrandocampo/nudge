@@ -1,17 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStockAlerts, lotsByExpirySeverity, needsAttention, regulatoryLabels, worstSeverity } from '../stockAlerts'
-
-// UTC-midnight today, the same instant every caller of these helpers uses.
-const TODAY = new Date(new Date().toISOString().slice(0, 10))
-const daysFromNow = (n) => {
-  const d = new Date()
-  d.setDate(d.getDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-const PAST = '2026-04-20'
-const SOON = daysFromNow(15)
-const SOONER = daysFromNow(3)
-const FAR = daysFromNow(400)
+import { needsAttention, regulatoryLabels, stockRowReasons, worstSeverity } from '../stockAlerts'
 
 const stock = (over = {}) => ({
   id: 1,
@@ -25,34 +13,17 @@ const stock = (over = {}) => ({
   ...over,
 })
 
-const keys = (entry) => entry.labels.map((l) => l.key)
-
-describe('lotsByExpirySeverity', () => {
-  it('buckets lots by their own expiry against today', () => {
-    const { reached, soon } = lotsByExpirySeverity(
-      stock({
-        lots: [
-          { id: 1, quantity: 1, expiry_date: PAST },
-          { id: 2, quantity: 2, expiry_date: SOON },
-          { id: 3, quantity: 3, expiry_date: FAR },
-          { id: 4, quantity: 4, expiry_date: null },
-        ],
-      }),
-      TODAY,
-    )
-    expect(reached.map((l) => l.id)).toEqual([1])
-    expect(soon.map((l) => l.id)).toEqual([2])
-  })
-
-  it('skips emptied lots, which are nothing to warn about', () => {
-    const { reached } = lotsByExpirySeverity(stock({ lots: [{ id: 1, quantity: 0, expiry_date: PAST }] }), TODAY)
-    expect(reached).toEqual([])
-  })
-
-  it('treats a missing lots array as no lots', () => {
-    expect(lotsByExpirySeverity({ name: 'x' }, TODAY)).toEqual({ reached: [], soon: [] })
-  })
+const regulatory = (over = {}) => ({
+  fetch_status: 'ok',
+  fetched_at: '2026-11-10T01:00:00Z',
+  supply_severity: null,
+  marketed: true,
+  status: 'authorised',
+  ...over,
 })
+
+const labelOf = (over) => regulatoryLabels(stock({ regulatory: regulatory(over) }))
+const reasonKeys = (over) => stockRowReasons(stock(over)).map((r) => r.key)
 
 describe('worstSeverity', () => {
   it('reports nothing for an empty or healthy set', () => {
@@ -81,172 +52,7 @@ describe('worstSeverity', () => {
   })
 })
 
-describe('buildStockAlerts', () => {
-  it('returns nothing when every stock is healthy', () => {
-    expect(buildStockAlerts([stock(), stock({ id: 2 })], TODAY)).toEqual([])
-  })
-
-  it('treats a missing stock list as empty', () => {
-    expect(buildStockAlerts(undefined, TODAY)).toEqual([])
-  })
-
-  it('reports critical stock with the available quantity', () => {
-    const [entry] = buildStockAlerts([stock({ stock_severity: 'critical', quantity: 3, quantity_available: 0 })], TODAY)
-    expect(entry.severity).toBe('danger')
-    expect(entry.labels).toEqual([{ key: 'inventory.alertCriticalStock', params: { qty: 0 }, tone: 'danger' }])
-  })
-
-  it('falls back to quantity, then to zero, when availability is absent', () => {
-    const [withQuantity] = buildStockAlerts(
-      [stock({ stock_severity: 'critical', quantity: 7, quantity_available: undefined })],
-      TODAY,
-    )
-    expect(withQuantity.labels[0].params.qty).toBe(7)
-
-    const [withNeither] = buildStockAlerts(
-      [stock({ stock_severity: 'critical', quantity: undefined, quantity_available: undefined })],
-      TODAY,
-    )
-    expect(withNeither.labels[0].params.qty).toBe(0)
-  })
-
-  it('counts expired lots once per stock instead of once per lot', () => {
-    const [entry] = buildStockAlerts(
-      [
-        stock({
-          expiry_severity: 'reached',
-          lots: [
-            { id: 1, quantity: 1, expiry_date: PAST },
-            { id: 2, quantity: 2, expiry_date: PAST },
-            { id: 3, quantity: 3, expiry_date: PAST },
-          ],
-        }),
-      ],
-      TODAY,
-    )
-    expect(entry.labels).toEqual([{ key: 'inventory.alertExpiryReached', params: { count: 3 }, tone: 'danger' }])
-  })
-
-  it('reports low stock with the depletion date when there is one', () => {
-    const [entry] = buildStockAlerts(
-      [stock({ stock_severity: 'low', quantity_available: 4, estimated_depletion_date: '2026-09-12' })],
-      TODAY,
-    )
-    expect(entry.severity).toBe('warning')
-    expect(entry.labels).toEqual([
-      { key: 'inventory.alertLowStockUntil', params: { qty: 4, date: '2026-09-12' }, tone: 'warning' },
-    ])
-  })
-
-  it('reports low stock without a date when none is known', () => {
-    const [entry] = buildStockAlerts(
-      [stock({ stock_severity: 'low', quantity_available: 4, estimated_depletion_date: null })],
-      TODAY,
-    )
-    expect(entry.labels).toEqual([{ key: 'inventory.alertLowStock', params: { qty: 4 }, tone: 'warning' }])
-  })
-
-  it.each([
-    ['nearest last', [SOON, SOONER]],
-    ['nearest first', [SOONER, SOON]],
-  ])('reports the nearest expiry among the soon lots (%s)', (_label, dates) => {
-    const [entry] = buildStockAlerts(
-      [
-        stock({
-          expiry_severity: 'soon',
-          lots: dates.map((expiry_date, i) => ({ id: i + 1, quantity: 1, expiry_date })),
-        }),
-      ],
-      TODAY,
-    )
-    expect(entry.labels).toEqual([
-      { key: 'inventory.alertExpiringSoon', params: { count: 2, date: SOONER }, tone: 'warning' },
-    ])
-  })
-
-  it('gives a stock with two problems one entry carrying both labels', () => {
-    const alerts = buildStockAlerts(
-      [
-        stock({
-          name: 'Ibuprofen',
-          stock_severity: 'critical',
-          quantity_available: 0,
-          expiry_severity: 'reached',
-          lots: [{ id: 99, quantity: 1, expiry_date: PAST }],
-        }),
-      ],
-      TODAY,
-    )
-    expect(alerts).toHaveLength(1)
-    expect(keys(alerts[0])).toEqual(['inventory.alertCriticalStock', 'inventory.alertExpiryReached'])
-  })
-
-  it('takes danger for the whole entry when only one label is danger', () => {
-    const [entry] = buildStockAlerts(
-      [
-        stock({
-          stock_severity: 'low',
-          expiry_severity: 'reached',
-          lots: [{ id: 1, quantity: 1, expiry_date: PAST }],
-        }),
-      ],
-      TODAY,
-    )
-    expect(entry.severity).toBe('danger')
-    expect(keys(entry)).toEqual(['inventory.alertExpiryReached', 'inventory.alertLowStock'])
-  })
-
-  it("says nothing about future lots when the backend awarded 'reached' precedence", () => {
-    // `expiry_severity` is one verdict, so a stock holding both an expired lot
-    // and a near-future one is 'reached' only — the soon label must not fire.
-    const [entry] = buildStockAlerts(
-      [
-        stock({
-          expiry_severity: 'reached',
-          lots: [
-            { id: 1, quantity: 1, expiry_date: PAST },
-            { id: 2, quantity: 2, expiry_date: SOON },
-          ],
-        }),
-      ],
-      TODAY,
-    )
-    expect(keys(entry)).toEqual(['inventory.alertExpiryReached'])
-  })
-
-  it('drops a stock whose expiry severity no lot backs, rather than showing an empty row', () => {
-    // Server and client can disagree about a lot expiring exactly today: the
-    // server judges on its own `date.today()`, the client on UTC midnight.
-    expect(buildStockAlerts([stock({ expiry_severity: 'reached', lots: [] })], TODAY)).toEqual([])
-    expect(buildStockAlerts([stock({ expiry_severity: 'soon', lots: [] })], TODAY)).toEqual([])
-  })
-
-  it('orders danger before warning, alphabetically within each block', () => {
-    const alerts = buildStockAlerts(
-      [
-        stock({ id: 1, name: 'Zinc', stock_severity: 'low' }),
-        stock({ id: 2, name: 'Aspirin', stock_severity: 'low' }),
-        stock({ id: 3, name: 'Warfarin', stock_severity: 'critical' }),
-        stock({ id: 4, name: 'Bandages', stock_severity: 'critical' }),
-      ],
-      TODAY,
-    )
-    expect(alerts.map((a) => a.stock.name)).toEqual(['Bandages', 'Warfarin', 'Aspirin', 'Zinc'])
-  })
-})
-
 // ── Regulatory alerts (T119) ────────────────────────────────────────────────
-
-const regulatory = (over = {}) => ({
-  fetch_status: 'ok',
-  fetched_at: '2026-11-10T01:00:00Z',
-  supply_severity: null,
-  marketed: true,
-  status: 'authorised',
-  ...over,
-})
-
-const labelOf = (over) => regulatoryLabels(stock({ regulatory: regulatory(over) }))
 
 describe('regulatoryLabels', () => {
   it('a healthy medicine says nothing', () => {
@@ -254,19 +60,15 @@ describe('regulatoryLabels', () => {
   })
 
   it('an active supply problem is danger', () => {
-    expect(labelOf({ supply_severity: 'danger' })).toEqual([
-      { key: 'inventory.alertSupplyProblem', params: {}, tone: 'danger' },
-    ])
+    expect(labelOf({ supply_severity: 'danger' })).toEqual([{ key: 'inventory.rowSupplyProblem', tone: 'danger' }])
   })
 
   it('a limited supply is warning', () => {
-    expect(labelOf({ supply_severity: 'warning' })).toEqual([
-      { key: 'inventory.alertSupplyLimited', params: {}, tone: 'warning' },
-    ])
+    expect(labelOf({ supply_severity: 'warning' })).toEqual([{ key: 'inventory.rowSupplyLimited', tone: 'warning' }])
   })
 
   it('a medicine no longer marketed is warning', () => {
-    expect(labelOf({ marketed: false })).toEqual([{ key: 'inventory.alertNotMarketed', params: {}, tone: 'warning' }])
+    expect(labelOf({ marketed: false })).toEqual([{ key: 'inventory.rowNotMarketed', tone: 'warning' }])
   })
 
   it('an unknown marketing state says nothing', () => {
@@ -274,23 +76,19 @@ describe('regulatoryLabels', () => {
   })
 
   it('a suspended authorisation is danger', () => {
-    expect(labelOf({ status: 'suspended' })).toEqual([
-      { key: 'inventory.alertAuthorizationSuspended', params: {}, tone: 'danger' },
-    ])
+    expect(labelOf({ status: 'suspended' })).toEqual([{ key: 'inventory.rowAuthorizationSuspended', tone: 'danger' }])
   })
 
   it('a revoked authorisation is danger', () => {
-    expect(labelOf({ status: 'revoked' })).toEqual([
-      { key: 'inventory.alertAuthorizationRevoked', params: {}, tone: 'danger' },
-    ])
+    expect(labelOf({ status: 'revoked' })).toEqual([{ key: 'inventory.rowAuthorizationRevoked', tone: 'danger' }])
   })
 
   it('several verdicts come in a fixed order', () => {
     const keysOf = labelOf({ supply_severity: 'warning', marketed: false, status: 'revoked' }).map((l) => l.key)
     expect(keysOf).toEqual([
-      'inventory.alertSupplyLimited',
-      'inventory.alertNotMarketed',
-      'inventory.alertAuthorizationRevoked',
+      'inventory.rowSupplyLimited',
+      'inventory.rowNotMarketed',
+      'inventory.rowAuthorizationRevoked',
     ])
   })
 
@@ -328,31 +126,77 @@ describe('regulatory alerts in the shared gates', () => {
   it('a regulatory danger still outranks an earlier warning', () => {
     expect(worstSeverity([stock({ stock_severity: 'low' }), insulin])).toBe('danger')
   })
+})
 
-  it('a regulatory-only stock gets its own banner entry', () => {
-    const [entry] = buildStockAlerts([insulin], TODAY)
-    expect(entry.severity).toBe('danger')
-    expect(keys(entry)).toEqual(['inventory.alertSupplyProblem'])
+// ── Why a row needs attention (replaces the inventory banner) ───────────────
+
+describe('stockRowReasons', () => {
+  it('a healthy stock gives no reason', () => {
+    expect(stockRowReasons(stock())).toEqual([])
   })
 
-  it('stock and expiry labels keep their order and come first', () => {
-    const [entry] = buildStockAlerts(
-      [
-        stock({
-          stock_severity: 'critical',
-          quantity_available: 0,
-          expiry_severity: 'reached',
-          lots: [{ id: 1, quantity: 1, expiry_date: PAST }],
-          regulatory: regulatory({ supply_severity: 'warning', status: 'suspended' }),
-        }),
-      ],
-      TODAY,
-    )
-    expect(keys(entry)).toEqual([
-      'inventory.alertCriticalStock',
-      'inventory.alertExpiryReached',
-      'inventory.alertSupplyLimited',
-      'inventory.alertAuthorizationSuspended',
+  it('out of stock gives no word: the red quantity says it', () => {
+    expect(reasonKeys({ quantity: 0, quantity_available: 0, stock_severity: 'critical' })).toEqual([])
+  })
+
+  it('falls back to quantity when availability is absent', () => {
+    expect(reasonKeys({ quantity_available: undefined, quantity: 0, stock_severity: 'critical' })).toEqual([])
+    expect(reasonKeys({ quantity_available: undefined, quantity: 2, stock_severity: 'critical' })).toEqual([
+      'inventory.rowCriticalStock',
     ])
+  })
+
+  it.each([
+    ['critical', 'inventory.rowCriticalStock', 'danger'],
+    ['low', 'inventory.rowLowStock', 'warning'],
+  ])('%s stock with units left and no date gets a word', (severity, key, tone) => {
+    expect(stockRowReasons(stock({ stock_severity: severity, quantity_available: 2 }))).toEqual([
+      { kind: 'stock', key, tone },
+    ])
+  })
+
+  it('a dated depletion already carries the tint, so the stock word is left out', () => {
+    expect(reasonKeys({ stock_severity: 'low', estimated_depletion_date: '2026-12-01' })).toEqual([])
+  })
+
+  it.each([
+    ['reached', 'inventory.rowExpiryReached', 'danger'],
+    ['soon', 'inventory.rowExpiringSoon', 'warning'],
+  ])('expiry %s is one word', (severity, key, tone) => {
+    expect(stockRowReasons(stock({ expiry_severity: severity }))).toEqual([{ kind: 'expiry', key, tone }])
+  })
+
+  it('stock, then expiry, then the agency, each said once', () => {
+    expect(
+      reasonKeys({
+        stock_severity: 'low',
+        quantity_available: 1,
+        expiry_severity: 'reached',
+        regulatory: regulatory({ supply_severity: 'danger', marketed: false }),
+      }),
+    ).toEqual([
+      'inventory.rowLowStock',
+      'inventory.rowExpiryReached',
+      'inventory.rowSupplyProblem',
+      'inventory.rowNotMarketed',
+    ])
+  })
+
+  it('every stock the Atención chip selects says something (reason, or the red zero)', () => {
+    const selected = [
+      stock({ stock_severity: 'critical', quantity: 0, quantity_available: 0 }),
+      stock({ stock_severity: 'critical', quantity_available: 1 }),
+      stock({ stock_severity: 'low', estimated_depletion_date: '2026-12-01' }),
+      stock({ stock_severity: 'low' }),
+      stock({ expiry_severity: 'soon' }),
+      stock({ expiry_severity: 'reached' }),
+      stock({ regulatory: regulatory({ status: 'revoked' }) }),
+    ]
+    for (const st of selected) {
+      expect(needsAttention(st)).toBe(true)
+      const quantity = st.quantity_available ?? st.quantity
+      const saysSomething = stockRowReasons(st).length > 0 || quantity === 0 || Boolean(st.estimated_depletion_date)
+      expect(saysSomething).toBe(true)
+    }
   })
 })

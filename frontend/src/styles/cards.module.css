@@ -245,23 +245,9 @@
   color: var(--c-text-2);
 }
 
-/* ── Group (left rail connecting cards) ──────────────────────── */
-
-.group {
-  margin-bottom: 1.25rem;
-  position: relative;
-}
-
-.group::before {
-  content: '';
-  position: absolute;
-  left: -0.75rem;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--c-primary);
-  border-radius: var(--radius-sm);
-}
+/* ── Collapsible header (Settings sections) ──────────────────── */
+/* The inventory's groups were the other user and their left rail lived here;
+   they are cards of their own now (InventoryPage.module.css, 2026-11-18). */
 
 .groupHeader {
   display: flex;
@@ -274,16 +260,6 @@
   cursor: pointer;
   text-align: left;
   color: var(--c-primary);
-}
-
-.groupName {
-  font-weight: 600;
-  font-size: 0.75rem;
-}
-
-.groupCount {
-  font-size: 0.7rem;
-  color: var(--c-text-3);
 }
 
 /* ── Inline icon tints ────────────────────────────────────────────
