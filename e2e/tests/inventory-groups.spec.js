@@ -96,11 +96,12 @@ test.describe('Inventory sections', () => {
 
     // Polled: `count()` does not auto-wait, so reading it against a list that
     // is still settling compares two different moments.
+    // The count is its own pill in the group card's header (2026-11-18).
     await expect
       .poll(async () => {
         const rows = await ungrouped.getByTestId('product-card').count()
-        const header = await ungrouped.locator('> button').innerText()
-        return header.includes(`(${rows})`) && rows > 0
+        const count = await ungrouped.getByTestId('group-count').innerText()
+        return count.trim() === String(rows) && rows > 0
       })
       .toBe(true)
   })

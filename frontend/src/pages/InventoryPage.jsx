@@ -295,7 +295,9 @@ export default function InventoryPage() {
                   aria-expanded={!collapsed[section.key]}
                 >
                   <span className={s.groupCardName}>{section.label}</span>
-                  <span className={s.groupCardCount}>{section.stocks.length}</span>
+                  <span className={s.groupCardCount} data-testid="group-count">
+                    {section.stocks.length}
+                  </span>
                   <span className={s.groupCardEnd}>
                     {/* Survives collapsing, which is the point: folding a group
                         must not hide that something inside is red. */}
