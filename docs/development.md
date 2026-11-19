@@ -265,8 +265,14 @@ commands run locally:
   request that leaves its own touched lines uncovered is flagged before merge.
 - **End-to-end** — Playwright specs covering online and offline flows
   (dashboard, inventory, history, sharing, i18n, push, plus dedicated offline
-  read / mutations / sync suites). Not wired into CI today; run them locally
-  with `make test-e2e`.
+  read / mutations / sync suites). CI runs the whole suite on every pull
+  request to `main`, with no retries; run it locally with `make test-e2e`.
+- **Accessibility** — `e2e/tests/a11y.spec.js` runs axe-core (WCAG 2.2 A/AA)
+  over 42 screen states at a phone (Pixel 7, touch) and a desktop width, and
+  **fails on any `serious` or `critical` violation**. The failure message names
+  the rule, the impact and the first offending elements; the full axe result is
+  attached to the test in the Playwright report. The states live in
+  `e2e/tests/a11y/scenes.js`: a new screen or modal should get a scene there.
 
 Test counts are deliberately not quoted here — they change every week and a
 stale number is worse than none. `make help` lists the targets that report them.
