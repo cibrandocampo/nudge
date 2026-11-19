@@ -298,14 +298,13 @@ describe('InventoryPage — grouping', () => {
     const { user } = renderPage()
 
     await waitFor(() => expect(screen.getByText('Ibuprofen')).toBeInTheDocument())
-    // Two sections since T096: the group, and one for the ungrouped stock —
-    // which used to render loose after every group and read as belonging to
-    // the last one.
-    expect(screen.getAllByTestId('group-box').map((b) => b.dataset.section)).toEqual(['10', 'ungrouped'])
-    expect(screen.getByText('Water filter')).toBeInTheDocument()
+    // One titled card per category; the ungrouped stock follows in a box of
+    // its own with no title.
+    expect(screen.getAllByTestId('group-box').map((b) => b.dataset.section)).toEqual(['10'])
+    expect(within(screen.getByTestId('ungrouped-list')).getByText('Water filter')).toBeInTheDocument()
 
     // Scoped to this group's own section: the name also labels its filter chip
-    // (T093), and there is a second section for the ungrouped stock (T096).
+    // (T093).
     await user.click(
       within(document.querySelector('[data-testid="group-box"][data-section="10"]')).getByText('Medicine'),
     )
@@ -319,8 +318,7 @@ describe('InventoryPage — grouping', () => {
     mockGroups([{ id: 10, name: 'Empty group', display_order: 0 }])
     renderPage()
     await screen.findByText('Water filter')
-    // The empty group is absent; the ungrouped section that holds the stock
-    // is not what this test is about.
+    // The empty group is absent; the stock is in the untitled loose list.
     expect(document.querySelector('[data-testid="group-box"][data-section="10"]')).toBeNull()
   })
 })
@@ -600,27 +598,38 @@ describe('InventoryPage — sections, persistence and scroll', () => {
 
   const section = (key) => document.querySelector(`[data-testid="group-box"][data-section="${key}"]`)
 
-  it('gives ungrouped products a section of their own, last', async () => {
+  it('lists ungrouped products after the categories, in a box with no title', async () => {
     renderWith([stock({ id: 1, name: 'Insulin', group: 10 }), stock({ id: 2, name: 'Loose item', group: null })])
     await screen.findByText('Insulin')
 
-    const boxes = screen.getAllByTestId('group-box')
-    expect(boxes.map((b) => b.dataset.section)).toEqual(['10', 'ungrouped'])
-    expect(within(section('ungrouped')).getByText('No category')).toBeInTheDocument()
-    expect(within(section('ungrouped')).getByText('1')).toBeInTheDocument()
+    expect(screen.getAllByTestId('group-box').map((b) => b.dataset.section)).toEqual(['10'])
+    const loose = screen.getByTestId('ungrouped-list')
+    expect(within(loose).getByText('Loose item')).toBeInTheDocument()
+    expect(within(loose).queryByRole('button', { name: /No category/ })).toBeNull()
+    expect(within(loose).queryByTestId('group-count')).toBeNull()
+    // After the last category, not before it.
+    expect(section('10').compareDocumentPosition(loose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('omits the ungrouped section when every product has a group', async () => {
+  it('shows a plain list, with no category card, when the user has no categories', async () => {
+    renderWith([stock({ id: 1, name: 'Insulin', group: null }), stock({ id: 2, name: 'Lancets', group: null })], [])
+    await screen.findByText('Insulin')
+    expect(screen.queryByTestId('group-box')).toBeNull()
+    expect(screen.queryByText('No category')).toBeNull()
+    expect(within(screen.getByTestId('ungrouped-list')).getAllByTestId('product-card')).toHaveLength(2)
+  })
+
+  it('omits the loose list when every product has a group', async () => {
     renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
     await screen.findByText('Insulin')
-    expect(section('ungrouped')).toBeNull()
+    expect(screen.queryByTestId('ungrouped-list')).toBeNull()
   })
 
   it('treats a product in a group the viewer cannot see as ungrouped', async () => {
     // The group is per user, so a shared product routinely lands here.
     renderWith([stock({ id: 1, name: 'Shared thing', group: 999 })])
     await screen.findByText('Shared thing')
-    expect(within(section('ungrouped')).getByText('Shared thing')).toBeInTheDocument()
+    expect(within(screen.getByTestId('ungrouped-list')).getByText('Shared thing')).toBeInTheDocument()
   })
 
   it('remembers a collapsed section across an unmount', async () => {

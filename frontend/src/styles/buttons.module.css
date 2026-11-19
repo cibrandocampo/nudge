@@ -91,7 +91,7 @@
 
 .btnDanger:hover:not(:disabled) {
   color: var(--c-delete-hover);
-  background: rgba(239, 68, 68, 0.05);
+  background: color-mix(in srgb, var(--c-danger) 5%, transparent);
   border-color: var(--c-border-danger);
 }
 
@@ -175,28 +175,28 @@
 
 .btnIconShare {
   color: var(--c-shared-light);
-  background: rgba(37, 99, 235, 0.05);
+  background: color-mix(in srgb, var(--c-shared) 5%, transparent);
 }
 
 .btnIconShare:hover {
-  color: #60a5fa;
-  background: rgba(37, 99, 235, 0.1);
+  color: var(--c-shared);
+  background: color-mix(in srgb, var(--c-shared) 10%, transparent);
 }
 
 .btnIconShared {
   color: var(--c-shared);
-  background: rgba(37, 99, 235, 0.14);
+  background: color-mix(in srgb, var(--c-shared) 14%, transparent);
   cursor: default;
 }
 
 .btnIconDelete {
   color: var(--c-delete);
-  background: rgba(239, 68, 68, 0.04);
+  background: color-mix(in srgb, var(--c-danger) 4%, transparent);
 }
 
 .btnIconDelete:hover {
   color: var(--c-delete-hover);
-  background: rgba(239, 68, 68, 0.1);
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
 }
 
 .btnAdd {
@@ -238,7 +238,7 @@
 
 .btnAddDanger:hover {
   color: var(--c-delete-hover);
-  background: rgba(239, 68, 68, 0.05);
+  background: color-mix(in srgb, var(--c-danger) 5%, transparent);
   border-color: var(--c-border-danger);
 }
 
@@ -253,7 +253,7 @@
 }
 
 .btnAddSuccess:hover {
-  background: rgba(34, 197, 94, 0.05);
+  background: color-mix(in srgb, var(--c-success) 5%, transparent);
   border-color: var(--c-border-success);
 }
 

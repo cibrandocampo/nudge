@@ -146,7 +146,7 @@
   color: var(--c-delete);
 }
 .status_conflict {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .itemBody {

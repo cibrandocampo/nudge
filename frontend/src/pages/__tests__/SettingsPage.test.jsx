@@ -20,6 +20,11 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Settings')).toBeInTheDocument()
   })
 
+  it('names the daily heads-up time input after its section', async () => {
+    renderWithProviders(<SettingsPage />)
+    expect(await screen.findByLabelText('Daily heads-up time')).toHaveAttribute('type', 'time')
+  })
+
   describe('hash deep-link to push section', () => {
     let scrollMock
     let originalScrollIntoView

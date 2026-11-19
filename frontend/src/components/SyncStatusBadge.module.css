@@ -19,7 +19,7 @@
   color: var(--c-delete);
 }
 .conflict {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 @keyframes syncPulse {

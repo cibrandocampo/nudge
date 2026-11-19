@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef, useState } from 'react'
+import { Suspense, lazy, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Combobox from './Combobox'
 import FormField from './FormField'
@@ -70,6 +70,7 @@ const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'))
  */
 export default function AddLotForm({ stock, today, onSubmit }) {
   const { t } = useTranslation()
+  const expiryId = useId()
   const { showToast } = useToast()
   const reachable = useServerReachable()
 
@@ -315,12 +316,13 @@ export default function AddLotForm({ stock, today, onSubmit }) {
               }}
             />
           </FormField>
-          <FormField label={t('inventory.lotExpiry')}>
+          <FormField label={t('inventory.lotExpiry')} controlId={expiryId}>
             {/* Locked while inherited: one batch has one expiry, so a date that
                 came from picking the batch is not the user's to edit. Typing in
                 the batch field unlocks it again. */}
             <div className={expiryInherited ? forms.lockedInput : undefined}>
               <input
+                id={expiryId}
                 className={cx(forms.input, s.addLotInput)}
                 type="date"
                 value={fields.expiry}

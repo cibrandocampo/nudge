@@ -31,7 +31,7 @@
 }
 
 .stateError {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .retry {

@@ -27,7 +27,6 @@ import layout from '../styles/layout.module.css'
 import s from './InventoryPage.module.css'
 
 /** Section key for products with no group of the viewer's own. */
-const UNGROUPED_KEY = 'ungrouped'
 
 export default function InventoryPage() {
   const { t } = useTranslation()
@@ -94,7 +93,7 @@ export default function InventoryPage() {
   // visible under the current search still exists, and its folded state should
   // outlive the search. Derived from `groups` rather than from what is on
   // screen, so a deleted group is pruned but a temporarily empty one is not.
-  const validSectionKeys = [...groups.map((group) => String(group.id)), UNGROUPED_KEY]
+  const validSectionKeys = groups.map((group) => String(group.id))
 
   const toggleCollapse = (key) =>
     setCollapsed((prev) => {
@@ -173,19 +172,19 @@ export default function InventoryPage() {
     return !gid || !knownGroupIds.has(gid)
   })
 
-  // Ungrouped products are a section like any other, last in the order. They
-  // used to render loose after every group, which read as belonging to the
-  // final one — and since the group is per viewer (`my_group ?? group`), a
-  // shared product routinely lands here, so this is real content and not a
-  // remainder.
-  const sections = [
-    ...groups.map((group) => ({
+  // Only categories get a titled, foldable card. Products with no category
+  // follow in a card of the same look with no title (2026-11-19): someone who
+  // never made categories sees a plain list, not everything under "No
+  // category"; with categories, the loose products no longer read as part of
+  // the last one, since each category sits in its own card. Shared products
+  // routinely land here (the group is per viewer, `my_group ?? group`).
+  const sections = groups
+    .map((group) => ({
       key: String(group.id),
       label: group.name,
       stocks: visibleStocks.filter((st) => effectiveGroupId(st) === group.id),
-    })),
-    { key: UNGROUPED_KEY, label: t('inventory.filterUngrouped'), stocks: ungroupedStocks },
-  ].filter((section) => section.stocks.length > 0)
+    }))
+    .filter((section) => section.stocks.length > 0)
 
   const renderStockRow = (stock) => (
     <StockRow
@@ -315,6 +314,12 @@ export default function InventoryPage() {
               </div>
             )
           })}
+
+      {!isFiltering && ungroupedStocks.length > 0 && (
+        <div className={s.looseCard} data-testid="ungrouped-list">
+          {ungroupedStocks.map(renderStockRow)}
+        </div>
+      )}
 
       {pickerStock && (
         <LotPickerModal

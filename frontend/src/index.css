@@ -10,26 +10,29 @@
   --c-surface: #ffffff;
   --c-ink: #0a0a0a;
   --c-text: #454961;
-  --c-text-2: #6c7188;
-  --c-text-3: #a1a1aa;
-  --c-muted: #d4d4d8;
+  --c-text-2: #575c75;
+  --c-text-3: #63677a;
+  --c-muted: #63677a;
   --c-border: #e4e4e7;
   --c-border-inner: #f4f4f5;
-  --c-ring: rgba(69, 73, 97, 0.18);
+  --c-ring: #7d8197;
 
-  /* Status */
-  --c-success: #22c55e;
-  --c-warning: #ca8a04;
-  --c-danger: #ef4444;
-  --c-border-success: rgba(34, 197, 94, 0.22);
-  --c-border-warning: rgba(202, 138, 4, 0.22);
-  --c-border-danger: rgba(239, 68, 68, 0.22);
+  /* Status (palette U, chosen 2026-11-18; WCAG AA checked in the a11y E2E).
+     Warning is the logo yellow: a FILL only (strips, dots, borders) — it is
+     1.44:1 on white, so warning TEXT uses --c-warning-text. */
+  --c-success: #0f766e;
+  --c-warning: #fcd34d;
+  --c-warning-text: #a16207;
+  --c-danger: #9f1239;
+  --c-border-success: rgba(15, 118, 110, 0.22);
+  --c-border-warning: rgba(252, 211, 77, 0.35);
+  --c-border-danger: rgba(159, 18, 57, 0.22);
 
   /* Accents */
   --c-shared: #4a56a1;
-  --c-shared-light: #c5c9e3;
-  --c-delete: #fca5a5;
-  --c-delete-hover: #f87171;
+  --c-shared-light: #6f79b8;
+  --c-delete: #9f1239;
+  --c-delete-hover: #881337;
 
   /* Shape */
   --radius-sm: 4px;
@@ -50,6 +53,14 @@
 *::after {
   box-sizing: border-box;
 }
+/* Scrolling to an element (anchors, focus, scrollIntoView) leaves it clear of
+   the sticky header + banner on top and the fixed bottom bar below, instead of
+   half under them (WCAG 2.4.11; axe flagged a button half under the bar). */
+html {
+  scroll-padding-top: 5rem;
+  scroll-padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 body {
   margin: 0;
   background: var(--c-bg);

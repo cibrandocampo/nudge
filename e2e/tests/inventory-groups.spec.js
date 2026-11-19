@@ -17,14 +17,13 @@ test.use({ viewport: { width: 390, height: 640 } })
  * Wait for the sections to be the ones the user will actually see.
  *
  * The stock list and the group list are two queries. Until the groups land,
- * every product is ungrouped and the page renders a single "No category"
- * section — which even carries a severity dot, since it holds everything.
+ * every product is ungrouped and the page renders one untitled loose list.
  * Reading section structure before that resolves means asserting on a frame
  * the user never really sees.
  */
 async function settled(page) {
   await expect(page.getByTestId('product-card').first()).toBeVisible()
-  await expect(page.locator('[data-testid="group-box"]:not([data-section="ungrouped"])').first()).toBeVisible()
+  await expect(page.locator('[data-testid="group-box"]').first()).toBeVisible()
 }
 
 test.describe('Inventory sections', () => {
@@ -89,21 +88,20 @@ test.describe('Inventory sections', () => {
     await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(before - 40)
   })
 
-  test('ungrouped products get a section of their own, with a count', async ({ page }) => {
-    const ungrouped = section(page, 'ungrouped')
-    await expect(ungrouped).toBeVisible()
-    await expect(ungrouped.locator('> button')).toContainText('No category')
-
-    // Polled: `count()` does not auto-wait, so reading it against a list that
-    // is still settling compares two different moments.
-    // The count is its own pill in the group card's header (2026-11-18).
-    await expect
-      .poll(async () => {
-        const rows = await ungrouped.getByTestId('product-card').count()
-        const count = await ungrouped.getByTestId('group-count').innerText()
-        return count.trim() === String(rows) && rows > 0
-      })
-      .toBe(true)
+  test('ungrouped products follow the categories in a box with no title', async ({ page }) => {
+    // A "No category" card labelled what the user never organised (2026-11-19):
+    // loose products sit after the last category, untitled and unfoldable.
+    const loose = page.getByTestId('ungrouped-list')
+    await expect(loose.getByTestId('product-card').first()).toBeVisible()
+    await expect(loose.getByRole('button', { name: /No category/ })).toHaveCount(0)
+    await expect(loose.getByTestId('group-count')).toHaveCount(0)
+    const lastSection = page.getByTestId('group-box').last()
+    expect(
+      await lastSection.evaluate(
+        (box, other) => !!(box.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING),
+        await loose.elementHandle(),
+      ),
+    ).toBe(true)
   })
 
   test('a folded section still shows that something inside needs attention', async ({ page }) => {

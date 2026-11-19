@@ -230,8 +230,8 @@
 .addContactForm > input.inputInvalid:focus {
   border-color: var(--c-danger);
   color: var(--c-danger);
-  background: rgba(239, 68, 68, 0.07);
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+  background: color-mix(in srgb, var(--c-danger) 7%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-danger) 18%, transparent);
 }
 
 .quietHoursToggleRow {

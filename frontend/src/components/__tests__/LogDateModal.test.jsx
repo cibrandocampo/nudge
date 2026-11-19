@@ -15,6 +15,11 @@ describe('LogDateModal', () => {
     vi.clearAllMocks()
   })
 
+  it('names the date input after the question it answers', () => {
+    renderWithProviders(<LogDateModal {...props} />)
+    expect(screen.getByLabelText('When did you do it?')).toBe(screen.getByTestId('log-date-input'))
+  })
+
   it('defaults the input to a present-time local value with a max set', () => {
     renderWithProviders(<LogDateModal {...props} />)
     const input = screen.getByTestId('log-date-input')

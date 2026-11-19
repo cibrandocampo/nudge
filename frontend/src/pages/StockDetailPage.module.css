@@ -129,7 +129,7 @@
 }
 
 .reasonWarning.reasonWarning {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .reasonDanger.reasonDanger {

@@ -124,7 +124,7 @@
 
 .chipAttention {
   border-color: var(--c-border-warning);
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 /* Doubled so the selected state beats `.chipAttention`, whatever order the
@@ -135,7 +135,14 @@
   color: var(--c-surface);
 }
 
+/* Quieter than the label by colour, not by transparency: 75 % opacity on
+   the secondary grey fell to 3.65:1 (a11y E2E, T139). */
 .count {
   font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+  color: var(--c-text-3);
+}
+
+.chipAttention .count,
+.chipActive.chipActive .count {
+  color: inherit;
 }

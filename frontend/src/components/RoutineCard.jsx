@@ -23,13 +23,14 @@ export const COLLAPSE_MS = 140
 const NUDGE_MS = 300
 
 // Time only (T106): green not due, amber due today, red overdue. Stock never
-// recolours the dot or the time — a routine due in 10 days with an empty stock
-// is not urgent; its stock line carries that problem instead.
-// `status` also colours the resting strip on touch (see the CSS).
+// recolours the dot — a routine due in 10 days with an empty stock is not
+// urgent; its stock line carries that problem instead. The time TEXT stays
+// plain secondary text (2026-11-18): the dot and the strip already say the
+// state. `status` also colours the resting strip on touch (see the CSS).
 function statusTokens(routine) {
-  if (!routine.is_due) return { status: 'ok', dot: cards.dotSuccess, text: cards.statusOk }
-  if (routine.is_overdue) return { status: 'overdue', dot: cards.dotDanger, text: cards.statusOverdue }
-  return { status: 'due', dot: cards.dotWarning, text: cards.statusDue }
+  if (!routine.is_due) return { status: 'ok', dot: cards.dotSuccess }
+  if (routine.is_overdue) return { status: 'overdue', dot: cards.dotDanger }
+  return { status: 'due', dot: cards.dotWarning }
 }
 
 /**
@@ -224,7 +225,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
           <SyncStatusBadge resourceKey={resourceKey} className={s.syncBadge} />
         </span>
         <span className={cards.cardSubtitle}>
-          <span className={cx(cards.status, tokens.text)}>
+          <span className={cx(cards.status, s.timeText)}>
             <span className={cx(cards.dot, tokens.dot)} />
             {timeLabel}
           </span>

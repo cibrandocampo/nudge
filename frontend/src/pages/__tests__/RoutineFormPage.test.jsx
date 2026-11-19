@@ -45,6 +45,11 @@ const editRoutine = {
 }
 
 describe('RoutineFormPage', () => {
+  it('names the description textarea by its label', async () => {
+    renderCreate()
+    expect((await screen.findByLabelText('Description')).tagName).toBe('TEXTAREA')
+  })
+
   it('shows "New routine" title in create mode', async () => {
     renderCreate()
     await waitFor(() => expect(screen.getByText('New routine')).toBeInTheDocument())
@@ -786,6 +791,12 @@ describe('interval phases', () => {
     // Two intervals: a repeat-count (spinbutton) on the first + a remove control per row.
     await waitFor(() => expect(screen.getByRole('spinbutton')).toBeInTheDocument())
     expect(screen.getAllByRole('button', { name: 'Remove interval' })).toHaveLength(2)
+  })
+
+  it('names each repeat count by the words around it ("for N times")', async () => {
+    const { user } = renderCreate()
+    await user.click(await screen.findByRole('button', { name: 'Add interval' }))
+    expect(await screen.findByRole('spinbutton', { name: 'for times' })).toBeInTheDocument()
   })
 
   it('adding twice yields a 3-interval sequence in the payload', async () => {

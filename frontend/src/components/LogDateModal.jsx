@@ -34,6 +34,7 @@ export default function LogDateModal({ onConfirm, onCancel }) {
       <p className={s.hint}>{t('routine.detail.logDateHint')}</p>
       <input
         type="datetime-local"
+        aria-label={t('routine.detail.logDateTitle')}
         className={s.input}
         value={value}
         max={max}

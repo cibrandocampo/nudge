@@ -52,6 +52,13 @@ describe('DateRangePicker', () => {
     expect(onChange).toHaveBeenCalledWith({ dateFrom: '', dateTo: '' })
   })
 
+  it('names the custom range dates by their visible labels', async () => {
+    const { user } = renderPicker()
+    await user.click(screen.getByRole('button', { name: /Last 15 days/i }))
+    expect(screen.getByLabelText('From')).toHaveAttribute('type', 'date')
+    expect(screen.getByLabelText('To')).toHaveAttribute('type', 'date')
+  })
+
   it('applies custom range', async () => {
     const { user, onChange } = renderPicker()
     await user.click(screen.getByRole('button', { name: /Last 15 days/i }))

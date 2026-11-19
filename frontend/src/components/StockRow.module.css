@@ -90,7 +90,7 @@
 }
 
 .depletionWarning.depletionWarning {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .depletionDanger.depletionDanger {
@@ -100,7 +100,7 @@
 /* Why the product needs attention (stockRowReasons): stock, expiry and the
    agency's verdicts, in their severity colour. */
 .reasonWarning.reasonWarning {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
   font-weight: 500;
 }
 

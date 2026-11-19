@@ -146,6 +146,14 @@ describe('buildFilterChips', () => {
     expect(chips.map((c) => c.id)).toEqual(['all', 'group-10'])
   })
 
+  it('offers no ungrouped chip when there is no category chip beside it', () => {
+    // Without categories "No category" is just "All" under another name.
+    const loose = [stock({ id: 1, name: 'Insulin' }), stock({ id: 2, name: 'Lancets' })]
+    expect(buildFilterChips(loose, [], '').map((c) => c.id)).toEqual(['all'])
+    // Categories that exist but hold nothing visible count as none.
+    expect(buildFilterChips(loose, GROUPS, '').map((c) => c.id)).toEqual(['all'])
+  })
+
   it('keeps the all chip even when the query matches nothing', () => {
     const chips = buildFilterChips(population, GROUPS, 'zzzzz')
     expect(chips.map((c) => c.id)).toEqual(['all'])

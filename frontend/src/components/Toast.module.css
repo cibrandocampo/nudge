@@ -89,7 +89,7 @@
 }
 
 .warning .icon {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 .warning {
   border-left: 3px solid var(--c-warning);

@@ -742,6 +742,13 @@ describe('StockDetailPage', () => {
     expect(within(within(rows[0]).getByTestId('group-expander')).getByText('2')).toBeInTheDocument()
   })
 
+  it('names the pack expander starting with the count it shows (WCAG 2.5.3)', async () => {
+    useStockResponse(serializedStock())
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.getByTestId('group-expander')).toHaveAccessibleName('2 packs: show them one by one')
+  })
+
   it('expands a group to show each box by its serial', async () => {
     useStockResponse(serializedStock())
     const { user } = renderDetail()

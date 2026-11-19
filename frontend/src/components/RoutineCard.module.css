@@ -164,7 +164,11 @@
 }
 
 .actionLayer[data-state='blocked'] {
-  background: repeating-linear-gradient(-45deg, var(--c-border-danger) 0 6px, rgba(239, 68, 68, 0.08) 6px 12px);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--c-border-danger) 0 6px,
+    color-mix(in srgb, var(--c-danger) 8%, transparent) 6px 12px
+  );
   color: var(--c-danger);
 }
 
@@ -214,6 +218,16 @@
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
     border-left-width: 0;
+  }
+
+  /* At rest on touch the ✓ sits wholly under the card, not 4 px of it in the
+   * strip: a 4 px sliver of a button is a target below WCAG 2.5.8's 24 px
+   * (axe: "partially obscured"), and touch completes by swiping. The strip is
+   * the layer's background, so nothing visible changes. Focusing the ✓ drops
+   * this rule and widens the strip to 44 px (rule at the top); dragging or
+   * leaving drops it too. */
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .check {
+    margin-left: var(--rest-offset);
   }
 }
 
@@ -336,4 +350,10 @@
     transform: none;
     transition: none;
   }
+}
+
+/* The time ("In 1h", "Overdue by 7 days") is plain secondary text: the dot
+   beside it and the strip already carry the state (2026-11-18). */
+.timeText {
+  color: var(--c-text-2);
 }
