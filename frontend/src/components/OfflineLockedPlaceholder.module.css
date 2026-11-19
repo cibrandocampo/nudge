@@ -12,7 +12,7 @@
 
 .title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--c-text);
 }
@@ -20,6 +20,6 @@
 .body {
   margin: 0;
   max-width: 32ch;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   line-height: 1.45;
 }

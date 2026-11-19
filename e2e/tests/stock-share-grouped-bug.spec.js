@@ -9,7 +9,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { login, loginAs, ensureContact, SEED } from './helpers.js'
+import { login, loginAs, ensureContact, goToInventory, SEED } from './helpers.js'
 import path from 'path'
 import fs from 'fs'
 
@@ -108,8 +108,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   const ctx2 = await browser.newContext()
   const page2 = await ctx2.newPage()
   await loginAs(page2, USER2.email, USER2.password)
-  await page2.getByRole('link', { name: 'Inventory' }).click()
-  await expect(page2).toHaveURL('/inventory')
+  await goToInventory(page2)
 
   // ── 8. The shared stock must be visible to user2 ──────────────────────
   await page2.waitForLoadState('networkidle')

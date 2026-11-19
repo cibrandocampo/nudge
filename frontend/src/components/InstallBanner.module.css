@@ -12,7 +12,7 @@
   color: var(--c-brand-text);
   border: none;
   border-bottom: 1px solid var(--c-brand);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;

@@ -88,7 +88,9 @@ backend/
 User
  ├── timezone (IANA string)
  ├── daily_notification_time (local time)
- └── language (en / es / gl)
+ ├── language (en / es / gl)
+ ├── theme (system / light / dark)
+ └── text_size (normal / large / xlarge)
 
 Routine
  ├── name, description
@@ -286,7 +288,7 @@ The legacy endpoint `POST /api/auth/token/` (username + password) is kept operat
 | `/routines/:id/edit` | RoutineFormPage | Edit existing routine |
 | `/history` | HistoryPage | Paginated global completion log |
 | `/inventory` | InventoryPage | Stock + lot management |
-| `/settings` | SettingsPage | Language, timezone, notification time |
+| `/settings` | SettingsPage | Language, theme, text size, timezone, notification time |
 
 ### PWA
 
@@ -300,7 +302,15 @@ The Web App Manifest (`public/manifest.json`) enables home-screen installation o
 
 ### i18n
 
-Three languages: English (`en`), Spanish (`es`), Galician (`gl`). Language is auto-detected from the browser and can be overridden in Settings. All UI strings live in `src/i18n/{en,es,gl}.json`.
+Three languages: English (`en`), Spanish (`es`), Galician (`gl`). Before sign-in the language is detected from the browser (or the last one used on the device); once the profile loads, `AppearanceProvider` applies `user.language` everywhere. It is changed in Settings. All UI strings live in `src/i18n/{en,es,gl}.json`.
+
+### Appearance
+
+Theme (`system` / `light` / `dark`) and text size (`normal` / `large` / `xlarge`) are profile fields, changed in Settings and applied on every device the user signs in to:
+
+- **Theme**: «System» follows `prefers-color-scheme`; «Light»/«Dark» set `data-theme` on `<html>`. The dark tokens live in two identical blocks in `index.css` (guarded by `src/test/darkTheme.test.js`). The `theme-color` metas follow the chosen theme.
+- **Text size**: a percentage on `<html>` (100 / 112.5 / 125 %); every font size is a `--fs-*` rem token, so the whole scale follows and the browser's own base size is kept.
+- **No flash**: the last appearance applied on the device is kept in `localStorage` (`nudge.appearance`) and applied by `main.jsx` before the first render — not by an inline script, which the CSP forbids. `AppearanceProvider` (`src/components/AppearanceProvider.jsx`) applies the profile once `/api/auth/me/` loads.
 
 ---
 

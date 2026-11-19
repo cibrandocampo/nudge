@@ -6,7 +6,7 @@
 .badge {
   background: var(--c-brand);
   color: var(--c-brand-text);
-  font-size: 0.6rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   min-width: 16px;
   height: 16px;
@@ -62,7 +62,7 @@
 }
 
 .panelTitle {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text);
 }
@@ -143,7 +143,7 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 .status_error {
-  color: var(--c-delete);
+  color: var(--c-danger);
 }
 .status_conflict {
   color: var(--c-warning-text);
@@ -155,7 +155,7 @@
 }
 
 .itemTitle {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -164,13 +164,13 @@
 }
 
 .itemMeta {
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
 }
 
 .discard {
   flex-shrink: 0;
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   background: none;
   border: 1px solid var(--c-border);
   color: var(--c-text-3);
@@ -182,7 +182,7 @@
     border-color var(--transition);
 }
 .discard:hover {
-  color: var(--c-delete-hover);
+  color: var(--c-danger-hover);
   border-color: var(--c-border-danger);
 }
 
@@ -194,9 +194,9 @@
 }
 
 .retry {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   border: none;
   border-radius: var(--radius);
   padding: 0.3rem 0.7rem;
@@ -209,9 +209,9 @@
 .errorDetail {
   margin-top: 0.3rem;
   padding: 0.25rem 0.5rem;
-  font-size: 0.65rem;
-  color: var(--c-delete);
-  background: color-mix(in srgb, var(--c-delete) 8%, transparent);
+  font-size: var(--fs-xs);
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 8%, transparent);
   border-radius: var(--radius-sm);
   word-break: break-all;
 }

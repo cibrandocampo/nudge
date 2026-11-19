@@ -22,8 +22,12 @@
   background: var(--c-success);
 }
 
+/* The logo yellow is 1.44:1 on white, so warning cannot be told by colour
+   alone (WCAG 1.4.1 / 1.4.11): a dark ring makes it the one hollow-looking
+   dot, next to the solid success and danger ones, in any colour vision. */
 .dotWarning {
   background: var(--c-warning);
+  box-shadow: inset 0 0 0 1.5px var(--c-warning-ring);
 }
 
 .dotDanger {
@@ -87,7 +91,7 @@
 }
 
 .cardTitle {
-  font-size: 0.8125rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -112,7 +116,7 @@
 }
 
 .cardSubtitle {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   display: flex;
   align-items: center;
@@ -131,7 +135,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--c-text-3);
   margin-top: 0.1rem;
@@ -147,7 +151,7 @@
   align-items: center;
   gap: 0.3rem;
   margin-left: auto;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-2);
   background: var(--c-surface);
   border: 1px solid var(--c-border);
@@ -171,7 +175,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 
@@ -192,7 +196,7 @@
 .stockQty {
   color: var(--c-text);
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 
 .stockDepletion {
@@ -227,7 +231,7 @@
 .consumptionRow {
   padding: 0.35rem 0.75rem;
   border-top: 1px solid var(--c-border-inner);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   display: flex;
   align-items: center;
@@ -254,7 +258,7 @@
   border: none;
   cursor: pointer;
   text-align: left;
-  color: var(--c-primary);
+  color: var(--c-text-accent);
 }
 
 /* ── Inline icon tints ────────────────────────────────────────────

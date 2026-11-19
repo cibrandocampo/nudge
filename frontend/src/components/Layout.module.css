@@ -66,7 +66,7 @@
 
 .navLabel {
   display: none;
-  font-size: 0.6rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -110,8 +110,10 @@
     margin-top: 0;
     opacity: 0;
     overflow: hidden;
-    font-size: 0.625rem;
-    line-height: 12px;
+    font-size: var(--fs-xs);
+    /* Relative, so the box grows with «Text size» (T148): 12 px at normal, as
+     * before; in px it clipped the descenders at «Extra large» (T149). */
+    line-height: 1;
     white-space: nowrap;
     transition:
       max-height 150ms ease,
@@ -120,7 +122,7 @@
   }
 
   .linkActive .navLabel {
-    max-height: 12px;
+    max-height: 1em;
     margin-top: 2px;
     opacity: 1;
   }

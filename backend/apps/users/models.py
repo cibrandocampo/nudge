@@ -11,6 +11,13 @@ LANGUAGE_CHOICES = [("en", "English"), ("es", "Español"), ("gl", "Galego")]
 
 AUTH_METHOD_CHOICES = [("otp", "OTP"), ("password", "Password")]
 
+# Appearance, applied by the frontend on every device the user signs in to.
+# "system" follows the device's light/dark setting.
+THEME_CHOICES = [("system", "System"), ("light", "Light"), ("dark", "Dark")]
+
+# Scales the root font size (100 % / 112.5 % / 125 %).
+TEXT_SIZE_CHOICES = [("normal", "Normal"), ("large", "Large"), ("xlarge", "Extra large")]
+
 
 def validate_timezone(value):
     if value not in zoneinfo.available_timezones():
@@ -35,6 +42,10 @@ class User(AbstractUser):
         choices=LANGUAGE_CHOICES,
         default="en",
     )
+    # Presentation only: neither field bumps `settings_updated_at`, which
+    # exists for the notification scheduler (see UserUpdateSerializer).
+    theme = models.CharField(max_length=8, choices=THEME_CHOICES, default="system")
+    text_size = models.CharField(max_length=8, choices=TEXT_SIZE_CHOICES, default="normal")
     timezone = models.CharField(
         max_length=64,
         default="UTC",

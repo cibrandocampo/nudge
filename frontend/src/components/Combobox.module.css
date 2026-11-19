@@ -26,7 +26,7 @@
 
 .option {
   padding: 0.4rem 0.65rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   color: var(--c-text);
 }
@@ -37,6 +37,6 @@
 
 .empty {
   padding: 0.5rem 0.65rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-3);
 }

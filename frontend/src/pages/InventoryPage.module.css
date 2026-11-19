@@ -49,7 +49,7 @@
 }
 
 .groupCardName {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   min-width: 0;
   overflow: hidden;
@@ -59,7 +59,7 @@
 
 .groupCardCount {
   flex: none;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text-2);
   background: var(--c-border-inner);
@@ -96,7 +96,7 @@
   gap: 0.3rem;
   margin: 0 0 0.35rem;
   padding: 0.5rem 0 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text-2);
 }

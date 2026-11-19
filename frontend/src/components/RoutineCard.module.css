@@ -160,7 +160,7 @@
 
 .actionLayer[data-state='armed'] {
   background: var(--c-success);
-  color: var(--c-surface);
+  color: var(--c-on-success);
 }
 
 .actionLayer[data-state='blocked'] {
@@ -195,6 +195,9 @@
 
   .row[data-phase='rest'][data-status='due']:not([data-dragging='true']):not(:has(.check:focus-visible)) .actionLayer {
     background: var(--c-warning);
+    /* Same ring as the warning dot: the clip leaves its left, top and bottom
+       edges, an outlined strip next to the solid green and red ones. */
+    box-shadow: inset 0 0 0 1px var(--c-warning-ring);
   }
 
   .row[data-phase='rest'][data-status='overdue']:not([data-dragging='true']):not(:has(.check:focus-visible))
@@ -292,7 +295,7 @@
 }
 
 .actionLabel {
-  font-size: 0.8125rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   white-space: nowrap;
   opacity: 0;
@@ -303,7 +306,7 @@
  * wraps to fit the strip it uncovers next to the ✕. */
 .actionLayer[data-state='blocked'] .actionLabel {
   max-width: calc(40% - 52px);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   line-height: 1.15;
   white-space: normal;
 }

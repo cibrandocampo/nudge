@@ -25,7 +25,7 @@
 }
 
 .entryName {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 /* Consumed lots, one block per snapshot entry. A definition list because that
@@ -42,7 +42,7 @@
    the value itself. Without this the badge sat a step smaller and entirely in
    the label colour, so "Ebastine" read as less important than "MET-A". */
 .entryStockBadge {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
 }
 
 .badgeValue {
@@ -58,7 +58,7 @@
   grid-template-columns: max-content 1fr;
   column-gap: 0.5rem;
   row-gap: 0.05rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
 }
 
 .lotLabel {
@@ -99,7 +99,7 @@
 }
 
 .entryTime {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   white-space: nowrap;
 }
@@ -112,7 +112,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-shared);
   white-space: nowrap;
 }
@@ -147,7 +147,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
   white-space: normal;
   overflow-wrap: anywhere;
@@ -162,7 +162,7 @@
 }
 
 .notesInput {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   min-width: 180px;
 }
 
@@ -178,7 +178,7 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   min-width: 0;
 }
@@ -209,7 +209,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-shared);
 }
 

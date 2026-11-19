@@ -5,10 +5,6 @@
 
 /* ── Buttons ─────────────────────────────────────────────────── */
 
-.disabled {
-  opacity: 0.6;
-}
-
 /* POC tokens (docs/design-poc.html lines 151–165) */
 
 .btn {
@@ -17,7 +13,7 @@
   justify-content: center;
   gap: 0.3rem;
   padding: 0.45rem 0.875rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   border-radius: var(--radius);
   border: 1px solid transparent;
@@ -32,18 +28,17 @@
    treatment `.btnConfirm:disabled` already used, applied to the base so no
    variant can forget it. */
 .btn:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btnSm {
   padding: 0.3rem 0.625rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 
 .btnPrimary {
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   border-color: var(--c-primary);
 }
 
@@ -54,7 +49,7 @@
 .btnSecondary {
   background: var(--c-surface);
   color: var(--c-text);
-  border-color: var(--c-border);
+  border-color: var(--c-outline);
 }
 
 .btnSecondary:hover:not(:disabled) {
@@ -66,9 +61,12 @@
    `.btn` alone leaves height to content — with the icons + font
    stack each button rounds to a slightly different pixel count. */
 
+/* The section-level buttons of the forms share one width
+   (stockform-buttons-visual.spec). In rem so it grows with the type scale and
+   the text-size setting: at 14 px «Share with…» outgrew a fixed 128 px. */
 .formSecondaryBtn {
   height: 36px;
-  min-width: 128px;
+  min-width: 9.5rem;
   padding-top: 0;
   padding-bottom: 0;
   justify-content: center;
@@ -85,12 +83,12 @@
 
 .btnDanger {
   background: transparent;
-  color: var(--c-delete);
-  border-color: var(--c-border);
+  color: var(--c-danger);
+  border-color: var(--c-outline);
 }
 
 .btnDanger:hover:not(:disabled) {
-  color: var(--c-delete-hover);
+  color: var(--c-danger-hover);
   background: color-mix(in srgb, var(--c-danger) 5%, transparent);
   border-color: var(--c-border-danger);
 }
@@ -119,7 +117,7 @@
 }
 
 .btnIcon:active {
-  opacity: 0.7;
+  background: color-mix(in srgb, var(--c-text) 18%, transparent);
 }
 
 /* An icon button inside a white card: bordered like `.btnSecondary`, so it
@@ -127,7 +125,7 @@
    looks disabled on white). */
 .btnIconOutline {
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   color: var(--c-text-2);
 }
 
@@ -137,7 +135,7 @@
 }
 
 .btnIconDone {
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   background: var(--c-primary);
 }
 
@@ -147,7 +145,7 @@
 
 .btnIconConsume {
   position: relative;
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   background: var(--c-primary);
 }
 
@@ -190,12 +188,12 @@
 }
 
 .btnIconDelete {
-  color: var(--c-delete);
+  color: var(--c-danger);
   background: color-mix(in srgb, var(--c-danger) 4%, transparent);
 }
 
 .btnIconDelete:hover {
-  color: var(--c-delete-hover);
+  color: var(--c-danger-hover);
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
 }
 
@@ -205,7 +203,7 @@
   border-radius: var(--radius-lg);
   background: var(--c-primary);
   border: none;
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -219,7 +217,7 @@
 
 .btnAddSecondary {
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   color: var(--c-text);
 }
 
@@ -232,12 +230,12 @@
 
 .btnAddDanger {
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  color: var(--c-delete);
+  border: 1px solid var(--c-outline);
+  color: var(--c-danger);
 }
 
 .btnAddDanger:hover {
-  color: var(--c-delete-hover);
+  color: var(--c-danger-hover);
   background: color-mix(in srgb, var(--c-danger) 5%, transparent);
   border-color: var(--c-border-danger);
 }
@@ -248,7 +246,7 @@
 
 .btnAddSuccess {
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   color: var(--c-success);
 }
 
@@ -262,10 +260,10 @@
 .btnCancel {
   padding: 0.6rem 1.2rem;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   background: var(--c-surface);
   color: var(--c-text);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   transition: background var(--transition);
@@ -280,8 +278,8 @@
   border-radius: var(--radius-lg);
   border: none;
   background: var(--c-primary);
-  color: var(--c-surface);
-  font-size: 0.875rem;
+  color: var(--c-on-primary);
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   transition: background var(--transition);
@@ -292,12 +290,12 @@
 }
 
 .btnConfirm:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btnConfirmDanger {
   background: var(--c-danger);
+  color: var(--c-on-danger);
 }
 
 .btnConfirmDanger:hover {
@@ -321,4 +319,38 @@
 .btnIconLg {
   width: 40px;
   height: 40px;
+}
+
+/* ── States: pressed and disabled ─────────────────────────────── */
+
+/* Pressed darkens the fill. It used to be opacity, which made a pressed
+   button look like a disabled one (UX-006: 1.27:1 between the two). */
+.btnPrimary:active:not(:disabled),
+.btnAdd:active,
+.btnConfirm:active:not(:disabled),
+.btnIconDone:active,
+.btnIconConsume:active {
+  background: var(--c-pressed);
+}
+
+/* Disabled has its own fill and text instead of opacity: it reads as
+   "not available" and never as "pressed". Doubled class so it wins over any
+   variant (same-file order or a page module's own button class). Declared
+   last on purpose. `.disabledText` is the same cue for things that are not
+   buttons (a nav link, a drag handle) and must not gain a fill. */
+.disabled.disabled,
+.disabled.disabled:hover,
+.btn:disabled,
+.btn:disabled:hover,
+.btnConfirm:disabled,
+.btnConfirm:disabled:hover {
+  background: var(--c-disabled-bg);
+  color: var(--c-disabled-text);
+  border-color: transparent;
+  filter: none;
+  cursor: not-allowed;
+}
+
+.disabledText.disabledText {
+  color: var(--c-disabled-text);
 }

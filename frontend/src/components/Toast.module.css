@@ -22,7 +22,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   box-shadow: var(--shadow-md);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--c-text);
   animation: slideUp 0.18s ease-out;
 }
@@ -61,10 +61,10 @@
   flex-shrink: 0;
   background: none;
   border: none;
-  color: var(--c-primary);
+  color: var(--c-text-accent);
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
 }
@@ -75,7 +75,7 @@
 /* Per-type accents: coloured left border + icon. Body stays on surface so
    the toast reads cleanly on both light and dark surfaces. */
 .info .icon {
-  color: var(--c-primary);
+  color: var(--c-text-accent);
 }
 .info {
   border-left: 3px solid var(--c-primary);

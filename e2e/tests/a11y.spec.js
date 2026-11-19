@@ -2,8 +2,8 @@
  * Accessibility gate (UX audit plan P7, docs/plans/a11y-ci.md).
  *
  * axe-core over every state the audit measured (`a11y/scenes.js`), at a phone
- * (Pixel 7, touch) and a desktop width. Any `serious` or `critical` WCAG 2.2
- * A/AA violation fails the test; `moderate` and `minor` are only attached to
+ * (Pixel 7, touch) and a desktop width, plus the phone in dark mode. Any
+ * `serious` or `critical` WCAG 2.2 A/AA violation fails the test; `moderate` and `minor` are only attached to
  * the report (axe.json). The failure message lists rule, impact, node count
  * and the first nodes, so a red CI says what to fix without opening artifacts.
  *
@@ -24,9 +24,13 @@ const BLOCKING = new Set(['serious', 'critical'])
 // `defaultBrowserType` cannot be set per describe (it forces a new worker
 // type); the project already runs Chromium.
 const { defaultBrowserType: _browser, ...pixel7 } = devices['Pixel 7']
-const WIDTHS = {
-  m412: pixel7,
-  d1280: { viewport: { width: 1280, height: 800 } },
+// Each pass: the width its scenes are filtered by (`scene.widths`) and the
+// context options. The dark pass runs at the phone width only: it is the
+// device the app is used on, and a desktop dark pass would add ~1.7 min more.
+const PASSES = {
+  m412: { width: 'm412', options: pixel7 },
+  d1280: { width: 'd1280', options: { viewport: { width: 1280, height: 800 } } },
+  m412dark: { width: 'm412', options: { ...pixel7, colorScheme: 'dark' } },
 }
 
 // The scanner needs a camera: the demo DataMatrix as a fake capture device.
@@ -49,7 +53,7 @@ function formatViolations(violations) {
     .join('\n')
 }
 
-function defineSceneTest(scene, width) {
+function defineSceneTest(scene, pass) {
   test(scene.id, async ({ page, context }, testInfo) => {
     let ids = null
     if (scene.user) {
@@ -73,7 +77,7 @@ function defineSceneTest(scene, width) {
         contentType: 'application/json',
       })
       const blocking = results.violations.filter((v) => BLOCKING.has(v.impact))
-      expect(blocking, `${scene.id} at ${width}:\n${formatViolations(blocking)}`).toEqual([])
+      expect(blocking, `${scene.id} at ${pass}:\n${formatViolations(blocking)}`).toEqual([])
     } finally {
       if (cleanup) await cleanup()
     }
@@ -87,8 +91,8 @@ test.describe('a11y', () => {
     await context.close()
   })
 
-  for (const [width, options] of Object.entries(WIDTHS)) {
-    test.describe(width, () => {
+  for (const [pass, { width, options }] of Object.entries(PASSES)) {
+    test.describe(pass, () => {
       test.use(options)
 
       for (const scene of SCENES) {
@@ -96,10 +100,10 @@ test.describe('a11y', () => {
         if (scene.camera) {
           test.describe(() => {
             test.use({ permissions: ['camera'] })
-            defineSceneTest(scene, width)
+            defineSceneTest(scene, pass)
           })
         } else {
-          defineSceneTest(scene, width)
+          defineSceneTest(scene, pass)
         }
       }
     })

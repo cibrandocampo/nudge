@@ -28,8 +28,9 @@ import s from './StockRow.module.css'
  * The interaction model is deliberately the card's, unchanged: the row is a
  * clickable container, the actions inside stop propagation, and the chevron is
  * the keyboard-reachable route to the detail. E2E navigates by that button's
- * "Open details" label (`helpers/navigation.js`) and consumes by the −1
- * button's "Consume 1 unit" label, so both must keep their names.
+ * `row-open-detail` test id (`helpers/navigation.js`; a label would break for
+ * a Spanish or Galician profile) and consumes by the −1 button's "Consume 1
+ * unit" label, so both must keep their names.
  */
 export default function StockRow({ stock, consuming, flashing, onConsume }) {
   const { t } = useTranslation()
@@ -119,6 +120,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
             onClick={goDetail}
             aria-label={t('common.openDetail')}
             title={t('common.openDetail')}
+            data-testid="row-open-detail"
           >
             <Icon name="chevron-right" size="sm" />
           </button>
