@@ -203,6 +203,18 @@
     background: var(--c-border);
     color: var(--c-text-3);
   }
+
+  /* The strip and the card read as one shape: the card's left side is square
+   * and borderless against the strip, and the clip rounds the pair. With the
+   * card's own left corners rounded, the 4 px strip was a separate bracket —
+   * tapered by the clip's arc at both ends, with a white wedge between it and
+   * the card's curve (reported on the phone, 2026-11-18). The card gets its
+   * corners back as soon as it moves. */
+  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible)) .card {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left-width: 0;
+  }
 }
 
 /* Full height and as wide as the mouse resting offset: the whole uncovered

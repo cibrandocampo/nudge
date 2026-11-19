@@ -59,16 +59,19 @@ test.describe('Inventory search and filters', () => {
     await expect(page.getByTestId('group-box')).toHaveCount(0)
   })
 
-  test('the attention chip matches the alert banner count', async ({ page }) => {
-    const banner = page.getByTestId('inventory-alert-banner')
-    await expect(banner).toBeVisible()
-    const bannerCount = Number((await banner.textContent()).match(/(\d+)/)[1])
+  test('the attention chip lists its products, and each row says why', async ({ page }) => {
+    // No summary banner any more: the chip filters, the row explains.
+    await expect(page.getByText(/need(s)? attention/i)).toHaveCount(0)
+    const attention = chip(page, 'attention')
+    const count = Number((await attention.textContent()).match(/(\d+)\s*$/)[1])
 
-    await chip(page, 'attention').click()
-    await expect(rows(page)).toHaveCount(bannerCount)
-    // The banner is a summary of the whole inventory, so it steps aside once
-    // the list stops showing the whole inventory.
-    await expect(banner).toBeHidden()
+    await attention.click()
+    await expect(rows(page)).toHaveCount(count)
+    // A reason word, the red zero of an empty stock, or a tinted "until" date.
+    for (const row of await rows(page).all()) {
+      const reasons = row.locator('[data-testid="row-reason"], [data-out-of-stock], [data-testid="depletion-date"]')
+      await expect(reasons.first()).toBeVisible()
+    }
   })
 
   test('a search with no matches offers a way back', async ({ page }) => {

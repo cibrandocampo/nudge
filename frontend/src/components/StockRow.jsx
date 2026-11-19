@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toMonthly } from '../utils/consumption'
 import cx from '../utils/cx'
+import { stockRowReasons } from '../utils/stockAlerts'
 import { borderTokensFromStock } from '../utils/stockSeverity'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
@@ -53,16 +54,12 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
   const sharedRate = stock.daily_consumption_shared || 0
   const totalRate = ownRate + sharedRate
 
-  // One warning at most, and it comes from `expiry_severity` rather than
-  // `stock_severity`: the dot on line 1 already carries the stock axis, and
-  // the two were deliberately decoupled (see `stockSeverity.js`). 'reached'
-  // outranks 'soon' — the backend awards that precedence, not this component.
-  const expiryWarning =
-    stock.expiry_severity === 'reached'
-      ? { key: 'inventory.rowExpiryReached', className: s.expiryDanger }
-      : stock.expiry_severity === 'soon'
-        ? { key: 'inventory.rowExpiringSoon', className: s.expiryWarning }
-        : null
+  // Why this product needs attention, said on its own row (the inventory has
+  // no summary banner: the Atención chip filters, the row explains). See
+  // `stockRowReasons` for what is said and what is left to the quantity and
+  // the depletion date.
+  const reasons = stockRowReasons(stock)
+  const outOfStock = quantity === 0
 
   return (
     <div className={s.row} data-testid="product-card" onClick={goDetail}>
@@ -85,33 +82,40 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
         </span>
         <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
         <span className={s.qtyGroup}>
-          <span className={cx(cards.stockQty, flashing && s.stockQtyFlash)}>
+          <span
+            className={cx(cards.stockQty, outOfStock && s.qtyOut, flashing && s.stockQtyFlash)}
+            data-testid="row-quantity"
+            data-out-of-stock={outOfStock || undefined}
+          >
             {quantity} {t('common.unit')}
           </span>
-          {(stock.quantity_expired ?? 0) > 0 && (
-            <span className={cards.stockQtyExpired}>
-              {' '}
-              ({t('inventory.expiredCount', { count: stock.quantity_expired })})
-            </span>
-          )}
+          {/* Expired units are a reason on line 2 ("1 expired"), not a
+              qualifier here: next to the quantity they squeezed the name. */}
         </span>
         <div className={s.actions} onClick={stop}>
-          {quantity > 0 && (
-            <button
-              type="button"
-              className={cx(buttons.btnIcon, buttons.btnIconConsume, consuming && buttons.disabled)}
-              onClick={() => onConsume(stock)}
-              disabled={consuming}
-              aria-label={t('inventory.consumeTooltip')}
-              title={t('inventory.consumeTooltip')}
-            >
-              <Icon name="package" className={buttons.consumeBox} />
-              <Icon name="arrow-down" className={buttons.consumeArrow} />
-            </button>
-          )}
+          {/* Out of stock keeps the same button, greyed and disabled, so the
+              action column stays aligned down the list and the row says
+              "nothing to consume" rather than losing a control. */}
           <button
             type="button"
-            className={cx(buttons.btnIcon, buttons.btnIconAction)}
+            className={cx(
+              buttons.btnIcon,
+              buttons.btnIconConsume,
+              outOfStock && s.consumeEmpty,
+              consuming && buttons.disabled,
+            )}
+            onClick={() => onConsume(stock)}
+            disabled={outOfStock || consuming}
+            aria-label={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
+            title={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
+            data-testid="row-consume"
+          >
+            <Icon name="package" className={buttons.consumeBox} />
+            <Icon name="arrow-down" className={buttons.consumeArrow} />
+          </button>
+          <button
+            type="button"
+            className={cx(buttons.btnIcon, s.detailChevron)}
             onClick={goDetail}
             aria-label={t('common.openDetail')}
             title={t('common.openDetail')}
@@ -121,7 +125,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
         </div>
       </div>
 
-      {totalRate > 0 && (
+      {(totalRate > 0 || reasons.length > 0) && (
         <div
           className={s.meta}
           data-testid="consumption-row"
@@ -136,31 +140,31 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           {ownRate > 0 && sharedRate > 0 && ' + '}
           {sharedRate > 0 && <span>{t('inventory.consumptionShared', { rate: toMonthly(sharedRate) })}</span>}
 
-          {expiryWarning && (
-            <span className={expiryWarning.className} data-testid="row-expiry-warning">
-              {t(expiryWarning.key)}
+          {reasons.map((reason) => (
+            <span
+              key={reason.key}
+              className={reason.tone === 'danger' ? s.reasonDanger : s.reasonWarning}
+              data-testid="row-reason"
+              data-kind={reason.kind}
+            >
+              {t(reason.key, reason.params)}
             </span>
-          )}
+          ))}
 
           {/* Right-aligned so the dates form a column down the list: "which
-              one runs out first" is answered by scanning, not by reading. */}
-          {quantity === 0 ? (
-            <span className={cx(s.depletion, s.depletionDanger)} data-testid="out-of-stock-footer">
-              {t('inventory.outOfStockFooter')}
+              one runs out first" is answered by scanning, not by reading. Out
+              of stock there is nothing to date: the red quantity says it. */}
+          {!outOfStock && stock.estimated_depletion_date && (
+            <span
+              className={cx(
+                s.depletion,
+                stock.stock_severity === 'low' && s.depletionWarning,
+                stock.stock_severity === 'critical' && s.depletionDanger,
+              )}
+              data-testid="depletion-date"
+            >
+              {t('inventory.depletionUntil', { date: formatShortDate(stock.estimated_depletion_date) })}
             </span>
-          ) : (
-            stock.estimated_depletion_date && (
-              <span
-                className={cx(
-                  s.depletion,
-                  stock.stock_severity === 'low' && s.depletionWarning,
-                  stock.stock_severity === 'critical' && s.depletionDanger,
-                )}
-                data-testid="depletion-date"
-              >
-                {t('inventory.depletionUntil', { date: formatShortDate(stock.estimated_depletion_date) })}
-              </span>
-            )
           )}
         </div>
       )}

@@ -325,64 +325,40 @@ describe('InventoryPage — grouping', () => {
   })
 })
 
-describe('InventoryPage — alert banner', () => {
-  // The page owns whether the banner is mounted and what it is given; the
-  // grouping rules themselves live in `stockAlerts.test.js` and the banner's
-  // own behaviour in `InventoryAlertBanner.test.jsx`. These tests only cover
-  // the seam between them.
-  const PAST_DATE = '2026-04-20'
-
-  it('does not render the banner when no stock has any severity', async () => {
-    mockStocks([stock()])
+describe('InventoryPage — attention on the rows', () => {
+  // No summary banner: the Atención chip filters, and each row says why. The
+  // reasons themselves are `stockRowReasons` (stockAlerts.test.js) and their
+  // rendering StockRow's; this covers the page.
+  it('shows no "products need attention" banner', async () => {
+    mockStocks([stock({ id: 1, name: 'Vitamin D', quantity: 0, quantity_available: 0, stock_severity: 'critical' })])
     mockGroups([])
     renderPage()
-    await screen.findByText('Water filter')
-    expect(screen.queryByTestId('inventory-alert-banner')).not.toBeInTheDocument()
+    await screen.findByText('Vitamin D')
+    expect(screen.queryByText(/need(s)? attention/i)).not.toBeInTheDocument()
   })
 
-  it('summarises every affected product in one collapsed banner', async () => {
+  it('each product the Atención chip selects says why on its own row', async () => {
     mockStocks([
-      stock({ id: 1, name: 'Vitamin D', quantity: 0, quantity_available: 0, stock_severity: 'critical', lots: [] }),
-      stock({ id: 2, name: 'Insulin', quantity: 10, stock_severity: 'low', estimated_depletion_date: '2026-05-15' }),
-    ])
-    mockGroups([])
-    renderPage()
-    const banner = await screen.findByTestId('inventory-alert-banner')
-    expect(within(banner).getByText(/2 products need attention/i)).toBeInTheDocument()
-    // Collapsed: the products are counted, not listed.
-    expect(screen.queryByTestId('inventory-alert-row')).not.toBeInTheDocument()
-  })
-
-  it('counts a product with two problems once', async () => {
-    // Critical (qty_available=0) AND a past-expiry lot. The four cards this
-    // replaced listed it twice, in two separate red blocks.
-    mockStocks([
-      stock({
-        id: 1,
-        name: 'Ibuprofen',
-        quantity: 0,
-        quantity_available: 0,
-        stock_severity: 'critical',
-        expiry_severity: 'reached',
-        lots: [{ id: 99, quantity: 1, expiry_date: PAST_DATE, lot_number: '' }],
-      }),
-    ])
-    mockGroups([])
-    renderPage()
-    const banner = await screen.findByTestId('inventory-alert-banner')
-    expect(within(banner).getByText(/1 product needs attention/i)).toBeInTheDocument()
-  })
-
-  it('opens onto one row per product, each linking to its detail page', async () => {
-    mockStocks([
-      stock({ id: 4, name: 'Aspirin', quantity: 0, quantity_available: 0, stock_severity: 'critical', lots: [] }),
+      stock({ id: 1, name: 'Vitamin D', quantity: 0, quantity_available: 0, stock_severity: 'critical' }),
+      stock({ id: 2, name: 'Insulin', quantity: 10, stock_severity: 'low' }),
+      stock({ id: 3, name: 'Ibuprofen', expiry_severity: 'reached' }),
+      stock({ id: 4, name: 'Water filter' }),
     ])
     mockGroups([])
     const { user } = renderPage()
-    await screen.findByTestId('inventory-alert-banner')
-    await user.click(screen.getByRole('button', { name: /needs attention/i }))
-    const row = screen.getByTestId('inventory-alert-row')
-    expect(row).toHaveAttribute('href', '/inventory/4')
+    await screen.findByText('Insulin')
+    await user.click(screen.getAllByTestId('stock-filter-chip').find((c) => c.dataset.chip === 'attention'))
+
+    const rows = screen.getAllByTestId('product-card')
+    expect(rows.map((r) => within(r).getByText(/^(Vitamin D|Insulin|Ibuprofen)$/).textContent)).toEqual([
+      'Vitamin D',
+      'Insulin',
+      'Ibuprofen',
+    ])
+    const [vitamin, insulin, ibuprofen] = rows
+    expect(within(vitamin).getByTestId('row-quantity')).toHaveAttribute('data-out-of-stock', 'true')
+    expect(within(insulin).getByTestId('row-reason')).toHaveTextContent('low stock')
+    expect(within(ibuprofen).getByTestId('row-reason')).toHaveTextContent('expired')
   })
 })
 
@@ -462,14 +438,6 @@ describe('InventoryPage — search and filter', () => {
     expect(rowNames()).toEqual(['Insulin', 'Aspirin'])
   })
 
-  it('hides the alert banner while filtering', async () => {
-    const { user } = renderPopulated()
-    await screen.findByTestId('inventory-alert-banner')
-
-    await user.click(chip('group-10'))
-    expect(screen.queryByTestId('inventory-alert-banner')).not.toBeInTheDocument()
-  })
-
   it('filters to a group when its chip is chosen', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
@@ -508,7 +476,7 @@ describe('InventoryPage — search and filter', () => {
     expect(rowNames()).toEqual(['Insulin', 'Lancets', 'Aspirin', 'Loose item'])
   })
 
-  it('restores groups and banner when the filter is cleared', async () => {
+  it('restores the groups when the filter is cleared', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
 
@@ -517,7 +485,6 @@ describe('InventoryPage — search and filter', () => {
 
     await user.click(chip('all'))
     expect(screen.getAllByTestId('group-box').length).toBeGreaterThan(0)
-    expect(screen.getByTestId('inventory-alert-banner')).toBeInTheDocument()
   })
 })
 
@@ -568,7 +535,7 @@ describe('InventoryPage — pinned section', () => {
       .getAllByTestId('product-card')
       .map((row) => row.querySelector('.name').textContent)
     expect(inGroup).toEqual(['Insulin', 'Lancets'])
-    expect(within(group).getByText('(2)')).toBeInTheDocument()
+    expect(within(group).getByText('2')).toBeInTheDocument()
     // Two rows on screen for the same product: one pinned, one in the group.
     expect(screen.getAllByText('Insulin')).toHaveLength(2)
   })
@@ -640,7 +607,7 @@ describe('InventoryPage — sections, persistence and scroll', () => {
     const boxes = screen.getAllByTestId('group-box')
     expect(boxes.map((b) => b.dataset.section)).toEqual(['10', 'ungrouped'])
     expect(within(section('ungrouped')).getByText('No category')).toBeInTheDocument()
-    expect(within(section('ungrouped')).getByText('(1)')).toBeInTheDocument()
+    expect(within(section('ungrouped')).getByText('1')).toBeInTheDocument()
   })
 
   it('omits the ungrouped section when every product has a group', async () => {

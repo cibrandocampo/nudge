@@ -67,6 +67,10 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
   const source = summary.display_name
   const status = summary.fetch_status
   const hasData = Boolean(summary.fetched_at) && status !== 'not_found'
+  // The source note goes with the leaflet: while there is none to read
+  // (loading, pending, failed, offline) the card shows no source line.
+  const [leafletAvailable, setLeafletAvailable] = useState(false)
+  const showSource = hasData && status === 'ok' && leafletAvailable
   const problems = detail?.supply_problems ?? []
   const active = problems.find((problem) => problem.active)
   const past = problems.filter((problem) => !problem.active)
@@ -242,7 +246,9 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
             )}
 
             {/* The leaflet before the notices: it is what most visits are for. */}
-            {status === 'ok' && <LeafletAccordion stockId={stock.id} summary={summary} />}
+            {status === 'ok' && (
+              <LeafletAccordion stockId={stock.id} summary={summary} onAvailableChange={setLeafletAvailable} />
+            )}
 
             {notices.length > 0 && (
               <div className={s.block}>
@@ -276,12 +282,12 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
           </>
         )}
 
-        {(hasData || isOwner) && (
+        {(showSource || isOwner || detail?.agency_url) && (
           <div className={s.footer}>
             {/* Source, date and guidance in one quiet line: citing the origin and
               the date of the data is what the AEMPS legal notice asks for
               reuse; the agency's full name is the line's title. */}
-            {hasData && (
+            {showSource && (
               <p className={s.sourceNote} title={summary.attribution} data-testid="regulatory-source">
                 {t('regulatory.sourceLabel', { source })} ·{' '}
                 {t('regulatory.sourceUpdated', { date: formatShortDate(summary.fetched_at) })}.{' '}

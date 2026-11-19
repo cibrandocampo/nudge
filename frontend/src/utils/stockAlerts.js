@@ -1,28 +1,3 @@
-import { lotExpirySeverity } from './stockSeverity'
-
-/**
- * Partition a stock's lots into reached / soon buckets in a single pass.
- *
- * Lived in `InventoryPage` until T090. The alert content is derived from
- * `stock.lots` directly rather than from a server-side `expiring_lots` field
- * (dropped in T170), and this module is now the only place that reads them
- * for alert purposes.
- *
- * Emptied lots are skipped: a lot kept alive at quantity 0 by `bulk_create`
- * is not something to warn about.
- */
-export function lotsByExpirySeverity(stock, today) {
-  const reached = []
-  const soon = []
-  for (const lot of stock.lots ?? []) {
-    if (lot.quantity <= 0) continue
-    const sev = lotExpirySeverity(lot, today)
-    if (sev === 'reached') reached.push(lot)
-    else if (sev === 'soon') soon.push(lot)
-  }
-  return { reached, soon }
-}
-
 /**
  * Labels for what the regulatory agency says about the stock's medicine.
  *
@@ -33,24 +8,24 @@ export function lotsByExpirySeverity(stock, today) {
  *
  * Only when there is data: never fetched (`fetched_at` null) or `not_found`
  * says nothing. Any other status keeps the last good data — a refresh in
- * flight (`pending`) or a failed one (`error`) must not make the alert blink.
+ * flight (`pending`) or a failed one (`error`) must not make the row blink.
  */
 export function regulatoryLabels(stock) {
   const regulatory = stock?.regulatory
   if (!regulatory?.fetched_at || regulatory.fetch_status === 'not_found') return []
   const labels = []
   if (regulatory.supply_severity === 'danger') {
-    labels.push({ key: 'inventory.alertSupplyProblem', params: {}, tone: 'danger' })
+    labels.push({ key: 'inventory.rowSupplyProblem', tone: 'danger' })
   } else if (regulatory.supply_severity === 'warning') {
-    labels.push({ key: 'inventory.alertSupplyLimited', params: {}, tone: 'warning' })
+    labels.push({ key: 'inventory.rowSupplyLimited', tone: 'warning' })
   }
   if (regulatory.marketed === false) {
-    labels.push({ key: 'inventory.alertNotMarketed', params: {}, tone: 'warning' })
+    labels.push({ key: 'inventory.rowNotMarketed', tone: 'warning' })
   }
   if (regulatory.status === 'suspended') {
-    labels.push({ key: 'inventory.alertAuthorizationSuspended', params: {}, tone: 'danger' })
+    labels.push({ key: 'inventory.rowAuthorizationSuspended', tone: 'danger' })
   } else if (regulatory.status === 'revoked') {
-    labels.push({ key: 'inventory.alertAuthorizationRevoked', params: {}, tone: 'danger' })
+    labels.push({ key: 'inventory.rowAuthorizationRevoked', tone: 'danger' })
   }
   return labels
 }
@@ -59,10 +34,10 @@ export function regulatoryLabels(stock) {
  * Whether a stock needs the user's attention on any axis: stock, expiry or
  * what the regulatory agency says (`regulatoryLabels`).
  *
- * The single definition of "in trouble" in the app: the alert banner counts
- * the products it will list with it, and the inventory's Atención filter chip
- * selects with the same function. Two copies would drift the first time a tier
- * is added or a threshold moves.
+ * The single definition of "in trouble" in the app: the inventory's Atención
+ * filter chip selects with it, and `stockRowReasons` says why on each row it
+ * selects. Two copies would drift the first time a tier is added or a
+ * threshold moves.
  */
 export function needsAttention(stock) {
   return (
@@ -72,6 +47,53 @@ export function needsAttention(stock) {
     stock?.expiry_severity === 'soon' ||
     regulatoryLabels(stock).length > 0
   )
+}
+
+/**
+ * Why a stock needs attention, as the words its inventory row shows:
+ *
+ *   [{ kind: 'stock' | 'expiry' | 'regulatory', key, params?, tone: 'danger' | 'warning' }]
+ *
+ * The row replaces the "N products need attention" banner: the Atención chip
+ * filters the list, and each row says its own reason, so the reason is where
+ * the product is. Every axis of `needsAttention` is covered, but nothing is
+ * said twice:
+ *
+ *   - stock: out of stock is the quantity itself, in red; a depletion date
+ *     ("until …") already carries the tint. Only a low or critical stock with
+ *     units left and no date gets a word.
+ *   - expiry: one word from the backend's single verdict ('reached' outranks
+ *     'soon', by construction).
+ *   - regulatory: the agency's verdicts, last.
+ *
+ * Descriptors, not text: the module stays free of i18next.
+ */
+export function stockRowReasons(stock) {
+  const reasons = []
+  const quantity = stock?.quantity_available ?? stock?.quantity ?? 0
+
+  if (quantity > 0 && !stock.estimated_depletion_date) {
+    if (stock.stock_severity === 'critical') {
+      reasons.push({ kind: 'stock', key: 'inventory.rowCriticalStock', tone: 'danger' })
+    } else if (stock.stock_severity === 'low') {
+      reasons.push({ kind: 'stock', key: 'inventory.rowLowStock', tone: 'warning' })
+    }
+  }
+
+  // Expired units are counted ("1 expired") when the backend reports them, so
+  // the count leaves line 1 — where it squeezed the name — and joins the
+  // reasons; with no count, the plain word.
+  const expired = stock?.quantity_expired ?? 0
+  if (expired > 0) {
+    reasons.push({ kind: 'expiry', key: 'inventory.expiredCount', params: { count: expired }, tone: 'danger' })
+  } else if (stock?.expiry_severity === 'reached') {
+    reasons.push({ kind: 'expiry', key: 'inventory.rowExpiryReached', tone: 'danger' })
+  } else if (stock?.expiry_severity === 'soon') {
+    reasons.push({ kind: 'expiry', key: 'inventory.rowExpiringSoon', tone: 'warning' })
+  }
+
+  for (const label of regulatoryLabels(stock)) reasons.push({ kind: 'regulatory', ...label })
+  return reasons
 }
 
 /**
@@ -92,106 +114,4 @@ export function worstSeverity(stocks) {
     if (tones.length > 0) warning = true
   }
   return warning ? 'warning' : null
-}
-
-/**
- * Earliest expiry among a set of lots, which arrive unordered.
- *
- * Plain string comparison is correct here and deliberate: `expiry_date` is an
- * ISO `YYYY-MM-DD` date, so lexicographic order is chronological order, and
- * parsing to `Date` would only add a timezone to get wrong.
- */
-function earliestExpiry(lots) {
-  return lots.reduce((min, lot) => (min === null || lot.expiry_date < min ? lot.expiry_date : min), null)
-}
-
-/**
- * Every stock that needs attention, one entry per stock.
- *
- *   [{ stock, severity: 'danger' | 'warning', labels: [{ key, params, tone }] }]
- *
- * The four alert cards this replaces (T090) emitted one badge **per lot**, so
- * a stock with three expired lots appeared three times and a stock that was
- * both out of stock and expired appeared in two separate blocks. Here a stock
- * is one row however many things are wrong with it, which is what makes each
- * row able to link to that stock's detail page.
- *
- * Labels are descriptors, not text: this module stays free of i18next so it
- * can be tested without a translation runtime. The caller resolves `key` with
- * `params`, formatting any `date` param on the way.
- *
- * `today` is passed in rather than read here so every list on screen judges
- * expiry against the same instant.
- */
-export function buildStockAlerts(stocks, today) {
-  const alerts = []
-
-  for (const stock of stocks ?? []) {
-    // Same gate the Atención chip uses, so the banner's count and the chip's
-    // count are the same number by construction. Also skips partitioning the
-    // lots of every healthy stock.
-    if (!needsAttention(stock)) continue
-
-    const { reached, soon } = lotsByExpirySeverity(stock, today)
-    const labels = []
-    // The quantity the depletion estimate is built from (T164 excludes
-    // expired lots from the burn rate's numerator), so it is the only figure
-    // coherent with the "until <date>" tail beside it.
-    const qty = stock.quantity_available ?? stock.quantity ?? 0
-
-    if (stock.stock_severity === 'critical') {
-      labels.push({ key: 'inventory.alertCriticalStock', params: { qty }, tone: 'danger' })
-    }
-
-    // `expiry_severity` is the backend's single verdict, so 'reached' and
-    // 'soon' are mutually exclusive by construction: a stock holding one
-    // expired lot and one near-future lot is 'reached', and says nothing
-    // about the latter. That precedence is the backend's to award.
-    if (stock.expiry_severity === 'reached' && reached.length > 0) {
-      labels.push({ key: 'inventory.alertExpiryReached', params: { count: reached.length }, tone: 'danger' })
-    }
-
-    if (stock.stock_severity === 'low') {
-      labels.push(
-        stock.estimated_depletion_date
-          ? {
-              key: 'inventory.alertLowStockUntil',
-              params: { qty, date: stock.estimated_depletion_date },
-              tone: 'warning',
-            }
-          : { key: 'inventory.alertLowStock', params: { qty }, tone: 'warning' },
-      )
-    }
-
-    if (stock.expiry_severity === 'soon' && soon.length > 0) {
-      labels.push({
-        key: 'inventory.alertExpiringSoon',
-        params: { count: soon.length, date: earliestExpiry(soon) },
-        tone: 'warning',
-      })
-    }
-
-    // The agency's verdicts come last: stock and expiry are what the user acts
-    // on today, and keep the order they always had.
-    labels.push(...regulatoryLabels(stock))
-
-    // An expiry severity the lots no longer back leaves nothing to say. The
-    // server judges against its own `date.today()` and the client against UTC
-    // midnight, so the two can disagree about a lot expiring exactly today.
-    // Drop the row rather than render one with a name and no reason.
-    if (labels.length === 0) continue
-
-    alerts.push({
-      stock,
-      severity: labels.some((label) => label.tone === 'danger') ? 'danger' : 'warning',
-      labels,
-    })
-  }
-
-  // Danger before warning, alphabetical within each block — the ordering the
-  // four separate cards used to encode through their position on the page.
-  return alerts.sort(
-    (a, b) =>
-      (a.severity === b.severity ? 0 : a.severity === 'danger' ? -1 : 1) || a.stock.name.localeCompare(b.stock.name),
-  )
 }

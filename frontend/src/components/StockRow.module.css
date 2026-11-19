@@ -97,14 +97,60 @@
   color: var(--c-danger);
 }
 
-.expiryWarning.expiryWarning {
+/* Why the product needs attention (stockRowReasons): stock, expiry and the
+   agency's verdicts, in their severity colour. */
+.reasonWarning.reasonWarning {
   color: var(--c-warning);
   font-weight: 500;
 }
 
-.expiryDanger.expiryDanger {
+.reasonDanger.reasonDanger {
   color: var(--c-danger);
   font-weight: 500;
+}
+
+/* The open-details chevron looks like the routine card's: a bare grey `›`, no
+   box (it was a grey square, a second "button" next to consume). It stays a
+   real button — the keyboard route to the detail, and E2E's "Open details". */
+.detailChevron.detailChevron {
+  background: transparent;
+  color: var(--c-text-3);
+  transition:
+    transform 150ms ease,
+    color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover .detailChevron.detailChevron {
+    transform: translateX(2px);
+    color: var(--c-text-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detailChevron.detailChevron,
+  .row:hover .detailChevron.detailChevron {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Out of stock: the quantity itself says it, in red. */
+.qtyOut.qtyOut {
+  color: var(--c-danger);
+}
+
+/* The consume button with nothing to consume: same icon, all grey (the box
+   and the yellow arrow), so it reads as unavailable rather than missing. */
+.consumeEmpty.consumeEmpty,
+.consumeEmpty.consumeEmpty:hover {
+  background: var(--c-border-inner);
+  color: var(--c-text-3);
+  cursor: default;
+}
+
+.consumeEmpty.consumeEmpty svg {
+  color: var(--c-text-3);
 }
 
 /* Quantity pulse after a consumption. Moved here from the card's stylesheet

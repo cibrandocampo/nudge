@@ -6,6 +6,7 @@ import {
   goOnline,
   goToDashboard,
   goToInventory,
+  goToStockDetail,
   waitForServiceWorkerReady,
   expectOfflineBanner,
   mockApiRoute,
@@ -93,6 +94,51 @@ test.describe('offline-read', () => {
       }
     })
     await expectOfflineBanner(page, { visible: false })
+  })
+
+  test('backend caído con caché: las lecturas de caché no reabren Historial ni Ajustes', async ({ page, context }) => {
+    // The user's phone, 2026-11-18 (UX-044): server unreachable, WiFi fine,
+    // and — unlike the test above — the SW cache left in place. Every read
+    // the SW served from its cache arrived as a 200, the api client took it
+    // for the backend answering, and the app flipped back to "reachable":
+    // the offline banner blinked away and History / Settings unlocked. Cache
+    // copies now carry `X-From-Cache: offline` and count as unreachable.
+    await goToStockDetail(page, 'hidroferol') // warms the inventory and the detail
+    await goToInventory(page)
+
+    const pattern = /^https?:\/\/[^/]+\/api\//
+    await context.route(pattern, (route) => route.abort('connectionrefused'))
+
+    // Reopen the product with the server down, as the user did: a reload
+    // makes the app ask again (navigating within 30 s would be served by the
+    // query cache and never reach the SW), and the SW answers from its cache.
+    await goToStockDetail(page, 'hidroferol')
+    await page.reload()
+    await expect(page.getByText(SEED.stocks.hidroferol).first()).toBeVisible()
+    await expectOfflineBanner(page, { visible: true })
+    // Move around the cached screens: still offline, still locked.
+    await goToInventory(page)
+    await goToStockDetail(page, 'hidroferol')
+
+    expect(await page.evaluate(() => navigator.onLine)).toBe(true)
+    // The deterministic half of the fix: the real SW marks what it serves from
+    // its cache (the api client's handling of the marker is unit-tested in
+    // client.test.js). Without the marker every cached 200 looked live.
+    const servedFrom = await page.evaluate(async () => {
+      const res = await fetch('/api/stock/', {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      })
+      return { ok: res.ok, marker: res.headers.get('X-From-Cache') }
+    })
+    expect(servedFrom).toEqual({ ok: true, marker: 'offline' })
+    await expectOfflineBanner(page, { visible: true })
+    for (const name of ['History', 'Settings']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-disabled', 'true')
+      await expect(page.getByRole('link', { name, exact: true })).toHaveCount(0)
+    }
   })
 
   test('warm de stock permite seleccionar lote offline sin /lots-for-selection', async ({ page, context }) => {
