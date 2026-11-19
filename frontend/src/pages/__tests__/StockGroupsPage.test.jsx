@@ -48,6 +48,12 @@ describe('StockGroupsPage', () => {
     expect(screen.getByText('Medicine')).toBeInTheDocument()
   })
 
+  it('exposes the drag handle as a named image, not a bare labelled span', async () => {
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    render()
+    expect(await screen.findByRole('img', { name: 'Drag to reorder' })).toBeInTheDocument()
+  })
+
   it('creates a new group via the bottom form', async () => {
     let receivedBody = null
     mockGroups([])

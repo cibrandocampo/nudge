@@ -448,6 +448,7 @@ export default function SettingsPage() {
         <input
           className={cx(forms.input, dailyInQuietHours && s.inputError)}
           type="time"
+          aria-label={t('settings.dailyTime')}
           value={form.daily_notification_time}
           onChange={(e) => {
             const next = e.target.value

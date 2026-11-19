@@ -42,3 +42,58 @@ describe('FormField', () => {
     expect(screen.getByText('Required field')).toBeInTheDocument()
   })
 })
+
+describe('FormField — the label names its control', () => {
+  it('points the label at a native child', () => {
+    render(
+      <FormField label="Description">
+        <textarea />
+      </FormField>,
+    )
+    expect(screen.getByLabelText('Description').tagName).toBe('TEXTAREA')
+  })
+
+  it('keeps an id the child already has', () => {
+    render(
+      <FormField label="Category">
+        <select id="own-id">
+          <option>One</option>
+        </select>
+      </FormField>,
+    )
+    expect(screen.getByLabelText('Category')).toHaveAttribute('id', 'own-id')
+  })
+
+  it('marks a required native child with aria-required, not with the hidden asterisk', () => {
+    render(
+      <FormField label="Name" required>
+        <input />
+      </FormField>,
+    )
+    expect(screen.getByLabelText(/Name/)).toHaveAttribute('aria-required', 'true')
+  })
+
+  it('names a wrapped control through controlId', () => {
+    render(
+      <FormField label="Expiry date" controlId="expiry">
+        <div>
+          <input id="expiry" type="date" />
+        </div>
+      </FormField>,
+    )
+    expect(screen.getByLabelText('Expiry date')).toHaveAttribute('type', 'date')
+  })
+
+  it('leaves a complex child alone', () => {
+    render(
+      <FormField label="Interval">
+        <div data-testid="picker">
+          <button type="button">−</button>
+          <button type="button">+</button>
+        </div>
+      </FormField>,
+    )
+    expect(screen.getByTestId('picker')).not.toHaveAttribute('id')
+    expect(screen.getByText('Interval').closest('label')).not.toHaveAttribute('for')
+  })
+})

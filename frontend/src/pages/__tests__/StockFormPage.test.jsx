@@ -43,6 +43,11 @@ beforeEach(() => {
 })
 
 describe('StockFormPage — create', () => {
+  it('names the category select by its visible label', async () => {
+    renderCreate()
+    expect((await screen.findByLabelText('Category')).tagName).toBe('SELECT')
+  })
+
   it('creates a stock with name only (no batches, no share)', async () => {
     let stockBody = null
     let lotCalls = 0

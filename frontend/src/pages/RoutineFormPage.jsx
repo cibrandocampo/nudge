@@ -355,7 +355,8 @@ export default function RoutineFormPage() {
                             />
                           </span>
                           {multi && !isLast && (
-                            <span className={s.intervalCount}>
+                            // A <label>: the input is named by the words around it ("for N times").
+                            <label className={s.intervalCount}>
                               <span className={s.phaseDuringLabel}>{t('routine.form.phaseDuring')}</span>
                               <input
                                 type="number"
@@ -371,7 +372,7 @@ export default function RoutineFormPage() {
                                 className={cx(forms.input, s.phaseCountInput)}
                               />
                               <span className={s.phaseDuringLabel}>{t('routine.form.phaseCount')}</span>
-                            </span>
+                            </label>
                           )}
                           {multi && isLast && (
                             <span className={s.intervalIndefinite}>{t('routine.form.phaseIndefinite')}</span>

@@ -175,8 +175,11 @@ export default function StockGroupsPage() {
                   setDragOverId(null)
                 }}
               >
+                {/* A visual cue for mouse dragging, not a control: role="img" lets it
+                    carry a name (aria-label on a bare span is prohibited). */}
                 <span
                   className={cx(s.dragHandle, !reachable && buttons.disabled)}
+                  role="img"
                   aria-label={t('stockGroups.dragHandle')}
                   title={!reachable ? t('offline.requiresConnection') : t('stockGroups.dragHandle')}
                 >

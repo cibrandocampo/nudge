@@ -82,8 +82,10 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
                   className={cx(buttons.btnIcon, s.groupExpander)}
                   onClick={() => toggleGroup(group.key)}
                   aria-expanded={expanded}
-                  aria-label={t('stockDetail.togglePacks')}
-                  title={t('stockDetail.togglePacks')}
+                  // The name starts with the visible count (WCAG 2.5.3): someone
+                  // who sees "4" and says "4" to a voice tool must hit it.
+                  aria-label={t('stockDetail.togglePacks', { count: group.rows.length })}
+                  title={t('stockDetail.togglePacks', { count: group.rows.length })}
                   data-testid="group-expander"
                 >
                   {/* The bare count replaces a "· N packs" caption in the

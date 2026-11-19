@@ -75,6 +75,12 @@ beforeEach(() => {
 })
 
 describe('AddLotForm', () => {
+  it('names the expiry date input by its label, around the lock badge', async () => {
+    const { user } = renderForm()
+    await openForm(user)
+    expect(screen.getByLabelText('Expiry date')).toBe(screen.getByTestId('expiry-input'))
+  })
+
   it('rests as a heading over the Automatic and Manual buttons', () => {
     scannerAvailableRef.current = true
     renderForm()

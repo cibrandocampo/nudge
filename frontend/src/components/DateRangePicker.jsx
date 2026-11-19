@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useEscapeKey } from '../hooks/useEscapeKey'
@@ -54,6 +54,8 @@ function formatLabel(t, dateFrom, dateTo) {
 
 export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
   const { t } = useTranslation()
+  const fromId = useId()
+  const toId = useId()
   const [open, setOpen] = useState(false)
   const [localFrom, setLocalFrom] = useState(dateFrom)
   const [localTo, setLocalTo] = useState(dateTo)
@@ -112,8 +114,11 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
 
           <div className={s.custom}>
             <div className={s.field}>
-              <label className={s.fieldLabel}>{t('dateRange.from')}</label>
+              <label className={s.fieldLabel} htmlFor={fromId}>
+                {t('dateRange.from')}
+              </label>
               <input
+                id={fromId}
                 type="date"
                 className={s.dateInput}
                 value={localFrom}
@@ -121,8 +126,16 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
               />
             </div>
             <div className={s.field}>
-              <label className={s.fieldLabel}>{t('dateRange.to')}</label>
-              <input type="date" className={s.dateInput} value={localTo} onChange={(e) => setLocalTo(e.target.value)} />
+              <label className={s.fieldLabel} htmlFor={toId}>
+                {t('dateRange.to')}
+              </label>
+              <input
+                id={toId}
+                type="date"
+                className={s.dateInput}
+                value={localTo}
+                onChange={(e) => setLocalTo(e.target.value)}
+              />
             </div>
             <button type="button" className={s.applyBtn} onClick={applyCustom}>
               {t('dateRange.apply')}
