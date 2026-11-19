@@ -66,7 +66,7 @@
 }
 
 .cardClickable:hover {
-  background: #fdfdfd;
+  background: var(--c-bg);
 }
 
 .cardHeader {
@@ -176,7 +176,7 @@
 }
 
 .statusDue {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .statusOverdue {
@@ -200,7 +200,7 @@
 }
 
 .stockDepletionWarn {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .stockDepletionDanger {
@@ -280,7 +280,7 @@
  * There is no success tint: a healthy stock stays neutral (T106). */
 
 .iconWarning.iconWarning {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .iconDanger.iconDanger {

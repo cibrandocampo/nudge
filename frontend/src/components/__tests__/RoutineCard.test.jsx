@@ -330,12 +330,22 @@ describe('RoutineCard', () => {
     expect(layer()).toHaveAttribute('data-state', 'blocked')
   })
 
-  it('keeps the green dot and time for a not-yet-due routine whose stock is depleted', () => {
+  it('keeps the green dot for a not-yet-due routine whose stock is depleted', () => {
     // "In 10 days" in red read as urgent when the problem was the stock.
     const { container } = renderCard({ ...baseRoutine, ...depleted, is_due: false, is_overdue: false })
     expect(container.querySelector('[class*="dotSuccess"]')).toBeInTheDocument()
     expect(container.querySelector('[class*="dotDanger"]')).not.toBeInTheDocument()
-    expect(container.querySelector('[class*="statusOk"]')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['not due', { is_due: false, is_overdue: false }],
+    ['due', { is_due: true, is_overdue: false }],
+    ['overdue', { is_due: true, is_overdue: true }],
+  ])('keeps the time text plain when the routine is %s: the dot and strip carry the state', (_label, over) => {
+    const { container } = renderCard({ ...baseRoutine, ...over })
+    const time = container.querySelector('[class*="timeText"]')
+    expect(time).toBeInTheDocument()
+    expect(time.className).not.toMatch(/statusOk|statusDue|statusOverdue/)
   })
 
   it('puts the depletion reason on the stock line, in red', () => {

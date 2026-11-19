@@ -224,7 +224,7 @@ input.phaseCountInput {
 
 .phaseError {
   font-size: 0.8rem;
-  color: var(--c-error, #e53e3e);
+  color: var(--c-danger);
   margin: 0;
 }
 

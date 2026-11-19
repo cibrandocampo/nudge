@@ -17,7 +17,7 @@
 }
 
 .danger {
-  background: rgba(239, 68, 68, 0.08);
+  background: color-mix(in srgb, var(--c-danger) 8%, transparent);
   color: var(--c-danger);
   border-bottom-color: var(--c-border-danger);
 }
