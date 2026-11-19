@@ -112,3 +112,13 @@
   z-index: 30;
   background: var(--c-surface);
 }
+
+/* Products with no category: the same box as a group card, without a title or
+   a fold. With no categories at all it is simply the list. */
+.looseCard {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-xxl);
+  overflow: hidden;
+  margin-bottom: 0.9rem;
+}

@@ -98,8 +98,11 @@ export function buildFilterChips(stocks, groups, query) {
     if (inGroup > 0) chips.push({ id: `group-${group.id}`, kind: 'group', name: group.name, count: inGroup })
   }
 
+  // Only beside a category chip: with no categories, "No category" would be
+  // "All" under another name, labelling what the user never organised.
+  const hasGroupChip = chips.some((chip) => chip.kind === 'group')
   const ungrouped = count((stock) => isUngrouped(stock, knownGroupIds))
-  if (ungrouped > 0) chips.push({ id: 'ungrouped', kind: 'ungrouped', name: null, count: ungrouped })
+  if (hasGroupChip && ungrouped > 0) chips.push({ id: 'ungrouped', kind: 'ungrouped', name: null, count: ungrouped })
 
   return chips
 }
