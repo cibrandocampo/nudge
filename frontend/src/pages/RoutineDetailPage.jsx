@@ -24,7 +24,7 @@ import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
-import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
+import { expiryToday, findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
@@ -88,7 +88,7 @@ export default function RoutineDetailPage() {
   const markDone = async (clientCreatedAt) => {
     if (routine?.requires_lot_selection) {
       const stock = findCachedStock(queryClient, routine?.stock)
-      const lots = lotsForSelection(stock)
+      const lots = lotsForSelection(stock, expiryToday())
       if (lots.length === 0) {
         showToast({ type: 'error', message: t('common.actionError') })
         return

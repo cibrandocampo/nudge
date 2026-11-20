@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConsumeStock } from '../hooks/mutations/useConsumeStock'
 import { errorToastMessage } from '../utils/errors'
-import { lotsForSelection } from '../utils/lotsForSelection'
+import { expiryToday, lotsForSelection } from '../utils/lotsForSelection'
 import LotConsumeModal from './LotConsumeModal'
 
 /**
@@ -10,8 +10,8 @@ import LotConsumeModal from './LotConsumeModal'
  * Always opened explicitly (even with one lot) so a tap on a card is
  * never a silent mutation. Fires `useConsumeStock` with quantity = 1.
  *
- * The selection itself is `LotConsumeModal` with `needed = 1`: same two steps,
- * same skip rule, same wire format. What belongs here is only what makes this
+ * The selection itself is `LotConsumeModal` with `needed = 1`: the same lot
+ * list (never the box), the same wire format. What belongs here is only what makes this
  * entry point different — it owns the mutation, and its copy says so.
  *
  * Props:
@@ -49,7 +49,7 @@ export default function LotPickerModal({ stock, onClose, onConsumed }) {
 
   return (
     <LotConsumeModal
-      groups={lotsForSelection(stock)}
+      groups={lotsForSelection(stock, expiryToday())}
       needed={1}
       title={t('lotPicker.title')}
       subtitle={t('lotPicker.subtitle', { name: stock.name })}

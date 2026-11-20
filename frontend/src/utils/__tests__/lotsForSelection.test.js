@@ -2,103 +2,133 @@ import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import {
   allocateFromGroup,
-  bulkQuantity,
+  consumptionOrder,
+  expiryToday,
   findCachedStock,
   groupLots,
   lotsForSelection,
-  needsPackChoice,
+  needsLotChoice,
 } from '../lotsForSelection'
 
-const ids = (groups) => groups.map((g) => g.key)
+// A fixed today: every expiry below is read against it, never the clock.
+const TODAY = new Date('2026-06-01')
+const ids = (lots) => lots.map((lot) => lot.id)
+const keys = (groups) => groups.map((g) => g.key)
+
+describe('expiryToday', () => {
+  it('is midnight UTC of the current date', () => {
+    expect(expiryToday(new Date('2026-06-01T23:30:00Z')).toISOString()).toBe('2026-06-01T00:00:00.000Z')
+  })
+
+  it('reads the clock when no instant is given', () => {
+    expect(expiryToday().toISOString()).toBe(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
+  })
+})
+
+// One test per rule of the order, which replicates `Stock.consumable_lots()`.
+describe('consumptionOrder', () => {
+  it('returns an empty array when handed something that is not an array', () => {
+    expect(consumptionOrder(null, TODAY)).toEqual([])
+  })
+
+  it('leaves out an expired lot', () => {
+    const lots = [
+      { id: 1, quantity: 3, expiry_date: '2026-05-31' },
+      { id: 2, quantity: 3, expiry_date: '2026-07-01' },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([2])
+  })
+
+  it('leaves out a lot that expires today', () => {
+    const lots = [
+      { id: 1, quantity: 3, expiry_date: '2026-06-01' },
+      { id: 2, quantity: 3, expiry_date: '2026-06-02' },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([2])
+  })
+
+  it('leaves out an empty lot, and one with no quantity', () => {
+    const lots = [
+      { id: 1, quantity: 0, expiry_date: null },
+      { id: 2, expiry_date: null },
+      { id: 3, quantity: 1, expiry_date: null },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([3])
+  })
+
+  it('takes the soonest expiry first and an undated lot last', () => {
+    const lots = [
+      { id: 1, quantity: 3, expiry_date: null },
+      { id: 2, quantity: 3, expiry_date: '2027-01-01' },
+      { id: 3, quantity: 3, expiry_date: '2026-09-01' },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([3, 2, 1])
+  })
+
+  it('breaks an expiry tie by lot number', () => {
+    const lots = [
+      { id: 1, quantity: 3, expiry_date: '2027-01-01', lot_number: 'B' },
+      { id: 2, quantity: 3, expiry_date: '2027-01-01', lot_number: 'A' },
+      { id: 3, quantity: 3, expiry_date: '2027-01-01' },
+    ]
+    // No number sorts first, as the backend's empty string does.
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([3, 2, 1])
+  })
+
+  it('takes the opened box before a full one of the same lot', () => {
+    const lots = [
+      { id: 1, quantity: 10, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-01-01' },
+      { id: 2, quantity: 4, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-02-01' },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([2, 1])
+  })
+
+  it('breaks a full tie by created_at, an unknown one first', () => {
+    const lots = [
+      { id: 1, quantity: 1, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-02-01' },
+      { id: 2, quantity: 1, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-01-01' },
+      { id: 3, quantity: 1, expiry_date: '2027-01-01', lot_number: 'A' },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([3, 2, 1])
+  })
+
+  it('does not reorder the array it was given', () => {
+    const lots = [
+      { id: 1, quantity: 1, expiry_date: null },
+      { id: 2, quantity: 1, expiry_date: '2027-01-01' },
+    ]
+    consumptionOrder(lots, TODAY)
+    expect(ids(lots)).toEqual([1, 2])
+  })
+})
 
 describe('lotsForSelection', () => {
   it('returns an empty array for null / undefined / malformed input', () => {
-    expect(lotsForSelection(null)).toEqual([])
-    expect(lotsForSelection(undefined)).toEqual([])
-    expect(lotsForSelection({})).toEqual([])
-    expect(lotsForSelection({ lots: null })).toEqual([])
-  })
-
-  it('filters out lots with quantity 0', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 0, expiry_date: '2026-05-01', lot_number: 'A' },
-        { id: 2, quantity: 5, expiry_date: '2026-06-01', lot_number: 'B' },
-      ],
-    }
-    const result = lotsForSelection(stock)
-    expect(result).toHaveLength(1)
-    expect(result[0].bulk).toEqual([{ lot_id: 2, quantity: 5, created_at: '' }])
-  })
-
-  it('treats lots with undefined quantity as zero (filtered out)', () => {
-    const stock = {
-      lots: [
-        { id: 1, expiry_date: '2026-01-01', lot_number: 'A' }, // quantity undefined
-        { id: 2, quantity: 2, expiry_date: '2026-02-01', lot_number: 'B' },
-      ],
-    }
-    expect(ids(lotsForSelection(stock))).toEqual(['B|2026-02-01'])
-  })
-
-  it('orders groups by expiry_date ascending (FEFO)', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 3, expiry_date: '2026-06-01', lot_number: 'B' },
-        { id: 2, quantity: 3, expiry_date: '2026-05-01', lot_number: 'A' },
-      ],
-    }
-    expect(ids(lotsForSelection(stock))).toEqual(['A|2026-05-01', 'B|2026-06-01'])
-  })
-
-  it('places groups with null expiry at the end', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 3, expiry_date: null, lot_number: 'Z' },
-        { id: 2, quantity: 3, expiry_date: '2026-05-01', lot_number: 'A' },
-        { id: 3, quantity: 3, expiry_date: '2026-06-01', lot_number: 'B' },
-      ],
-    }
-    expect(ids(lotsForSelection(stock))).toEqual(['A|2026-05-01', 'B|2026-06-01', 'Z|'])
-  })
-
-  it('uses the earliest created_at to break ties on expiry_date', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 3, expiry_date: '2026-06-01', lot_number: 'B', created_at: '2026-01-02T00:00:00Z' },
-        { id: 2, quantity: 3, expiry_date: '2026-06-01', lot_number: 'A', created_at: '2026-01-01T00:00:00Z' },
-      ],
-    }
-    expect(ids(lotsForSelection(stock))).toEqual(['A|2026-06-01', 'B|2026-06-01'])
-  })
-
-  it('handles undefined created_at when breaking a tie', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 1, expiry_date: '2026-05-01', lot_number: 'A' }, // no created_at
-        { id: 2, quantity: 1, expiry_date: '2026-05-01', lot_number: 'B', created_at: '2026-01-01T00:00:00Z' },
-      ],
-    }
-    // Empty string sorts before a real timestamp.
-    expect(ids(lotsForSelection(stock))).toEqual(['A|2026-05-01', 'B|2026-05-01'])
-  })
-
-  it('normalises an empty lot_number to null', () => {
-    const stock = { lots: [{ id: 8, quantity: 1, expiry_date: null, lot_number: '' }] }
-    expect(lotsForSelection(stock)[0].lot_number).toBeNull()
+    expect(lotsForSelection(null, TODAY)).toEqual([])
+    expect(lotsForSelection(undefined, TODAY)).toEqual([])
+    expect(lotsForSelection({}, TODAY)).toEqual([])
+    expect(lotsForSelection({ lots: null }, TODAY)).toEqual([])
   })
 
   it('groups lots sharing lot number and expiry, summing their quantity', () => {
     const stock = {
       lots: [
         { id: 1, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-A', serial_number: 'SN-1' },
-        { id: 2, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-A', serial_number: 'SN-2' },
+        { id: 2, quantity: 2, expiry_date: '2028-06-01', lot_number: 'LOT-A', serial_number: '' },
       ],
     }
-    const result = lotsForSelection(stock)
-    expect(result).toHaveLength(1)
-    expect(result[0].quantity).toBe(2)
-    expect(result[0].packs.map((p) => p.serial_number)).toEqual(['SN-1', 'SN-2'])
+    expect(lotsForSelection(stock, TODAY)).toEqual([
+      {
+        key: 'LOT-A|2028-06-01',
+        lot_number: 'LOT-A',
+        expiry_date: '2028-06-01',
+        quantity: 3,
+        rows: [
+          { lot_id: 1, quantity: 1 },
+          { lot_id: 2, quantity: 2 },
+        ],
+      },
+    ])
   })
 
   it('keeps lots with the same lot number but different expiry in separate groups', () => {
@@ -108,57 +138,145 @@ describe('lotsForSelection', () => {
         { id: 2, quantity: 1, expiry_date: '2029-06-01', lot_number: 'LOT-A' },
       ],
     }
-    expect(lotsForSelection(stock)).toHaveLength(2)
+    expect(keys(lotsForSelection(stock, TODAY))).toEqual(['LOT-A|2028-06-01', 'LOT-A|2029-06-01'])
   })
 
-  it('splits a group into serialized packs and unserialized bulk', () => {
-    const stock = {
-      lots: [
-        { id: 1, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-A', serial_number: 'SN-1' },
-        { id: 2, quantity: 5, expiry_date: '2028-06-01', lot_number: 'LOT-A', serial_number: '' },
-      ],
-    }
-    const [group] = lotsForSelection(stock)
-    expect(group.packs).toHaveLength(1)
-    expect(group.bulk).toHaveLength(1)
-    expect(group.quantity).toBe(6)
-    expect(bulkQuantity(group)).toBe(5)
+  it('normalises an empty lot_number to null', () => {
+    const stock = { lots: [{ id: 8, quantity: 1, expiry_date: null, lot_number: '' }] }
+    expect(lotsForSelection(stock, TODAY)[0].lot_number).toBeNull()
   })
 
-  it('orders packs within a group by created_at', () => {
+  it('does not offer an expired group', () => {
     const stock = {
       lots: [
-        {
-          id: 1,
-          quantity: 1,
-          expiry_date: '2028-06-01',
-          lot_number: 'A',
-          serial_number: 'SN-LATE',
-          created_at: '2026-02-01T00:00:00Z',
-        },
-        {
-          id: 2,
-          quantity: 1,
-          expiry_date: '2028-06-01',
-          lot_number: 'A',
-          serial_number: 'SN-EARLY',
-          created_at: '2026-01-01T00:00:00Z',
-        },
+        { id: 1, quantity: 3, expiry_date: '2026-05-01', lot_number: 'OLD' },
+        { id: 2, quantity: 3, expiry_date: '2026-06-01', lot_number: 'TODAY' },
+        { id: 3, quantity: 3, expiry_date: '2027-01-01', lot_number: 'NEW' },
       ],
     }
-    const [group] = lotsForSelection(stock)
-    expect(group.packs.map((p) => p.serial_number)).toEqual(['SN-EARLY', 'SN-LATE'])
+    expect(keys(lotsForSelection(stock, TODAY))).toEqual(['NEW|2027-01-01'])
+  })
+
+  it('orders groups by expiry, undated last, then by lot number', () => {
+    const stock = {
+      lots: [
+        { id: 1, quantity: 3, expiry_date: null, lot_number: 'Z' },
+        { id: 2, quantity: 3, expiry_date: '2027-01-01', lot_number: 'B' },
+        { id: 3, quantity: 3, expiry_date: '2027-01-01', lot_number: 'A' },
+        { id: 4, quantity: 3, expiry_date: '2026-09-01', lot_number: 'C' },
+      ],
+    }
+    expect(keys(lotsForSelection(stock, TODAY))).toEqual(['C|2026-09-01', 'A|2027-01-01', 'B|2027-01-01', 'Z|'])
+  })
+
+  it('orders the rows of a group with the opened box first', () => {
+    const stock = {
+      lots: [
+        { id: 1, quantity: 10, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-01-01' },
+        { id: 2, quantity: 4, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-02-01' },
+      ],
+    }
+    expect(lotsForSelection(stock, TODAY)[0].rows.map((row) => row.lot_id)).toEqual([2, 1])
   })
 })
 
-// `groupLots` is also called directly by the stock detail page, with
-// `minQuantity: 0` so a depleted lot is still listed for deletion. That entry
-// point reaches inputs `lotsForSelection` filters out first.
+describe('needsLotChoice', () => {
+  const groupsOf = (lots) => lotsForSelection({ lots }, TODAY)
+
+  it('asks when there is more than one lot to choose from', () => {
+    const groups = groupsOf([
+      { id: 1, lot_number: 'A', expiry_date: '2027-01-01', quantity: 1 },
+      { id: 2, lot_number: 'B', expiry_date: '2027-01-01', quantity: 1 },
+    ])
+    expect(needsLotChoice(groups)).toBe(true)
+  })
+
+  it('does not ask for two boxes of the same lot', () => {
+    const groups = groupsOf([
+      { id: 1, lot_number: 'A', expiry_date: '2027-01-01', quantity: 1, serial_number: 'SN-1' },
+      { id: 2, lot_number: 'A', expiry_date: '2027-01-01', quantity: 1, serial_number: 'SN-2' },
+    ])
+    expect(needsLotChoice(groups)).toBe(false)
+  })
+
+  it('does not count an expired lot as a choice', () => {
+    const groups = groupsOf([
+      { id: 1, lot_number: 'OLD', expiry_date: '2026-01-01', quantity: 1 },
+      { id: 2, lot_number: 'NEW', expiry_date: '2027-01-01', quantity: 1 },
+    ])
+    expect(needsLotChoice(groups)).toBe(false)
+  })
+
+  it('does not ask when there is nothing at all', () => {
+    expect(needsLotChoice([])).toBe(false)
+  })
+})
+
+describe('allocateFromGroup', () => {
+  const [group] = lotsForSelection(
+    {
+      lots: [
+        { id: 1, quantity: 10, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-01-01' },
+        { id: 2, quantity: 1, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-03-01' },
+        { id: 3, quantity: 4, expiry_date: '2027-01-01', lot_number: 'A', created_at: '2026-02-01' },
+      ],
+    },
+    TODAY,
+  )
+
+  it('returns nothing when no units are needed, or no group is given', () => {
+    expect(allocateFromGroup(group, 0)).toEqual([])
+    expect(allocateFromGroup(null, 1)).toEqual([])
+  })
+
+  it('takes one unit from the most opened box', () => {
+    expect(allocateFromGroup(group, 1)).toEqual([{ lot_id: 2, quantity: 1 }])
+  })
+
+  it('spreads across the rows in consumption order, never more than a row holds', () => {
+    expect(allocateFromGroup(group, 7)).toEqual([
+      { lot_id: 2, quantity: 1 },
+      { lot_id: 3, quantity: 4 },
+      { lot_id: 1, quantity: 2 },
+    ])
+  })
+})
+
+// `groupLots` feeds the stock detail list, which shows every lot — expired
+// ones included, so they can be deleted. Its behaviour is not the picker's.
 describe('groupLots', () => {
   it('returns an empty array when handed something that is not an array', () => {
     expect(groupLots(null)).toEqual([])
     expect(groupLots(undefined)).toEqual([])
     expect(groupLots({ 0: { quantity: 1 } })).toEqual([])
+  })
+
+  it('keeps an expired lot', () => {
+    const groups = groupLots([
+      { id: 1, lot_number: 'OLD', expiry_date: '2020-01-01', quantity: 2 },
+      { id: 2, lot_number: 'NEW', expiry_date: '2099-01-01', quantity: 2 },
+    ])
+    expect(keys(groups)).toEqual(['OLD|2020-01-01', 'NEW|2099-01-01'])
+  })
+
+  it('orders groups by expiry, undated last, ties by the earliest created_at', () => {
+    const groups = groupLots([
+      { id: 1, lot_number: 'Z', expiry_date: null, quantity: 1, created_at: '2026-01-01' },
+      { id: 2, lot_number: 'B', expiry_date: '2027-01-01', quantity: 1, created_at: '2026-01-01' },
+      { id: 3, lot_number: 'A', expiry_date: '2027-01-01', quantity: 1, created_at: '2026-02-01' },
+    ])
+    expect(keys(groups)).toEqual(['B|2027-01-01', 'A|2027-01-01', 'Z|'])
+  })
+
+  it('keeps the full lots in rows, ordered by created_at', () => {
+    const [group] = groupLots([
+      { id: 1, lot_number: 'A', expiry_date: null, quantity: 1, created_at: '2026-02-01', updated_at: 'u1' },
+      { id: 2, lot_number: 'A', expiry_date: null, quantity: 9, created_at: '2026-01-01', updated_at: 'u2' },
+      { id: 3, lot_number: 'A', expiry_date: null, quantity: 1 },
+    ])
+    expect(group.rows.map((lot) => lot.id)).toEqual([3, 2, 1])
+    expect(group.rows[1].updated_at).toBe('u2')
+    expect(group.created_at).toBe('2026-01-01')
   })
 
   it('counts a lot with no quantity as zero when minQuantity allows it through', () => {
@@ -167,9 +285,7 @@ describe('groupLots', () => {
         { id: 1, lot_number: 'L', quantity: null },
         { id: 2, lot_number: 'L', quantity: 2 },
       ],
-      {
-        minQuantity: 0,
-      },
+      { minQuantity: 0 },
     )
     expect(groups).toHaveLength(1)
     expect(groups[0].quantity).toBe(2)
@@ -180,61 +296,6 @@ describe('groupLots', () => {
     const lots = [{ id: 1, lot_number: 'L', quantity: 0 }]
     expect(groupLots(lots, { minQuantity: 0 })).toHaveLength(1)
     expect(groupLots(lots)).toEqual([])
-  })
-})
-
-describe('allocateFromGroup', () => {
-  const group = {
-    key: 'LOT-A|2028-06-01',
-    lot_number: 'LOT-A',
-    expiry_date: '2028-06-01',
-    quantity: 7,
-    created_at: '',
-    packs: [
-      { lot_id: 1, serial_number: 'SN-1', quantity: 1, created_at: '' },
-      { lot_id: 2, serial_number: 'SN-2', quantity: 1, created_at: '' },
-    ],
-    bulk: [{ lot_id: 3, quantity: 5, created_at: '' }],
-  }
-
-  it('returns nothing when no units are needed', () => {
-    expect(allocateFromGroup(group, 0)).toEqual([])
-    expect(allocateFromGroup(null, 2)).toEqual([])
-  })
-
-  it('allocates one chosen pack as a single unit', () => {
-    expect(allocateFromGroup(group, 1, [2])).toEqual([{ lot_id: 2, quantity: 1 }])
-  })
-
-  it('allocates several chosen packs', () => {
-    expect(allocateFromGroup(group, 2, [1, 2])).toEqual([
-      { lot_id: 1, quantity: 1 },
-      { lot_id: 2, quantity: 1 },
-    ])
-  })
-
-  it('ignores packs that were not chosen', () => {
-    expect(allocateFromGroup(group, 1, [2])).not.toContainEqual({ lot_id: 1, quantity: 1 })
-  })
-
-  it('falls back to bulk rows when no pack is chosen', () => {
-    expect(allocateFromGroup(group, 3)).toEqual([{ lot_id: 3, quantity: 3 }])
-  })
-
-  it('covers the shortfall from bulk after the chosen packs', () => {
-    expect(allocateFromGroup(group, 3, [1])).toEqual([
-      { lot_id: 1, quantity: 1 },
-      { lot_id: 3, quantity: 2 },
-    ])
-  })
-
-  it('never allocates more than a row holds', () => {
-    const selections = allocateFromGroup(group, 99, [1, 2])
-    expect(selections).toEqual([
-      { lot_id: 1, quantity: 1 },
-      { lot_id: 2, quantity: 1 },
-      { lot_id: 3, quantity: 5 },
-    ])
   })
 })
 
@@ -274,37 +335,5 @@ describe('findCachedStock', () => {
     const qc = new QueryClient()
     qc.setQueryData(['stock'], { not: 'array' })
     expect(findCachedStock(qc, 1)).toBeUndefined()
-  })
-})
-
-describe('needsPackChoice', () => {
-  const groupOf = (lots) => lotsForSelection({ lots })[0]
-
-  it('asks when the batch holds several identified boxes', () => {
-    const group = groupOf([
-      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
-      { id: 2, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
-    ])
-    expect(needsPackChoice(group)).toBe(true)
-  })
-
-  it('does not ask for a single identified box, however many units it holds', () => {
-    const group = groupOf([
-      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 10, serial_number: 'SN-ONLY' },
-    ])
-    expect(needsPackChoice(group)).toBe(false)
-  })
-
-  it('does not ask when the single box sits alongside unidentified units', () => {
-    const group = groupOf([
-      { id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 2, serial_number: 'SN-SOLO' },
-      { id: 2, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 5, serial_number: '' },
-    ])
-    expect(needsPackChoice(group)).toBe(false)
-  })
-
-  it('does not ask for a batch with no serials at all', () => {
-    const group = groupOf([{ id: 1, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 3 }])
-    expect(needsPackChoice(group)).toBe(false)
   })
 })

@@ -16,7 +16,7 @@ import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
-import { findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
+import { expiryToday, findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
 import layout from '../styles/layout.module.css'
 import s from './DashboardPage.module.css'
@@ -116,7 +116,7 @@ export default function DashboardPage() {
       // offline as long as the stock has been fetched at least once (the
       // `useStockList()` warm above seeds it on dashboard mount).
       const stock = findCachedStock(queryClient, routine.stock)
-      const lots = lotsForSelection(stock)
+      const lots = lotsForSelection(stock, expiryToday())
       if (lots.length === 0) {
         showToast({ type: 'error', message: t('common.actionError') })
         return

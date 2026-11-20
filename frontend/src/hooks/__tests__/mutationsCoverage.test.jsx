@@ -506,33 +506,57 @@ describe('useConsumeStock — applyConsumption branches', () => {
     expect(stock.quantity).toBe(2)
   })
 
-  it('uses FEFO ordering when no lot_selections are provided (fefoCompare branch)', async () => {
+  // The optimistic consume predicts what the server will do, so it follows the
+  // same `consumptionOrder`: the lots on screen while the POST is in flight are
+  // what is read here — the server's answer would overwrite them.
+  const consumeWithHeldResponse = async (lots, quantity) => {
+    let release
+    const held = new Promise((r) => (release = r))
     server.use(
       http.post(`${BASE}/stock/1/consume/`, async () => {
-        await new Promise((r) => setTimeout(r, 5))
-        return HttpResponse.json({ id: 1, quantity: 1, lots: [{ id: 103, quantity: 1, expiry_date: '2027-01-01' }] })
+        await held
+        return HttpResponse.json({ ok: true })
       }),
     )
     const { result, qc } = renderWith(() => useConsumeStock())
-    qc.setQueryData(['stock', 1], {
-      id: 1,
-      quantity: 3,
-      lots: [
-        // Same expiry_date → fefoCompare falls back to created_at comparison (branch)
-        { id: 102, quantity: 2, expiry_date: '2026-05-01', created_at: '2026-02-01T00:00:00Z' },
-        { id: 103, quantity: 1, expiry_date: '2027-01-01', created_at: '2026-01-01T00:00:00Z' },
-      ],
-    })
-
+    qc.setQueryData(['stock', 1], { id: 1, quantity: lots.reduce((n, lot) => n + lot.quantity, 0), lots })
+    let pending
     await act(async () => {
-      await result.current.mutateAsync({
-        stockId: 1,
-        quantity: 2,
-        lotSelections: undefined,
-      })
+      pending = result.current.mutateAsync({ stockId: 1, quantity, lotSelections: undefined })
+      await Promise.resolve()
     })
-    const stock = qc.getQueryData(['stock', 1])
-    expect(stock.quantity).toBe(1)
+    const optimistic = qc.getQueryData(['stock', 1]).lots.map((lot) => [lot.id, lot.quantity])
+    release()
+    await act(async () => {
+      await pending
+    })
+    return optimistic
+  }
+
+  it('without a selection, skips an expired lot even when it sorts first', async () => {
+    const optimistic = await consumeWithHeldResponse(
+      [
+        { id: 102, quantity: 2, expiry_date: '2020-05-01' },
+        { id: 103, quantity: 3, expiry_date: '2099-01-01' },
+      ],
+      2,
+    )
+    expect(optimistic).toEqual([
+      [102, 2],
+      [103, 1],
+    ])
+  })
+
+  it('without a selection, finishes the opened box before the full one', async () => {
+    const optimistic = await consumeWithHeldResponse(
+      [
+        { id: 200, quantity: 10, expiry_date: null, lot_number: 'A', created_at: '2026-01-01T00:00:00Z' },
+        { id: 201, quantity: 1, expiry_date: null, lot_number: 'A', created_at: '2026-02-01T00:00:00Z' },
+      ],
+      2,
+    )
+    // The emptied box leaves the list; one unit comes out of the full one.
+    expect(optimistic).toEqual([[200, 9]])
   })
 
   it('falls back to quantity = 0 when the cached stock has no quantity field', async () => {
@@ -557,27 +581,6 @@ describe('useConsumeStock — applyConsumption branches', () => {
     })
     // Server response overwrote the cache; check the intermediate optimistic step
     // did not explode on the missing quantity.
-    expect(qc.getQueryData(['stock', 1]).quantity).toBe(2)
-  })
-
-  it('sorts lots with null expiry_date and missing created_at using FEFO fallbacks', async () => {
-    server.use(http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ id: 1, quantity: 2, lots: [] })))
-    const { result, qc } = renderWith(() => useConsumeStock())
-    qc.setQueryData(['stock', 1], {
-      id: 1,
-      quantity: 3,
-      lots: [
-        { id: 200, quantity: 1, expiry_date: null }, // no created_at → empty string
-        { id: 201, quantity: 1, expiry_date: null, created_at: '2026-01-01T00:00:00Z' },
-        { id: 202, quantity: 1, expiry_date: '2026-05-01' },
-      ],
-    })
-
-    await act(async () => {
-      await result.current.mutateAsync({ stockId: 1, quantity: 1, lotSelections: undefined })
-    })
-    // The 2026-05-01 lot (earliest expiry) should be consumed first in the
-    // optimistic update; server response overwrites to match.
     expect(qc.getQueryData(['stock', 1]).quantity).toBe(2)
   })
 

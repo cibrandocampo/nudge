@@ -173,8 +173,8 @@ describe('InventoryPage — −1 lot picker', () => {
     mockStocks([
       stock({
         lots: [
-          { id: 10, quantity: 3, expiry_date: '2027-01-01', lot_number: 'LOT-A' },
-          { id: 11, quantity: 2, expiry_date: '2028-01-01', lot_number: 'LOT-B' },
+          { id: 10, quantity: 3, expiry_date: '2099-01-01', lot_number: 'LOT-A' },
+          { id: 11, quantity: 2, expiry_date: '2100-01-01', lot_number: 'LOT-B' },
         ],
       }),
     ])
@@ -201,8 +201,8 @@ describe('InventoryPage — −1 lot picker', () => {
     // Stateful: the refused consume flips `gone`, and the refetch it triggers
     // returns the stock without LOT-A, as the server now has it.
     let gone = false
-    const lotA = { id: 10, quantity: 1, expiry_date: '2027-01-01', lot_number: 'LOT-A' }
-    const lotB = { id: 11, quantity: 2, expiry_date: '2028-01-01', lot_number: 'LOT-B' }
+    const lotA = { id: 10, quantity: 1, expiry_date: '2099-01-01', lot_number: 'LOT-A' }
+    const lotB = { id: 11, quantity: 2, expiry_date: '2100-01-01', lot_number: 'LOT-B' }
     mockGroups([])
     server.use(
       http.get(`${BASE}/stock/`, () => HttpResponse.json([stock({ lots: gone ? [lotB] : [lotA, lotB] })])),
