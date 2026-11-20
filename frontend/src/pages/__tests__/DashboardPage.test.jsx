@@ -724,3 +724,115 @@ describe('DashboardPage — completing routines', () => {
     expect(check).toHaveAttribute('title', 'No stock available')
   })
 })
+
+describe('DashboardPage — when confirming asks for a lot (T126)', () => {
+  const hour = 3600000
+  const lot = (id, lotNumber, expiry, quantity = 1) => ({
+    id,
+    lot_number: lotNumber,
+    expiry_date: expiry,
+    quantity,
+    created_at: `2026-01-0${id}T00:00:00Z`,
+  })
+  const pastDay = new Date(Date.now() - 48 * hour).toISOString().slice(0, 10)
+  const routineWith = (requiresLotSelection) => ({
+    id: 1,
+    name: 'Vitamins',
+    next_due_at: new Date(Date.now() - hour).toISOString(),
+    created_at: '2025-01-01T00:00:00Z',
+    is_due: true,
+    is_overdue: true,
+    hours_until_due: -1,
+    interval_hours: 24,
+    stock_name: 'Filters',
+    stock_quantity: 5,
+    stock_quantity_available: 5,
+    stock: 10,
+    stock_usage: 1,
+    requires_lot_selection: requiresLotSelection,
+  })
+
+  // Stateful: once the POST lands the routine is served as upcoming, so the
+  // refetch after the mutation does not replay the pre-log dashboard.
+  const setup = ({ lots, requiresLotSelection }) => {
+    const routine = routineWith(requiresLotSelection)
+    const posts = []
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => {
+        if (posts.length === 0) return HttpResponse.json({ due: [routine], upcoming: [] })
+        const done = { ...routine, is_due: false, is_overdue: false, hours_until_due: 24 }
+        done.next_due_at = new Date(Date.now() + 24 * hour).toISOString()
+        return HttpResponse.json({ due: [], upcoming: [done] })
+      }),
+      http.get(`${BASE}/stock/`, () => HttpResponse.json(lots ? [{ id: 10, name: 'Filters', quantity: 5, lots }] : [])),
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        posts.push(await request.json())
+        return HttpResponse.json({ id: 77 }, { status: 201 })
+      }),
+    )
+    return posts
+  }
+
+  const confirm = async ({ cached = true } = {}) => {
+    const view = renderWithProviders(<DashboardPage />)
+    await waitFor(() => expect(screen.getByText('Vitamins')).toBeInTheDocument())
+    await waitFor(() => expect(view.queryClient.getQueryData(['stock'])).toEqual(cached ? expect.any(Array) : []))
+    await view.user.click(screen.getByRole('button', { name: /done/i }))
+    return view
+  }
+
+  it('logs straight away, without the picker, when the stock has one consumable lot', async () => {
+    const posts = setup({ lots: [lot(1, 'LOT-A', '2099-01-01', 3)], requiresLotSelection: false })
+    await confirm()
+    await waitFor(() => expect(screen.getByText('Marked as done')).toBeInTheDocument())
+    expect(posts).toHaveLength(1)
+    expect(posts[0].lot_selections).toBeUndefined()
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+
+  it('opens the picker when the stock has two consumable lots', async () => {
+    const posts = setup({
+      lots: [lot(1, 'LOT-A', '2099-01-01'), lot(2, 'LOT-B', '2099-06-01')],
+      requiresLotSelection: true,
+    })
+    await confirm()
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+    expect(posts).toEqual([])
+  })
+
+  it('does not ask when the only other lot has expired', async () => {
+    const posts = setup({
+      lots: [lot(1, 'OLD', pastDay), lot(2, 'LOT-B', '2099-06-01')],
+      requiresLotSelection: false,
+    })
+    await confirm()
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].lot_selections).toBeUndefined()
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Marked as done')).toBeInTheDocument())
+  })
+
+  it('refuses with the insufficient-stock message when every cached lot has expired', async () => {
+    const posts = setup({ lots: [lot(1, 'OLD', pastDay, 2)], requiresLotSelection: false })
+    await confirm()
+    await waitFor(() => expect(screen.getByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument())
+    expect(posts).toEqual([])
+    expect(screen.getByText('Vitamins')).toBeInTheDocument()
+  })
+
+  it('without the stock in cache, logs when the server says there is no choice', async () => {
+    const posts = setup({ lots: null, requiresLotSelection: false })
+    await confirm({ cached: false })
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].lot_selections).toBeUndefined()
+    await waitFor(() => expect(screen.getByText('Marked as done')).toBeInTheDocument())
+  })
+
+  it('without the stock in cache, refuses when the server says there is a choice', async () => {
+    const posts = setup({ lots: null, requiresLotSelection: true })
+    await confirm({ cached: false })
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    expect(posts).toEqual([])
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+})

@@ -15,8 +15,8 @@ import { useStockList } from '../hooks/useStock'
 import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
 import cx from '../utils/cx'
-import { errorToastMessage } from '../utils/errors'
-import { expiryToday, findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
+import { errorToastMessage, lotDecisionError } from '../utils/errors'
+import { expiryToday, findCachedStock, routineLotDecision } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
 import layout from '../styles/layout.module.css'
 import s from './DashboardPage.module.css'
@@ -108,23 +108,22 @@ export default function DashboardPage() {
 
   const markDone = async (routineId, { revert } = {}) => {
     const routine = allRoutines.find((r) => r.id === routineId)
-    if (routine?.requires_lot_selection) {
-      // The card already played its exit; nothing is logged until the user
-      // picks lots, so bring it back while the picker is open.
-      revert?.()
-      // Derive the selection list from the already-cached stock. Works
-      // offline as long as the stock has been fetched at least once (the
-      // `useStockList()` warm above seeds it on dashboard mount).
-      const stock = findCachedStock(queryClient, routine.stock)
-      const lots = lotsForSelection(stock, expiryToday())
-      if (lots.length === 0) {
-        showToast({ type: 'error', message: t('common.actionError') })
-        return
-      }
-      setLotModal({ routine, lots })
+    // Decided from the already-cached stock, so it works offline as long as
+    // the stock has been fetched once (the `useStockList()` warm above seeds
+    // it on dashboard mount).
+    const decision = routineLotDecision(routine, findCachedStock(queryClient, routine?.stock), expiryToday())
+    if (decision.action === 'log') {
+      await runLog(routineId, { revert })
       return
     }
-    await runLog(routineId, { revert })
+    // The card already played its exit; nothing is logged until the user
+    // picks a lot (or never), so bring it back.
+    revert?.()
+    if (decision.action === 'ask') {
+      setLotModal({ routine, lots: decision.groups })
+      return
+    }
+    showToast({ type: 'error', message: lotDecisionError(decision, routine, t) })
   }
 
   const handleLotConfirm = async (lotSelections) => {

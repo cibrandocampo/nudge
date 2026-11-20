@@ -488,6 +488,7 @@
   "errors.routineSavedAfterStockShared": "The stock was shared, but the routine couldn't be saved. Please try saving the routine again.",
   "errors.insufficientStock": "Not enough stock ({{required}} needed, {{available}} available).",
   "errors.lotUnavailable": "This batch is no longer available.",
+  "errors.lotExpired": "This batch has expired and can't be used.",
   "toast.error.generic": "Something went wrong",
   "toast.success.generic": "Done",
   "offline.banner": "No connection to the server. Your changes to routines and stock are saved locally and will sync when you reconnect.",

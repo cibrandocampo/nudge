@@ -8,6 +8,7 @@ import { OfflineError } from '../api/errors'
 const ERROR_CODE_I18N_KEYS = {
   insufficient_stock: 'errors.insufficientStock',
   lot_unavailable: 'errors.lotUnavailable',
+  lot_expired: 'errors.lotExpired',
 }
 
 /**
@@ -45,4 +46,17 @@ export function queueErrorMessage(entry, t) {
   const key = ERROR_CODE_I18N_KEYS[entry.errorMessage]
   if (key) return t(key, entry.errorArgs ?? {})
   return entry.errorMessage
+}
+
+/**
+ * Toast message when confirming a routine cannot go ahead (see
+ * `routineLotDecision`): nothing consumable left in the cached stock reads as
+ * the server's `insufficient_stock` would; a stock that is not cached at all
+ * — no lots to offer in the picker — gets the generic message.
+ */
+export function lotDecisionError(decision, routine, t) {
+  if (decision.action === 'insufficient') {
+    return t('errors.insufficientStock', { required: routine.stock_usage, available: 0 })
+  }
+  return t('common.actionError')
 }

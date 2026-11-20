@@ -82,12 +82,19 @@ export const SEED = {
     HIDROFEROL_NO_SN_EXPIRY_DAYS: 60,
     // Ebastine — 3 lots, FEFO order.
     EBASTINE_LOTS: ['EBA-1', 'EBA-2', 'EBA-3'],
-    // Single-lot stocks.
+    // Glucose sensors is the MIXED stock (T127): SEN-OLD expired, SEN-NEW valid.
     GLUCOSE_SENSOR: 'SEN-OLD',
+    GLUCOSE_SENSOR_VALID: 'SEN-NEW',
+    // Single-lot stocks.
     PUMP_CANNULA: 'CAN-A',
     IBUPROFEN_NEAR: 'IBU-1',
     IBUPROFEN_FAR: 'IBU-2',
     PARACETAMOL: 'PCT-2028',
+    // One lot, two boxes (T127): the full one is older, the opened one goes first.
+    PARACETAMOL_FULL_BOX: { serial: 'P7K2Q9M4XA', quantity: 20 },
+    PARACETAMOL_OPENED_BOX: { serial: 'P7K2Q9M5XB', quantity: 8 },
+    // Metformin lots offered by the picker (MET-A holds three serialised boxes).
+    METFORMIN_LOTS: ['MET-A', 'MET-B', 'MET-C'],
     BIRTH_CONTROL: 'BCP-2026',
   },
   expectedStates: {

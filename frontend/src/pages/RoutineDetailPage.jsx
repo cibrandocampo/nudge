@@ -21,10 +21,10 @@ import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
 import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
 import { avatarInitial } from '../utils/displayName'
-import { errorToastMessage } from '../utils/errors'
+import { errorToastMessage, lotDecisionError } from '../utils/errors'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
-import { expiryToday, findCachedStock, lotsForSelection } from '../utils/lotsForSelection'
+import { expiryToday, findCachedStock, routineLotDecision } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
@@ -86,17 +86,16 @@ export default function RoutineDetailPage() {
   // audit `created_at` stays server-assigned either way. The timestamp is
   // carried through the lot-selection detour so it survives LotConsumeModal.
   const markDone = async (clientCreatedAt) => {
-    if (routine?.requires_lot_selection) {
-      const stock = findCachedStock(queryClient, routine?.stock)
-      const lots = lotsForSelection(stock, expiryToday())
-      if (lots.length === 0) {
-        showToast({ type: 'error', message: t('common.actionError') })
-        return
-      }
-      setLotModal({ lots, clientCreatedAt })
+    const decision = routineLotDecision(routine, findCachedStock(queryClient, routine?.stock), expiryToday())
+    if (decision.action === 'log') {
+      await runLog(undefined, clientCreatedAt)
       return
     }
-    await runLog(undefined, clientCreatedAt)
+    if (decision.action === 'ask') {
+      setLotModal({ lots: decision.groups, clientCreatedAt })
+      return
+    }
+    showToast({ type: 'error', message: lotDecisionError(decision, routine, t) })
   }
 
   const handleLotConfirm = async (lotSelections) => {

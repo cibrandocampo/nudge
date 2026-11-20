@@ -203,6 +203,27 @@ describe('offline sync worker', () => {
     expect(qc.invalidateQueries).not.toHaveBeenCalled()
   })
 
+  it('keeps the code and body of a 422 lot_expired on a routine log replay', async () => {
+    initSyncWorker(fakeQueryClient())
+    const body = { detail: 'Lot expired.', code: 'lot_expired', lot_ids: [3] }
+    let calls = 0
+    server.use(
+      http.post(`${BASE}/routines/1/log/`, () => {
+        calls += 1
+        return HttpResponse.json(body, { status: 422 })
+      }),
+    )
+
+    await enqueue(pendingEntry())
+    await processQueue()
+
+    const [entry] = await list()
+    expect(entry.status).toBe('error')
+    expect(entry.errorMessage).toBe('lot_expired')
+    expect(entry.errorArgs).toEqual(body)
+    expect(calls).toBe(1)
+  })
+
   it('falls back to the status when the refusal body has no code', async () => {
     initSyncWorker(fakeQueryClient())
     server.use(
