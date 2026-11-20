@@ -292,6 +292,23 @@ describe('PendingBadge', () => {
     expect(screen.getByTestId('error-detail')).toHaveTextContent('Not enough stock (3 needed, 1 available).')
   })
 
+  it('translates a lot_expired refusal', async () => {
+    await enqueue(
+      entry({
+        id: 'err',
+        status: 'error',
+        errorMessage: 'lot_expired',
+        errorArgs: { detail: 'Lot expired.', code: 'lot_expired', lot_ids: [3] },
+      }),
+    )
+    const user = userEvent.setup()
+    renderBadge()
+    await waitFor(() => screen.getByTestId('pending-badge'))
+    await user.click(screen.getByTestId('pending-badge'))
+    await user.click(screen.getByRole('button', { name: /show error details/i }))
+    expect(screen.getByTestId('error-detail')).toHaveTextContent("This batch has expired and can't be used.")
+  })
+
   it('discarding a consume refused with insufficient_stock restores the cached stock', async () => {
     // The sync worker leaves an entry refused for good in `error`; the
     // optimistic decrement stays on screen until the user discards it.

@@ -1132,3 +1132,99 @@ describe('RoutineDetailPage — stock row while a completion is queued (T106)', 
     expect(value.className).not.toContain('stockReason')
   })
 })
+
+describe('RoutineDetailPage — when confirming asks for a lot (T126)', () => {
+  const lot = (id, lotNumber, expiry, quantity = 1) => ({
+    id,
+    lot_number: lotNumber,
+    expiry_date: expiry,
+    quantity,
+    created_at: `2026-01-0${id}T00:00:00Z`,
+  })
+  const pastDay = new Date(Date.now() - 48 * 3600000).toISOString().slice(0, 10)
+
+  // Stateful: once the POST lands the routine reports its new entry, so the
+  // refetch after the mutation does not replay the pre-log routine.
+  const setup = ({ lots, requiresLotSelection }) => {
+    const posts = []
+    server.use(
+      http.get(`${BASE}/routines/1/`, () =>
+        HttpResponse.json({
+          ...routine,
+          requires_lot_selection: requiresLotSelection,
+          last_entry_at: posts.length ? new Date().toISOString() : routine.last_entry_at,
+        }),
+      ),
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json(lots ? [{ id: 1, name: 'Vitamin D', quantity: 10, lots }] : []),
+      ),
+      http.post(`${BASE}/routines/1/log/`, async ({ request }) => {
+        posts.push(await request.json())
+        return HttpResponse.json({ id: 77 }, { status: 201 })
+      }),
+    )
+    return posts
+  }
+
+  const confirm = async ({ cached = true } = {}) => {
+    const view = renderDetail()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeInTheDocument())
+    await waitFor(() => expect(view.queryClient.getQueryData(['stock'])).toEqual(cached ? expect.any(Array) : []))
+    await view.user.click(screen.getByText('Mark as done'))
+    return view
+  }
+
+  it('logs straight away, without the picker, when the stock has one consumable lot', async () => {
+    const posts = setup({ lots: [lot(1, 'LOT-A', '2099-01-01', 3)], requiresLotSelection: false })
+    await confirm()
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].lot_selections).toBeUndefined()
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeEnabled())
+  })
+
+  it('opens the picker when the stock has two consumable lots', async () => {
+    const posts = setup({
+      lots: [lot(1, 'LOT-A', '2099-01-01'), lot(2, 'LOT-B', '2099-06-01')],
+      requiresLotSelection: true,
+    })
+    await confirm()
+    await waitFor(() => expect(screen.getByText('Select items to consume')).toBeInTheDocument())
+    expect(posts).toEqual([])
+  })
+
+  it('does not ask when the only other lot has expired', async () => {
+    const posts = setup({
+      lots: [lot(1, 'OLD', pastDay), lot(2, 'LOT-B', '2099-06-01')],
+      requiresLotSelection: false,
+    })
+    await confirm()
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].lot_selections).toBeUndefined()
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeEnabled())
+  })
+
+  it('refuses with the insufficient-stock message when every cached lot has expired', async () => {
+    const posts = setup({ lots: [lot(1, 'OLD', pastDay, 2)], requiresLotSelection: false })
+    await confirm()
+    await waitFor(() => expect(screen.getByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument())
+    expect(posts).toEqual([])
+  })
+
+  it('without the stock in cache, logs when the server says there is no choice', async () => {
+    const posts = setup({ lots: null, requiresLotSelection: false })
+    await confirm({ cached: false })
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].lot_selections).toBeUndefined()
+    await waitFor(() => expect(screen.getByText('Mark as done')).toBeEnabled())
+  })
+
+  it('without the stock in cache, refuses when the server says there is a choice', async () => {
+    const posts = setup({ lots: null, requiresLotSelection: true })
+    await confirm({ cached: false })
+    await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
+    expect(posts).toEqual([])
+    expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
+  })
+})

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OfflineError } from '../../api/errors'
-import { errorToastMessage, queueErrorMessage } from '../errors'
+import { errorToastMessage, lotDecisionError, queueErrorMessage } from '../errors'
 
 describe('errorToastMessage', () => {
   it('returns the offline message when the error is an OfflineError', () => {
@@ -86,5 +86,35 @@ describe('queueErrorMessage', () => {
     const t = vi.fn((key) => key)
     expect(queueErrorMessage({ errorMessage: 'HTTP 400' }, t)).toBe('HTTP 400')
     expect(t).not.toHaveBeenCalled()
+  })
+})
+
+describe('lot_expired', () => {
+  const body = { detail: 'Lot expired.', code: 'lot_expired', lot_ids: [3] }
+
+  it('translates a live lot_expired refusal instead of showing its English detail', () => {
+    const t = vi.fn((key) => `[${key}]`)
+    const err = new Error('HTTP 422')
+    err.body = body
+    expect(errorToastMessage(err, t)).toBe('[errors.lotExpired]')
+  })
+
+  it('translates a queue entry refused with lot_expired', () => {
+    const t = vi.fn((key) => `[${key}]`)
+    expect(queueErrorMessage({ errorMessage: 'lot_expired', errorArgs: body }, t)).toBe('[errors.lotExpired]')
+  })
+})
+
+describe('lotDecisionError', () => {
+  it('reads nothing consumable as insufficient stock, with the routine usage as required', () => {
+    const t = vi.fn((key, args) => `[${key}] required=${args.required} available=${args.available}`)
+    expect(lotDecisionError({ action: 'insufficient' }, { stock_usage: 2 }, t)).toBe(
+      '[errors.insufficientStock] required=2 available=0',
+    )
+  })
+
+  it('falls back to the generic message when the lots are not known', () => {
+    const t = vi.fn((key) => key)
+    expect(lotDecisionError({ action: 'unavailable' }, { stock_usage: 2 }, t)).toBe('common.actionError')
   })
 })

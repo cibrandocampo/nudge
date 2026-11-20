@@ -11,7 +11,8 @@ fixture is shaped to:
    shared-with-me / private sharing modes · multi-lot FEFO · bulk_create
    to bypass `delete_empty_lot` · mixed lot-number/no-lot-number/no-expiry
    shapes · GS1-serialised packs (scanned boxes) next to anonymous counts ·
-   a scanned pack whose code carries no serial · consumed-lot snapshots in
+   a scanned pack whose code carries no serial · a mixed stock (expired +
+   valid lot) · an opened box next to a full one · consumed-lot snapshots in
    history with a serial, without one, and in the pre-serial legacy shape ·
    product identity (GTIN / default lot quantity) fully known, half known
    and unknown · regulatory data from real recorded AEMPS answers: an active
@@ -331,10 +332,13 @@ class Command(BaseCommand):
             ]
         )
 
-        # Glucose monitor sensors — single lot already expired (bulk_create
-        # bypasses `delete_empty_lot` to keep the qty=1 lot alive). Demo
-        # case: a stock with `expiry_severity='reached'`. A real diabetic
-        # might still be wearing this sensor while shopping for a fresh box.
+        # Glucose monitor sensors — the MIXED stock: an expired lot (kept by
+        # bulk_create, which bypasses `delete_empty_lot`) next to a fresh one.
+        # Demo case: `expiry_severity='reached'` while there is still stock to
+        # use. A real diabetic kept the old sensor and has since bought a new
+        # box. Consumption rules (T124): confirming `Replace glucose sensor`
+        # takes SEN-NEW and never SEN-OLD, and asks nothing — the expired lot
+        # is not a choice (`consumption-rules.spec.js`).
         stocks["glucose_sensors"] = Stock.objects.create(
             user=cibran,
             name="Glucose monitor sensors",
@@ -347,6 +351,12 @@ class Command(BaseCommand):
                     quantity=1,
                     expiry_date=today - timedelta(days=3),
                     lot_number="SEN-OLD",
+                ),
+                StockLot(
+                    stock=stocks["glucose_sensors"],
+                    quantity=2,
+                    expiry_date=today + timedelta(days=120),
+                    lot_number="SEN-NEW",
                 ),
             ]
         )
@@ -443,17 +453,29 @@ class Command(BaseCommand):
             raw_scan=_gs1_payload("MET-C", met_c_expiry),
         )
 
-        # Paracetamol — single lot, identified by lot number only.
+        # Paracetamol — one lot, two boxes: a full one (created first) and an
+        # OPENED one with fewer units left. Consumption rules (T124): a unit
+        # comes out of the opened box first, although the full one is older —
+        # `created_at` is only the last tie-break (`consumption-rules.spec.js`).
         stocks["paracetamol"] = Stock.objects.create(
             user=cibran,
             name="Paracetamol 1g",
             group=groups[("cibran", "Medicine cabinet")],
         )
+        pct_expiry = today + timedelta(days=400)
         StockLot.objects.create(
             stock=stocks["paracetamol"],
             quantity=20,
-            expiry_date=today + timedelta(days=400),
+            expiry_date=pct_expiry,
             lot_number="PCT-2028",
+            serial_number="P7K2Q9M4XA",
+        )
+        StockLot.objects.create(
+            stock=stocks["paracetamol"],
+            quantity=8,
+            expiry_date=pct_expiry,
+            lot_number="PCT-2028",
+            serial_number="P7K2Q9M5XB",
         )
 
         # Ebastine — backs the `Take antihistamine` routine (daily).

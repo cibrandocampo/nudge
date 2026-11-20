@@ -273,8 +273,8 @@ class SeedCommandTest(TestCase):
         self.assertEqual(User.objects.filter(is_superuser=False).count(), 3)
         self.assertEqual(Routine.objects.count(), 10)
         self.assertEqual(Stock.objects.count(), 13)
-        # 22 = 21 + MET-C, the pack scanned from a code carrying no serial.
-        self.assertEqual(StockLot.objects.count(), 23)
+        # 25 = 23 + SEN-NEW (the mixed stock) + the opened Paracetamol box (T127).
+        self.assertEqual(StockLot.objects.count(), 25)
         self.assertEqual(RoutineEntry.objects.count(), 50)
         # 8 = 6 + the two Metformin consumptions that give history a serialised
         # snapshot and a pre-serial one.
@@ -368,6 +368,28 @@ class SeedCommandTest(TestCase):
         self.assertEqual(unserialised.count(), 1)
         self.assertEqual(unserialised.first().lot_number, "MET-C")
 
+    def test_seed_has_a_mixed_stock_with_one_consumable_lot(self):
+        """Expired + valid lots on a stock with a routine (T127).
+
+        Confirming the routine must take the valid lot and ask nothing: the
+        expired one is not consumable, so there is no choice.
+        """
+        call_command("seed")
+        sensors = Stock.objects.get(name="Glucose monitor sensors")
+        self.assertEqual(sorted(sensors.lots.values_list("lot_number", flat=True)), ["SEN-NEW", "SEN-OLD"])
+        self.assertEqual([lot.lot_number for lot in sensors.consumable_lots()], ["SEN-NEW"])
+        self.assertFalse(sensors.has_lot_choice())
+        self.assertTrue(Routine.objects.filter(stock=sensors, name="Replace glucose sensor").exists())
+
+    def test_seed_has_an_opened_box_next_to_a_full_one(self):
+        """One lot, two boxes; the opened one is newer but goes first (T127)."""
+        call_command("seed")
+        paracetamol = Stock.objects.get(name="Paracetamol 1g")
+        boxes = list(paracetamol.lots.order_by("created_at"))
+        self.assertEqual([(b.lot_number, b.quantity) for b in boxes], [("PCT-2028", 20), ("PCT-2028", 8)])
+        self.assertTrue(all(b.serial_number for b in boxes))
+        self.assertEqual(paracetamol.consumable_lots()[0].quantity, 8)
+
     def test_seed_covers_every_history_snapshot_shape(self):
         """History must exercise all three shapes `HistoryEntryCard` renders.
 
@@ -454,9 +476,9 @@ class SeedCommandTest(TestCase):
         """Glucose sensors carry the `expiry_severity='reached'` demo case."""
         call_command("seed")
         sensors = Stock.objects.get(name="Glucose monitor sensors")
-        self.assertEqual(sensors.lots.count(), 1)
-        lot = sensors.lots.get()
-        self.assertEqual(lot.lot_number, "SEN-OLD")
+        # Since T127 a valid SEN-NEW sits beside it (the mixed-stock case,
+        # `test_seed_has_a_mixed_stock_with_one_consumable_lot`).
+        lot = sensors.lots.get(lot_number="SEN-OLD")
         # Expired but still at qty>0 (bulk_create bypasses delete_empty_lot).
         self.assertGreater(lot.quantity, 0)
         from datetime import date

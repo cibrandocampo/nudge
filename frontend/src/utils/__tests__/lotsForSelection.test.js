@@ -8,6 +8,7 @@ import {
   groupLots,
   lotsForSelection,
   needsLotChoice,
+  routineLotDecision,
 } from '../lotsForSelection'
 
 // A fixed today: every expiry below is read against it, never the clock.
@@ -63,6 +64,15 @@ describe('consumptionOrder', () => {
       { id: 3, quantity: 3, expiry_date: '2026-09-01' },
     ]
     expect(ids(consumptionOrder(lots, TODAY))).toEqual([3, 2, 1])
+  })
+
+  it('puts an undated lot last whichever side of the comparison it is on', () => {
+    const lots = [
+      { id: 1, quantity: 3, expiry_date: '2027-01-01' },
+      { id: 2, quantity: 3, expiry_date: null },
+    ]
+    expect(ids(consumptionOrder(lots, TODAY))).toEqual([1, 2])
+    expect(ids(consumptionOrder([...lots].reverse(), TODAY))).toEqual([1, 2])
   })
 
   it('breaks an expiry tie by lot number', () => {
@@ -335,5 +345,49 @@ describe('findCachedStock', () => {
     const qc = new QueryClient()
     qc.setQueryData(['stock'], { not: 'array' })
     expect(findCachedStock(qc, 1)).toBeUndefined()
+  })
+})
+
+describe('routineLotDecision', () => {
+  const routine = (overrides = {}) => ({ id: 1, stock: 10, stock_usage: 1, ...overrides })
+  const lotA = { id: 1, lot_number: 'A', expiry_date: '2027-01-01', quantity: 2 }
+  const lotB = { id: 2, lot_number: 'B', expiry_date: '2027-06-01', quantity: 1 }
+  const expired = { id: 3, lot_number: 'OLD', expiry_date: '2026-01-01', quantity: 4 }
+
+  it('logs when the routine has no stock', () => {
+    expect(routineLotDecision(routine({ stock: null }), undefined, TODAY)).toEqual({ action: 'log' })
+    expect(routineLotDecision(undefined, undefined, TODAY)).toEqual({ action: 'log' })
+  })
+
+  it('logs with one consumable lot', () => {
+    expect(routineLotDecision(routine(), { lots: [lotA] }, TODAY)).toEqual({ action: 'log' })
+  })
+
+  it('logs when the only other lot has expired', () => {
+    expect(routineLotDecision(routine(), { lots: [expired, lotA] }, TODAY)).toEqual({ action: 'log' })
+  })
+
+  it('asks with the groups in consumption order when there are two lots', () => {
+    const decision = routineLotDecision(routine(), { lots: [lotB, lotA] }, TODAY)
+    expect(decision.action).toBe('ask')
+    expect(keys(decision.groups)).toEqual(['A|2027-01-01', 'B|2027-06-01'])
+  })
+
+  it('reports insufficient stock when every cached lot has expired or is empty', () => {
+    const empty = { ...lotA, quantity: 0 }
+    expect(routineLotDecision(routine(), { lots: [expired, empty] }, TODAY)).toEqual({ action: 'insufficient' })
+  })
+
+  it("falls back to the server's requires_lot_selection when the stock is not cached", () => {
+    expect(routineLotDecision(routine({ requires_lot_selection: false }), undefined, TODAY)).toEqual({ action: 'log' })
+    expect(routineLotDecision(routine({ requires_lot_selection: true }), undefined, TODAY)).toEqual({
+      action: 'unavailable',
+    })
+  })
+
+  it('treats a cached stock without a lot list as not cached', () => {
+    expect(routineLotDecision(routine({ requires_lot_selection: true }), { id: 10 }, TODAY)).toEqual({
+      action: 'unavailable',
+    })
   })
 })

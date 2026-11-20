@@ -143,6 +143,39 @@ export function needsLotChoice(groups) {
 }
 
 /**
+ * What confirming a routine does with its linked stock — the one decision the
+ * Today page and the routine detail page share.
+ *
+ * Decided from the cached stock, so it works offline:
+ *
+ *   - `{ action: 'ask', groups }` — more than one consumable lot: open the
+ *     picker with `groups`;
+ *   - `{ action: 'log' }` — one lot (or no stock): log without a selection and
+ *     let the server apply the consumption order;
+ *   - `{ action: 'insufficient' }` — the cached stock has nothing consumable
+ *     left (only expired or empty lots): logging would be refused.
+ *
+ * When the stock is not cached there are no lots to decide from, so the
+ * server's `requires_lot_selection` (the same rule, `Stock.has_lot_choice()`)
+ * stands in: false → `log`; true → `{ action: 'unavailable' }`, since the
+ * picker cannot be built without the lots.
+ *
+ * @param routine a routine as the API returns it
+ * @param stock `findCachedStock(queryClient, routine.stock)`
+ * @param today from `expiryToday()`
+ */
+export function routineLotDecision(routine, stock, today) {
+  if (!routine?.stock) return { action: 'log' }
+  if (!Array.isArray(stock?.lots)) {
+    return routine.requires_lot_selection ? { action: 'unavailable' } : { action: 'log' }
+  }
+  const groups = lotsForSelection(stock, today)
+  if (groups.length === 0) return { action: 'insufficient' }
+  if (needsLotChoice(groups)) return { action: 'ask', groups }
+  return { action: 'log' }
+}
+
+/**
  * Group raw lot objects by `(lot_number, expiry_date)` for the stock detail
  * list, preserving the lots themselves in `rows` (it needs the full lot,
  * `updated_at` included, to delete an individual box).
