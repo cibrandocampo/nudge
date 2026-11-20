@@ -39,3 +39,16 @@ class LotUnavailable(DomainError):
     def __init__(self, lot_ids):
         self.lot_ids = sorted(lot_ids)
         super().__init__(f"Lots no longer available: {self.lot_ids}.")
+
+
+class LotExpired(DomainError):
+    """Selected lots that have expired (expiry date today or earlier).
+
+    An expired lot is never consumed: the automatic order skips it, and an
+    explicit selection that names one is refused rather than silently
+    redirected to another lot — the user picked that box on purpose.
+    """
+
+    def __init__(self, lot_ids):
+        self.lot_ids = sorted(lot_ids)
+        super().__init__(f"Lots expired: {self.lot_ids}.")

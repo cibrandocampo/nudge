@@ -193,9 +193,19 @@ and fields, and it returns the standard shape of `clients/types.py`.
 
 ### Inventory — FEFO
 
-When a routine is logged, stock is decremented using FEFO (First Expired, First Out): lots are consumed in ascending `expiry_date` order (`NULL` expiry dates are treated as furthest in the future). Each lot is decremented partially until the required `stock_usage` units are satisfied across as many lots as needed.
+When a routine is logged, stock is decremented using FEFO (First Expired, First Out). The order lives in one place, `Stock.consumable_lots()`:
 
-A consumption is all or nothing. `Stock.consume_lots` (used by `POST /api/stock/{id}/consume/` and `POST /api/routines/{id}/log/`) either takes exactly the requested units or raises `InsufficientStock`, which the API returns as `422` with `code: "insufficient_stock"`, `required` and `available`. The method is atomic, so a failure leaves every lot as it was. This applies when FEFO runs out of lots and when an explicit lot selection asks a lot for more than it holds. A selected lot that no longer exists (emptied, and so deleted, after the user picked it) answers `422` with `code: "lot_unavailable"` and its `lot_ids`; a lot of another stock is still a `400`. As a result, the audit rows (`RoutineEntry.consumed_lots`, `StockConsumption`) always add up to the quantity they record. Both request bodies go through `ConsumeInputSerializer` / `LogInputSerializer`: `quantity >= 1`, no repeated `lot_id`, and `lot_selections` null or `[]` means FEFO.
+1. An expired lot (`expiry_date <= today`) is never consumed, and empty lots are skipped.
+2. Ascending `expiry_date`, with `NULL` treated as furthest in the future.
+3. Then `lot_number`, so units with the same expiry stay together by what is printed on them.
+4. Then `quantity` ascending, so an opened box is finished before a full one is started.
+5. Then `created_at`.
+
+Each lot is decremented partially until the required `stock_usage` units are satisfied across as many lots as needed.
+
+`requires_lot_selection` (on stocks and routines) is `Stock.has_lot_choice()`: true only when the consumable lots form more than one `(lot_number, expiry_date)` group. Two boxes of the same lot are no choice, and expired lots never count.
+
+A consumption is all or nothing. `Stock.consume_lots` (used by `POST /api/stock/{id}/consume/` and `POST /api/routines/{id}/log/`) either takes exactly the requested units or raises `InsufficientStock`, which the API returns as `422` with `code: "insufficient_stock"`, `required` and `available`. The method is atomic, so a failure leaves every lot as it was. This applies when FEFO runs out of lots and when an explicit lot selection asks a lot for more than it holds. A selected lot that no longer exists (emptied, and so deleted, after the user picked it) answers `422` with `code: "lot_unavailable"` and its `lot_ids`; a selected lot that has expired answers `422` with `code: "lot_expired"` and its `lot_ids`; a lot of another stock is still a `400`. As a result, the audit rows (`RoutineEntry.consumed_lots`, `StockConsumption`) always add up to the quantity they record. Both request bodies go through `ConsumeInputSerializer` / `LogInputSerializer`: `quantity >= 1`, no repeated `lot_id`, and `lot_selections` null or `[]` means FEFO.
 
 ### Timezone handling
 

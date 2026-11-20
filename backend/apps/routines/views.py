@@ -452,21 +452,24 @@ class RoutineViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         lot_selections = input_serializer.validated_data.get("lot_selections")
         client_created_at = input_serializer.validated_data.get("client_created_at")
 
-        # Refuse to log when the routine has a linked stock whose total
+        # Refuse to log when the routine has a linked stock whose consumable
         # quantity is below `stock_usage`. Otherwise the entry would be
         # recorded as "consumed" while no stock actually existed — an
         # audit hole that also let `pain_relief` (seeded with 0-qty
-        # Ibuprofen) be marked done without blocking in the UI.
-        if routine.stock and routine.stock.quantity < routine.stock_usage:
-            return Response(
-                {
-                    "detail": "Insufficient stock to log this routine.",
-                    "code": "insufficient_stock",
-                    "required": routine.stock_usage,
-                    "available": routine.stock.quantity,
-                },
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
+        # Ibuprofen) be marked done without blocking in the UI. Expired
+        # units do not count: they are never consumed (T124).
+        if routine.stock:
+            available = routine.stock.quantity_available
+            if available < routine.stock_usage:
+                return Response(
+                    {
+                        "detail": "Insufficient stock to log this routine.",
+                        "code": "insufficient_stock",
+                        "required": routine.stock_usage,
+                        "available": available,
+                    },
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
 
         with transaction.atomic():
             entry_kwargs = {

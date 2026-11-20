@@ -212,10 +212,12 @@ docker compose -f dev/docker-compose.yml exec backend python manage.py migrate
 
 ## Stock patterns
 
-- **FEFO ordering** (First Expired First Out):
-  ```python
-  queryset.order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-  ```
+- **FEFO ordering** (First Expired First Out): never re-implement it, use
+  `stock.consumable_lots()`. It excludes expired (`expiry_date <= today`) and
+  empty lots and orders by
+  `F("expiry_date").asc(nulls_last=True), "lot_number", "quantity", "created_at"`
+  (opened box before a full one). `stock.has_lot_choice()` decides
+  `requires_lot_selection`.
 - **Stock mutations** must use `transaction.atomic()` to prevent partial updates:
   ```python
   from django.db import transaction

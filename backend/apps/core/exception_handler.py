@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.views import set_rollback
 
-from apps.routines.exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
+from apps.routines.exceptions import InsufficientStock, InvalidLotSelection, LotExpired, LotUnavailable
 
 
 def exception_handler(exc, context):
@@ -35,6 +35,15 @@ def exception_handler(exc, context):
         body = {
             "detail": "Lot no longer available.",
             "code": "lot_unavailable",
+            "lot_ids": exc.lot_ids,
+        }
+        response_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+    elif isinstance(exc, LotExpired):
+        # 422 for the same reason: well formed, but that lot can no longer be
+        # used. The client offers the lots that still are (T126).
+        body = {
+            "detail": "Lot expired.",
+            "code": "lot_expired",
             "lot_ids": exc.lot_ids,
         }
         response_status = status.HTTP_422_UNPROCESSABLE_ENTITY

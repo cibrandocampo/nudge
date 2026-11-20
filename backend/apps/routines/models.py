@@ -9,7 +9,7 @@ from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
-from .exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
+from .exceptions import InsufficientStock, InvalidLotSelection, LotExpired, LotUnavailable
 
 
 class StockGroup(models.Model):
@@ -138,6 +138,49 @@ class Stock(models.Model):
         agg = self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=today)).aggregate(total=Sum("quantity"))
         return agg["total"] or 0
 
+    def _consumable_lots_unordered(self):
+        """Lots with units left that have not expired (same rule as `quantity_available`)."""
+        return self.lots.filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=date.today()), quantity__gt=0)
+
+    def consumable_lots(self):
+        """The lots a consumption may draw from, in the order it draws them.
+
+        This is THE consumption order (docs/plans/consume-stock-rules-and-swipe.md);
+        the frontend replicates it to preselect the lot it proposes (T125):
+
+        1. Out: lots with no units left, and expired lots — a lot whose
+           `expiry_date` is today or earlier is never consumed.
+        2. `expiry_date` ascending, lots without an expiry last.
+        3. `lot_number` ascending.
+        4. `quantity` ascending: inside a lot, the opened box before a full one.
+        5. `created_at` ascending.
+        """
+        return self._consumable_lots_unordered().order_by(
+            F("expiry_date").asc(nulls_last=True), "lot_number", "quantity", "created_at"
+        )
+
+    def has_lot_choice(self):
+        """True when the user has a lot to choose: more than one consumable group.
+
+        A group is a `(lot_number, expiry_date)` pair — what is printed on the
+        unit — so two boxes of the same lot are no choice, and two expiries
+        without lot numbers are one. Expired and empty lots do not count.
+        Drives `requires_lot_selection` on stocks and routines.
+
+        Prefetch-aware like `quantity_available`: with `lots` prefetched it
+        costs no query.
+        """
+        if "lots" in self.__dict__.get("_prefetched_objects_cache", {}):
+            today = date.today()
+            groups = {
+                (lot.lot_number, lot.expiry_date)
+                for lot in self.lots.all()
+                if lot.quantity > 0 and (lot.expiry_date is None or lot.expiry_date > today)
+            }
+            return len(groups) > 1
+        # Unordered: an ORDER BY would add its columns to the DISTINCT.
+        return self._consumable_lots_unordered().values("lot_number", "expiry_date").distinct().count() > 1
+
     @transaction.atomic
     def consume_lots(self, quantity, lot_selections=None):
         """
@@ -147,9 +190,9 @@ class Stock(models.Model):
         Args:
             quantity: total units to consume.
             lot_selections: optional list of dicts
-                [{"lot_id": int, "quantity": int}, ...]. When None, FEFO
-                (First Expired, First Out) consumes from earliest expiry
-                until `quantity` is reached.
+                [{"lot_id": int, "quantity": int}, ...]. When None, the lots
+                are drawn in the consumption order of `consumable_lots`
+                (expired lots never) until `quantity` is reached.
 
         Returns: list of consumed_lot dicts
             [{"lot_number", "expiry_date", "serial_number", "quantity"}, ...]
@@ -163,10 +206,13 @@ class Stock(models.Model):
             another stock. `apps.core.exception_handler` turns it into a 400.
             LotUnavailable when a selected lot no longer exists (emptied and
             deleted since it was picked); the handler turns it into a 422.
-            InsufficientStock when the lots cannot cover `quantity` (FEFO) or a
-            selection asks a lot for more than it holds. The handler turns it
-            into a 422; the method is atomic, so no lot keeps a partial
-            decrement.
+            LotExpired when a selection takes units from a lot whose expiry
+            date is today or earlier; the handler turns it into a 422.
+            InsufficientStock when the consumable lots cannot cover `quantity`
+            (its `available` counts consumable units only, never expired ones)
+            or a selection asks a lot for more than it holds. The handler
+            turns it into a 422; the method is atomic, so no lot keeps a
+            partial decrement.
 
         Invariant: on return, the quantities in the returned dicts add up to
         exactly `quantity`, so the audit rows built from them (RoutineEntry,
@@ -191,6 +237,11 @@ class Stock(models.Model):
                 if StockLot.objects.filter(id__in=invalid).exists():
                     raise InvalidLotSelection("One or more lot_ids are invalid.")
                 raise LotUnavailable(invalid)
+            # An expired lot is never consumed, not even when picked by hand.
+            picked = [sel["lot_id"] for sel in lot_selections if sel["quantity"] > 0]
+            expired = list(self.lots.filter(id__in=picked, expiry_date__lte=date.today()).values_list("id", flat=True))
+            if expired:
+                raise LotExpired(expired)
             for sel in lot_selections:
                 qty = sel["quantity"]
                 if qty == 0:
@@ -203,11 +254,7 @@ class Stock(models.Model):
                 consumed_lots.append(_lot_consumed_dict(lot, qty))
         else:
             remaining = quantity
-            for lot in (
-                self.lots.select_for_update()
-                .filter(quantity__gt=0)
-                .order_by(F("expiry_date").asc(nulls_last=True), "created_at")
-            ):
+            for lot in self.consumable_lots().select_for_update():
                 if remaining <= 0:
                     break
                 consume = min(lot.quantity, remaining)
@@ -216,8 +263,8 @@ class Stock(models.Model):
                 remaining -= consume
                 consumed_lots.append(_lot_consumed_dict(lot, consume))
 
-        # Only FEFO can fall short here: it walked every lot, so what it took
-        # is everything the stock had.
+        # Only the unselected branch can fall short here: it walked every
+        # consumable lot, so what it took is all the stock could give.
         consumed_total = sum(c["quantity"] for c in consumed_lots)
         if consumed_total != quantity:
             raise InsufficientStock(requested=quantity, available=consumed_total)
@@ -309,8 +356,9 @@ class UserStockPin(models.Model):
 class StockLot(models.Model):
     """
     A single batch/lot of a Stock item with its own quantity and optional expiry.
-    FEFO ordering: lots with sooner expiry_date are consumed first.
-    Lots without expiry_date are ordered last (treated as far future).
+    The default ordering lists lots by expiry (none last); the order in which
+    they are *consumed* is `Stock.consumable_lots`, which also skips expired
+    lots and opens a started box first.
 
     A lot carrying a `serial_number` identifies **one physical pack** (read from
     the GS1 DataMatrix printed on the box). Such a lot is never merged,
