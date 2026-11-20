@@ -26,8 +26,8 @@
 
 .tagline {
   margin: 0 0 2rem;
-  color: var(--c-muted);
-  font-size: 0.875rem;
+  color: var(--c-text-3);
+  font-size: var(--fs-sm);
 }
 
 .form {
@@ -40,23 +40,24 @@
 .btn {
   padding: 0.75rem;
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   border: none;
   border-radius: var(--radius-lg);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
   margin-top: 0.5rem;
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  background: var(--c-disabled-bg);
+  color: var(--c-disabled-text);
   cursor: not-allowed;
 }
 
 .stepTitle {
   margin: 0 0 0.25rem;
-  font-size: 1.05rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   text-align: center;
 }
@@ -64,8 +65,8 @@
 .linkBtn {
   background: none;
   border: none;
-  color: var(--c-muted);
-  font-size: 0.8rem;
+  color: var(--c-text-3);
+  font-size: var(--fs-sm);
   text-align: center;
   cursor: pointer;
   padding: 0.25rem 0;
@@ -73,8 +74,7 @@
 }
 
 .linkBtn:disabled {
-  color: var(--c-muted);
-  opacity: 0.55;
+  color: var(--c-disabled-text);
   cursor: not-allowed;
   text-decoration: none;
 }
@@ -102,7 +102,7 @@
   color: transparent;
   caret-color: transparent;
   -webkit-text-fill-color: transparent;
-  font-size: 1.5rem;
+  font-size: var(--fs-xl);
   text-align: center;
   z-index: 2;
   cursor: text;
@@ -121,10 +121,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   border-radius: var(--radius);
   background: var(--c-surface);
-  font-size: 1.25rem;
+  font-size: var(--fs-xl);
   font-weight: 600;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   color: var(--c-text);

@@ -14,7 +14,7 @@
 
 .packSerial {
   grid-column: 2 / 4;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
   overflow-wrap: anywhere;
 }
@@ -37,7 +37,7 @@
 }
 
 .packCount {
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--c-text-3);
   font-weight: 500;

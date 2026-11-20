@@ -7,7 +7,7 @@
 
 .title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   color: var(--c-text);
   letter-spacing: -0.01em;
@@ -16,7 +16,7 @@
 .xBtn {
   background: none;
   border: none;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   color: var(--c-text-3);
   cursor: pointer;
   padding: 0.1rem 0.25rem;
@@ -29,7 +29,7 @@
 
 .subtitle {
   margin: 0 0 1rem;
-  font-size: 0.825rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
 }
 
@@ -68,23 +68,23 @@
 .radio {
   width: 1.75rem;
   height: 1.75rem;
-  border: 2px solid var(--c-border);
+  border: 2px solid var(--c-outline);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
-  color: var(--c-primary);
+  font-size: var(--fs-lg);
+  color: var(--c-text-accent);
   flex-shrink: 0;
 }
 
 .itemSelected .radio {
   border-color: var(--c-primary);
-  color: var(--c-primary);
+  color: var(--c-text-accent);
 }
 
 .name {
   flex: 1;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--c-text);
 }

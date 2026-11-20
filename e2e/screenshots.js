@@ -211,6 +211,10 @@ async function main() {
       })
       const page2 = await context2.newPage()
       await login(page2, USER2_EMAIL, PASS)
+      // The seed gives maria a Spanish profile, applied from sign-in (T148);
+      // the docs and the landing page are in English, so this capture is too.
+      // `make screenshots` reseeds first, and every E2E run reseeds again.
+      await api(page2, 'PATCH', '/api/auth/me/', { language: 'en' })
       await page2.goto(`${BASE}/`)
       await screenshot(page2, 'shared-dashboard')
       await context2.close()

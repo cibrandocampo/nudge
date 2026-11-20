@@ -22,7 +22,7 @@
 
 .title {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   color: var(--c-text);
   letter-spacing: -0.01em;
@@ -30,14 +30,14 @@
 
 .slogan {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
 }
 
 .why {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   line-height: 1.4;
   color: var(--c-text-2);
 }

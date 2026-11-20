@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Info } from 'lucide-react'
 import { api } from '../api/client'
 import { OfflineError } from '../api/errors'
+import { appearanceOf, applyAppearance, storeAppearance } from '../appearance'
 import { useAuth } from '../contexts/AuthContext'
 import { useContacts } from '../hooks/useContacts'
 import { useCreateContact } from '../hooks/mutations/useCreateContact'
@@ -34,6 +35,18 @@ const LANGUAGES = [
   { code: 'en', labelKey: 'settings.languageEn' },
   { code: 'es', labelKey: 'settings.languageEs' },
   { code: 'gl', labelKey: 'settings.languageGl' },
+]
+
+const THEME_OPTIONS = [
+  { code: 'system', labelKey: 'settings.themeSystem' },
+  { code: 'light', labelKey: 'settings.themeLight' },
+  { code: 'dark', labelKey: 'settings.themeDark' },
+]
+
+const TEXT_SIZE_OPTIONS = [
+  { code: 'normal', labelKey: 'settings.textSizeNormal' },
+  { code: 'large', labelKey: 'settings.textSizeLarge' },
+  { code: 'xlarge', labelKey: 'settings.textSizeXlarge' },
 ]
 
 // True when `time` (HH:MM) falls inside the [start, end) range. Returns false
@@ -74,6 +87,7 @@ export default function SettingsPage() {
     quiet_hours_start: '22:00',
     quiet_hours_end: '07:00',
   }))
+  const [appearance, setAppearance] = useState(() => appearanceOf(user))
 
   const {
     permission: pushPermission,
@@ -119,11 +133,9 @@ export default function SettingsPage() {
         quiet_hours_start: (user.quiet_hours_start || '22:00:00').slice(0, 5),
         quiet_hours_end: (user.quiet_hours_end || '07:00:00').slice(0, 5),
       })
-      if (user.language && user.language !== i18n.language) {
-        i18n.changeLanguage(user.language)
-      }
+      setAppearance(appearanceOf(user))
     }
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user])
 
   // Generic autosave for the two fields without a dedicated form (timezone
   // and daily notification time). Matches the language pattern: the user
@@ -180,6 +192,31 @@ export default function SettingsPage() {
       autosave({ language: lng })
     },
     [i18n, autosave],
+  )
+
+  // Theme and text size apply at once, before the PATCH answers, so the user
+  // sees the choice; a failed save puts the previous appearance back. On
+  // success AppearanceProvider re-applies the same values from the profile.
+  const changeAppearance = useCallback(
+    (key, value) => {
+      const previous = appearance
+      const next = { ...appearance, [key]: value }
+      setAppearance(next)
+      applyAppearance(next)
+      storeAppearance(next)
+      updateMe.mutate(
+        { patch: { [key === 'textSize' ? 'text_size' : key]: value }, updatedAt: user?.settings_updated_at },
+        {
+          onError: (err) => {
+            setAppearance(previous)
+            applyAppearance(previous)
+            storeAppearance(previous)
+            showToast({ type: 'error', message: errorToastMessage(err, t, 'settings.errorSave') })
+          },
+        },
+      )
+    },
+    [appearance, updateMe, user?.settings_updated_at, showToast, t],
   )
 
   // True when the active quiet-hours range covers `daily_notification_time`.
@@ -471,19 +508,33 @@ export default function SettingsPage() {
       </Section>
 
       <Section title={t('settings.language')}>
-        <div className={s.langRow}>
-          {LANGUAGES.map(({ code, labelKey }) => (
-            <button
-              key={code}
-              type="button"
-              className={cx(i18n.language === code ? s.langBtnActive : s.langBtn, !reachable && buttons.disabled)}
-              onClick={() => changeLanguage(code)}
-              disabled={!reachable}
-            >
-              {t(labelKey)}
-            </button>
-          ))}
-        </div>
+        <OptionGroup
+          label={t('settings.language')}
+          options={LANGUAGES}
+          value={i18n.language}
+          onChange={changeLanguage}
+          disabled={!reachable}
+        />
+      </Section>
+
+      <Section title={t('settings.theme')}>
+        <OptionGroup
+          label={t('settings.theme')}
+          options={THEME_OPTIONS}
+          value={appearance.theme}
+          onChange={(value) => changeAppearance('theme', value)}
+          disabled={!reachable}
+        />
+      </Section>
+
+      <Section title={t('settings.textSize')}>
+        <OptionGroup
+          label={t('settings.textSize')}
+          options={TEXT_SIZE_OPTIONS}
+          value={appearance.textSize}
+          onChange={(value) => changeAppearance('textSize', value)}
+          disabled={!reachable}
+        />
       </Section>
 
       <Section title={t('settings.timezone')}>
@@ -681,6 +732,28 @@ function Section({ id, title, children, flash = false }) {
     <div id={id} className={cx(s.section, flash && s.flash)}>
       {title && <p className={layout.sectionTitle}>{title}</p>}
       {children}
+    </div>
+  )
+}
+
+// A row of buttons where one is the current choice (language, theme, text
+// size). `aria-pressed` tells screen readers which one; picking one saves it.
+function OptionGroup({ label, options, value, onChange, disabled }) {
+  const { t } = useTranslation()
+  return (
+    <div className={s.optionRow} role="group" aria-label={label}>
+      {options.map(({ code, labelKey }) => (
+        <button
+          key={code}
+          type="button"
+          className={cx(value === code ? s.optionBtnActive : s.optionBtn, disabled && buttons.disabled)}
+          aria-pressed={value === code}
+          onClick={() => onChange(code)}
+          disabled={disabled}
+        >
+          {t(labelKey)}
+        </button>
+      ))}
     </div>
   )
 }

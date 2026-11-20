@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { ensureContact, loginAs, loginAsUser1, resetSeed, SEED } from './helpers.js'
+import { ensureContact, goToInventory, loginAs, loginAsUser1, resetSeed, SEED } from './helpers.js'
 
 /**
  * Coupled share E2E (T132).
@@ -150,8 +150,7 @@ test.describe('Coupled share — routine with linked stock', () => {
         page2.getByTestId('routine-card').filter({ hasText: ROUTINE_NAME }),
       ).toBeVisible({ timeout: 10_000 })
 
-      await page2.getByRole('link', { name: 'Inventory', exact: true }).click()
-      await expect(page2).toHaveURL('/inventory')
+      await goToInventory(page2)
       await expect(
         page2.getByTestId('product-card').filter({ hasText: STOCK_NAME }),
       ).toBeVisible({ timeout: 10_000 })

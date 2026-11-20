@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { AppVersionProvider } from './contexts/AppVersionContext'
 import { AuthProvider } from './contexts/AuthContext'
+import AppearanceProvider from './components/AppearanceProvider'
 import ConflictOrchestrator from './components/ConflictOrchestrator'
 import IconsSprite from './components/IconsSprite'
 import Layout from './components/Layout'
@@ -45,42 +46,44 @@ export default function App() {
         <ToastProvider>
           <AppRuntime />
           <AuthProvider>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <ConflictOrchestrator />
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route element={<ProtectedRoute />}>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<DashboardPage />} />
-                    <Route path="/routines/new" element={<RoutineFormPage />} />
-                    <Route path="/routines/:id" element={<RoutineDetailPage />} />
-                    <Route path="/routines/:id/edit" element={<RoutineFormPage />} />
-                    <Route
-                      path="/history"
-                      element={
-                        <OfflineRouteGuard>
-                          <HistoryPage />
-                        </OfflineRouteGuard>
-                      }
-                    />
-                    <Route path="/inventory" element={<InventoryPage />} />
-                    <Route path="/inventory/new" element={<StockFormPage />} />
-                    <Route path="/inventory/groups" element={<StockGroupsPage />} />
-                    <Route path="/inventory/:id" element={<StockDetailPage />} />
-                    <Route path="/inventory/:id/edit" element={<StockFormPage />} />
-                    <Route
-                      path="/settings"
-                      element={
-                        <OfflineRouteGuard>
-                          <SettingsPage />
-                        </OfflineRouteGuard>
-                      }
-                    />
+            <AppearanceProvider>
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <ConflictOrchestrator />
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<Layout />}>
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/routines/new" element={<RoutineFormPage />} />
+                      <Route path="/routines/:id" element={<RoutineDetailPage />} />
+                      <Route path="/routines/:id/edit" element={<RoutineFormPage />} />
+                      <Route
+                        path="/history"
+                        element={
+                          <OfflineRouteGuard>
+                            <HistoryPage />
+                          </OfflineRouteGuard>
+                        }
+                      />
+                      <Route path="/inventory" element={<InventoryPage />} />
+                      <Route path="/inventory/new" element={<StockFormPage />} />
+                      <Route path="/inventory/groups" element={<StockGroupsPage />} />
+                      <Route path="/inventory/:id" element={<StockDetailPage />} />
+                      <Route path="/inventory/:id/edit" element={<StockFormPage />} />
+                      <Route
+                        path="/settings"
+                        element={
+                          <OfflineRouteGuard>
+                            <SettingsPage />
+                          </OfflineRouteGuard>
+                        }
+                      />
+                    </Route>
                   </Route>
-                </Route>
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </BrowserRouter>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </BrowserRouter>
+            </AppearanceProvider>
           </AuthProvider>
         </ToastProvider>
       </AppVersionProvider>

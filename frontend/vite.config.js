@@ -63,8 +63,10 @@ export default defineConfig({
         name: 'Nudge',
         short_name: 'Nudge',
         description: 'A gentle reminder for recurring things.',
-        theme_color: '#1a1a2e',
-        background_color: '#ffffff',
+        // A manifest has no dark variant: light values (--c-surface, --c-bg).
+        // At runtime the page's theme-color metas take over.
+        theme_color: '#ffffff',
+        background_color: '#fafafa',
         display: 'standalone',
         start_url: '/',
         scope: '/',

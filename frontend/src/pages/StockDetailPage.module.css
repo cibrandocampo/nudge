@@ -9,7 +9,7 @@
   align-items: center;
   gap: 0.25rem;
   color: var(--c-text-3);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-decoration: none;
   padding: 0.25rem 0;
 }
@@ -77,7 +77,7 @@
 
 .dayHeader {
   margin: 0 0 0 0.125rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
 }
@@ -109,12 +109,12 @@
    plain outlined icon button. */
 .pinOn {
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
 }
 
 .pinOn:hover {
   background: var(--c-primary-hover);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
 }
 
 /* The header's reason line (expired units, low stock, expiring), under the
@@ -124,7 +124,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem 0.6rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 
@@ -134,4 +134,29 @@
 
 .reasonDanger.reasonDanger {
   color: var(--c-danger);
+}
+
+/* The header row wraps when it runs out of room: the name and the total keep
+   the first line (at least 9rem), and the category pill, pin and consume move
+   together to a second one. At 320 px with the type scale (T146) the name was cut to
+   «Metfo» and «18 total» broke over three lines. */
+.headerRow {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+
+.headerRow > :first-child {
+  flex: 1 1 9rem;
+}
+
+/* Category, pin and consume wrap together, kept on the right. */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.headerRow .headerQty {
+  white-space: nowrap;
 }

@@ -44,7 +44,7 @@
 
 .name {
   min-width: 0;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
@@ -55,7 +55,7 @@
 .qtyGroup {
   flex: none;
   white-space: nowrap;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 
 .actions {
@@ -71,7 +71,7 @@
   flex-wrap: wrap;
   gap: 0.35rem;
   padding-left: calc(8px + 0.4rem);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
 }
 

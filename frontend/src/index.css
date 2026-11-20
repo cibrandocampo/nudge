@@ -1,21 +1,38 @@
 :root {
+  color-scheme: light;
+
   /* Brand */
   --c-brand: #fcd34d;
   --c-brand-text: #78350f;
 
-  /* Neutral (slate) */
+  /* Action. --c-primary is a FILL or a control's border/icon (what can be
+     tapped), never body text; text on it is --c-on-primary. --c-pressed is the
+     pressed fill: darker, never transparent (pressed must not look disabled). */
   --c-primary: #454961;
   --c-primary-hover: #5a5f7d;
+  --c-pressed: color-mix(in srgb, var(--c-primary) 82%, black);
+  --c-on-primary: #ffffff;
+
+  /* Neutral (slate) */
   --c-bg: #fafafa;
   --c-surface: #ffffff;
   --c-ink: #0a0a0a;
   --c-text: #454961;
   --c-text-2: #575c75;
   --c-text-3: #63677a;
-  --c-muted: #63677a;
+  /* Emphasised text (titles, names, text links): the navy as TEXT. */
+  --c-text-accent: #454961;
+  /* Decorative edges (cards, separators): no contrast threshold. */
   --c-border: #e4e4e7;
   --c-border-inner: #f4f4f5;
+  /* Edge of a control (input, select, bordered button): >= 3:1 (WCAG 1.4.11). */
+  --c-outline: #8a8ea1;
   --c-ring: #7d8197;
+  /* Disabled control: its own fill and text, never opacity. */
+  --c-disabled-bg: #f0f0f2;
+  --c-disabled-text: #8d91a0;
+  /* Behind modals and sheets. */
+  --c-scrim: rgba(0, 0, 0, 0.4);
 
   /* Status (palette U, chosen 2026-11-18; WCAG AA checked in the a11y E2E).
      Warning is the logo yellow: a FILL only (strips, dots, borders) — it is
@@ -23,16 +40,29 @@
   --c-success: #0f766e;
   --c-warning: #fcd34d;
   --c-warning-text: #a16207;
+  /* The ring that gives the warning dot and strip a shape (WCAG 1.4.1). The
+     same dark yellow in both themes: in dark, warning TEXT becomes the logo
+     yellow, and a ring of the fill's own colour would vanish. */
+  --c-warning-ring: #a16207;
   --c-danger: #9f1239;
+  --c-danger-hover: #881337;
   --c-border-success: rgba(15, 118, 110, 0.22);
   --c-border-warning: rgba(252, 211, 77, 0.35);
   --c-border-danger: rgba(159, 18, 57, 0.22);
+  /* Text on a solid status fill (the swipe layer, a destructive confirm). */
+  --c-on-success: #ffffff;
+  --c-on-danger: #ffffff;
+  /* Status containers: tinted chip or notice backgrounds with their own text. */
+  --c-success-container: #ccfbf1;
+  --c-on-success-container: #134e4a;
+  --c-warning-container: #fef3c7;
+  --c-on-warning-container: #78350f;
+  --c-danger-container: #ffe4e6;
+  --c-on-danger-container: #881337;
 
   /* Accents */
   --c-shared: #4a56a1;
   --c-shared-light: #6f79b8;
-  --c-delete: #9f1239;
-  --c-delete-hover: #881337;
 
   /* Shape */
   --radius-sm: 4px;
@@ -46,6 +76,114 @@
   --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.15);
   --shadow-focus: 0 0 0 2px var(--c-ring);
   --transition: 150ms ease;
+
+  /* Type scale (T146). Every font-size comes from here, in rem, so the
+     «Text size» setting (which scales the root) moves the whole app. Nothing
+     below 12 px; body text is 16 px. */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+}
+
+/* ── Dark theme (palette U dark = option A, chosen 2026-11-18) ───────────
+   Two blocks with the SAME declarations: the system setting when the user
+   chose «System» (no data-theme), and an explicit «Dark» (T148 sets
+   data-theme). CSS cannot share a declaration list between a media query and
+   a plain selector, and light-dark() would leave every colour unset on older
+   Safari. `src/test/darkTheme.test.js` fails if the two blocks drift apart.
+   The brand yellow, the warning fill and the type scale do not change. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --c-primary: #b9bde0;
+    --c-primary-hover: #d3d6ee;
+    --c-pressed: color-mix(in srgb, var(--c-primary) 78%, white);
+    --c-on-primary: #1d2029;
+    --c-bg: #14161d;
+    --c-surface: #1d2029;
+    --c-ink: #f4f4f6;
+    --c-text: #e6e7ef;
+    --c-text-2: #b8bccc;
+    --c-text-3: #9a9fb2;
+    --c-text-accent: #e6e7ef;
+    --c-border: #343849;
+    --c-border-inner: #262a35;
+    --c-outline: #6f7590;
+    --c-ring: #8e93a6;
+    --c-disabled-bg: #23262f;
+    --c-disabled-text: #6c7186;
+    --c-scrim: rgba(0, 0, 0, 0.6);
+    --c-success: #2dd4bf;
+    --c-warning-text: #fcd34d;
+    --c-danger: #f87171;
+    --c-danger-hover: #fecaca;
+    --c-border-success: rgba(45, 212, 191, 0.28);
+    --c-border-warning: rgba(252, 211, 77, 0.28);
+    --c-border-danger: rgba(248, 113, 113, 0.28);
+    --c-on-success: #14161d;
+    --c-on-danger: #14161d;
+    --c-success-container: #134e4a;
+    --c-on-success-container: #ccfbf1;
+    --c-warning-container: #5c3a06;
+    --c-on-warning-container: #fef3c7;
+    --c-danger-container: #6b1a1a;
+    --c-on-danger-container: #fee2e2;
+    --c-shared: #a5b4fc;
+    --c-shared-light: #7d84a6;
+    /* Shadows do not separate dark surfaces; the three surface levels and the
+       borders do. */
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --c-primary: #b9bde0;
+  --c-primary-hover: #d3d6ee;
+  --c-pressed: color-mix(in srgb, var(--c-primary) 78%, white);
+  --c-on-primary: #1d2029;
+  --c-bg: #14161d;
+  --c-surface: #1d2029;
+  --c-ink: #f4f4f6;
+  --c-text: #e6e7ef;
+  --c-text-2: #b8bccc;
+  --c-text-3: #9a9fb2;
+  --c-text-accent: #e6e7ef;
+  --c-border: #343849;
+  --c-border-inner: #262a35;
+  --c-outline: #6f7590;
+  --c-ring: #8e93a6;
+  --c-disabled-bg: #23262f;
+  --c-disabled-text: #6c7186;
+  --c-scrim: rgba(0, 0, 0, 0.6);
+  --c-success: #2dd4bf;
+  --c-warning-text: #fcd34d;
+  --c-danger: #f87171;
+  --c-danger-hover: #fecaca;
+  --c-border-success: rgba(45, 212, 191, 0.28);
+  --c-border-warning: rgba(252, 211, 77, 0.28);
+  --c-border-danger: rgba(248, 113, 113, 0.28);
+  --c-on-success: #14161d;
+  --c-on-danger: #14161d;
+  --c-success-container: #134e4a;
+  --c-on-success-container: #ccfbf1;
+  --c-warning-container: #5c3a06;
+  --c-on-warning-container: #fef3c7;
+  --c-danger-container: #6b1a1a;
+  --c-on-danger-container: #fee2e2;
+  --c-shared: #a5b4fc;
+  --c-shared-light: #7d84a6;
+  /* Shadows do not separate dark surfaces; the three surface levels and the
+     borders do. */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 *,
@@ -65,6 +203,7 @@ body {
   margin: 0;
   background: var(--c-bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: var(--fs-md);
   color: var(--c-text);
   -webkit-font-smoothing: antialiased;
 }

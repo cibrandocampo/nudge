@@ -6,7 +6,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   padding: 0.15rem 0.35rem;
   opacity: 0.3;
   transition: opacity 0.15s;
@@ -42,7 +42,7 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.2rem 0.3rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   border: none;
   background: none;

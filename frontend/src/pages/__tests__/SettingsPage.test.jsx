@@ -1,8 +1,10 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import i18n from 'i18next'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import { enqueue } from '../../offline/queue'
+import { mockUser } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
 import SettingsPage from '../SettingsPage'
@@ -113,13 +115,110 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Galego')).toBeInTheDocument()
   })
 
-  it('switches language on button click', async () => {
-    const { user } = renderWithProviders(<SettingsPage />)
-    // English is currently active, click Español
-    await user.click(screen.getByText('Español'))
-    // The API should be called to persist language
-    // After i18n change, labels will be in Spanish (but since our setup only has en.json,
-    // the keys fall back). Just verify no crash.
+  describe('language', () => {
+    afterEach(async () => {
+      await act(() => i18n.changeLanguage('en'))
+    })
+
+    it('switches language on button click and saves it', async () => {
+      let patchedBody = null
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patchedBody = await request.json()
+          return HttpResponse.json({})
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />)
+      const group = await screen.findByRole('group', { name: 'Language' })
+      expect(within(group).getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true')
+
+      await user.click(within(group).getByRole('button', { name: 'Español' }))
+
+      expect(i18n.language).toBe('es')
+      await waitFor(() => expect(patchedBody).toEqual({ language: 'es' }))
+    })
+
+    // AppearanceProvider applies the profile language everywhere (T148);
+    // Settings no longer does it on mount.
+    it('does not apply the profile language itself', async () => {
+      renderWithProviders(<SettingsPage />, { auth: { user: { ...mockUser, language: 'es' } } })
+      await screen.findByRole('group', { name: 'Language' })
+      expect(i18n.language).toBe('en')
+    })
+  })
+
+  describe('theme and text size', () => {
+    const html = document.documentElement
+
+    afterEach(() => {
+      delete html.dataset.theme
+      html.style.fontSize = ''
+      localStorage.clear()
+    })
+
+    it('shows the profile values as pressed', async () => {
+      renderWithProviders(<SettingsPage />, { auth: { user: { ...mockUser, theme: 'light', text_size: 'xlarge' } } })
+      const theme = await screen.findByRole('group', { name: 'Theme' })
+      expect(within(theme).getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'true')
+      expect(within(theme).getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'false')
+      const size = screen.getByRole('group', { name: 'Text size' })
+      expect(within(size).getByRole('button', { name: 'Extra large' })).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('«Dark» applies at once and saves { theme: "dark" }', async () => {
+      let patchedBody = null
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patchedBody = await request.json()
+          return HttpResponse.json({})
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />)
+      await user.click(await screen.findByRole('button', { name: 'Dark' }))
+
+      expect(html.dataset.theme).toBe('dark')
+      expect(screen.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true')
+      await waitFor(() => expect(patchedBody).toEqual({ theme: 'dark' }))
+    })
+
+    it('a text size saves as text_size and sets the root font size', async () => {
+      let patchedBody = null
+      server.use(
+        http.patch(`${BASE}/auth/me/`, async ({ request }) => {
+          patchedBody = await request.json()
+          return HttpResponse.json({})
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />)
+      await user.click(await screen.findByRole('button', { name: 'Large' }))
+
+      expect(html.style.fontSize).toBe('112.5%')
+      await waitFor(() => expect(patchedBody).toEqual({ text_size: 'large' }))
+    })
+
+    it('a failed save reverts the theme and shows the error', async () => {
+      server.use(http.patch(`${BASE}/auth/me/`, () => new HttpResponse(null, { status: 500 })))
+      const { user } = renderWithProviders(<SettingsPage />)
+      await user.click(await screen.findByRole('button', { name: 'Dark' }))
+
+      expect(await screen.findByText('Error — try again')).toBeInTheDocument()
+      expect(html.hasAttribute('data-theme')).toBe(false)
+      expect(screen.getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'true')
+      expect(JSON.parse(localStorage.getItem('nudge.appearance'))).toEqual({ theme: 'system', textSize: 'normal' })
+    })
+
+    it('is disabled offline', async () => {
+      reachableRef.current = false
+      try {
+        renderWithProviders(<SettingsPage />)
+        const theme = await screen.findByRole('group', { name: 'Theme' })
+        for (const button of within(theme).getAllByRole('button')) expect(button).toBeDisabled()
+        for (const button of within(screen.getByRole('group', { name: 'Text size' })).getAllByRole('button'))
+          expect(button).toBeDisabled()
+      } finally {
+        reachableRef.current = true
+      }
+    })
   })
 
   it('renders timezone combobox with the current value', async () => {

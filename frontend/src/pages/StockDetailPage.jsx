@@ -367,7 +367,7 @@ export default function StockDetailPage() {
           </div>
 
           <div className={cx(cards.card, tokens.border)}>
-            <div className={cards.cardHeader}>
+            <div className={cx(cards.cardHeader, s.headerRow)}>
               <div className={cards.cardMeta}>
                 <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
                   <span>{stock.name}</span>
@@ -375,7 +375,7 @@ export default function StockDetailPage() {
                 </span>
                 <span className={cards.cardSubtitle}>
                   <span className={cx(cards.dot, tokens.dot)} />
-                  <span className={cards.stockQty}>
+                  <span className={cx(cards.stockQty, s.headerQty)}>
                     {stock.quantity_available ?? stock.quantity ?? 0} {t('common.total')}
                   </span>
                   {stock.estimated_depletion_date && (
@@ -412,68 +412,70 @@ export default function StockDetailPage() {
                   </span>
                 )}
               </div>
-              {/* The category pill lives in the header row, not inside the
+              <div className={s.headerActions}>
+                {/* The category pill lives in the header row, not inside the
                   subtitle. `cardCategoryPill` pushes itself right with
                   `margin-left: auto`, which used to land it against the card
                   edge — but with the consume button there it ended up beside a
                   control it did not share a baseline with. As a sibling of the
-                  button it inherits `cardHeader`'s vertical centring, so the
-                  two line up. */}
-              {groupName && (
-                <span className={cards.cardCategoryPill}>
-                  <Icon name="tag" size="sm" />
-                  {groupName}
-                </span>
-              )}
-              {/* Pin to the top of the inventory. A per-user preference, so a
+                  button it shares `headerActions`' vertical centring, so the
+                  two line up; the group wraps as one when the name needs the room. */}
+                {groupName && (
+                  <span className={cards.cardCategoryPill}>
+                    <Icon name="tag" size="sm" />
+                    {groupName}
+                  </span>
+                )}
+                {/* Pin to the top of the inventory. A per-user preference, so a
                   recipient of a shared stock gets it too — the endpoint is
                   not gated on ownership. Disabled rather than hidden at the
                   cap, with a title that says how to make room. */}
-              <button
-                type="button"
-                className={cx(
-                  buttons.btnIcon,
-                  isPinned ? s.pinOn : buttons.btnIconOutline,
-                  (!reachable || pinCapReached) && buttons.disabled,
-                  isPinned && s.pinnedIcon,
-                )}
-                onClick={handleTogglePin}
-                aria-pressed={isPinned}
-                aria-disabled={!reachable || pinCapReached}
-                aria-label={isPinned ? t('inventory.unpinAction') : t('inventory.pinAction')}
-                title={
-                  !reachable
-                    ? t('offline.pageUnavailable')
-                    : pinCapReached
-                      ? t('inventory.pinCapReached', { max: MAX_PINNED })
-                      : isPinned
-                        ? t('inventory.unpinAction')
-                        : t('inventory.pinAction')
-                }
-                data-testid="pin-toggle"
-                data-pinned={isPinned}
-              >
-                <Icon name="pin" size="sm" />
-              </button>
-              {/* Consume one unit, the most frequent action on a stock. It
+                <button
+                  type="button"
+                  className={cx(
+                    buttons.btnIcon,
+                    isPinned ? s.pinOn : buttons.btnIconOutline,
+                    (!reachable || pinCapReached) && buttons.disabled,
+                    isPinned && s.pinnedIcon,
+                  )}
+                  onClick={handleTogglePin}
+                  aria-pressed={isPinned}
+                  aria-disabled={!reachable || pinCapReached}
+                  aria-label={isPinned ? t('inventory.unpinAction') : t('inventory.pinAction')}
+                  title={
+                    !reachable
+                      ? t('offline.pageUnavailable')
+                      : pinCapReached
+                        ? t('inventory.pinCapReached', { max: MAX_PINNED })
+                        : isPinned
+                          ? t('inventory.unpinAction')
+                          : t('inventory.pinAction')
+                  }
+                  data-testid="pin-toggle"
+                  data-pinned={isPinned}
+                >
+                  <Icon name="pin" size="sm" />
+                </button>
+                {/* Consume one unit, the most frequent action on a stock. It
                   lives on the card rather than in the top bar so it sits next
                   to the number it decrements, mirrors where `StockRow` puts
                   it in the inventory list, and stays away from the destructive
                   delete button. Hidden at zero: it could only fail. */}
-              {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
-                <button
-                  type="button"
-                  className={cx(buttons.btnIcon, buttons.btnIconConsume, !reachable && buttons.disabled)}
-                  onClick={handleConsume}
-                  aria-disabled={!reachable}
-                  aria-label={t('inventory.consumeTooltip')}
-                  title={!reachable ? t('offline.pageUnavailable') : t('inventory.consumeTooltip')}
-                  data-testid="consume-one"
-                >
-                  <Icon name="package" className={buttons.consumeBox} />
-                  <Icon name="arrow-down" className={buttons.consumeArrow} />
-                </button>
-              )}
+                {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    className={cx(buttons.btnIcon, buttons.btnIconConsume, !reachable && buttons.disabled)}
+                    onClick={handleConsume}
+                    aria-disabled={!reachable}
+                    aria-label={t('inventory.consumeTooltip')}
+                    title={!reachable ? t('offline.pageUnavailable') : t('inventory.consumeTooltip')}
+                    data-testid="consume-one"
+                  >
+                    <Icon name="package" className={buttons.consumeBox} />
+                    <Icon name="arrow-down" className={buttons.consumeArrow} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

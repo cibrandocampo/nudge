@@ -15,14 +15,17 @@
 }
 
 /* Marks the region actually handed to the decoder, so the user knows where to
-   aim rather than guessing. Must match CROP_RATIO in the component. */
+   aim rather than guessing. Must match CROP_RATIO in the component.
+   White in both themes, like the viewport's black: it sits on the camera
+   image, not on a themed surface (--c-surface turned it dark grey on black in
+   the dark theme — T149 phone review). */
 .reticle {
   position: absolute;
   top: 15%;
   left: 15%;
   width: 70%;
   height: 70%;
-  border: 2px solid var(--c-surface);
+  border: 2px solid #fff;
   border-radius: var(--radius);
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 35%);
   pointer-events: none;
@@ -35,7 +38,7 @@
 
 .hint {
   margin: 0.75rem 0 0;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
   text-align: center;
   line-height: 1.4;
@@ -46,7 +49,7 @@
    you know it is the answer to a camera that will not focus. */
 .cameraHint {
   margin: 0.75rem 0 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   line-height: 1.35;
   color: var(--c-text-3);
   text-align: center;
@@ -68,12 +71,12 @@
 }
 
 .cameraBtn {
-  font-size: 1.1rem;
+  font-size: var(--fs-lg);
   padding: 0.4rem 0.7rem;
 }
 
 .cameraArrow {
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-3);
 }
 

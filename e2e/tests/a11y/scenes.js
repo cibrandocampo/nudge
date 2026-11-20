@@ -159,7 +159,8 @@ export const SCENES = [
     user: 'user3',
     run: async ({ page }) => {
       await go(page, '/')
-      await expect(page.getByRole('heading', { name: 'Routines' })).toBeVisible()
+      // user3 (Laura) has a Galician profile, applied from sign-in (T148).
+      await expect(page.getByRole('heading', { name: 'Rutinas' })).toBeVisible()
       await expect(page.getByTestId('routine-card')).toHaveCount(0)
     },
   },
@@ -248,7 +249,7 @@ export const SCENES = [
     user: 'user3',
     run: async ({ page }) => {
       await go(page, '/inventory')
-      await expect(page.getByText('No items yet').first()).toBeVisible()
+      await expect(page.getByText('Aínda sen artigos').first()).toBeVisible()
     },
   },
 

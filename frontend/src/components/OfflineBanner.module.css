@@ -7,7 +7,7 @@
   align-items: center;
   gap: 0.15rem;
   padding: 0.35rem 1rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   background: var(--c-brand);
   color: var(--c-brand-text);
@@ -25,7 +25,7 @@
  * primary message keeps visual priority. */
 .lastSync {
   margin: 0;
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   opacity: 0.85;
 }

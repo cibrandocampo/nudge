@@ -11,6 +11,6 @@
   border-color: var(--c-shared);
 }
 .shareBtn:disabled {
-  color: var(--c-muted);
+  color: var(--c-text-3);
   border-color: var(--c-border);
 }

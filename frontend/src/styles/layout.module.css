@@ -9,7 +9,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--c-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -27,7 +27,7 @@
 }
 
 .modalTitle {
-  font-size: 1rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   color: var(--c-text);
   margin: 0 0 1rem;
@@ -42,7 +42,7 @@
 /* ── Typography ──────────────────────────────────────────────── */
 
 .sectionTitle {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-ink);
   text-transform: uppercase;
@@ -52,15 +52,15 @@
 
 .pageTitle {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--c-text);
   letter-spacing: -0.02em;
 }
 
 .muted {
-  color: var(--c-muted);
-  font-size: 0.875rem;
+  color: var(--c-text-3);
+  font-size: var(--fs-sm);
   margin: 0;
 }
 

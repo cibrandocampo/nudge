@@ -16,7 +16,7 @@
   animation: syncPulse 1.4s ease-in-out infinite;
 }
 .error {
-  color: var(--c-delete);
+  color: var(--c-danger);
 }
 .conflict {
   color: var(--c-warning-text);

@@ -2,26 +2,28 @@ import { expect } from '@playwright/test'
 import { SEED } from './constants.js'
 import { routineCard, stockCard } from './locators.js'
 
+// The bottom bar is the app's only <nav>. Its links are found by destination,
+// not by label: since T148 a Spanish or Galician profile shows its own
+// language from sign-in, so 'Settings' is 'Ajustes' or 'Axustes'.
+export const navLink = (page, path) => page.locator(`nav a[href="${path}"]`)
+
 export async function goToDashboard(page) {
-  // `exact: true` disambiguates from any in-page link that carries the
-  // localised nav label as a substring (seen in BottomNav vs page
-  // titles).
-  await page.getByRole('link', { name: 'Routines', exact: true }).click()
+  await navLink(page, '/').click()
   await page.waitForURL('/')
 }
 
 export async function goToInventory(page) {
-  await page.getByRole('link', { name: 'Inventory', exact: true }).click()
+  await navLink(page, '/inventory').click()
   await page.waitForURL('/inventory')
 }
 
 export async function goToHistory(page) {
-  await page.getByRole('link', { name: 'History', exact: true }).click()
+  await navLink(page, '/history').click()
   await page.waitForURL('/history')
 }
 
 export async function goToSettings(page) {
-  await page.getByRole('link', { name: 'Settings', exact: true }).click()
+  await navLink(page, '/settings').click()
   await page.waitForURL('/settings')
 }
 
@@ -49,7 +51,7 @@ export async function goToStockDetail(page, stockKey) {
   // `.first()` because a pinned product renders twice since T095 — once in
   // the Destacados section and once in its group. Either row opens the same
   // detail page, so the first one will do.
-  await stockCard(page, stockKey).first().getByRole('button', { name: 'Open details' }).click()
+  await stockCard(page, stockKey).first().getByTestId('row-open-detail').click()
   await expect(page).toHaveURL(/\/inventory\/\d+$/)
   await expect(page.getByText(name).first()).toBeVisible()
 }

@@ -38,7 +38,7 @@
   color: var(--c-text);
   font-weight: 600;
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 
 .profileRow {
@@ -61,35 +61,36 @@
 .profileRow .avatar {
   width: 36px;
   height: 36px;
-  font-size: 0.95rem;
+  font-size: var(--fs-md);
 }
 
-/* Language buttons fill the available width and split evenly — matches the
- * timezone combobox which is already full-width inside its card. */
-.langRow {
+/* Option buttons (language, theme, text size) fill the available width and
+ * split evenly — matches the timezone combobox which is already full-width
+ * inside its card. A long label wraps inside its button at large text sizes. */
+.optionRow {
   display: flex;
   gap: 0.5rem;
 }
 
-.langBtn,
-.langBtnActive {
+.optionBtn,
+.optionBtnActive {
   flex: 1 1 0;
   padding: 0.5rem 0.875rem;
   border-radius: var(--radius-lg);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 
-.langBtn {
-  border: 1px solid var(--c-border);
+.optionBtn {
+  border: 1px solid var(--c-outline);
   background: var(--c-surface);
   color: var(--c-text-2);
 }
 
-.langBtnActive {
+.optionBtnActive {
   border: 1px solid var(--c-primary);
   background: var(--c-border-inner);
-  color: var(--c-primary);
+  color: var(--c-text-accent);
   font-weight: 600;
 }
 
@@ -119,7 +120,7 @@
 
 .pushLabel {
   color: var(--c-text);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 
@@ -128,8 +129,8 @@
   border: none;
   border-radius: var(--radius-lg);
   background: var(--c-primary);
-  color: var(--c-surface);
-  font-size: 0.875rem;
+  color: var(--c-on-primary);
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
   align-self: flex-start;
@@ -137,11 +138,11 @@
 
 .pushBtnGhost {
   padding: 0.6rem 1.25rem;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   border-radius: var(--radius-lg);
   background: var(--c-surface);
   color: var(--c-text-3);
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   align-self: flex-start;
 }
@@ -186,7 +187,7 @@
   border-radius: 50%;
   background: var(--c-border-inner);
   color: var(--c-text-2);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   display: grid;
   place-items: center;
@@ -194,7 +195,7 @@
 }
 
 .contactName {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -241,7 +242,7 @@
 }
 
 .quietHoursToggleLabel {
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
 }
 
 .quietHoursRange {
@@ -276,7 +277,7 @@
   align-items: center;
   gap: 0.4rem;
   margin: 0.5rem 0 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
   line-height: 1.35;
 }
@@ -292,6 +293,6 @@
 
 .appVersion {
   text-align: center;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
 }

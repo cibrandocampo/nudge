@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, loginAs, SEED, ensureContact } from './helpers.js'
+import { login, loginAs, SEED, ensureContact, goToInventory } from './helpers.js'
 
 /**
  * Sharing E2E tests.
@@ -214,8 +214,7 @@ test.describe('Sharing — Inventory', () => {
     const ctx2 = await browser.newContext()
     const page2 = await ctx2.newPage()
     await loginAs(page2, USER2.email, USER2.password)
-    await page2.getByRole('link', { name: 'Inventory' }).click()
-    await expect(page2).toHaveURL('/inventory')
+    await goToInventory(page2)
 
     const sharedCard = page2.locator('[data-testid="product-card"]').filter({ hasText: name })
     await expect(sharedCard).toBeVisible({ timeout: 10_000 })

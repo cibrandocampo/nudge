@@ -1,7 +1,7 @@
 .intro {
   margin: 0 0 1rem;
   color: var(--c-text-2);
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -28,7 +28,7 @@
 }
 
 .field {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-3);
 }
 
@@ -37,7 +37,7 @@
   align-items: baseline;
   gap: 0.5rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
 
@@ -71,7 +71,7 @@
   column-gap: 0.5rem;
   width: 100%;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .valuesText .current {

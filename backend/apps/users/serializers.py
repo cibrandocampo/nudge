@@ -32,6 +32,8 @@ class UserSerializer(serializers.ModelSerializer):
             "quiet_hours_end",
             "is_staff",
             "language",
+            "theme",
+            "text_size",
             "settings_updated_at",
         ]
         read_only_fields = [
@@ -102,6 +104,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "timezone",
             "daily_notification_time",
             "language",
+            "theme",
+            "text_size",
             "quiet_hours_enabled",
             "quiet_hours_start",
             "quiet_hours_end",

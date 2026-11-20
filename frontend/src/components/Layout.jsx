@@ -96,7 +96,7 @@ export default function Layout() {
                 aria-label={label}
                 aria-disabled="true"
                 title={t('offline.requiresConnection')}
-                className={cx(s.link, buttons.disabled)}
+                className={cx(s.link, buttons.disabledText)}
                 onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
               >
                 {renderInner(icon, label, to)}

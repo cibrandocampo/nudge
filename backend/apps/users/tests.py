@@ -1032,6 +1032,39 @@ class MeViewTest(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("language", response.json())
 
+    def test_get_me_returns_appearance_defaults(self):
+        data = self.client.get("/api/auth/me/").json()
+        self.assertEqual(data["theme"], "system")
+        self.assertEqual(data["text_size"], "normal")
+
+    def test_patch_me_updates_theme(self):
+        response = self.client.patch("/api/auth/me/", {"theme": "dark"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["theme"], "dark")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.theme, "dark")
+
+    def test_patch_me_updates_text_size(self):
+        response = self.client.patch("/api/auth/me/", {"text_size": "xlarge"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["text_size"], "xlarge")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.text_size, "xlarge")
+
+    def test_patch_me_invalid_theme_returns_400(self):
+        response = self.client.patch("/api/auth/me/", {"theme": "blue"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("theme", response.json())
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.theme, "system")
+
+    def test_patch_me_invalid_text_size_returns_400(self):
+        response = self.client.patch("/api/auth/me/", {"text_size": "huge"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("text_size", response.json())
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.text_size, "normal")
+
     def test_patch_me_updates_first_and_last_name(self):
         # The onboarding step (T196) PATCHes /me/ with first/last name
         # after the new user verifies their first OTP. The serializer
@@ -1124,6 +1157,14 @@ class SettingsUpdatedAtTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         after = self._snapshot()
         self.assertGreater(after, before)
+
+    def test_patch_appearance_does_not_bump(self):
+        # Theme and text size are presentation: the notification scheduler,
+        # which reads this stamp, does not care about them.
+        before = self._snapshot()
+        response = self.client.patch("/api/auth/me/", {"theme": "dark", "text_size": "large"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._snapshot(), before)
 
     def test_patch_same_value_does_not_bump(self):
         # Re-PATCHing the same value should not move the timestamp.

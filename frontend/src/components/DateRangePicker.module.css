@@ -10,10 +10,10 @@
   padding: 0 0.625rem 0 0.875rem;
   border: none;
   border-radius: var(--radius-lg);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   outline: none;
   cursor: pointer;
   white-space: nowrap;
@@ -69,7 +69,7 @@
   background: none;
   border: none;
   padding: 0.4rem 0.6rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-align: left;
   color: var(--c-text-2);
   border-radius: var(--radius);
@@ -83,7 +83,7 @@
 
 .presetBtnActive {
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   font-weight: 500;
 }
 
@@ -108,16 +108,16 @@
 }
 
 .fieldLabel {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   font-weight: 500;
 }
 
 .dateInput {
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-outline);
   border-radius: var(--radius);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   background: var(--c-surface);
   color: var(--c-text);
   outline: none;
@@ -127,10 +127,10 @@
   padding: 0.4rem 0.75rem;
   border: none;
   border-radius: var(--radius-lg);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   cursor: pointer;
   margin-top: 0.25rem;
 }

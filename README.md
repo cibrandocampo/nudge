@@ -73,6 +73,10 @@ What makes it more than a checklist:
   either of you can complete it and both see the same history.
 - **Push that respects the night.** A daily heads-up, an alert when something
   falls due, follow-up reminders — with quiet hours per user.
+- **Easy to read.** Light or dark theme (or follow the phone), three text sizes,
+  and English, Spanish or Galician — chosen once in Settings, applied on every
+  device you sign in to, with an automated accessibility check (axe, WCAG 2.2
+  AA rules) on every change.
 - **Yours.** No SaaS, no public registration, no telemetry. Backend and database
   never leave the Docker network.
 

@@ -22,7 +22,7 @@ class UserAdmin(BaseUserAdmin):
         (
             "Nudge settings",
             {
-                "fields": ("timezone", "daily_notification_time", "language"),
+                "fields": ("timezone", "daily_notification_time", "language", "theme", "text_size"),
             },
         ),
         (
@@ -43,7 +43,7 @@ class UserAdmin(BaseUserAdmin):
         (
             "Nudge settings",
             {
-                "fields": ("timezone", "daily_notification_time", "language"),
+                "fields": ("timezone", "daily_notification_time", "language", "theme", "text_size"),
             },
         ),
     )

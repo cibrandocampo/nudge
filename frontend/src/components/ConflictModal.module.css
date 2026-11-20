@@ -13,14 +13,14 @@
 
 .title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
 }
 
 .subtitle {
   margin: 0.1rem 0 0;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
 }
 
@@ -48,7 +48,7 @@
 
 .empty {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-3);
   text-align: center;
   padding: 1rem 0;
@@ -72,7 +72,7 @@
 }
 
 .diffField {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text);
   text-transform: uppercase;
@@ -87,7 +87,7 @@
 }
 
 .diffLabel {
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--c-text-3);
   text-transform: uppercase;
@@ -95,7 +95,7 @@
 }
 
 .diffValue {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--c-text-2);
   word-break: break-word;
 }
@@ -110,7 +110,7 @@
 
 .btn {
   padding: 0.3rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 500;
   border-radius: var(--radius);
   cursor: pointer;
@@ -120,7 +120,7 @@
 
 .btnPrimary {
   background: var(--c-primary);
-  color: var(--c-surface);
+  color: var(--c-on-primary);
   border-color: var(--c-primary);
 }
 .btnPrimary:hover {
@@ -130,7 +130,7 @@
 .btnSecondary {
   background: var(--c-surface);
   color: var(--c-text);
-  border-color: var(--c-border);
+  border-color: var(--c-outline);
 }
 .btnSecondary:hover {
   background: var(--c-border-inner);

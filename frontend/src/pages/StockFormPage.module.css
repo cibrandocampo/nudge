@@ -18,7 +18,7 @@
   background: none;
   border: none;
   color: var(--c-text-3);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   padding: 0.25rem 0.5rem 0.25rem 0;
 }
@@ -72,7 +72,7 @@
 }
 
 .batchFieldLabel {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--c-text-3);
   font-weight: 500;
 }
@@ -104,8 +104,8 @@
   padding: 0.25rem 0;
   background: none;
   border: none;
-  color: var(--c-primary);
-  font-size: 0.8rem;
+  color: var(--c-text-accent);
+  font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
 }
