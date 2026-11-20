@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { registerRollback } from '../../offline/rollbacks'
+import { consumptionOrder, expiryToday } from '../../utils/lotsForSelection'
 import { useOfflineMutation } from '../useOfflineMutation'
 import { restoreKeys, snapshotKeys } from './_optimisticHelpers'
 
@@ -65,7 +66,7 @@ registerRollback('consumeStock', (qc, { stockId, quantity, lotSelections }) => {
  *
  * Optimistic: decrements the total `quantity` and reduces the per-lot
  * quantities. When `lotSelections` is provided we apply them exactly;
- * otherwise we emulate FEFO (expiry asc, nulls last, then created_at).
+ * otherwise we follow `consumptionOrder`, the server's own order.
  * Keeps the UI in sync immediately; the server's response overwrites on
  * `onSuccess`.
  */
@@ -137,34 +138,29 @@ export function useConsumeStock() {
 
 /**
  * Returns a new lots array with `quantity` units subtracted. Respects the
- * caller's lot_selections when provided; otherwise consumes in FEFO order
- * (expiry ascending, nulls last, ties broken by `created_at`).
+ * caller's lot_selections when provided; otherwise takes the units in
+ * `consumptionOrder` — the same order the server uses, so an expired lot is
+ * never touched and the opened box goes first.
  */
 function applyConsumption(lots, quantity, lotSelections) {
+  let deductions
   if (Array.isArray(lotSelections) && lotSelections.length > 0) {
-    const bySel = new Map(lotSelections.map((sel) => [sel.lot_id, sel.quantity]))
-    return lots
-      .map((lot) => {
-        const deduct = bySel.get(lot.id) ?? 0
-        if (deduct <= 0) return lot
-        return { ...lot, quantity: Math.max(0, lot.quantity - deduct) }
-      })
-      .filter((lot) => lot.quantity > 0)
+    deductions = new Map(lotSelections.map((sel) => [sel.lot_id, sel.quantity]))
+  } else {
+    deductions = new Map()
+    let remaining = quantity
+    for (const lot of consumptionOrder(lots, expiryToday())) {
+      if (remaining <= 0) break
+      const take = Math.min(lot.quantity, remaining)
+      deductions.set(lot.id, take)
+      remaining -= take
+    }
   }
-  const ordered = [...lots].sort(fefoCompare)
-  let remaining = quantity
-  const next = ordered.map((lot) => {
-    if (remaining <= 0) return lot
-    const consume = Math.min(lot.quantity, remaining)
-    remaining -= consume
-    return { ...lot, quantity: lot.quantity - consume }
-  })
-  return next.filter((lot) => lot.quantity > 0)
-}
-
-function fefoCompare(a, b) {
-  const aDate = a.expiry_date ?? '9999-12-31'
-  const bDate = b.expiry_date ?? '9999-12-31'
-  if (aDate !== bDate) return aDate.localeCompare(bDate)
-  return (a.created_at ?? '').localeCompare(b.created_at ?? '')
+  return lots
+    .map((lot) => {
+      const deduct = deductions.get(lot.id) ?? 0
+      if (deduct <= 0) return lot
+      return { ...lot, quantity: Math.max(0, lot.quantity - deduct) }
+    })
+    .filter((lot) => lot.quantity > 0)
 }

@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
 
-from .exceptions import InsufficientStock, InvalidLotSelection, LotUnavailable
+from .exceptions import InsufficientStock, InvalidLotSelection, LotExpired, LotUnavailable
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 
@@ -2026,8 +2026,10 @@ class StockConsumeTest(APITestCase):
         response = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertFalse(response.json()["requires_lot_selection"])
 
-    def test_requires_lot_selection_true_with_named_lot(self):
+    def test_requires_lot_selection_true_with_two_named_lots(self):
+        # One lot is no choice (T124); two are.
         make_lot(self.stock, quantity=5, lot_number="LOT-1")
+        make_lot(self.stock, quantity=5, lot_number="LOT-2")
         response = self.client.get(f"/api/stock/{self.stock.id}/")
         self.assertTrue(response.json()["requires_lot_selection"])
 
@@ -2322,9 +2324,10 @@ class RoutineViewSetTest(APITestCase):
     # ── requires_lot_selection ────────────────────────────────────────────────
 
     def test_requires_lot_selection_true(self):
-        """Stock with at least one lot with lot_number → True."""
+        """Stock with two consumable lots → True (one lot is no choice, T124)."""
         stock = make_stock(self.user)
         make_lot(stock, quantity=5, lot_number="RTEW32")
+        make_lot(stock, quantity=5, lot_number="RTEW33")
         r = make_routine(self.user, stock=stock)
         response = self.client.get(f"/api/routines/{r.id}/")
         self.assertTrue(response.json()["requires_lot_selection"])
@@ -4475,8 +4478,10 @@ class StockConsumeLotsMethodTests(TestCase):
     def setUp(self):
         self.user = make_user()
         self.stock = make_stock(self.user, name="Pills")
-        self.lot1 = make_lot(self.stock, quantity=3, expiry_date=date(2026, 6, 1), lot_number="A")
-        self.lot2 = make_lot(self.stock, quantity=2, expiry_date=date(2026, 12, 31), lot_number="B")
+        # Relative to today: fixed dates expired with the calendar, and expired
+        # lots are never consumed (T124).
+        self.lot1 = make_lot(self.stock, quantity=3, expiry_date=date.today() + timedelta(days=30), lot_number="A")
+        self.lot2 = make_lot(self.stock, quantity=2, expiry_date=date.today() + timedelta(days=60), lot_number="B")
 
     def test_consume_lots_with_valid_selections(self):
         """Explicit lot_selections decrement each lot and return one dict per consumed lot."""
@@ -4493,7 +4498,7 @@ class StockConsumeLotsMethodTests(TestCase):
         self.assertFalse(StockLot.objects.filter(pk=self.lot2.pk).exists())
         # Returned dicts carry the canonical shape.
         self.assertEqual(result[0]["lot_number"], "A")
-        self.assertEqual(result[0]["expiry_date"], "2026-06-01")
+        self.assertEqual(result[0]["expiry_date"], self.lot1.expiry_date.isoformat())
         self.assertEqual(result[0]["quantity"], 3)
         self.assertEqual(result[1]["lot_number"], "B")
         self.assertEqual(result[1]["quantity"], 2)
@@ -4563,7 +4568,7 @@ class StockConsumeLotsMethodTests(TestCase):
         no_expiry_lot = make_lot(self.stock, quantity=4, lot_number="C")
         result = self.stock.consume_lots(quantity=2)
         self.assertEqual(len(result), 1)
-        # lot1 (2026-06-01) is the earliest expiry, so it's consumed first.
+        # lot1 (today + 30) is the earliest expiry, so it is consumed first.
         self.lot1.refresh_from_db()
         self.assertEqual(self.lot1.quantity, 1)
         # lot2 and the no-expiry lot are untouched.
@@ -5874,3 +5879,217 @@ class StockLeafletTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("sections", response.data)
+
+
+# ── T124: consumption order, expired lots, when to ask ──────────────────────
+
+
+def _in(days):
+    """A date `days` from today (negative = in the past)."""
+    return date.today() + timedelta(days=days)
+
+
+class ConsumptionOrderTests(TestCase):
+    """`Stock.consumable_lots`: which lots a consumption draws from, and in what order."""
+
+    def setUp(self):
+        self.stock = make_stock(make_user())
+
+    def order(self):
+        return list(self.stock.consumable_lots())
+
+    def test_expired_lot_is_excluded(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(-1), lot_number="OLD")
+        valid = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="NEW")
+        self.assertEqual(self.order(), [valid])
+
+    def test_lot_expiring_today_counts_as_expired(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(0))
+        self.assertEqual(self.order(), [])
+
+    def test_earlier_expiry_first(self):
+        later = make_lot(self.stock, quantity=5, expiry_date=_in(60))
+        sooner = make_lot(self.stock, quantity=5, expiry_date=_in(30))
+        self.assertEqual(self.order(), [sooner, later])
+
+    def test_lots_without_expiry_come_last(self):
+        no_expiry = make_lot(self.stock, quantity=5)
+        dated = make_lot(self.stock, quantity=5, expiry_date=_in(365))
+        self.assertEqual(self.order(), [dated, no_expiry])
+
+    def test_same_expiry_ordered_by_lot_number(self):
+        b = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="B")
+        a = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="A")
+        self.assertEqual(self.order(), [a, b])
+
+    def test_opened_box_before_full_box_of_same_lot(self):
+        full = make_lot(self.stock, quantity=10, expiry_date=_in(30), lot_number="L1", serial_number="S1")
+        opened = make_lot(self.stock, quantity=3, expiry_date=_in(30), lot_number="L1", serial_number="S2")
+        self.assertEqual(self.order(), [opened, full])
+
+    def test_full_tie_falls_back_to_created_at(self):
+        second = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1", serial_number="S1")
+        first = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1", serial_number="S2")
+        StockLot.objects.filter(pk=first.pk).update(created_at=timezone.now() - timedelta(days=2))
+        StockLot.objects.filter(pk=second.pk).update(created_at=timezone.now() - timedelta(days=1))
+        self.assertEqual(self.order(), [first, second])
+
+    def test_automatic_consumption_follows_the_order(self):
+        full = make_lot(self.stock, quantity=10, expiry_date=_in(30), lot_number="L1", serial_number="S1")
+        opened = make_lot(self.stock, quantity=3, expiry_date=_in(30), lot_number="L1", serial_number="S2")
+        self.stock.consume_lots(1)
+        opened.refresh_from_db()
+        full.refresh_from_db()
+        self.assertEqual((opened.quantity, full.quantity), (2, 10))
+
+
+class ExpiredLotConsumptionTests(TestCase):
+    """An expired lot is never consumed, automatically or by explicit selection."""
+
+    def setUp(self):
+        self.stock = make_stock(make_user())
+        self.expired = make_lot(self.stock, quantity=5, expiry_date=_in(-3), lot_number="OLD")
+
+    def test_mixed_stock_consumes_the_valid_lot_and_leaves_the_expired_one(self):
+        valid = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="NEW")
+        result = self.stock.consume_lots(1)
+        self.expired.refresh_from_db()
+        valid.refresh_from_db()
+        self.assertEqual((self.expired.quantity, valid.quantity), (5, 4))
+        self.assertEqual(result[0]["lot_number"], "NEW")
+
+    def test_only_expired_lots_is_insufficient_with_nothing_available(self):
+        with self.assertRaises(InsufficientStock) as ctx:
+            self.stock.consume_lots(1)
+        self.assertEqual((ctx.exception.requested, ctx.exception.available), (1, 0))
+
+    def test_selecting_an_expired_lot_raises_and_consumes_nothing(self):
+        valid = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="NEW")
+        with self.assertRaises(LotExpired) as ctx:
+            self.stock.consume_lots(
+                2,
+                lot_selections=[{"lot_id": valid.id, "quantity": 1}, {"lot_id": self.expired.id, "quantity": 1}],
+            )
+        self.assertEqual(ctx.exception.lot_ids, [self.expired.id])
+        self.expired.refresh_from_db()
+        valid.refresh_from_db()
+        self.assertEqual((self.expired.quantity, valid.quantity), (5, 5))
+
+    def test_an_expired_lot_selected_with_zero_units_is_not_a_refusal(self):
+        valid = make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="NEW")
+        self.stock.consume_lots(
+            1, lot_selections=[{"lot_id": valid.id, "quantity": 1}, {"lot_id": self.expired.id, "quantity": 0}]
+        )
+        valid.refresh_from_db()
+        self.assertEqual(valid.quantity, 4)
+
+
+class ExpiredLotApiTests(APITestCase):
+    """How the API reports a consumption that would need an expired lot."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+        self.expired = make_lot(self.stock, quantity=5, expiry_date=_in(-3), lot_number="OLD")
+
+    def test_consume_with_only_expired_lots_is_422_with_nothing_available(self):
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "insufficient_stock")
+        self.assertEqual(response.json()["available"], 0)
+
+    def test_routine_with_only_expired_lots_is_refused_before_logging(self):
+        routine = make_routine(self.user, stock=self.stock)
+        response = self.client.post(f"/api/routines/{routine.id}/log/", {})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["code"], "insufficient_stock")
+        self.assertEqual(response.json()["available"], 0)
+        self.assertFalse(RoutineEntry.objects.filter(routine=routine).exists())
+
+    def test_selecting_an_expired_lot_is_422_lot_expired(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="NEW")
+        response = self.client.post(
+            f"/api/stock/{self.stock.id}/consume/",
+            {"quantity": 1, "lot_selections": [{"lot_id": self.expired.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json(), {"detail": "Lot expired.", "code": "lot_expired", "lot_ids": [self.expired.id]}
+        )
+        self.expired.refresh_from_db()
+        self.assertEqual(self.expired.quantity, 5)
+
+
+class RequiresLotSelectionTests(APITestCase):
+    """`requires_lot_selection`: more than one consumable (lot_number, expiry_date) group.
+
+    Each case checks the flag on the stock and on a routine linked to it: both
+    serializers read `Stock.has_lot_choice`.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        self.stock = make_stock(self.user)
+        self.routine = make_routine(self.user, stock=self.stock)
+
+    def flags(self):
+        on_stock = self.client.get(f"/api/stock/{self.stock.id}/").json()["requires_lot_selection"]
+        on_routine = self.client.get(f"/api/routines/{self.routine.id}/").json()["requires_lot_selection"]
+        return on_stock, on_routine
+
+    def test_one_lot_is_no_choice(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1")
+        self.assertEqual(self.flags(), (False, False))
+
+    def test_two_lots_are_a_choice(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1")
+        make_lot(self.stock, quantity=5, expiry_date=_in(60), lot_number="L2")
+        self.assertEqual(self.flags(), (True, True))
+
+    def test_a_valid_lot_and_an_expired_one_is_no_choice(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1")
+        make_lot(self.stock, quantity=5, expiry_date=_in(-1), lot_number="L0")
+        self.assertEqual(self.flags(), (False, False))
+
+    def test_two_boxes_of_the_same_lot_are_no_choice(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1", serial_number="S1")
+        make_lot(self.stock, quantity=2, expiry_date=_in(30), lot_number="L1", serial_number="S2")
+        self.assertEqual(self.flags(), (False, False))
+
+    def test_two_expiries_without_lot_numbers_are_a_choice(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30))
+        make_lot(self.stock, quantity=5, expiry_date=_in(60))
+        self.assertEqual(self.flags(), (True, True))
+
+    def test_empty_lots_do_not_count(self):
+        make_lot(self.stock, quantity=5, expiry_date=_in(30), lot_number="L1")
+        make_lot(self.stock, quantity=0, expiry_date=_in(60), lot_number="L2")
+        self.assertEqual(self.flags(), (False, False))
+
+
+class HasLotChoicePathsTests(TestCase):
+    """`Stock.has_lot_choice` answers the same with and without the `lots` prefetch."""
+
+    def test_query_and_prefetch_paths_agree(self):
+        stock = make_stock(make_user())
+        make_lot(stock, quantity=5, expiry_date=_in(30), lot_number="L1", serial_number="S1")
+        make_lot(stock, quantity=5, expiry_date=_in(30), lot_number="L1", serial_number="S2")
+        make_lot(stock, quantity=5, expiry_date=_in(-1), lot_number="L0")
+        cases = {
+            "query": Stock.objects.get(pk=stock.pk),
+            "prefetch": Stock.objects.prefetch_related("lots").get(pk=stock.pk),
+        }
+        for path, loaded in cases.items():
+            with self.subTest(path=path):
+                self.assertFalse(loaded.has_lot_choice())
+        make_lot(stock, quantity=5, expiry_date=_in(60), lot_number="L2")
+        cases = {
+            "query": Stock.objects.get(pk=stock.pk),
+            "prefetch": Stock.objects.prefetch_related("lots").get(pk=stock.pk),
+        }
+        for path, loaded in cases.items():
+            with self.subTest(path=path):
+                self.assertTrue(loaded.has_lot_choice())

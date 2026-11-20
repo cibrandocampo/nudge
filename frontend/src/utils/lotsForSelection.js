@@ -1,72 +1,71 @@
 /**
- * Build the lot-selection list from a cached Stock object.
+ * Today as the lot-expiry comparisons read it: midnight UTC of the current
+ * date, the same instant the stock detail page shares with its lot rows. A lot
+ * whose `expiry_date` is on or before it has expired — it expires *on* that
+ * day, as the backend's `date.today()` reads it.
  *
- * Lots are **grouped** by `(lot_number, expiry_date)`: scanning three boxes of
- * the same batch creates three `StockLot` rows, which would otherwise show up
- * as three visually identical entries. Within a group the rows are split in
- * two, because they are different things:
- *
- *   - `packs` — rows carrying a GS1 serial. Each one is an identified physical
- *     box, so the user can be asked *which* one to consume.
- *   - `bulk`  — rows without a serial: an anonymous count.
- *
- * A group can hold both (three scanned packs plus an older hand-typed row of
- * the same batch).
- *
- * FEFO ordering: expiry_date ascending, nulls last, ties broken by the earliest
- * `created_at` in the group. Only lots with `quantity > 0` are included.
- *
- * Derived from the cached stock so the lot selection modal works offline:
- * no extra HTTP call, and the stock's own cache (seeded by `useStockList()`
- * or `useStock(id)`) is the single source of truth. Use
- * `findCachedStock(queryClient, id)` to fetch the stock from whichever
- * cache has it.
- *
- * @returns {Array<{
- *   key: string,
- *   lot_number: string | null,
- *   expiry_date: string | null,
- *   quantity: number,
- *   created_at: string,
- *   packs: Array<{ lot_id: number, serial_number: string, quantity: number, created_at: string }>,
- *   bulk: Array<{ lot_id: number, quantity: number, created_at: string }>,
- * }>}
+ * Callers compute it once and pass it down, so a list and its tests never
+ * disagree about when "now" is.
  */
-export function lotsForSelection(stock) {
-  if (!stock || !Array.isArray(stock.lots)) return []
+export function expiryToday(now = new Date()) {
+  return new Date(now.toISOString().slice(0, 10))
+}
 
-  return groupLots(stock.lots).map(({ rows, ...group }) => {
-    const packs = []
-    const bulk = []
-    for (const lot of rows) {
-      const row = { lot_id: lot.id, quantity: lot.quantity, created_at: lot.created_at ?? '' }
-      if (lot.serial_number) packs.push({ ...row, serial_number: lot.serial_number })
-      else bulk.push(row)
-    }
-    return { ...group, packs, bulk }
-  })
+/** Whether a lot can be consumed: it holds units and has not expired. */
+function isConsumable(lot, today) {
+  if ((lot.quantity ?? 0) <= 0) return false
+  return lot.expiry_date == null || new Date(lot.expiry_date) > today
+}
+
+// Soonest expiry first, undated last. The first key of every lot order in the
+// app — consumption and the stock detail list alike.
+function byExpiry(a, b) {
+  const aDate = a.expiry_date ?? '9999-12-31'
+  const bDate = b.expiry_date ?? '9999-12-31'
+  return aDate.localeCompare(bDate)
+}
+
+// Missing text fields sort first, as the backend's empty strings do.
+const text = (value) => value ?? ''
+
+// Only ever called on consumable lots, whose `quantity` is a positive number.
+function consumptionCompare(a, b) {
+  return (
+    byExpiry(a, b) ||
+    text(a.lot_number).localeCompare(text(b.lot_number)) ||
+    a.quantity - b.quantity ||
+    text(a.created_at).localeCompare(text(b.created_at))
+  )
 }
 
 /**
- * Group raw lot objects by `(lot_number, expiry_date)`, preserving the lots
- * themselves in `rows`.
+ * The lots of a stock in the order they are consumed — the one definition of
+ * that order on the client. It replicates the backend's
+ * `Stock.consumable_lots()`, which stays the reference:
  *
- * The shared core behind both `lotsForSelection` (which maps the rows into the
- * consumption wire shape) and the stock detail list (which needs the full lot,
- * `updated_at` included, to delete an individual box). One grouping rule, two
- * consumers — a second implementation would drift.
+ *   1. never an expired lot (`expiry_date <= today`) nor an empty one;
+ *   2. expiry ascending, undated last;
+ *   3. then `lot_number`, so units of one printed batch stay together;
+ *   4. then `quantity` ascending — the opened box before a full one;
+ *   5. then `created_at`.
+ *
+ * Used by the lot picker (through `lotsForSelection`) and by the optimistic
+ * consume, so what the screen predicts is what the server does.
  *
  * @param lots raw lots as the API returns them
- * @param minQuantity lots below this are dropped. Defaults to 1, so consumption
- *   never offers an empty lot; pass 0 to render whatever the server sent.
- * @returns FEFO-ordered groups, `rows` ordered by `created_at`
+ * @param today from `expiryToday()`
  */
-export function groupLots(lots, { minQuantity = 1 } = {}) {
+export function consumptionOrder(lots, today) {
   if (!Array.isArray(lots)) return []
+  return lots.filter((lot) => isConsumable(lot, today)).sort(consumptionCompare)
+}
 
+// Bucket lots by `(lot_number, expiry_date)` — what is printed on the unit —
+// keeping the input order both across groups (first appearance) and inside
+// each group's `rows`.
+function collectGroups(lots) {
   const groups = new Map()
   for (const lot of lots) {
-    if ((lot.quantity ?? 0) < minQuantity) continue
     const lotNumber = lot.lot_number || null
     const expiryDate = lot.expiry_date ?? null
     const key = `${lotNumber ?? ''}|${expiryDate ?? ''}`
@@ -89,72 +88,102 @@ export function groupLots(lots, { minQuantity = 1 } = {}) {
     }
     group.rows.push(lot)
   }
-
-  const result = [...groups.values()]
-  for (const group of result) {
-    group.rows.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
-  }
-  return result.sort(fefoCompare)
+  return [...groups.values()]
 }
 
 /**
- * Turn a chosen group into the wire format the API expects.
+ * Build the lot-selection list from a cached Stock object: what the user picks
+ * from when a consumption needs a lot.
  *
- * Chosen packs are consumed first, in the order they were picked out of the
- * group; whatever is still needed comes from the group's unserialized rows. A
- * pack normally holds a single unit, but the model does not forbid more, so the
- * allocation caps at each row's own quantity rather than assuming 1.
+ * The user is asked the **lot**, never the box: a unit carries its lot number
+ * and expiry, not the serial of the box it came out of. So the list holds one
+ * entry per `(lot_number, expiry_date)` group, and inside a group the units are
+ * taken in consumption order — the opened box first (see `allocateFromGroup`).
+ *
+ * Expired and empty lots are not offered; groups and their rows follow
+ * `consumptionOrder`.
+ *
+ * Derived from the cached stock so the lot selection modal works offline:
+ * no extra HTTP call, and the stock's own cache (seeded by `useStockList()`
+ * or `useStock(id)`) is the single source of truth. Use
+ * `findCachedStock(queryClient, id)` to fetch the stock from whichever
+ * cache has it.
+ *
+ * @param stock a cached Stock object; anything malformed yields `[]`
+ * @param today from `expiryToday()`
+ * @returns {Array<{
+ *   key: string,
+ *   lot_number: string | null,
+ *   expiry_date: string | null,
+ *   quantity: number,
+ *   rows: Array<{ lot_id: number, quantity: number }>,
+ * }>}
+ */
+export function lotsForSelection(stock, today) {
+  if (!stock || !Array.isArray(stock.lots)) return []
+
+  return collectGroups(consumptionOrder(stock.lots, today)).map((group) => ({
+    key: group.key,
+    lot_number: group.lot_number,
+    expiry_date: group.expiry_date,
+    quantity: group.quantity,
+    rows: group.rows.map((lot) => ({ lot_id: lot.id, quantity: lot.quantity })),
+  }))
+}
+
+/**
+ * Whether consuming from this stock needs the user to choose a lot: only when
+ * there is more than one group to choose from. The same rule as the backend's
+ * `requires_lot_selection` (`Stock.has_lot_choice()`).
+ *
+ * @param groups the result of `lotsForSelection`
+ */
+export function needsLotChoice(groups) {
+  return groups.length > 1
+}
+
+/**
+ * Group raw lot objects by `(lot_number, expiry_date)` for the stock detail
+ * list, preserving the lots themselves in `rows` (it needs the full lot,
+ * `updated_at` included, to delete an individual box).
+ *
+ * Unlike `lotsForSelection` it does not drop expired lots: the detail list
+ * shows them so they can be deleted. Groups are ordered by expiry (undated
+ * last), ties by the earliest `created_at`; `rows` by `created_at`.
+ *
+ * @param lots raw lots as the API returns them
+ * @param minQuantity lots below this are dropped. Defaults to 1; pass 0 to
+ *   render whatever the server sent.
+ */
+export function groupLots(lots, { minQuantity = 1 } = {}) {
+  if (!Array.isArray(lots)) return []
+
+  const groups = collectGroups(lots.filter((lot) => (lot.quantity ?? 0) >= minQuantity))
+  for (const group of groups) {
+    group.rows.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+  }
+  return groups.sort((a, b) => byExpiry(a, b) || a.created_at.localeCompare(b.created_at))
+}
+
+/**
+ * Turn a chosen group into the wire format the API expects, taking its rows in
+ * the order `lotsForSelection` left them — the opened box first. A row normally
+ * holds a single unit, but the model does not forbid more, so the allocation
+ * caps at each row's own quantity.
  *
  * @returns {Array<{ lot_id: number, quantity: number }>}
  */
-export function allocateFromGroup(group, needed, chosenPackLotIds = []) {
+export function allocateFromGroup(group, needed) {
   if (!group || needed <= 0) return []
-  const chosen = new Set(chosenPackLotIds)
   const selections = []
   let remaining = needed
-
-  for (const pack of group.packs) {
-    if (remaining <= 0) break
-    if (!chosen.has(pack.lot_id)) continue
-    const take = Math.min(pack.quantity, remaining)
-    selections.push({ lot_id: pack.lot_id, quantity: take })
-    remaining -= take
-  }
-  for (const row of group.bulk) {
+  for (const row of group.rows) {
     if (remaining <= 0) break
     const take = Math.min(row.quantity, remaining)
     selections.push({ lot_id: row.lot_id, quantity: take })
     remaining -= take
   }
   return selections
-}
-
-/** Total units held in a group's unserialized rows. */
-export function bulkQuantity(group) {
-  return group.bulk.reduce((sum, row) => sum + row.quantity, 0)
-}
-
-/**
- * Whether consuming from this group needs the user to say *which* box.
- *
- * A pack step only earns its place when there is a real choice to make: a group
- * holding a single identified pack has no ambiguity, so it is taken
- * automatically however many units come out of it. The rule lives here, next to
- * the grouping that builds `packs`, because every consumption entry point must
- * skip on the same condition — two copies of it would drift apart silently.
- */
-export function needsPackChoice(group) {
-  return group.packs.length > 1
-}
-
-// Only ever called on the groups `groupLots` builds, whose `created_at` is
-// normalised to a string there — no nullish guard needed, and one that could
-// never fire would only suggest the invariant is weaker than it is.
-function fefoCompare(a, b) {
-  const aDate = a.expiry_date ?? '9999-12-31'
-  const bDate = b.expiry_date ?? '9999-12-31'
-  if (aDate !== bDate) return aDate.localeCompare(bDate)
-  return a.created_at.localeCompare(b.created_at)
 }
 
 /**

@@ -157,8 +157,9 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     - ``estimated_depletion_date``, ``depletion_is_estimated``,
       ``daily_consumption_own``, ``daily_consumption_shared`` — depletion
       estimate using Nudge's heuristic.
-    - ``requires_lot_selection`` — UI hint: the stock has lot-numbered lots,
-      so the client must let the user pick which to consume before any decrement.
+    - ``requires_lot_selection`` — UI hint: there is a lot to choose (more than
+      one consumable lot number / expiry, `Stock.has_lot_choice`), so the client
+      asks which one before consuming.
     - ``is_pinned`` — whether the requesting user has pinned this stock to the
       top of their inventory. Per-viewer, like ``my_group``: on a shared stock
       the owner's pin says nothing about the recipient's.
@@ -408,10 +409,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
         return self._quantity_partition(obj)["expired"]
 
     def get_requires_lot_selection(self, obj):
-        # Use prefetch cache when available to avoid an extra query
-        if "lots" in obj.__dict__.get("_prefetched_objects_cache", {}):
-            return any(lot.lot_number and lot.quantity > 0 for lot in obj.lots.all())
-        return obj.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
+        return obj.has_lot_choice()
 
     def _consumption_data(self, obj):
         """Compute and cache consumption data for the stock.
@@ -842,12 +840,7 @@ class RoutineSerializer(SharedWithMixin, FlexFieldsModelSerializer):
         return round(delta, 1)
 
     def get_requires_lot_selection(self, obj):
-        if not obj.stock_id:
-            return False
-        stock = obj.stock
-        if "lots" in stock.__dict__.get("_prefetched_objects_cache", {}):
-            return any(lot.lot_number and lot.quantity > 0 for lot in stock.lots.all())
-        return stock.lots.filter(quantity__gt=0).exclude(lot_number="").exists()
+        return bool(obj.stock_id) and obj.stock.has_lot_choice()
 
 
 class RoutineEntrySerializer(FlexFieldsModelSerializer):

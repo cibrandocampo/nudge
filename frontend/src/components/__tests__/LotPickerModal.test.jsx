@@ -1,13 +1,23 @@
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
-import { lotsForSelection } from '../../utils/lotsForSelection'
+import { expiryToday, lotsForSelection } from '../../utils/lotsForSelection'
 import LotConsumeModal from '../LotConsumeModal'
 import LotPickerModal from '../LotPickerModal'
 
 const BASE = 'http://localhost/api'
+
+// Only `Date` is faked: the picker drops expired batches against today, and a
+// frozen today keeps the fixtures' expiries valid however long the suite lives.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-06-01T12:00:00Z'))
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function buildStock(overrides = {}) {
   return {
@@ -140,106 +150,63 @@ describe('LotPickerModal', () => {
     expect(screen.getByRole('button', { name: /consume 1/i })).toBeDisabled()
   })
 
-  // ── Serialized packs ──────────────────────────────────────────────────────
+  // ── The lot, never the box ────────────────────────────────────────────────
 
-  const serializedStock = () =>
+  // Two boxes of one batch: a full one scanned first, the opened one after.
+  const twoBoxesStock = () =>
     buildStock({
       lots: [
-        { id: 30, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-1' },
-        { id: 31, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-2' },
+        {
+          id: 30,
+          quantity: 10,
+          expiry_date: '2028-06-01',
+          lot_number: 'LOT-S',
+          serial_number: 'SN-1',
+          created_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 31,
+          quantity: 4,
+          expiry_date: '2028-06-01',
+          lot_number: 'LOT-S',
+          serial_number: 'SN-2',
+          created_at: '2026-01-02T00:00:00Z',
+        },
       ],
     })
 
-  it('shows two packs of the same batch as a single lot row', () => {
-    renderModal({ stock: serializedStock() })
+  it('shows two boxes of the same batch as a single lot row', () => {
+    renderModal({ stock: twoBoxesStock() })
     expect(screen.getAllByTestId('lot-group-row')).toHaveLength(1)
-    expect(screen.getByText(/2 available/)).toBeInTheDocument()
+    expect(screen.getByText(/14 available/)).toBeInTheDocument()
   })
 
-  it('asks which pack and consumes exactly that box', async () => {
+  it('consumes from the opened box, with no box step', async () => {
     let receivedBody = null
     server.use(
       http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
         receivedBody = await request.json()
-        return HttpResponse.json({ id: 5, name: 'Water filter', quantity: 1, lots: [] })
+        return HttpResponse.json({ ok: true })
       }),
     )
-
-    const { user } = renderModal({ stock: serializedStock() })
+    const { user } = renderModal({ stock: twoBoxesStock() })
     await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    expect(screen.getByText('Which pack?')).toBeInTheDocument()
-
-    await user.click(screen.getByText('SN-2'))
-    await user.click(screen.getByTestId('pack-confirm'))
 
     await waitFor(() => expect(receivedBody).not.toBeNull())
     expect(receivedBody.lot_selections).toEqual([{ lot_id: 31, quantity: 1 }])
   })
 
-  it('consumes straight away for a batch without serials', async () => {
-    let receivedBody = null
-    server.use(
-      http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
-        receivedBody = await request.json()
-        return HttpResponse.json({ ok: true })
-      }),
-    )
-    const { user } = renderModal()
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    await waitFor(() => expect(receivedBody).not.toBeNull())
-    expect(receivedBody.lot_selections).toEqual([{ lot_id: 10, quantity: 1 }])
-  })
-
-  it('does not ask which pack when the batch holds a single identified box', async () => {
-    let receivedBody = null
-    server.use(
-      http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
-        receivedBody = await request.json()
-        return HttpResponse.json({ ok: true })
-      }),
-    )
-    const stock = buildStock({
-      // Ten pills, one serial: consuming one needs no confirmation.
-      lots: [{ id: 50, quantity: 10, expiry_date: '2028-06-01', lot_number: 'LOT-ONE', serial_number: 'SN-ONLY' }],
-    })
-    const { user } = renderModal({ stock })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    await waitFor(() => expect(receivedBody).not.toBeNull())
-    expect(receivedBody.lot_selections).toEqual([{ lot_id: 50, quantity: 1 }])
-  })
-
-  it('goes back from the pack step to the lot list', async () => {
-    const { user } = renderModal({ stock: serializedStock() })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    await user.click(screen.getByRole('button', { name: /back/i }))
-    expect(screen.getByText(/select the batch to consume/i)).toBeInTheDocument()
-  })
-
-  it('lets the user consume an unidentified unit from a mixed batch', async () => {
-    let receivedBody = null
-    server.use(
-      http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
-        receivedBody = await request.json()
-        return HttpResponse.json({ ok: true })
-      }),
-    )
+  it('does not offer an expired batch', () => {
     const stock = buildStock({
       lots: [
-        { id: 40, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-M', serial_number: 'SN-9' },
-        { id: 42, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-M', serial_number: 'SN-10' },
-        { id: 41, quantity: 4, expiry_date: '2028-06-01', lot_number: 'LOT-M', serial_number: '' },
+        { id: 70, quantity: 2, expiry_date: '2026-03-01', lot_number: 'LOT-OLD' },
+        { id: 71, quantity: 2, expiry_date: '2028-06-01', lot_number: 'LOT-NEW' },
       ],
     })
-    const { user } = renderModal({ stock })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    await user.click(screen.getByTestId('bulk-row'))
-    await user.click(screen.getByTestId('pack-confirm'))
-
-    await waitFor(() => expect(receivedBody).not.toBeNull())
-    expect(receivedBody.lot_selections).toEqual([{ lot_id: 41, quantity: 1 }])
+    renderModal({ stock })
+    expect(screen.getAllByRole('radio')).toHaveLength(1)
+    expect(screen.queryByText('LOT-OLD')).not.toBeInTheDocument()
+    expect(screen.getByText('LOT-NEW')).toBeInTheDocument()
   })
 
   // Every row is a `<li role="radio" tabIndex={0}>`, so a keyboard user
@@ -257,44 +224,6 @@ describe('LotPickerModal', () => {
     first.focus()
     await user.keyboard(' ')
     expect(second).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('selects a pack row with Enter, and ignores other keys', async () => {
-    const { user } = renderModal({ stock: serializedStock() })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    const [first, second] = screen.getAllByTestId('pack-row')
-    second.focus()
-    await user.keyboard('{Enter}')
-    expect(second).toHaveAttribute('aria-checked', 'true')
-
-    first.focus()
-    await user.keyboard('a')
-    expect(second).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('selects the unidentified-units row with Enter', async () => {
-    const stock = buildStock({
-      lots: [
-        { id: 60, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-K', serial_number: 'SN-A' },
-        { id: 61, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-K', serial_number: 'SN-B' },
-        { id: 62, quantity: 3, expiry_date: '2028-06-01', lot_number: 'LOT-K', serial_number: '' },
-      ],
-    })
-    const { user } = renderModal({ stock })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    const bulk = screen.getByTestId('bulk-row')
-    bulk.focus()
-    await user.keyboard('{Enter}')
-    expect(bulk).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('surfaces a server error on the pack step without leaving it', async () => {
-    server.use(http.post(`${BASE}/stock/5/consume/`, () => new HttpResponse(null, { status: 500 })))
-    const { user } = renderModal({ stock: serializedStock() })
-    await user.click(screen.getByRole('button', { name: /consume 1/i }))
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(await screen.findByText(/could not consume/i)).toBeInTheDocument()
-    expect(screen.getAllByTestId('pack-row')).toHaveLength(2)
   })
 
   it('refuses to close while the consume is in flight', async () => {
@@ -315,14 +244,14 @@ describe('LotPickerModal', () => {
 // batches and identical clicks produce byte-identical `lot_selections`. A
 // divergence here would be the two entry points drifting apart again.
 describe('LotPickerModal — parity with the routine entry point', () => {
-  const mixedBatch = [
-    { id: 30, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-1' },
-    { id: 31, quantity: 1, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-2' },
-    { id: 32, quantity: 4, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: '' },
+  const batches = [
+    { id: 30, quantity: 10, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-1' },
+    { id: 31, quantity: 4, expiry_date: '2028-06-01', lot_number: 'LOT-S', serial_number: 'SN-2' },
+    { id: 32, quantity: 4, expiry_date: '2028-09-01', lot_number: 'LOT-T', serial_number: '' },
   ]
 
   it('sends what the routine flow would confirm for the same single unit', async () => {
-    const stock = buildStock({ lots: mixedBatch })
+    const stock = buildStock({ lots: batches })
     let receivedBody = null
     server.use(
       http.post(`${BASE}/stock/5/consume/`, async ({ request }) => {
@@ -333,18 +262,19 @@ describe('LotPickerModal — parity with the routine entry point', () => {
 
     const picker = renderWithProviders(<LotPickerModal stock={stock} onClose={() => {}} onConsumed={() => {}} />)
     await picker.user.click(screen.getByRole('button', { name: /consume 1/i }))
-    await picker.user.click(screen.getByText('SN-2'))
-    await picker.user.click(screen.getByTestId('pack-confirm'))
     await waitFor(() => expect(receivedBody).not.toBeNull())
     picker.unmount()
 
     const onConfirm = vi.fn()
     const routine = renderWithProviders(
-      <LotConsumeModal groups={lotsForSelection(stock)} needed={1} onConfirm={onConfirm} onCancel={() => {}} />,
+      <LotConsumeModal
+        groups={lotsForSelection(stock, expiryToday())}
+        needed={1}
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />,
     )
     await routine.user.click(screen.getByText('Confirm'))
-    await routine.user.click(screen.getByText('SN-2'))
-    await routine.user.click(screen.getByTestId('pack-confirm'))
 
     expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 31, quantity: 1 }])
     expect(onConfirm).toHaveBeenCalledWith(receivedBody.lot_selections)

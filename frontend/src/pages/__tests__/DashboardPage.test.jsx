@@ -22,8 +22,8 @@ const stockForLotSelection = {
   name: 'Filters',
   quantity: 5,
   lots: [
-    { id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 2, created_at: '2026-01-01T00:00:00Z' },
-    { id: 2, lot_number: 'LOT-B', expiry_date: '2027-06-01', quantity: 5, created_at: '2026-01-02T00:00:00Z' },
+    { id: 1, lot_number: 'LOT-A', expiry_date: '2099-01-01', quantity: 2, created_at: '2026-01-01T00:00:00Z' },
+    { id: 2, lot_number: 'LOT-B', expiry_date: '2099-06-01', quantity: 5, created_at: '2026-01-02T00:00:00Z' },
   ],
 }
 const stockListHandler = http.get(`${BASE}/stock/`, () => HttpResponse.json([stockForLotSelection]))

@@ -57,7 +57,7 @@ export function lotSuggestions(stock, today) {
 }
 
 // Soonest first, undated last, ties broken by the number so the order never
-// depends on how the rows happened to arrive. Mirrors `fefoCompare` in
+// depends on how the rows happened to arrive. Starts like `byExpiry` in
 // `lotsForSelection.js`, including its sentinel.
 function bySoonestExpiry(a, b) {
   const aDate = a.expiry_date ?? '9999-12-31'

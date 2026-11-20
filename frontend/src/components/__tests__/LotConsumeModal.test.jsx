@@ -6,7 +6,9 @@ import LotConsumeModal from '../LotConsumeModal'
 // The modal consumes exactly what `lotsForSelection` produces, so fixtures are
 // built by running the real grouping over raw lots. A hand-written group object
 // could drift from its producer; this cannot.
-const groupsFrom = (lots) => lotsForSelection({ lots })
+// A fixed today keeps the fixtures' expiries valid however long the suite lives.
+const TODAY = new Date('2026-01-01')
+const groupsFrom = (lots) => lotsForSelection({ lots }, TODAY)
 
 const mockGroups = groupsFrom([
   { id: 1, lot_number: 'LOT-A', expiry_date: '2027-01-01', quantity: 5 },
@@ -196,7 +198,10 @@ describe('LotConsumeModal', () => {
   })
 })
 
-describe('LotConsumeModal — pack step', () => {
+// The user is asked the lot, never the box: a unit carries its lot number and
+// expiry, not the serial of the box it came from (T125). Inside the chosen lot
+// the units come out in consumption order — the opened box first.
+describe('LotConsumeModal — one step, the lot', () => {
   const onConfirm = vi.fn()
   const onCancel = vi.fn()
 
@@ -204,337 +209,49 @@ describe('LotConsumeModal — pack step', () => {
     vi.clearAllMocks()
   })
 
-  const twoPacks = groupsFrom([
-    { id: 11, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-1' },
-    { id: 12, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-2' },
+  // Two boxes of one batch: a full one scanned first, an opened one after.
+  const twoBoxes = groupsFrom([
+    { id: 11, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-1', created_at: '1' },
+    { id: 12, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 4, serial_number: 'SN-2', created_at: '2' },
   ])
 
-  it('groups two packs of the same batch into one row', () => {
-    renderWithProviders(<LotConsumeModal needed={1} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />)
+  it('shows two boxes of the same lot as one row, without their serials', () => {
+    renderWithProviders(<LotConsumeModal needed={1} groups={twoBoxes} onConfirm={onConfirm} onCancel={onCancel} />)
     expect(screen.getAllByTestId('lot-group-row')).toHaveLength(1)
-    expect(screen.getByText(/2 available/)).toBeInTheDocument()
-  })
-
-  it('asks which pack, and sends the lot_id of the chosen box', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText('Which pack?')).toBeInTheDocument()
-    expect(screen.getByText(/LOT-A · 2 packs/)).toBeInTheDocument()
-
-    await user.click(screen.getByText('SN-2'))
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 12, quantity: 1 }])
-  })
-
-  it('preselects the oldest pack so confirming twice is enough', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 11, quantity: 1 }])
-  })
-
-  it('skips the pack step for a lot with no serials', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={mockGroups} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 1, quantity: 1 }])
-  })
-
-  it('lets the user go back to the lot list', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    await user.click(screen.getByText('Back'))
-    expect(screen.getByText('Select items to consume')).toBeInTheDocument()
-    expect(onConfirm).not.toHaveBeenCalled()
-  })
-
-  it('skips the pack step when the lot holds a single identified box', async () => {
-    const onePack = groupsFrom([
-      // One serial covering ten units: there is nothing to choose between.
-      { id: 41, lot_number: 'LOT-1', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-ONLY' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={onePack} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 41, quantity: 1 }])
-  })
-
-  it('takes the single box of a mixed lot without asking', async () => {
-    const mixedOnePack = groupsFrom([
-      { id: 51, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 2, serial_number: 'SN-SOLO' },
-      { id: 52, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 5, serial_number: '' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={mixedOnePack} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 51, quantity: 1 }])
-  })
-
-  it('offers the unidentified units of a mixed lot as an alternative', async () => {
-    const mixed = groupsFrom([
-      { id: 21, lot_number: 'LOT-M', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-9' },
-      { id: 23, lot_number: 'LOT-M', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-10' },
-      { id: 22, lot_number: 'LOT-M', expiry_date: '2028-06-01', quantity: 5, serial_number: '' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={mixed} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    await user.click(screen.getByTestId('bulk-row'))
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 22, quantity: 1 }])
-  })
-
-  it('sends one entry per pack when several units are consumed', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={2} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText('2/2')).toBeInTheDocument()
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([
-      { lot_id: 11, quantity: 1 },
-      { lot_id: 12, quantity: 1 },
-    ])
-  })
-
-  it('refuses to continue when fewer packs are named than units consumed', async () => {
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={2} groups={twoPacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    await user.click(screen.getByText('SN-2')) // deselect → 1 of 2
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).not.toHaveBeenCalled()
-    expect(screen.getByText(/Select 2 pack/)).toBeInTheDocument()
-  })
-
-  it('walks one pack step per lot when two multi-pack lots are involved', async () => {
-    const twoLots = groupsFrom([
-      { id: 31, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A1' },
-      { id: 33, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A2' },
-      { id: 32, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B1' },
-      { id: 34, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B2' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={3} groups={twoLots} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    // FEFO pre-distribution: 2 from LOT-A, 1 from LOT-B.
-    await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText('SN-A1')).toBeInTheDocument()
-    await user.click(screen.getByTestId('pack-confirm'))
-    // Second lot's own pack step.
-    expect(screen.getByText('SN-B1')).toBeInTheDocument()
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([
-      { lot_id: 31, quantity: 1 },
-      { lot_id: 33, quantity: 1 },
-      { lot_id: 32, quantity: 1 },
-    ])
-  })
-
-  it('goes back from the second pack step to the first, not to the lot list', async () => {
-    const twoLots = groupsFrom([
-      { id: 31, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A1' },
-      { id: 33, lot_number: 'LOT-A', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-A2' },
-      { id: 32, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B1' },
-      { id: 34, lot_number: 'LOT-B', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-B2' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={3} groups={twoLots} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(screen.getByText('SN-B1')).toBeInTheDocument()
-
-    await user.click(screen.getByText('Back'))
-    // One step back is LOT-A's pack step. Going straight to the lot list would
-    // throw away a choice the user did not ask to undo.
-    expect(screen.getByText('SN-A1')).toBeInTheDocument()
-    expect(screen.queryByText('SN-B1')).not.toBeInTheDocument()
-  })
-
-  it('ignores a pack picked beyond the number of units being consumed', async () => {
-    const threePacks = groupsFrom([
-      { id: 71, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
-      { id: 72, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
-      { id: 73, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-3' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={2} groups={threePacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    expect(screen.getByText('2/2')).toBeInTheDocument()
-
-    // The first two are preselected; the third has nowhere to go. Deselecting
-    // one first is the way to swap — silently dropping an earlier choice would
-    // be the modal picking for the user.
-    await user.click(screen.getByText('SN-3'))
-    expect(screen.getByText('2/2')).toBeInTheDocument()
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([
-      { lot_id: 71, quantity: 1 },
-      { lot_id: 72, quantity: 1 },
-    ])
-  })
-
-  // The other half of the rule above: deselecting first is what makes room, so
-  // swapping one box for another has to work. Nothing exercised the branch that
-  // adds a pack while the selection is short of the allocation.
-  it('swaps a pack when one is deselected to make room', async () => {
-    const threePacks = groupsFrom([
-      { id: 71, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-1' },
-      { id: 72, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-2' },
-      { id: 73, lot_number: 'LOT-T', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-3' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={2} groups={threePacks} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-
-    await user.click(screen.getByText('SN-1')) // drop the first: 1 of 2
-    expect(screen.getByText('1/2')).toBeInTheDocument()
-    await user.click(screen.getByText('SN-3')) // and take the third instead
-    expect(screen.getByText('2/2')).toBeInTheDocument()
-
-    await user.click(screen.getByTestId('pack-confirm'))
-    // Allocation order follows the group, not the order they were picked.
-    expect(onConfirm).toHaveBeenCalledWith([
-      { lot_id: 72, quantity: 1 },
-      { lot_id: 73, quantity: 1 },
-    ])
-  })
-
-  it('toggles a pack with Enter, and ignores other keys', async () => {
-    const twoPacksLot = groupsFrom([
-      { id: 81, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-X' },
-      { id: 82, lot_number: 'LOT-E', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-Y' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={twoPacksLot} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    const [, second] = screen.getAllByTestId('pack-row')
-    second.focus()
-    await user.keyboard('{Enter}')
-    expect(second).toHaveAttribute('aria-checked', 'true')
-
-    await user.keyboard('a')
-    expect(second).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('selects the unidentified units with Enter when one unit is consumed', async () => {
-    const mixed = groupsFrom([
-      { id: 91, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-M1' },
-      { id: 92, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-M2' },
-      { id: 93, lot_number: 'LOT-M', expiry_date: '2028-01-01', quantity: 4, serial_number: '' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={1} groups={mixed} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    const bulk = screen.getByTestId('bulk-row')
-    bulk.focus()
-    await user.keyboard('{Enter}')
-    expect(bulk).toHaveAttribute('aria-checked', 'true')
-    await user.click(screen.getByTestId('pack-confirm'))
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 93, quantity: 1 }])
-  })
-
-  it('shows the unidentified units as read-only when several units are consumed', async () => {
-    const mixed = groupsFrom([
-      { id: 94, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-N1' },
-      { id: 95, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 1, serial_number: 'SN-N2' },
-      { id: 96, lot_number: 'LOT-N', expiry_date: '2028-01-01', quantity: 4, serial_number: '' },
-    ])
-    const { user } = renderWithProviders(
-      <LotConsumeModal needed={2} groups={mixed} onConfirm={onConfirm} onCancel={onCancel} />,
-    )
-    await user.click(screen.getByText('Confirm'))
-    const bulk = screen.getByTestId('bulk-row')
-    // Informational: the shortfall is taken from here automatically, so there
-    // is nothing to click and no checked state to report.
-    expect(bulk).not.toHaveAttribute('role')
-    expect(bulk).not.toHaveAttribute('aria-checked')
-    expect(bulk).toHaveTextContent('4 available')
-  })
-})
-
-// The pack step is skipped when a group holds one identified pack — there is
-// nothing to choose. That left the user consuming a named box without ever
-// being told which one, so the group row shows it instead (T042). Informing,
-// not asking: no step is added.
-describe('LotConsumeModal — the solo pack is named on the group row', () => {
-  const onConfirm = vi.fn()
-  const onCancel = vi.fn()
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  const render1 = (groups, needed = 1) =>
-    renderWithProviders(<LotConsumeModal needed={needed} groups={groups} onConfirm={onConfirm} onCancel={onCancel} />)
-
-  it('shows the serial when the group holds exactly one identified pack', () => {
-    const onePack = groupsFrom([
-      { id: 41, lot_number: 'LOT-1', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-ONLY' },
-    ])
-    render1(onePack)
-    expect(screen.getByTestId('group-serial')).toHaveTextContent('SN-ONLY')
-  })
-
-  it('shows no serial on the group row when several packs are on offer', () => {
-    const twoPacksLot = groupsFrom([
-      { id: 11, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-1' },
-      { id: 12, lot_number: 'LOT-A', expiry_date: '2028-06-01', quantity: 1, serial_number: 'SN-2' },
-    ])
-    render1(twoPacksLot)
-    // Choosing between them is what the pack step is for; naming one here
-    // would claim a box the user has not picked yet.
-    expect(screen.queryByTestId('group-serial')).not.toBeInTheDocument()
+    expect(screen.getByText(/14 available/)).toBeInTheDocument()
     expect(screen.queryByText('SN-1')).not.toBeInTheDocument()
+    expect(screen.queryByText('SN-2')).not.toBeInTheDocument()
   })
 
-  it('leaves a group with no identified packs unchanged', () => {
-    render1(mockGroups)
-    expect(screen.queryByTestId('group-serial')).not.toBeInTheDocument()
-  })
-
-  it('names the solo pack of a mixed group, which is what comes out first', () => {
-    const mixedOnePack = groupsFrom([
-      { id: 51, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 2, serial_number: 'SN-SOLO' },
-      { id: 52, lot_number: 'LOT-M1', expiry_date: '2028-06-01', quantity: 5, serial_number: '' },
-    ])
-    render1(mixedOnePack)
-    // `allocateFromGroup` takes chosen packs before bulk, so a single unit
-    // consumed from this group is SN-SOLO.
-    expect(screen.getByTestId('group-serial')).toHaveTextContent('SN-SOLO')
-  })
-
-  // The regression guard for the whole task: this adds information, not a
-  // different allocation.
-  it('confirms a single-pack group with the same lotSelections as before', async () => {
-    const onePack = groupsFrom([
-      { id: 41, lot_number: 'LOT-1', expiry_date: '2028-06-01', quantity: 10, serial_number: 'SN-ONLY' },
-    ])
-    const { user } = render1(onePack)
+  it('confirms in one step, sending the opened box', async () => {
+    const { user } = renderWithProviders(
+      <LotConsumeModal needed={1} groups={twoBoxes} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
     await user.click(screen.getByText('Confirm'))
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 12, quantity: 1 }])
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+  })
 
-    expect(screen.queryByText('Which pack?')).not.toBeInTheDocument()
-    expect(onConfirm).toHaveBeenCalledWith([{ lot_id: 41, quantity: 1 }])
+  it('finishes the opened box before taking from the full one', async () => {
+    const { user } = renderWithProviders(
+      <LotConsumeModal needed={6} groups={twoBoxes} onConfirm={onConfirm} onCancel={onCancel} />,
+    )
+    await user.click(screen.getByText('Confirm'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      { lot_id: 12, quantity: 4 },
+      { lot_id: 11, quantity: 2 },
+    ])
+  })
+
+  it('does not offer an expired lot', () => {
+    const groups = groupsFrom([
+      { id: 61, lot_number: 'GONE', expiry_date: '2025-12-31', quantity: 3 },
+      { id: 62, lot_number: 'GOOD', expiry_date: '2028-01-01', quantity: 3 },
+    ])
+    renderWithProviders(<LotConsumeModal needed={1} groups={groups} onConfirm={onConfirm} onCancel={onCancel} />)
+    expect(screen.getAllByTestId('lot-group-row')).toHaveLength(1)
+    expect(screen.queryByText('GONE')).not.toBeInTheDocument()
+    expect(screen.getByText('GOOD')).toBeInTheDocument()
   })
 })

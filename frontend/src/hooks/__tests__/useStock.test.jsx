@@ -430,17 +430,18 @@ describe('stock mutation hooks — optimistic updates (T062)', () => {
     server.use(mockNetworkError('post', '/stock/1/consume/'))
     const { result, qc } = renderWith(() => useConsumeStock())
     const lots = [
-      { id: 1, quantity: 2, expiry_date: '2027-01-01', created_at: '2026-01-01T00:00:00Z' },
-      { id: 2, quantity: 2, expiry_date: '2027-01-01' },
+      { id: 1, quantity: 2, expiry_date: '2099-01-01', created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, quantity: 2, expiry_date: '2099-01-01' },
     ]
     qc.setQueryData(['stock', 1], { id: 1, quantity: 4, lots })
 
     await act(async () => {
       await result.current.mutateAsync({ stockId: 1, quantity: 1 })
     })
+    // Lot 2 gave the unit; the lots keep the order the cache had them in.
     expect(qc.getQueryData(['stock', 1]).lots).toEqual([
-      { id: 2, quantity: 1, expiry_date: '2027-01-01' },
-      { id: 1, quantity: 2, expiry_date: '2027-01-01', created_at: '2026-01-01T00:00:00Z' },
+      { id: 1, quantity: 2, expiry_date: '2099-01-01', created_at: '2026-01-01T00:00:00Z' },
+      { id: 2, quantity: 1, expiry_date: '2099-01-01' },
     ])
   })
 
