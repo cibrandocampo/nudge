@@ -46,7 +46,7 @@
 @media (max-width: 480px) {
   .panel {
     position: fixed;
-    top: 54px; /* header height (48px) + 6px gap, mirrors the desktop offset */
+    top: calc(var(--header-h) + 6px); /* 6px under the header, as the desktop offset */
     right: 0.75rem;
     left: 0.75rem;
     width: auto;

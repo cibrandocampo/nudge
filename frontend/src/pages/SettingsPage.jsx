@@ -11,11 +11,13 @@ import { useCreateContact } from '../hooks/mutations/useCreateContact'
 import { useDeleteContact } from '../hooks/mutations/useDeleteContact'
 import { useUpdateMe } from '../hooks/mutations/useUpdateMe'
 import { usePushStatus } from '../hooks/usePushStatus'
+import { useEditMode } from '../hooks/useEditMode'
 import { useServerReachable } from '../hooks/useServerReachable'
 import AlertBanner from '../components/AlertBanner'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import Combobox from '../components/Combobox'
 import ConfirmModal from '../components/ConfirmModal'
+import EditToggle from '../components/EditToggle'
 import Icon from '../components/Icon'
 import InstallCard from '../components/InstallCard'
 import { useToast } from '../components/useToast'
@@ -122,6 +124,8 @@ export default function SettingsPage() {
   const createContact = useCreateContact()
   const deleteContact = useDeleteContact()
   const reachable = useServerReachable()
+  // «Edit» mode of the contacts list (T153); ends when the last contact goes.
+  const contactsEdit = useEditMode({ count: contacts.length })
 
   useEffect(() => {
     if (user) {
@@ -356,7 +360,7 @@ export default function SettingsPage() {
           </div>
           <button
             type="button"
-            className={buttons.btnAdd}
+            className={cx(buttons.icon, buttons.outlined)}
             onClick={() => setShowPwModal(true)}
             aria-label={t('header.changePassword')}
             title={t('header.changePassword')}
@@ -366,9 +370,25 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      <Section title={t('settings.contacts')}>
+      <Section
+        title={t('settings.contacts')}
+        action={
+          // «Edit» reveals the remove buttons (T153, UX-036); none at rest.
+          contacts.length > 0 && (
+            <EditToggle
+              section={t('settings.contacts')}
+              editing={contactsEdit.editing}
+              onToggle={contactsEdit.toggle}
+              controls="contacts-list"
+              reachable={reachable}
+              offlineTitle={t('offline.requiresConnection')}
+              onOffline={() => showToast({ type: 'error', message: t('offline.requiresConnection') })}
+            />
+          )
+        }
+      >
         {contacts.length > 0 ? (
-          <ul className={s.contactList} data-testid="contacts-list">
+          <ul id="contacts-list" className={s.contactList} data-testid="contacts-list">
             {contacts.map((c) => (
               <li key={c.id} className={s.contactRow}>
                 <span className={s.avatar} aria-hidden="true">
@@ -378,16 +398,23 @@ export default function SettingsPage() {
                   {fullName(c)}
                   {(c.first_name || c.last_name) && c.email && <span className={forms.helpText}> ({c.email})</span>}
                 </span>
-                <button
-                  type="button"
-                  className={cx(buttons.btnIcon, buttons.btnIconDelete, !reachable && buttons.disabled)}
-                  onClick={() => setContactToRemove({ id: c.id, name: fullName(c) })}
-                  title={!reachable ? t('offline.requiresConnection') : t('settings.removeContact')}
-                  aria-label={t('settings.removeContact')}
-                  disabled={!reachable}
-                >
-                  <Icon name="x" size="sm" />
-                </button>
+                {contactsEdit.editing && (
+                  <button
+                    type="button"
+                    className={cx(buttons.icon, buttons.iconDanger, !reachable && buttons.disabled)}
+                    onClick={() => setContactToRemove({ id: c.id, name: fullName(c) })}
+                    title={
+                      !reachable
+                        ? t('offline.requiresConnection')
+                        : t('settings.removeContactNamed', { name: fullName(c) })
+                    }
+                    aria-label={t('settings.removeContactNamed', { name: fullName(c) })}
+                    disabled={!reachable}
+                    data-testid="row-delete"
+                  >
+                    <Icon name="x" size="sm" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -410,7 +437,7 @@ export default function SettingsPage() {
           />
           <button
             type="submit"
-            className={cx(buttons.btnAdd, (!reachable || !contactEmail.trim()) && buttons.disabled)}
+            className={cx(buttons.icon, buttons.iconFilled, (!reachable || !contactEmail.trim()) && buttons.disabled)}
             disabled={!reachable || !contactEmail.trim()}
             data-testid="add-contact-submit"
             aria-label={t('settings.addContact.add')}
@@ -560,7 +587,7 @@ export default function SettingsPage() {
       {/* Last on the page (T104): signing out is deliberate, and it wipes
        * this device. Settings is locked offline, so it only runs online. */}
       <Section>
-        <button type="button" className={cx(buttons.btn, buttons.btnDanger)} onClick={handleSignOut}>
+        <button type="button" className={cx(buttons.btn, buttons.danger)} onClick={handleSignOut}>
           <Icon name="log-out" size="sm" />
           {t('settings.signOut')}
         </button>
@@ -727,10 +754,20 @@ function PushStatus({ permission, subscribed, loading, onToggle, disabled = fals
   )
 }
 
-function Section({ id, title, children, flash = false }) {
+// `action` puts a control on the title's row, on the right (the contacts'
+// «Edit», T153).
+function Section({ id, title, action, children, flash = false }) {
+  const heading = title && <p className={layout.sectionTitle}>{title}</p>
   return (
     <div id={id} className={cx(s.section, flash && s.flash)}>
-      {title && <p className={layout.sectionTitle}>{title}</p>}
+      {action ? (
+        <div className={s.sectionHeader}>
+          {heading}
+          {action}
+        </div>
+      ) : (
+        heading
+      )}
       {children}
     </div>
   )
@@ -760,7 +797,7 @@ function OptionGroup({ label, options, value, onChange, disabled }) {
 
 function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
   return (
-    <label className={forms.formToggleSwitch}>
+    <label className={cx(buttons.hit, forms.formToggleSwitch)}>
       <input
         type="checkbox"
         role="switch"

@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { diffPayloads } from '../utils/diffPayloads'
 import Icon from './Icon'
 import ModalFrame from './ModalFrame'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './ConflictModal.module.css'
 
 function formatValue(value) {
@@ -42,7 +44,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
             </h2>
             <p className={s.subtitle}>{t('conflict.subtitle')}</p>
           </div>
-          <button type="button" className={s.close} onClick={onClose} aria-label={t('common.close')}>
+          <button type="button" className={cx(buttons.hit, s.close)} onClick={onClose} aria-label={t('common.close')}>
             <Icon name="x" size="sm" />
           </button>
         </div>
@@ -70,7 +72,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
         <div className={s.footer}>
           <button
             type="button"
-            className={`${s.btn} ${s.btnSecondary}`}
+            className={cx(buttons.btn, buttons.secondary)}
             onClick={onUseServer}
             data-testid="conflict-action-discard"
           >
@@ -78,7 +80,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
           </button>
           <button
             type="button"
-            className={`${s.btn} ${s.btnPrimary}`}
+            className={cx(buttons.btn, buttons.primary)}
             onClick={onKeepMine}
             data-testid="conflict-action-overwrite"
           >

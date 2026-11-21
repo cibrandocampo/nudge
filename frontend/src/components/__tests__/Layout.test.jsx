@@ -189,6 +189,14 @@ describe('Layout', () => {
     expect(screen.getByRole('link', { name: 'Routines' })).not.toHaveAttribute('aria-current')
   })
 
+  it('every tab carries its own label as text, not only the active one (T151)', async () => {
+    const { queryClient } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    await routinesLoaded(queryClient)
+    for (const label of ['Routines', 'Inventory', 'History', 'Settings']) {
+      expect(screen.getByRole('link', { name: label })).toHaveTextContent(label)
+    }
+  })
+
   it('places the banner before the main element in the DOM', async () => {
     setNotification('default')
     await stubSubscription(null)

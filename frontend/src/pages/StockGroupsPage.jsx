@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AlertBanner from '../components/AlertBanner'
 import ConfirmModal from '../components/ConfirmModal'
+import EditToggle from '../components/EditToggle'
 import Icon from '../components/Icon'
 import Spinner from '../components/Spinner'
+import { useEditMode } from '../hooks/useEditMode'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useStockGroups } from '../hooks/useStock'
 import { useCreateStockGroup } from '../hooks/mutations/useCreateStockGroup'
 import { useDeleteStockGroup } from '../hooks/mutations/useDeleteStockGroup'
 import { useUpdateStockGroup } from '../hooks/mutations/useUpdateStockGroup'
 import { useServerReachable } from '../hooks/useServerReachable'
+import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
@@ -30,19 +33,42 @@ export default function StockGroupsPage() {
   const [newName, setNewName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null) // { id, name }
   const [actionError, setActionError] = useState(null)
-  // Local mirror of the server list so we can reorder optimistically
-  // before the PATCH responses land. Keeps the UI snappy under drag.
+  // Local mirror of the server list so a move shows at once, before the
+  // PATCH responses land.
   const [localOrder, setLocalOrder] = useState(null)
-  const [dragId, setDragId] = useState(null)
-  const [dragOverId, setDragOverId] = useState(null)
+  const { showToast } = useToast()
+  // «Edit» mode (T153 pattern): delete and Up/Down only while editing. Up/Down
+  // replace the drag-and-drop reorder (T154, UX-017): HTML5 drag never worked
+  // with a finger on Android and had no keyboard path.
+  const groupsEdit = useEditMode({ count: groups.length })
+  // After a move, the focus goes back to the moved category's control in its
+  // new row (`{ id, dir }`), and the live region says where it landed.
+  const [pendingFocus, setPendingFocus] = useState(null)
+  const [announcement, setAnnouncement] = useState('')
+  const moveRefs = useRef(new Map())
 
-  // Sync local mirror whenever the server list changes. `null` means
-  // "use the server list as-is".
-  useEffect(() => {
-    setLocalOrder(null)
-  }, [groups])
+  // Moves still waiting for their PATCHes. The local mirror stays on screen
+  // until the last one settles: each PATCH's success updates its category in
+  // the cache in place, and dropping the mirror on that change (as this page
+  // did with the drag) showed the cache mid-sequence — a second move made
+  // quickly undid the first on screen (T154 E2E).
+  const pendingMoves = useRef(0)
 
-  const orderedGroups = localOrder ?? groups
+  // The list is always shown by `display_order`, never by the cache's array
+  // order, which in-place updates leave unsorted.
+  const orderedGroups = localOrder ?? [...groups].sort((a, b) => a.display_order - b.display_order)
+
+  useLayoutEffect(() => {
+    if (!pendingFocus) return
+    const { id, dir } = pendingFocus
+    const index = orderedGroups.findIndex((g) => g.id === id)
+    // At an end its own button is unavailable: the other one keeps the focus
+    // on the moved category.
+    const atEnd = dir === 'up' ? index === 0 : index === orderedGroups.length - 1
+    const target = moveRefs.current.get(`${id}-${atEnd ? (dir === 'up' ? 'down' : 'up') : dir}`)
+    target?.focus()
+    setPendingFocus(null)
+  }, [pendingFocus, orderedGroups])
 
   // Cancel inline rename on Escape. Scoped to when a row is being edited.
   useEscapeKey(() => setEditing(null), editing != null)
@@ -86,11 +112,10 @@ export default function StockGroupsPage() {
   }
 
   const persistReorder = async (newOrder) => {
-    // Only PATCH groups whose display_order would actually change.
+    // Only PATCH groups whose display_order actually changes: a swap is two.
     const diffs = newOrder
       .map((g, idx) => ({ id: g.id, name: g.name, displayOrder: idx, prev: g.display_order }))
       .filter((d) => d.prev !== d.displayOrder)
-    if (diffs.length === 0) return
     try {
       await Promise.all(
         diffs.map((d) =>
@@ -99,31 +124,36 @@ export default function StockGroupsPage() {
       )
       setActionError(null)
     } catch {
+      // The mirror is dropped when the last pending move settles (`move`);
+      // the refetch the mutation triggers brings the server's order back.
       setActionError(t('stockGroups.errorReorder'))
-      setLocalOrder(null)
     }
   }
 
-  const handleDrop = async (targetId) => {
-    const fromId = dragId
-    setDragId(null)
-    setDragOverId(null)
-    if (fromId == null || fromId === targetId) return
-    const source = orderedGroups
-    const fromIdx = source.findIndex((g) => g.id === fromId)
-    const toIdx = source.findIndex((g) => g.id === targetId)
-    if (fromIdx === -1 || toIdx === -1) return
-    const next = [...source]
-    const [moved] = next.splice(fromIdx, 1)
-    next.splice(toIdx, 0, moved)
-    setLocalOrder(next)
-    await persistReorder(next)
+  // Swap a category with its neighbour. Two PATCHes at most: only the two
+  // rows whose `display_order` changes are sent.
+  const move = async (groupId, dir) => {
+    // Only reachable from a row's own button, which is unavailable at an end.
+    const from = orderedGroups.findIndex((g) => g.id === groupId)
+    const to = dir === 'up' ? from - 1 : from + 1
+    const next = [...orderedGroups]
+    ;[next[from], next[to]] = [next[to], next[from]]
+    setLocalOrder(next.map((g, index) => ({ ...g, display_order: index })))
+    setPendingFocus({ id: groupId, dir })
+    setAnnouncement(t('stockGroups.moved', { name: next[to].name, position: to + 1, total: next.length }))
+    pendingMoves.current += 1
+    try {
+      await persistReorder(next)
+    } finally {
+      pendingMoves.current -= 1
+      if (pendingMoves.current === 0) setLocalOrder(null)
+    }
   }
 
   return (
     <div>
       <div className={layout.topBar}>
-        <button type="button" className={s.back} onClick={() => navigate('/inventory')}>
+        <button type="button" className={cx(buttons.btn, buttons.text, s.back)} onClick={() => navigate('/inventory')}>
           {t('common.backToInventory')}
         </button>
         <h1 className={layout.pageTitle}>{t('stockGroups.title')}</h1>
@@ -140,91 +170,99 @@ export default function StockGroupsPage() {
       ) : orderedGroups.length === 0 ? (
         <p className={s.empty}>{t('stockGroups.empty')}</p>
       ) : (
-        <ul className={s.list}>
-          {orderedGroups.map((group) => {
-            const isDragOver = dragOverId === group.id && dragId !== group.id
-            return (
-              <li
-                key={group.id}
-                className={cx(s.row, isDragOver && s.rowDragOver, dragId === group.id && s.rowDragging)}
-                draggable={reachable && editing?.id !== group.id}
-                onDragStart={(e) => {
-                  setDragId(group.id)
-                  e.dataTransfer.effectAllowed = 'move'
-                  // Needed for Firefox to actually start the drag.
-                  e.dataTransfer.setData('text/plain', String(group.id))
-                }}
-                onDragEnter={() => dragId != null && setDragOverId(group.id)}
-                onDragOver={(e) => {
-                  if (dragId != null) {
-                    e.preventDefault()
-                    e.dataTransfer.dropEffect = 'move'
-                  }
-                }}
-                onDragLeave={(e) => {
-                  // Only clear when leaving the row entirely, not its children.
-                  if (!e.currentTarget.contains(e.relatedTarget))
-                    setDragOverId((cur) => (cur === group.id ? null : cur))
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  handleDrop(group.id)
-                }}
-                onDragEnd={() => {
-                  setDragId(null)
-                  setDragOverId(null)
-                }}
-              >
-                {/* A visual cue for mouse dragging, not a control: role="img" lets it
-                    carry a name (aria-label on a bare span is prohibited). */}
-                <span
-                  className={cx(s.dragHandle, !reachable && buttons.disabledText)}
-                  role="img"
-                  aria-label={t('stockGroups.dragHandle')}
-                  title={!reachable ? t('offline.requiresConnection') : t('stockGroups.dragHandle')}
+        <>
+          <div className={s.listHeader}>
+            <EditToggle
+              section={t('stockGroups.title')}
+              editing={groupsEdit.editing}
+              onToggle={groupsEdit.toggle}
+              controls="stock-groups"
+              reachable={reachable}
+              offlineTitle={t('offline.requiresConnection')}
+              onOffline={() => showToast({ type: 'error', message: t('offline.requiresConnection') })}
+            />
+          </div>
+          <ul id="stock-groups" className={s.list}>
+            {orderedGroups.map((group, index) => {
+              const first = index === 0
+              const last = index === orderedGroups.length - 1
+              const moveButton = (dir, unavailable) => (
+                <button
+                  type="button"
+                  ref={(el) => {
+                    if (el) moveRefs.current.set(`${group.id}-${dir}`, el)
+                    else moveRefs.current.delete(`${group.id}-${dir}`)
+                  }}
+                  className={cx(buttons.icon, buttons.outlined, unavailable && buttons.disabled)}
+                  onClick={() => !unavailable && move(group.id, dir)}
+                  // `aria-disabled`, not `disabled`: the button at an end keeps
+                  // its place in the tab order, so the focus never drops out
+                  // of the list after a move lands it there.
+                  aria-disabled={unavailable || undefined}
+                  aria-label={t(dir === 'up' ? 'stockGroups.moveUp' : 'stockGroups.moveDown', { name: group.name })}
+                  data-testid={`move-${dir}`}
                 >
-                  <Icon name="grip-vertical" size="sm" />
-                </span>
-                {editing?.id === group.id ? (
-                  <input
-                    className={cx(forms.input, s.nameInput)}
-                    defaultValue={group.name}
-                    autoFocus
-                    aria-label={t('stockGroups.rename')}
-                    onBlur={(e) => commitRename(group.id, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') commitRename(group.id, e.target.value)
-                    }}
-                  />
-                ) : (
-                  <span className={s.name}>{group.name}</span>
-                )}
-                <div className={s.actions}>
-                  <button
-                    type="button"
-                    className={cx(buttons.btnAdd, buttons.btnAddDanger)}
-                    onClick={() => setConfirmDelete({ id: group.id, name: group.name })}
-                    disabled={!reachable}
-                    aria-label={t('stockGroups.delete')}
-                    title={!reachable ? t('offline.requiresConnection') : t('stockGroups.delete')}
-                  >
-                    <Icon name="trash" size="sm" />
-                  </button>
-                  <button
-                    type="button"
-                    className={buttons.btnAdd}
-                    onClick={() => setEditing({ id: group.id })}
-                    disabled={!reachable || editing?.id === group.id}
-                    aria-label={t('stockGroups.rename')}
-                    title={!reachable ? t('offline.requiresConnection') : t('stockGroups.rename')}
-                  >
-                    <Icon name="pencil" size="sm" />
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+                  <Icon name={dir === 'up' ? 'chevron-up' : 'chevron-down'} size="sm" />
+                </button>
+              )
+              return (
+                <li key={group.id} className={s.row} data-testid="group-row">
+                  {groupsEdit.editing && (
+                    <div className={s.moveButtons}>
+                      {moveButton('up', first)}
+                      {moveButton('down', last)}
+                    </div>
+                  )}
+                  {editing?.id === group.id ? (
+                    <input
+                      className={cx(forms.input, s.nameInput)}
+                      defaultValue={group.name}
+                      autoFocus
+                      aria-label={t('stockGroups.rename')}
+                      onBlur={(e) => commitRename(group.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRename(group.id, e.target.value)
+                      }}
+                    />
+                  ) : (
+                    <span className={s.name}>{group.name}</span>
+                  )}
+                  <div className={s.actions}>
+                    {groupsEdit.editing ? (
+                      <button
+                        type="button"
+                        className={cx(buttons.icon, buttons.outlined, buttons.iconDanger)}
+                        onClick={() => setConfirmDelete({ id: group.id, name: group.name })}
+                        disabled={!reachable}
+                        aria-label={t('stockGroups.deleteNamed', { name: group.name })}
+                        title={!reachable ? t('offline.requiresConnection') : undefined}
+                        data-testid="row-delete"
+                      >
+                        <Icon name="trash" size="sm" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={cx(buttons.icon, buttons.outlined)}
+                        onClick={() => setEditing({ id: group.id })}
+                        disabled={!reachable || editing?.id === group.id}
+                        aria-label={t('stockGroups.renameNamed', { name: group.name })}
+                        title={!reachable ? t('offline.requiresConnection') : undefined}
+                        data-testid="group-rename"
+                      >
+                        <Icon name="pencil" size="sm" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {/* Where a moved category landed, for screen readers (T154). */}
+          <p className={layout.srOnly} aria-live="polite" data-testid="move-announcement">
+            {announcement}
+          </p>
+        </>
       )}
 
       <form onSubmit={handleCreate} className={s.createForm}>
@@ -238,7 +276,7 @@ export default function StockGroupsPage() {
         />
         <button
           type="submit"
-          className={buttons.btnAdd}
+          className={cx(buttons.icon, buttons.iconFilled)}
           disabled={createGroup.isPending || !reachable || !newName.trim()}
           aria-label={t('stockGroups.createButton')}
           title={!reachable ? t('offline.requiresConnection') : t('stockGroups.createButton')}

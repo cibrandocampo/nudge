@@ -1,5 +1,7 @@
 /**
- * The 42 states the UX audit measured (docs/plans/frontend-ux-audit, T133/T134),
+ * The 42 states the UX audit measured (docs/plans/frontend-ux-audit, T133/T134)
+ * plus the states later tasks added (T151: content under the bottom bar; T152:
+ * the «More» menus; T153–T154: lists in «Edit» mode; T155: the notice slot),
  * as scenes the accessibility spec can reach on its own.
  *
  * A scene is `{ id, user, widths?, camera?, run({ page, context, ids }) }`:
@@ -174,6 +176,17 @@ export const SCENES = [
     },
   },
   {
+    // T152: the rare actions of a routine (history, deactivate, delete).
+    id: 'routine__more-menu',
+    user: 'user1',
+    run: async ({ page, ids }) => {
+      await go(page, `/routines/${ids.routine(R.takeVitaminD)}`)
+      await page.getByTestId('more-menu').click()
+      await expect(page.getByRole('menu')).toBeVisible()
+      await expect(page.getByRole('menuitem')).toHaveCount(3)
+    },
+  },
+  {
     id: 'routine__log-date-modal',
     user: 'user1',
     run: async ({ page, ids }) => {
@@ -214,6 +227,28 @@ export const SCENES = [
     run: async ({ page }) => {
       await go(page, '/inventory')
       await expect(page.getByTestId('group-box').first()).toBeVisible()
+    },
+  },
+  {
+    // T151: the bottom bar is translucent, so its inactive labels must keep
+    // their contrast with a product row scrolling underneath. The spec analyses
+    // every scene at scroll 0; at the phone width the inventory list already
+    // runs under the bar there, and the scene asserts it does.
+    id: 'nav__content-underneath',
+    user: 'user1',
+    widths: ['m412'],
+    run: async ({ page }) => {
+      await go(page, '/inventory')
+      await expect(page.getByTestId('group-box').first()).toBeVisible()
+      await page.evaluate(() => window.scrollTo(0, 0))
+      const underneath = await page.evaluate(() => {
+        const bar = document.querySelector('nav').getBoundingClientRect()
+        return [...document.querySelectorAll('[data-testid="product-card"], [data-testid="group-box"]')].some((el) => {
+          const r = el.getBoundingClientRect()
+          return r.top < bar.bottom && r.bottom > bar.top
+        })
+      })
+      expect(underneath, 'an inventory row runs under the bottom bar').toBe(true)
     },
   },
   {
@@ -263,6 +298,17 @@ export const SCENES = [
     },
   },
   {
+    // T152: the rare actions of a product (history, delete).
+    id: 'product__more-menu',
+    user: 'user1',
+    run: async ({ page, ids }) => {
+      await go(page, `/inventory/${ids.stock(S.hidroferol)}`)
+      await page.getByTestId('more-menu').click()
+      await expect(page.getByRole('menu')).toBeVisible()
+      await expect(page.getByRole('menuitem')).toHaveCount(2)
+    },
+  },
+  {
     id: 'product__no-regulatory',
     user: 'user1',
     run: async ({ page, ids }) => {
@@ -278,6 +324,17 @@ export const SCENES = [
       const expander = page.getByTestId('group-expander').first()
       await expander.click()
       await expect(expander).toHaveAttribute('aria-expanded', 'true')
+    },
+  },
+  {
+    // T153: the lots in «Edit» mode, a group expanded, every row's delete on.
+    id: 'product__lots-edit',
+    user: 'user1',
+    run: async ({ page, ids }) => {
+      await go(page, `/inventory/${ids.stock(S.metformin)}`)
+      await page.getByTestId('edit-toggle').click()
+      await page.getByTestId('group-expander').first().click()
+      await expect(page.getByTestId('row-delete').first()).toBeVisible()
     },
   },
   {
@@ -358,8 +415,10 @@ export const SCENES = [
     user: 'user1',
     run: async ({ page, ids }) => {
       await go(page, `/inventory/${ids.stock(S.metformin)}`)
-      // Only single-box lots carry a trash; multi-box ones show the expander.
-      await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
+      // Lot trashes only show in the lots' «Edit» mode (T153); the first one
+      // belongs to a single-box lot (multi-box ones show the expander).
+      await page.getByTestId('edit-toggle').click()
+      await page.getByTestId('row-delete').first().click()
       await expect(page.getByRole('dialog')).toBeVisible()
     },
   },
@@ -387,6 +446,16 @@ export const SCENES = [
     run: async ({ page }) => {
       await go(page, '/inventory/groups')
       await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
+    },
+  },
+  {
+    // T154: categories in «Edit» mode — Up / Down and delete per row.
+    id: 'groups__edit',
+    user: 'user1',
+    run: async ({ page }) => {
+      await go(page, '/inventory/groups')
+      await page.getByTestId('edit-toggle').click()
+      await expect(page.getByTestId('move-up').first()).toBeVisible()
     },
   },
 
@@ -428,6 +497,17 @@ export const SCENES = [
     },
   },
   {
+    // T153: contacts in «Edit» mode, each row with its remove button.
+    id: 'settings__contacts-edit',
+    user: 'user1',
+    run: async ({ page }) => {
+      await go(page, '/settings')
+      await expect(page.getByTestId('contacts-list')).toBeVisible()
+      await page.getByTestId('edit-toggle').click()
+      await expect(page.getByTestId('contacts-list').getByTestId('row-delete').first()).toBeVisible()
+    },
+  },
+  {
     id: 'settings__change-password',
     user: 'user1',
     run: async ({ page }) => {
@@ -445,6 +525,36 @@ export const SCENES = [
       await setReachable(page, false)
       await expect(page.getByTestId('offline-banner')).toBeVisible()
       return () => setReachable(page, true)
+    },
+  },
+  {
+    // T155: a queued change the server refused for good — the notice slot
+    // says it could not be saved. Queued offline, refused (400) on replay.
+    id: 'global__sync-errors',
+    user: 'user1',
+    run: async ({ page, context }) => {
+      await go(page, '/')
+      await setReachable(page, false)
+      // Queued as `today__pending-sync` does: the request fails at the network
+      // (offline, as the hook simulates it, still tries it first).
+      const abort = (route) => route.abort('connectionrefused')
+      await context.route('**/api/routines/*/log/', abort)
+      await markFromCard(page, R.waterCactus)
+      await expect(page.getByTestId('pending-badge')).toBeVisible({ timeout: 10_000 })
+      // Back online, the replay is refused for good (400): an `error` entry.
+      await context.unroute('**/api/routines/*/log/', abort)
+      const refuse = (route) =>
+        route.fulfill({ status: 400, contentType: 'application/json', body: '{"detail":"Refused."}' })
+      await context.route('**/api/routines/*/log/', refuse)
+      // A network failure waits for the browser's `online` event to replay
+      // (offline/sync.js); the reachability hook alone does not fire it.
+      await setReachable(page, true)
+      await page.evaluate(() => window.dispatchEvent(new Event('online')))
+      await expect(page.getByTestId('notice-sync-errors')).toBeVisible({ timeout: 10_000 })
+      return async () => {
+        await context.unroute('**/api/routines/*/log/', refuse)
+        await clearOfflineQueue(page)
+      }
     },
   },
   {
@@ -539,8 +649,9 @@ export const SCENES = [
     user: 'user1',
     run: async ({ page, ids }) => {
       await go(page, `/inventory/${ids.stock(S.hidroferol)}`)
-      // The top bar's delete-product button (ConfirmModal), not a lot's.
-      await page.getByRole('button', { name: 'Delete stock' }).first().click()
+      // «Delete stock» from the «More» menu (T152), not a lot's trash.
+      await page.getByTestId('more-menu').click()
+      await page.getByTestId('menu-delete').click()
       await expect(page.getByRole('dialog')).toBeVisible()
     },
   },

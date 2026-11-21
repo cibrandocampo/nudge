@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import forms from '../styles/forms.module.css'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './PasswordInput.module.css'
 
 export default function PasswordInput({ className, ...props }) {
@@ -16,7 +18,7 @@ export default function PasswordInput({ className, ...props }) {
       />
       <button
         type="button"
-        className={s.toggle}
+        className={cx(buttons.hit, s.toggle)}
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? t('common.hidePassword') : t('common.showPassword')}
         tabIndex={-1}

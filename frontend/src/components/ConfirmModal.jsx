@@ -11,10 +11,10 @@ export default function ConfirmModal({ message, onConfirm, onCancel, confirmLabe
     <ModalFrame onClose={onCancel}>
       <p className={s.message}>{message}</p>
       <div className={s.actions}>
-        <button className={buttons.btnCancel} onClick={onCancel}>
+        <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel}>
           {t('common.cancel')}
         </button>
-        <button className={cx(buttons.btnConfirm, buttons.btnConfirmDanger)} onClick={onConfirm}>
+        <button className={cx(buttons.btn, buttons.danger, buttons.filled)} onClick={onConfirm}>
           {confirmLabel ?? t('common.confirm')}
         </button>
       </div>

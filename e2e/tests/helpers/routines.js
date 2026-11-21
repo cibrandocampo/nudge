@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { SEED } from './constants.js'
 import { routineCard } from './locators.js'
-import { goToRoutineDetail } from './navigation.js'
+import { chooseFromMoreMenu, goToRoutineDetail } from './navigation.js'
 
 /**
  * Mark a routine as done from the Dashboard card, by clicking the check on
@@ -128,8 +128,8 @@ export async function deleteRoutine(page, routineKeyOrName) {
   await page.goto('/')
   await page.getByRole('link', { name }).first().click()
   await page.waitForURL(/\/routines\/\d+$/)
-  await page.getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('button', { name: 'Delete' }).last().click()
+  await chooseFromMoreMenu(page, 'menu-delete')
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
   await page.waitForURL('/')
 }
 

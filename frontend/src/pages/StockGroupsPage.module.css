@@ -1,10 +1,7 @@
+/* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
+   padding so the text lines up with the content below. */
 .back {
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  padding: 0;
+  margin-left: -0.5rem;
 }
 
 .empty {
@@ -33,43 +30,17 @@
   border: 1px solid var(--c-border);
   border-radius: var(--radius-xl);
   background: var(--c-surface);
-  transition:
-    transform 0.12s,
-    box-shadow 0.12s,
-    border-color 0.12s;
 }
 
-.rowDragging {
-  opacity: 0.5;
-}
-
-.rowDragOver {
-  border-color: var(--c-primary);
-  outline: 2px solid color-mix(in srgb, var(--c-primary) 20%, transparent);
-  outline-offset: 0;
-}
-
-.dragHandle {
-  flex-shrink: 0;
-  color: var(--c-text-3);
-  cursor: grab;
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem;
-  user-select: none;
-}
-.dragHandle:active {
-  cursor: grabbing;
-}
-
+/* Wraps instead of an ellipsis: in edit mode the Up/Down and delete buttons
+   leave the name less room, and a cut name is the one thing the row is for. */
 .name {
   flex: 1;
+  min-width: 0;
   padding: 0.25rem 0;
   color: var(--c-text);
   font-size: var(--fs-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .nameInput {
@@ -79,6 +50,20 @@
 .actions {
   display: flex;
   gap: 0.25rem;
+}
+
+/* The «Edit» toggle above the list, on the right (T154). */
+.listHeader {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.25rem;
+}
+
+/* Up / Down, in edit mode, before the name (T154). */
+.moveButtons {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 /* Create-category form: standalone bordered input + `+` button. Both
@@ -95,10 +80,10 @@
 .createInput {
   flex: 1;
   min-width: 0;
-  /* Match the 40×40 of `shared.btnAdd` so the input and the `+` button
+  /* Match the 44×44 of the `+` (`buttons.icon`) so the input and the button
    * render the same pixel height. Otherwise the input's vertical
-   * padding makes it ~44 px tall and the button reads as smaller. */
-  height: 40px;
+   * padding sets its own height and the two do not line up. */
+  height: 44px;
 }
 
 .error {

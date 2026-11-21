@@ -63,7 +63,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  /* Wide enough that the chips' 44 px tap zones (`buttons.hit`) do not
+     overlap: a 32 × 26 chip reaches 6 px beyond each side and 9 px above
+     and below. */
+  gap: 18px 12px;
 }
 
 /* Tones are doubled for specificity: they must win over `IconChip`'s own colours (and

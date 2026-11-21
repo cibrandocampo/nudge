@@ -16,6 +16,13 @@ vi.mock('../../hooks/useServerReachable', () => ({
 
 const BASE = 'http://localhost/api'
 
+// Removing a contact is behind the contacts' «Edit» (T153): open it, then
+// press the row's ×, whose name says who it removes.
+async function removeContact(user, name) {
+  await user.click(await screen.findByRole('button', { name: 'Edit: Contacts' }))
+  await user.click(screen.getByRole('button', { name: `Remove ${name}` }))
+}
+
 describe('SettingsPage', () => {
   it('renders page title', async () => {
     renderWithProviders(<SettingsPage />)
@@ -640,7 +647,7 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument()
-    await user.click(screen.getByTitle('Remove contact'))
+    await removeContact(user, 'alice@example.com')
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument())
@@ -664,7 +671,7 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument()
-    await user.click(screen.getByTitle('Remove contact'))
+    await removeContact(user, 'alice@example.com')
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.getByText(/Action not available offline/i)).toBeInTheDocument())
@@ -679,7 +686,7 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument()
-    await user.click(screen.getByTitle('Remove contact'))
+    await removeContact(user, 'alice@example.com')
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove contact' }))
     await waitFor(() => expect(screen.getByText('Something went wrong. Please try again.')).toBeInTheDocument())
@@ -737,7 +744,7 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />)
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument()
-    await user.click(screen.getByTitle('Remove contact'))
+    await removeContact(user, 'alice@example.com')
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -925,20 +932,20 @@ describe('SettingsPage', () => {
       }
     })
 
-    it('disables the remove-contact buttons offline', async () => {
+    it("refuses to open the contacts' edit mode offline, so no remove button shows", async () => {
       reachableRef.current = false
       server.use(
         http.get(`${BASE}/auth/contacts/`, () =>
           HttpResponse.json([{ id: 1, first_name: '', last_name: '', email: 'alice@example.com' }]),
         ),
       )
-      renderWithProviders(<SettingsPage />)
+      const { user } = renderWithProviders(<SettingsPage />)
       await screen.findByText('alice@example.com')
-      const removeButtons = screen
-        .getAllByRole('button')
-        .filter((btn) => btn.getAttribute('aria-label') === 'Remove contact')
-      expect(removeButtons.length).toBeGreaterThan(0)
-      for (const btn of removeButtons) expect(btn).toBeDisabled()
+      const edit = screen.getByRole('button', { name: 'Edit: Contacts' })
+      expect(edit).toHaveAttribute('aria-disabled', 'true')
+      await user.click(edit)
+      expect(await screen.findAllByText('Requires connection')).not.toHaveLength(0)
+      expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
     })
   })
 
@@ -1331,5 +1338,33 @@ describe('SettingsPage', () => {
       expect(await screen.findByText('Login page')).toBeInTheDocument()
       expect(logout).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('SettingsPage — contacts edit mode (T153)', () => {
+  const contacts = [
+    { id: 10, first_name: 'Alice', last_name: 'Smith', email: 'alice@example.com' },
+    { id: 11, first_name: '', last_name: '', email: 'bob@example.com' },
+  ]
+
+  it('shows no remove button at rest, and one per contact, named, while editing', async () => {
+    server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json(contacts)))
+    const { user } = renderWithProviders(<SettingsPage />)
+    await screen.findByText('bob@example.com')
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit: Contacts' }))
+    expect(screen.getAllByTestId('row-delete').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Remove Alice Smith',
+      'Remove bob@example.com',
+    ])
+    expect(screen.getByRole('button', { name: 'Done: Contacts' })).toHaveAttribute('aria-controls', 'contacts-list')
+  })
+
+  it('has no Edit toggle when there is no contact to edit', async () => {
+    server.use(http.get(`${BASE}/auth/contacts/`, () => HttpResponse.json([])))
+    renderWithProviders(<SettingsPage />)
+    await screen.findByText(/no contacts/i)
+    expect(screen.queryByRole('button', { name: 'Edit: Contacts' })).not.toBeInTheDocument()
   })
 })

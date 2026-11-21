@@ -256,7 +256,7 @@ export default function RoutineFormPage() {
     >
       <div>
         <div className={layout.topBar}>
-          <button type="button" className={s.back} onClick={() => navigate(-1)}>
+          <button type="button" className={cx(buttons.btn, buttons.text, s.back)} onClick={() => navigate(-1)}>
             {t('common.backToRoutines')}
           </button>
           <h1 className={layout.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
@@ -293,7 +293,7 @@ export default function RoutineFormPage() {
               <div className={s.intervalHeaderActions}>
                 <button
                   type="button"
-                  className={s.intervalInfoBtn}
+                  className={cx(buttons.hit, s.intervalInfoBtn)}
                   onClick={() => setShowIntervalHelp((v) => !v)}
                   aria-expanded={showIntervalHelp}
                   aria-label={t('routine.form.intervalHelpAria')}
@@ -303,7 +303,7 @@ export default function RoutineFormPage() {
                 </button>
                 <button
                   type="button"
-                  className={buttons.btnAdd}
+                  className={cx(buttons.icon, buttons.iconFilled)}
                   onClick={() =>
                     setForm((f) => {
                       const cur =
@@ -380,7 +380,7 @@ export default function RoutineFormPage() {
                           {multi && (
                             <button
                               type="button"
-                              className={cx(buttons.btnIcon, buttons.btnIconDelete, s.intervalRemove)}
+                              className={cx(buttons.icon, buttons.iconDanger, s.intervalRemove)}
                               onClick={() =>
                                 setForm((f) => {
                                   const next = f.interval_phases.filter((_, idx) => idx !== i)
@@ -588,7 +588,7 @@ export default function RoutineFormPage() {
           <div className={forms.formFooter}>
             <button
               type="submit"
-              className={cx(buttons.btn, buttons.btnPrimary, buttons.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.primary, buttons.formSecondaryBtn, s.submitBtn)}
               disabled={saving || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
@@ -596,7 +596,7 @@ export default function RoutineFormPage() {
             </button>
             <button
               type="button"
-              className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
+              className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
               onClick={() => navigate(-1)}
             >
               {t('routine.form.cancel')}
@@ -621,7 +621,7 @@ export default function RoutineFormPage() {
 
 function ToggleSwitch({ checked, onChange, ariaLabel, disabled = false }) {
   return (
-    <label className={forms.formToggleSwitch}>
+    <label className={cx(buttons.hit, forms.formToggleSwitch)}>
       <input
         type="checkbox"
         role="switch"

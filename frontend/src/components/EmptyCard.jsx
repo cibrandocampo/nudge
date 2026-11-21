@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './EmptyCard.module.css'
 
 /**
@@ -20,12 +22,12 @@ export default function EmptyCard({ title, message, action }) {
       {title && <p className={s.title}>{title}</p>}
       {message && <p className={s.body}>{message}</p>}
       {action?.onClick && (
-        <button type="button" className={s.link} onClick={action.onClick}>
+        <button type="button" className={cx(buttons.hit, s.link)} onClick={action.onClick}>
           {action.label}
         </button>
       )}
       {action?.to && (
-        <Link to={action.to} className={s.link}>
+        <Link to={action.to} className={cx(buttons.hit, s.link)}>
           {action.label}
         </Link>
       )}

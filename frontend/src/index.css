@@ -65,6 +65,15 @@
   --c-shared-light: #6f79b8;
 
   /* Shape */
+  /* Bottom bar height without the safe area (T151): 6 px + 26 px icon + 2 px +
+     the 12 px label at line-height 1.2 (0.9rem, grows with «Text size») + 6 px.
+     Everything that must clear the bar reads it; never a literal height. */
+  --nav-h: calc(40px + 0.9rem);
+  /* The sticky header's height (T155): what sticks under it (the notice slot,
+     the inventory bar, its section headers) and anchors scrolled into view
+     read it. */
+  --header-h: 48px;
+
   --radius-sm: 4px;
   --radius: 6px;
   --radius-lg: 8px;
@@ -196,7 +205,7 @@
    half under them (WCAG 2.4.11; axe flagged a button half under the bar). */
 html {
   scroll-padding-top: 5rem;
-  scroll-padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 
 body {

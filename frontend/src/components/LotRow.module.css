@@ -21,9 +21,14 @@
  *     so the row separator can reach the list's left edge.
  *   - right: 0.75rem to match `.cardHeader`'s right padding, so the rightmost
  *     item lines up vertically with the chevron in the card header. */
+/* The first track never goes below its content (icon + «7 u.»): at
+ * `minmax(0, 1fr)` it collapsed when the other tracks filled a narrow row
+ * (320 px at «Extra large») and the quantity ran over the expiry. With it at
+ * `max-content`, the tracks that give way are the ones whose text can wrap
+ * (the expiry, a pack's serial). */
 .list[data-with-pills] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(max-content, 1fr) auto auto;
   align-items: center;
   column-gap: 0.5rem;
   padding: 0 0.75rem 0 0;
@@ -33,7 +38,7 @@
  * Declaring it unconditionally would leave a phantom column and its gap on the
  * read-only inventory card. */
 .list[data-with-pills][data-trailing] {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(max-content, 1fr) auto auto auto;
 }
 
 .cardLotRow {
@@ -111,6 +116,7 @@
 }
 
 .cardLotQty {
+  white-space: nowrap;
   color: var(--c-text);
   font-weight: 500;
   font-variant-numeric: tabular-nums;

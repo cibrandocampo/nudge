@@ -39,6 +39,11 @@ describe('StockLotsList', () => {
     expect(container.querySelector('[data-with-pills]')).toBeNull()
   })
 
+  it('renders nothing while the stock carries no lot list at all', () => {
+    renderList({ lots: undefined })
+    expect(screen.queryByTestId('lot-row')).not.toBeInTheDocument()
+  })
+
   it('renders one row per group with its quantity, expiry and lot pill', () => {
     renderList({
       lots: [lot({ id: 10, quantity: 3, lot_number: 'LOT-A', expiry_date: '2026-09-30' })],
@@ -54,10 +59,10 @@ describe('StockLotsList', () => {
     const user = userEvent.setup()
     const onRemoveLot = vi.fn()
     const only = lot({ id: 42, quantity: 1, lot_number: 'LOT-A' })
-    renderList({ lots: [only], onRemoveLot })
+    renderList({ lots: [only], onRemoveLot, editing: true })
 
     expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
-    await user.click(screen.getByLabelText('Delete'))
+    await user.click(screen.getByRole('button', { name: 'Delete lot LOT-A' }))
 
     expect(onRemoveLot).toHaveBeenCalledTimes(1)
     expect(onRemoveLot).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }))
@@ -138,11 +143,12 @@ describe('StockLotsList', () => {
         lot({ id: 11, quantity: 1, lot_number: 'LOT-A', serial_number: 'SN-2' }),
       ],
       onRemoveLot,
+      editing: true,
     })
 
     await user.click(screen.getByTestId('group-expander'))
     const packs = screen.getAllByTestId('pack-row')
-    await user.click(within(packs[1]).getByLabelText('Delete'))
+    await user.click(within(packs[1]).getByRole('button', { name: 'Delete box SN-2' }))
 
     expect(onRemoveLot).toHaveBeenCalledTimes(1)
     expect(onRemoveLot).toHaveBeenCalledWith(expect.objectContaining({ id: 11, serial_number: 'SN-2' }))
@@ -178,9 +184,9 @@ describe('StockLotsList', () => {
   })
 
   it('disables deleting while the server is unreachable', () => {
-    renderList({ reachable: false })
+    renderList({ reachable: false, editing: true })
 
-    const del = screen.getByLabelText('Delete')
+    const del = screen.getByRole('button', { name: 'Delete lot LOT-A' })
     expect(del).toHaveAttribute('aria-disabled', 'true')
     expect(del).toHaveAttribute('title', 'This section is not available offline.')
   })
@@ -227,18 +233,18 @@ describe('StockLotsList — a single identified box', () => {
   it('deletes the only pack from inside the expanded row', async () => {
     const user = userEvent.setup()
     const onRemoveLot = vi.fn()
-    renderList({ lots: oneSerialized, onRemoveLot })
+    renderList({ lots: oneSerialized, onRemoveLot, editing: true })
 
     await user.click(screen.getByTestId('group-expander'))
     const pack = screen.getByTestId('pack-row')
-    await user.click(within(pack).getByRole('button', { name: /delete/i }))
+    await user.click(within(pack).getByRole('button', { name: 'Delete box SN-LAST' }))
 
     expect(onRemoveLot).toHaveBeenCalledWith(expect.objectContaining({ id: 20, serial_number: 'SN-LAST' }))
   })
 
-  // The unchanged case: no serial, one row, trailing delete exactly as before.
+  // The unchanged case: no serial, one row, trailing delete (in edit mode) as before.
   it('leaves a single unserialized group exactly as it was', () => {
-    renderList({ lots: [lot({ id: 21, quantity: 4, lot_number: 'LOT-P', serial_number: '' })] })
+    renderList({ lots: [lot({ id: 21, quantity: 4, lot_number: 'LOT-P', serial_number: '' })], editing: true })
 
     expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
     expect(within(screen.getByTestId('lot-row')).getByRole('button', { name: /delete/i })).toBeInTheDocument()
@@ -252,5 +258,48 @@ describe('StockLotsList — a single identified box', () => {
       ],
     })
     expect(within(screen.getByTestId('group-expander')).getByText('2')).toBeInTheDocument()
+  })
+})
+
+// «Edit» mode (T153, UX-036): no trash per row at rest.
+describe('StockLotsList — edit mode', () => {
+  const lots = [
+    lot({ id: 30, quantity: 2, lot_number: 'LOT-A', expiry_date: '2027-01-01' }),
+    lot({ id: 31, quantity: 5, lot_number: '', expiry_date: '2027-06-01' }),
+    lot({ id: 32, quantity: 1, lot_number: 'LOT-S', serial_number: 'SN-9', expiry_date: '2028-01-01' }),
+    lot({ id: 33, quantity: 3, lot_number: 'LOT-S', serial_number: '', expiry_date: '2028-01-01' }),
+  ]
+
+  it('shows no delete button at rest, not even inside an expanded group', async () => {
+    const user = userEvent.setup()
+    renderList({ lots })
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+  })
+
+  it('names what each delete button removes: the lot, or the box by its serial', async () => {
+    const user = userEvent.setup()
+    renderList({ lots, editing: true })
+    await user.click(screen.getByTestId('group-expander'))
+    expect(screen.getAllByTestId('row-delete').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Delete lot LOT-A',
+      'Delete lot without number',
+      'Delete box SN-9',
+      'Delete unidentified units',
+    ])
+  })
+
+  it('keeps the trailing column at rest only when a row has an expander in it', () => {
+    const { container: plain } = renderList({ lots: [lots[0]] })
+    expect(plain.querySelector('[data-trailing]')).toBeNull()
+    const { container: editing } = renderList({ lots: [lots[0]], editing: true })
+    expect(editing.querySelector('[data-trailing]')).not.toBeNull()
+    const { container: withPacks } = renderList({ lots: [lots[2], lots[3]] })
+    expect(withPacks.querySelector('[data-trailing]')).not.toBeNull()
+  })
+
+  it('gives the list the id its section toggle points at', () => {
+    const { container } = renderList({ id: 'stock-lots' })
+    expect(container.querySelector('#stock-lots')).not.toBeNull()
   })
 })

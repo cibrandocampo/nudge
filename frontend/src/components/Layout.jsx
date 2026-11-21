@@ -1,17 +1,14 @@
 import { useLayoutEffect } from 'react'
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
-import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { usePushStatus } from '../hooks/usePushStatus'
 import { useRoutines } from '../hooks/useRoutines'
 import { useServerReachable } from '../hooks/useServerReachable'
-import AlertBanner from './AlertBanner'
 import AutoUpdater from './AutoUpdater'
 import Header from './Header'
 import Icon from './Icon'
-import InstallBanner from './InstallBanner'
-import OfflineBanner from './OfflineBanner'
+import NoticeSlot from './NoticeSlot'
 import { useToast } from './useToast'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
@@ -26,9 +23,7 @@ const LOCKED_OFFLINE_ROUTES = new Set(['/history', '/settings'])
 
 export default function Layout() {
   const { active } = usePushStatus()
-  const { canInstall } = useInstallPrompt()
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { data: routines = [] } = useRoutines()
   const hasPendingRoutines = routines.some((r) => r.is_due)
   const reachable = useServerReachable()
@@ -75,13 +70,8 @@ export default function Layout() {
     <div className={s.root}>
       <AutoUpdater />
       <Header />
-      <InstallBanner />
-      <OfflineBanner />
-      {!canInstall && !active && (
-        <AlertBanner variant="warning" icon="alert-triangle" onClick={() => navigate('/settings#push')}>
-          {t('settings.pushAlert')}
-        </AlertBanner>
-      )}
+      {/* One notice at a time: offline, unsaved changes, install, notifications (T155). */}
+      <NoticeSlot />
       <main className={s.main}>
         <Outlet />
       </main>

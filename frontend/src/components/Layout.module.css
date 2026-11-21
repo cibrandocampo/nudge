@@ -10,20 +10,29 @@
   max-width: 600px;
   margin: 0 auto;
   width: 100%;
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0));
+  /* Clear the fixed bottom bar, plus room for the last card's shadow. */
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 2rem);
 }
 
+/* Bottom bar V2 (T151, UX-012): four labelled tabs, a pill behind the active
+ * icon, a translucent background. Its height is `--nav-h` (index.css) plus
+ * the safe area; everything that has to clear the bar reads that variable.
+ * Overturns T105's «only the active tab shows a label». */
 .nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
   display: flex;
   justify-content: space-around;
   z-index: 100;
-  padding: 0.35rem 0 calc(0.35rem + env(safe-area-inset-bottom, 0));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--c-border);
+  /* ≥ 88 % opaque (UX-012): the inactive labels keep 4.5:1 whatever scrolls
+   * underneath. The blur only softens what shows through the rest. */
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }
 
 .link {
@@ -31,14 +40,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0;
+  height: var(--nav-h);
+  padding: 0;
   text-decoration: none;
-  color: var(--c-text-3);
+  color: var(--c-text-2);
   transition: color var(--transition);
   background: transparent;
   border: 0;
   font: inherit;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .linkActive {
@@ -49,90 +60,54 @@
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.15rem;
+  gap: 2px;
 }
 
-/* Anchors the dots to the icon's corner, whatever the label's width. */
+/* The icon box: 26 px, with the pill behind it and the dots on its corner
+ * (the label can be wider than the icon; the dot belongs to the icon). */
 .iconWrap {
   position: relative;
   display: inline-flex;
 }
 
+.iconWrap > svg {
+  position: relative;
+  width: 26px;
+  height: 26px;
+}
+
+/* The pill behind the active icon: a tint of the action colour, so it
+ * follows the theme without a token of its own. */
+.linkActive .iconWrap::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 56px;
+  height: 30px;
+  border-radius: 15px;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--c-primary) 16%, transparent);
+}
+
 .badge {
   position: absolute;
-  top: -3px;
-  right: -7px;
+  top: -1px;
+  right: -5px;
 }
 
+/* 12 px at Normal; in rem, so it grows with «Text size» and `--nav-h` with it
+ * (line-height 1.2 = the 0.9rem in `--nav-h`). */
 .navLabel {
-  display: none;
   font-size: var(--fs-xs);
   font-weight: 500;
+  line-height: 1.2;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-@media (min-width: 600px) {
-  .navLabel {
-    display: block;
-  }
-}
-
-/* Phones (T105): only the active tab shows its label. Its icon drops from
- * 20 to 16 px and a 10 px label appears 2 px below (16 + 2 + 12 = 30 px).
- * Every tab is fixed to the old content box — the 20 px icon plus the
- * 0.35rem padding above and below — so the bar keeps its height whichever
- * tab is active. Inactive labels are collapsed rather than display:none so
- * the change can animate. */
-@media (max-width: 599.98px) {
-  .link {
-    height: calc(20px + 0.7rem);
-    padding: 0;
-  }
-
-  .linkInner {
-    gap: 0;
-  }
-
-  .iconWrap > svg {
-    transition:
-      width 150ms ease,
-      height 150ms ease;
-  }
-
-  .linkActive .iconWrap > svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .navLabel {
-    display: block;
-    max-height: 0;
-    margin-top: 0;
-    opacity: 0;
-    overflow: hidden;
-    font-size: var(--fs-xs);
-    /* Relative, so the box grows with «Text size» (T148): 12 px at normal, as
-     * before; in px it clipped the descenders at «Extra large» (T149). */
-    line-height: 1;
-    white-space: nowrap;
-    transition:
-      max-height 150ms ease,
-      margin-top 150ms ease,
-      opacity 150ms ease;
-  }
-
-  .linkActive .navLabel {
-    max-height: 1em;
-    margin-top: 2px;
-    opacity: 1;
-  }
-}
-
-@media (max-width: 599.98px) and (prefers-reduced-motion: reduce) {
-  .iconWrap > svg,
-  .navLabel {
-    transition: none;
-  }
+.linkActive .navLabel {
+  font-weight: 600;
 }
 
 @media (max-height: 500px) and (orientation: landscape) {

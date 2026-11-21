@@ -72,15 +72,27 @@ const stock = {
   ],
 }
 
+const detailRoutes = () => (
+  <Routes>
+    <Route path="/inventory/:id" element={<StockDetailPage />} />
+    <Route path="/inventory/:id/edit" element={<div>Edit form stub</div>} />
+    <Route path="/inventory" element={<div>Inventory home</div>} />
+  </Routes>
+)
+
 function renderDetail() {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/inventory/:id" element={<StockDetailPage />} />
-      <Route path="/inventory/:id/edit" element={<div>Edit form stub</div>} />
-      <Route path="/inventory" element={<div>Inventory home</div>} />
-    </Routes>,
-    { initialEntries: ['/inventory/1'] },
-  )
+  return renderWithProviders(detailRoutes(), { initialEntries: ['/inventory/1'] })
+}
+
+// Lot deletes only show in the lots' «Edit» mode (T153).
+async function editLots(user) {
+  await user.click(await screen.findByRole('button', { name: 'Edit: Lots' }))
+}
+
+// The rare actions live in «More» (T152): open it, then take the item.
+async function menuItem(user, name) {
+  await user.click(await screen.findByRole('button', { name: 'More actions' }))
+  return screen.getByRole('menuitem', { name })
 }
 
 describe('StockDetailPage', () => {
@@ -160,27 +172,28 @@ describe('StockDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await expectNewToast()
 
-    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await user.click(await menuItem(user, 'Delete stock'))
     await expectNewToast()
 
     await user.click(screen.getByTestId('add-lot-manual'))
     await expectNewToast()
 
-    // The first "Delete"-named button is the topbar "Delete stock"; the
-    // last one is the per-lot trash. Pick the last to avoid ambiguity.
-    const lotDeletes = screen.getAllByRole('button', { name: /Delete/, exact: false })
-    await user.click(lotDeletes[lotDeletes.length - 1])
+    // Lot deletes live behind the lots' «Edit» (T153), which offline
+    // refuses to open with the same toast.
+    await user.click(screen.getByRole('button', { name: 'Edit: Lots' }))
     await expectNewToast()
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
   })
 
   it('keeps the Edit button visible for non-owners (recipients edit their group there) but hides Delete', async () => {
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_owner: false, owner_display_name: 'alice' })),
     )
-    renderDetail()
+    const { user } = renderDetail()
     await screen.findByText('Water filter')
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete stock' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['View history'])
   })
 
   it('ignores add-lot submission with an invalid quantity', async () => {
@@ -249,8 +262,8 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    const lotDeleteBtns = screen.getAllByTitle('Delete')
-    await user.click(lotDeleteBtns[0])
+    await editLots(user)
+    await user.click(screen.getAllByTestId('row-delete')[0])
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(deleteCalled).toBe(true))
@@ -266,7 +279,7 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByRole('button', { name: /Delete stock/ }))
+    await user.click(await menuItem(user, 'Delete stock'))
     const dialog = screen.getByRole('dialog')
     // Confirm inside the dialog
     const confirmBtn = dialog.querySelectorAll('button')[1]
@@ -279,7 +292,7 @@ describe('StockDetailPage', () => {
     server.use(http.delete(`${BASE}/stock/1/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByRole('button', { name: /Delete stock/ }))
+    await user.click(await menuItem(user, 'Delete stock'))
     const dialog = screen.getByRole('dialog')
     const confirmBtn = dialog.querySelectorAll('button')[1]
     await user.click(confirmBtn)
@@ -291,7 +304,7 @@ describe('StockDetailPage', () => {
     server.use(mockNetworkError('delete', '/stock/1/'))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    await user.click(screen.getByRole('button', { name: /Delete stock/ }))
+    await user.click(await menuItem(user, 'Delete stock'))
     const dialog = screen.getByRole('dialog')
     const confirmBtn = dialog.querySelectorAll('button')[1]
     await user.click(confirmBtn)
@@ -467,8 +480,8 @@ describe('StockDetailPage', () => {
     server.use(http.delete(`${BASE}/stock/1/lots/100/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
     await screen.findByText('Water filter')
-    const lotDeleteBtns = screen.getAllByTitle('Delete')
-    await user.click(lotDeleteBtns[0])
+    await editLots(user)
+    await user.click(screen.getAllByTestId('row-delete')[0])
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument())
@@ -775,10 +788,11 @@ describe('StockDetailPage', () => {
     )
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await editLots(user)
     await user.click(screen.getByTestId('group-expander'))
 
     const secondPack = screen.getAllByTestId('pack-row')[1]
-    await user.click(within(secondPack).getByLabelText('Delete'))
+    await user.click(within(secondPack).getByTestId('row-delete'))
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -789,10 +803,11 @@ describe('StockDetailPage', () => {
     useStockResponse(serializedStock())
     const { user } = renderDetail()
     await screen.findByText('Water filter')
+    await editLots(user)
     await user.click(screen.getByTestId('group-expander'))
 
     const firstPack = screen.getAllByTestId('pack-row')[0]
-    await user.click(within(firstPack).getByLabelText('Delete'))
+    await user.click(within(firstPack).getByTestId('row-delete'))
     // Scoped to the dialog: the pack row on the page also mentions the serial.
     expect(within(screen.getByRole('dialog')).getByText(/serial SN-1/i)).toBeInTheDocument()
   })
@@ -813,14 +828,27 @@ describe('StockDetailPage', () => {
     expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
   })
 
-  it('renders a single unserialized lot exactly as before, with its own delete button', async () => {
-    renderDetail()
+  it('renders a single unserialized lot exactly as before, with its own delete button in edit mode', async () => {
+    const { user } = renderDetail()
     await screen.findByText('Water filter')
 
     // The default fixture has two distinct lots, neither grouped nor split.
     expect(screen.getAllByTestId('lot-row')).toHaveLength(2)
     expect(screen.queryByTestId('group-expander')).not.toBeInTheDocument()
-    expect(screen.getAllByLabelText('Delete')).toHaveLength(2)
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+    await editLots(user)
+    expect(screen.getAllByTestId('row-delete')).toHaveLength(2)
+  })
+
+  it('the lots toggle reads «Done» while editing and hides the deletes again', async () => {
+    const { user } = renderDetail()
+    await screen.findByText('Water filter')
+    await editLots(user)
+    const done = screen.getByRole('button', { name: 'Done: Lots' })
+    expect(done).toHaveAttribute('aria-controls', 'stock-lots')
+    await user.click(done)
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit: Lots' })).toBeInTheDocument()
   })
 
   // ── Consume one unit from the header card ────────────────────────────────
@@ -1229,11 +1257,16 @@ describe('StockDetailPage', () => {
     expect(captured.calls).toBe(0)
   })
 
-  it('marks the pack delete button unavailable offline and refuses the click', async () => {
+  it('marks the pack delete button unavailable when the connection drops while editing, and refuses the click', async () => {
     useStockResponse(serializedStock())
-    reachableRef.current = false
-    const { user } = renderDetail()
+    const { user, rerender } = renderDetail()
     await screen.findByText('Water filter')
+    await editLots(user)
+    // Offline the lots cannot enter edit mode; the deletes can still be on
+    // screen if the connection goes while editing. The page re-renders when
+    // reachability changes (`useServerReachable`); the rerender stands in.
+    reachableRef.current = false
+    rerender(detailRoutes())
     await user.click(screen.getByTestId('group-expander'))
 
     const del = within(screen.getAllByTestId('pack-row')[0]).getByRole('button')
@@ -1731,8 +1764,10 @@ describe('StockDetailPage — dialogs dismissed and connection lost while open',
     return calls
   }
 
-  const lastDeleteButton = () => {
-    const buttons = screen.getAllByRole('button', { name: /Delete/ })
+  // The last lot's delete, behind the lots' «Edit» (T153).
+  const lastDeleteButton = async (user) => {
+    await user.click(screen.getByRole('button', { name: 'Edit: Lots' }))
+    const buttons = screen.getAllByTestId('row-delete')
     return buttons[buttons.length - 1]
   }
 
@@ -1745,7 +1780,7 @@ describe('StockDetailPage — dialogs dismissed and connection lost while open',
     const calls = trackDeletes()
     const { user } = render()
     await screen.findByText('Water filter')
-    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await user.click(await menuItem(user, 'Delete stock'))
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -1756,7 +1791,7 @@ describe('StockDetailPage — dialogs dismissed and connection lost while open',
     const calls = trackDeletes()
     const { user, rerender } = render()
     await screen.findByText('Water filter')
-    await user.click(screen.getByRole('button', { name: 'Delete stock' }))
+    await user.click(await menuItem(user, 'Delete stock'))
     reachableRef.current = false
     rerender(tree())
     await user.click(within(screen.getByRole('dialog')).getAllByRole('button')[1])
@@ -1769,7 +1804,7 @@ describe('StockDetailPage — dialogs dismissed and connection lost while open',
     const calls = trackDeletes()
     const { user } = render()
     await screen.findByText('Water filter')
-    await user.click(lastDeleteButton())
+    await user.click(await lastDeleteButton(user))
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -1780,7 +1815,7 @@ describe('StockDetailPage — dialogs dismissed and connection lost while open',
     const calls = trackDeletes()
     const { user, rerender } = render()
     await screen.findByText('Water filter')
-    await user.click(lastDeleteButton())
+    await user.click(await lastDeleteButton(user))
     reachableRef.current = false
     rerender(tree())
     await user.click(within(screen.getByRole('dialog')).getAllByRole('button')[1])

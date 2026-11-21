@@ -258,7 +258,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     }
     const entryButtonProps = {
       type: 'button',
-      className: cx(buttons.btn, buttons.btnPrimary, s.entryBtn, !reachable && buttons.disabled),
+      className: cx(buttons.btn, buttons.primary, s.entryBtn, !reachable && buttons.disabled),
       'aria-disabled': !reachable,
       title: !reachable ? t('offline.pageUnavailable') : undefined,
     }
@@ -419,10 +419,10 @@ export default function AddLotForm({ stock, today, onSubmit }) {
         )}
 
         <div className={s.addLotActions}>
-          <button type="button" className={cx(buttons.btn, buttons.btnSecondary)} onClick={close} disabled={adding}>
+          <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={close} disabled={adding}>
             {t('common.cancel')}
           </button>
-          <button type="submit" className={cx(buttons.btn, buttons.btnPrimary)} disabled={adding || Boolean(blocker)}>
+          <button type="submit" className={cx(buttons.btn, buttons.primary)} disabled={adding || Boolean(blocker)}>
             {adding ? t('inventory.adding') : t('common.save')}
           </button>
         </div>

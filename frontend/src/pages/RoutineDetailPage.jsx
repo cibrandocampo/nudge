@@ -7,6 +7,7 @@ import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import LogDateModal from '../components/LogDateModal'
 import LotConsumeModal from '../components/LotConsumeModal'
+import OverflowMenu from '../components/OverflowMenu'
 import QueryHandler from '../components/QueryHandler'
 import SharedWithChips from '../components/SharedWithChips'
 import SyncStatusBadge from '../components/SyncStatusBadge'
@@ -211,56 +212,62 @@ export default function RoutineDetailPage() {
       {routine && (
         <div>
           <div className={layout.topBar}>
-            <Link to="/" className={s.back}>
+            <Link to="/" className={cx(buttons.btn, buttons.text, s.back)}>
               {t('common.backToRoutines')}
             </Link>
+            {/* «Edit» as text and the rare actions in «More» (T152,
+                UX-018/034). «Mark as done», below, is the page's main action,
+                so «Edit» is secondary. A recipient only gets the history. */}
             <div className={s.topActions}>
-              <Link
-                to={`/history?type=routines&routine=${routine.id}`}
-                className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
-                aria-label={t('routine.detail.viewAll')}
-                title={t('routine.detail.viewAll')}
-              >
-                <Icon name="history" />
-              </Link>
               {routine.is_owner !== false && (
-                <>
-                  <button
-                    type="button"
-                    className={cx(buttons.btnAdd, routine.is_active ? buttons.btnAddDanger : buttons.btnAddSuccess)}
-                    onClick={toggleActive}
-                    aria-label={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-                    title={routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate')}
-                  >
-                    <Icon name={routine.is_active ? 'pause' : 'play'} />
-                  </button>
-                  <button
-                    type="button"
-                    className={cx(buttons.btnAdd, buttons.btnAddDanger)}
-                    onClick={() => setShowDeleteConfirm(true)}
-                    aria-label={t('routine.detail.delete')}
-                    title={t('routine.detail.delete')}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                  <button
-                    type="button"
-                    className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
-                    onClick={() => {
-                      if (!reachable) {
-                        showToast({ type: 'error', message: t('offline.pageUnavailable') })
-                        return
-                      }
-                      navigate(`/routines/${id}/edit`)
-                    }}
-                    aria-disabled={!reachable}
-                    aria-label={t('routine.detail.edit')}
-                    title={!reachable ? t('offline.pageUnavailable') : t('routine.detail.edit')}
-                  >
-                    <Icon name="pencil" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className={cx(buttons.btn, buttons.secondary, !reachable && buttons.disabled)}
+                  onClick={() => {
+                    if (!reachable) {
+                      showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                      return
+                    }
+                    navigate(`/routines/${id}/edit`)
+                  }}
+                  aria-disabled={!reachable}
+                  title={!reachable ? t('offline.pageUnavailable') : undefined}
+                  data-testid="edit-routine"
+                >
+                  <Icon name="pencil" size="sm" />
+                  {t('routine.detail.edit')}
+                </button>
               )}
+              <OverflowMenu
+                items={[
+                  {
+                    key: 'history',
+                    label: t('menu.viewHistory'),
+                    icon: 'history',
+                    to: `/history?type=routines&routine=${routine.id}`,
+                    testId: 'menu-history',
+                  },
+                  ...(routine.is_owner !== false
+                    ? [
+                        {
+                          key: 'active',
+                          label: routine.is_active ? t('routine.detail.deactivate') : t('routine.detail.activate'),
+                          icon: routine.is_active ? 'pause' : 'play',
+                          onSelect: toggleActive,
+                          testId: 'menu-toggle-active',
+                        },
+                        {
+                          key: 'delete',
+                          label: t('routine.detail.deleteRoutine'),
+                          icon: 'trash',
+                          danger: true,
+                          onSelect: () => setShowDeleteConfirm(true),
+                          testId: 'menu-delete',
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </div>
           </div>
 
@@ -322,7 +329,7 @@ export default function RoutineDetailPage() {
                     {stockDetailPath && (
                       <Link
                         to={stockDetailPath}
-                        className={s.stockLink}
+                        className={cx(buttons.hit, s.stockLink)}
                         aria-label={t('common.openDetail')}
                         title={t('common.openDetail')}
                         data-testid="stock-detail-link"
@@ -392,7 +399,7 @@ export default function RoutineDetailPage() {
               <button
                 className={cx(
                   buttons.btn,
-                  buttons.btnPrimary,
+                  buttons.primary,
                   s.primaryAction,
                   (completing || routineStockDepleted) && buttons.disabled,
                 )}
@@ -413,7 +420,7 @@ export default function RoutineDetailPage() {
                 type="button"
                 className={cx(
                   buttons.btn,
-                  buttons.btnPrimary,
+                  buttons.primary,
                   s.pickTimeBtn,
                   (completing || routineStockDepleted) && buttons.disabled,
                 )}
@@ -433,7 +440,7 @@ export default function RoutineDetailPage() {
               <button
                 className={cx(
                   buttons.btn,
-                  buttons.btnPrimary,
+                  buttons.primary,
                   s.primaryAction,
                   (completing || routineStockDepleted) && buttons.disabled,
                 )}
@@ -454,7 +461,7 @@ export default function RoutineDetailPage() {
                 type="button"
                 className={cx(
                   buttons.btn,
-                  buttons.btnPrimary,
+                  buttons.primary,
                   s.pickTimeBtn,
                   (completing || routineStockDepleted) && buttons.disabled,
                 )}

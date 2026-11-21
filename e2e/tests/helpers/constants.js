@@ -69,6 +69,8 @@ export const SEED = {
       officialName: 'IBUPROFENO CINFA 600 mg COMPRIMIDOS RECUBIERTOS CON PELICULA EFG',
     },
   },
+  // user1's categories in their seeded `display_order` (seed.py `_create_groups`).
+  groupsUser1: ['Diabetes', 'Home', 'Medicine cabinet', 'Travel'],
   // Stocks the seed pins for user1, so every run starts with the Destacados
   // section on screen. A pinned product renders twice (Destacados + its
   // group) — locate it with `.first()` or scope it to a section.

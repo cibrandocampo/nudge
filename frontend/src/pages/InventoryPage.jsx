@@ -208,7 +208,7 @@ export default function InventoryPage() {
         <div className={s.topActions}>
           <button
             type="button"
-            className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
+            className={cx(buttons.icon, buttons.outlined)}
             onClick={() => navigate('/inventory/groups')}
             aria-label={t('inventory.manageGroups')}
             title={t('inventory.manageGroups')}
@@ -217,7 +217,7 @@ export default function InventoryPage() {
           </button>
           <button
             type="button"
-            className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
+            className={cx(buttons.icon, buttons.iconFilled, !reachable && buttons.disabled)}
             onClick={() => {
               if (!reachable) {
                 showToast({ type: 'error', message: t('offline.pageUnavailable') })

@@ -16,6 +16,17 @@
   padding: 1rem;
 }
 
+/* A section title with a control on its right (the contacts' «Edit», T153).
+   The 44 px text button sets the row's height; it is pulled into the
+   section's padding so the title does not move down. */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: -0.65rem -0.5rem -0.35rem 0;
+}
+
 /* One-shot attention flash when navigated via the global push-alert
  * banner (`/settings#push`). Fades from brand yellow back to surface so
  * the user's eye lands on the right card after scroll-into-view. */

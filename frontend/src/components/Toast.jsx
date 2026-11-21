@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle, Info, X, XCircle } from 'lucide-react'
 import { ToastContext } from './ToastContext'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './Toast.module.css'
 
 const DEFAULT_DURATION = 4000
@@ -83,7 +85,7 @@ export function ToastProvider({ children }) {
               )}
               <button
                 type="button"
-                className={s.close}
+                className={cx(buttons.hit, s.close)}
                 onClick={() => dismissToast(toast.id)}
                 aria-label="Dismiss notification"
               >

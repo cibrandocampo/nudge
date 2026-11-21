@@ -48,7 +48,7 @@ export default function ShareWithSection({ value = [], onChange, contacts = [], 
         <span className={forms.formSectionTitle}>{label}</span>
         <button
           type="button"
-          className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn, s.shareBtn)}
+          className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn, s.shareBtn)}
           onClick={() => setOpen(true)}
           disabled={buttonDisabled}
           title={noContacts ? t('stockForm.sharedNoContacts') : undefined}

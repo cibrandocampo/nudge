@@ -2,26 +2,31 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { useServerReachable } from '../hooks/useServerReachable'
-import Icon from './Icon'
 import InstallSheet from './InstallSheet'
-import s from './InstallBanner.module.css'
+import Notice from './Notice'
 
 /**
- * Sticky top banner inviting the user to install Nudge as a PWA. Auto-hides
- * when running in standalone mode, on desktop, or after the user installs
- * during this session — see `useInstallPrompt`.
+ * The invitation to install Nudge as a PWA, in the notice slot (T155). Hidden
+ * when running standalone, on desktop, or after installing this session (see
+ * `useInstallPrompt`), and while offline (the offline notice is the one that
+ * matters then, UX-042).
  *
- * Also hidden while the server is unreachable: the offline banner sticks to
- * the same spot and is the one that matters then (both stuck at once, the
- * install invitation covered it, UX-042).
+ * Its × hides it for good on this device (UX-009): `NoticeSlot` remembers it
+ * (`utils/installDismissal`) and stops rendering this, since whether install
+ * shows decides whether the notifications notice may. Settings' InstallCard
+ * still offers installing.
+ *
+ * Props:
+ *   onDismiss — the × was pressed
  */
-export default function InstallBanner() {
+export default function InstallBanner({ onDismiss }) {
   const { t } = useTranslation()
   const { canInstall, hasNativePrompt, platform, triggerNativePrompt } = useInstallPrompt()
   const reachable = useServerReachable()
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  if (!canInstall || !reachable) return null
+  // The sheet outlives the notice: it stays open while the user follows it.
+  if ((!canInstall || !reachable) && !sheetOpen) return null
 
   const handleClick = async () => {
     if (hasNativePrompt) {
@@ -37,11 +42,20 @@ export default function InstallBanner() {
 
   return (
     <>
-      <button type="button" className={s.banner} onClick={handleClick} data-testid="install-banner">
-        <img src="/icons/source.svg" alt="" className={s.logo} aria-hidden="true" />
-        <span>{t('pwa.install.banner')}</span>
-        <Icon name="chevron-right" size="sm" />
-      </button>
+      {canInstall && reachable && (
+        <Notice
+          tone="neutral"
+          icon="download"
+          onClick={handleClick}
+          onDismiss={onDismiss}
+          dismissLabel={t('pwa.install.dismiss')}
+          testId="install-notice"
+          actionTestId="install-banner"
+          dismissTestId="install-dismiss"
+        >
+          {t('pwa.install.banner')}
+        </Notice>
+      )}
       {sheetOpen && <InstallSheet platform={platform} onClose={() => setSheetOpen(false)} />}
     </>
   )

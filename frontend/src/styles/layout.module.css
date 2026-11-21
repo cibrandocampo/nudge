@@ -121,3 +121,17 @@
   width: 100%;
   padding: 0;
 }
+
+/* Read by screen readers, not shown: a live region that announces what just
+   happened (a reordered category, T154). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

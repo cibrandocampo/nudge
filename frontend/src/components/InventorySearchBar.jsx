@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
 import Icon from './Icon'
+import buttons from '../styles/buttons.module.css'
 import s from './InventorySearchBar.module.css'
 
 /**
@@ -41,7 +42,7 @@ export default function InventorySearchBar({ barRef, query, onQueryChange, chips
         {query && (
           <button
             type="button"
-            className={s.clear}
+            className={cx(buttons.hit, s.clear)}
             onClick={() => onQueryChange('')}
             aria-label={t('inventory.searchClear')}
             title={t('inventory.searchClear')}
@@ -59,7 +60,7 @@ export default function InventorySearchBar({ barRef, query, onQueryChange, chips
             <button
               key={chip.id}
               type="button"
-              className={cx(s.chip, active && s.chipActive, chip.kind === 'attention' && s.chipAttention)}
+              className={cx(buttons.hit, s.chip, active && s.chipActive, chip.kind === 'attention' && s.chipAttention)}
               onClick={() => onChipChange(chip.id)}
               aria-pressed={active}
               data-testid="stock-filter-chip"

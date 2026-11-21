@@ -30,8 +30,8 @@ is a true page-specific one-off.
    that maps to an existing token.
 2. **Shared CSS classes** — `src/styles/{buttons,cards,forms,layout}.module.css`,
    one file per family (T045 split the old `shared.module.css`; no class was
-   renamed). Buttons (`.btn*`, `.btnIcon*`, `.btnAdd*`, `.btnCancel`,
-   `.btnConfirm`, `.btnIconMd/Lg`), cards and status dots, forms (`.input`,
+   renamed). Buttons (`.btn` + `.primary`/`.secondary`/`.text`/`.danger`,
+   `.icon` + modifiers, `.hit`; T150), cards and status dots, forms (`.input`,
    `.formSection*`, `.formChip*`, `.formToggle*`, `.formFooter`,
    `.lockedInput`, `.error`), layout (overlays, modal boxes, typography:
    `.pageTitle`, `.sectionTitle`, `.helpText`, `.muted`).
@@ -90,15 +90,18 @@ has proven itself and the abstraction earns its keep.
   `AddLotForm` and `StockFormPage`'s batch rows. `+ campos` reveals
   *whatever is folded at that moment*, one field or two, read at press
   time. A second copy of this state machine is the thing to avoid.
-- **`.btnCancel` / `.btnConfirm`** (`styles/buttons.module.css`) — a single
-  source of truth for modal action buttons; previously each modal defined
-  its own local `.cancelBtn` / `.confirmBtn`.
-- **`.btnIcon` / `.btnIconMd` / `.btnIconLg`** — 32 / 36 / 40 px icon
-  button variants with documented convention (in-card / form-level /
-  top-bar triggers). No more hardcoded `width: 36px; height: 36px;` in
-  page-local CSS.
-  `.btnIconOutline` is the bordered white variant for icon buttons inside a
-  white card, where the plain grey `.btnIcon` reads as disabled.
+- **Button system** (`styles/buttons.module.css`, T150) — five variants on
+  one base: `cx(buttons.btn, buttons.primary | secondary | text | danger)`
+  (`danger` + `filled` is the final confirmation in a modal), and
+  `buttons.icon` for icon-only buttons with modifiers `outlined`,
+  `iconFilled` (the «+» and «Consume 1»), `iconDanger`, `iconSuccess`.
+  Every target is ≥ 44×44: text buttons by `min-height`, icon buttons by
+  their 44 px box. A page control that is small on purpose (chip, close ×,
+  password eye) keeps its size and takes `buttons.hit`, an invisible 44×44
+  area — keep its neighbours far enough that the areas do not overlap, and
+  remember an `overflow` ancestor clips it. Disabled is `buttons.disabled`
+  (or `disabledText` for non-buttons); pressed never uses opacity. No page
+  defines its own button look: modals, forms and headers all use these.
 - **`IconChip`** (`components/IconChip.jsx`) — a status chip that shows only
   its icon and unfolds its text on tap, hover (devices that can hover) or
   keyboard focus; the text stays in the DOM as its accessible name. The tone

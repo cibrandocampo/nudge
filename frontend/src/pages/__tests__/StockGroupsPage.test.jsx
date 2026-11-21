@@ -13,19 +13,57 @@ vi.mock('../../hooks/useServerReachable', () => ({
 
 const BASE = 'http://localhost/api'
 
+const routes = () => (
+  <Routes>
+    <Route path="/inventory/groups" element={<StockGroupsPage />} />
+    <Route path="/inventory" element={<div>Inventory stub</div>} />
+  </Routes>
+)
+
 function render() {
-  return renderWithProviders(
-    <Routes>
-      <Route path="/inventory/groups" element={<StockGroupsPage />} />
-      <Route path="/inventory" element={<div>Inventory stub</div>} />
-    </Routes>,
-    { initialEntries: ['/inventory/groups'] },
-  )
+  return renderWithProviders(routes(), { initialEntries: ['/inventory/groups'] })
 }
 
 beforeEach(() => {
   reachableRef.current = true
 })
+
+// Delete and Up/Down only show in the categories' «Edit» mode (T154).
+async function editGroups(user) {
+  await user.click(await screen.findByRole('button', { name: 'Edit: Categories' }))
+}
+
+const ABC = [
+  { id: 1, name: 'A', display_order: 0 },
+  { id: 2, name: 'B', display_order: 1 },
+  { id: 3, name: 'C', display_order: 2 },
+]
+
+const names = () => screen.getAllByTestId('group-row').map((row) => row.querySelector('span').textContent)
+
+// A stateful server: each PATCH changes the list the GET serves, sorted by
+// `display_order` as the API does. A static GET would replay the old order on
+// the refetch after the mutation and undo the move on screen.
+function serveGroups(initial) {
+  const rows = initial.map((g) => ({ ...g }))
+  const patches = []
+  server.use(
+    http.get(`${BASE}/stock-groups/`, () =>
+      HttpResponse.json([...rows].sort((a, b) => a.display_order - b.display_order)),
+    ),
+    http.patch(`${BASE}/stock-groups/:id/`, async ({ params, request }) => {
+      const body = await request.json()
+      const id = Number(params.id)
+      patches.push({ id, ...body })
+      Object.assign(
+        rows.find((g) => g.id === id),
+        body,
+      )
+      return HttpResponse.json(rows.find((g) => g.id === id))
+    }),
+  )
+  return patches
+}
 
 function mockGroups(groups) {
   server.use(http.get(`${BASE}/stock-groups/`, () => HttpResponse.json(groups)))
@@ -46,12 +84,6 @@ describe('StockGroupsPage', () => {
     render()
     await waitFor(() => expect(screen.getByText('Pantry')).toBeInTheDocument())
     expect(screen.getByText('Medicine')).toBeInTheDocument()
-  })
-
-  it('exposes the drag handle as a named image, not a bare labelled span', async () => {
-    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
-    render()
-    expect(await screen.findByRole('img', { name: 'Drag to reorder' })).toBeInTheDocument()
   })
 
   it('creates a new group via the bottom form', async () => {
@@ -83,7 +115,7 @@ describe('StockGroupsPage', () => {
     )
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /rename/i }))
+    await user.click(await screen.findByRole('button', { name: 'Rename Pantry' }))
     const input = await screen.findByRole('textbox', { name: /rename/i })
     await user.clear(input)
     await user.type(input, 'Despensa{Enter}')
@@ -102,7 +134,7 @@ describe('StockGroupsPage', () => {
     )
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /rename/i }))
+    await user.click(await screen.findByRole('button', { name: 'Rename Pantry' }))
     const input = await screen.findByRole('textbox', { name: /rename/i })
     await user.type(input, ' edited{Escape}')
 
@@ -122,7 +154,8 @@ describe('StockGroupsPage', () => {
     )
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /^delete$/i }))
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Delete Pantry' }))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
 
@@ -140,47 +173,13 @@ describe('StockGroupsPage', () => {
     )
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /^delete$/i }))
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Delete Pantry' }))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(deleteCalls).toBe(0)
-  })
-
-  it('reorders groups via drag-and-drop and PATCHes the affected rows', async () => {
-    const patchBodies = []
-    mockGroups([
-      { id: 1, name: 'A', display_order: 0 },
-      { id: 2, name: 'B', display_order: 1 },
-      { id: 3, name: 'C', display_order: 2 },
-    ])
-    server.use(
-      http.patch(`${BASE}/stock-groups/:id/`, async ({ params, request }) => {
-        const body = await request.json()
-        patchBodies.push({ id: Number(params.id), ...body })
-        return HttpResponse.json({ id: Number(params.id), ...body })
-      }),
-    )
-
-    render()
-    const rows = await screen.findAllByRole('listitem')
-    expect(rows).toHaveLength(3)
-
-    // Drag row 0 (A) onto row 2 (C) so A ends up at the bottom:
-    // [A, B, C] → [B, C, A] → display_order changes for all three.
-    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
-    const { fireEvent } = await import('@testing-library/react')
-    fireEvent.dragStart(rows[0], { dataTransfer })
-    fireEvent.dragEnter(rows[2], { dataTransfer })
-    fireEvent.dragOver(rows[2], { dataTransfer })
-    fireEvent.drop(rows[2], { dataTransfer })
-
-    await waitFor(() => expect(patchBodies).toHaveLength(3))
-    const byId = Object.fromEntries(patchBodies.map((p) => [p.id, p.display_order]))
-    expect(byId[1]).toBe(2) // A moved to position 2
-    expect(byId[2]).toBe(0) // B shifted up
-    expect(byId[3]).toBe(1) // C shifted up
   })
 
   it('shows a create error when the POST rejects', async () => {
@@ -199,7 +198,7 @@ describe('StockGroupsPage', () => {
     server.use(http.patch(`${BASE}/stock-groups/1/`, () => new HttpResponse(null, { status: 500 })))
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /rename/i }))
+    await user.click(await screen.findByRole('button', { name: 'Rename Pantry' }))
     const input = await screen.findByRole('textbox', { name: /rename/i })
     await user.clear(input)
     await user.type(input, 'Despensa{Enter}')
@@ -211,72 +210,220 @@ describe('StockGroupsPage', () => {
     server.use(http.delete(`${BASE}/stock-groups/1/`, () => new HttpResponse(null, { status: 500 })))
 
     const { user } = render()
-    await user.click(await screen.findByRole('button', { name: /^delete$/i }))
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Delete Pantry' }))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
     expect(await screen.findByText(/could not delete/i)).toBeInTheDocument()
   })
 
-  it('shows a reorder error and rolls back local order when a PATCH rejects during reorder', async () => {
-    mockGroups([
-      { id: 1, name: 'A', display_order: 0 },
-      { id: 2, name: 'B', display_order: 1 },
-    ])
-    server.use(http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })))
-
+  it('at rest shows only the rename pencil: no Up/Down, no delete, no drag', async () => {
+    mockGroups(ABC)
     render()
-    const rows = await screen.findAllByRole('listitem')
-    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
-    const { fireEvent } = await import('@testing-library/react')
-    fireEvent.dragStart(rows[0], { dataTransfer })
-    fireEvent.dragOver(rows[1], { dataTransfer })
-    fireEvent.drop(rows[1], { dataTransfer })
+    await screen.findByText('A')
+    expect(screen.getAllByTestId('group-rename')).toHaveLength(3)
+    expect(screen.queryByTestId('move-up')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+    for (const row of screen.getAllByTestId('group-row')) expect(row).not.toHaveAttribute('draggable')
+  })
+
+  it('in edit mode every row has Up, Down and a delete named after it', async () => {
+    mockGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    expect(screen.getByRole('button', { name: 'Move B up' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move B down' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete B' })).toBeInTheDocument()
+    expect(screen.queryByTestId('group-rename')).not.toBeInTheDocument()
+  })
+
+  it('Down swaps a category with the next one and PATCHes only those two', async () => {
+    const patches = serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
+
+    expect(names()).toEqual(['B', 'A', 'C'])
+    await waitFor(() => expect(patches).toHaveLength(2))
+    expect(Object.fromEntries(patches.map((b) => [b.id, b.display_order]))).toEqual({ 1: 1, 2: 0 })
+  })
+
+  it('Up swaps a category with the previous one', async () => {
+    const patches = serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move C up' }))
+
+    expect(names()).toEqual(['A', 'C', 'B'])
+    await waitFor(() => expect(patches).toHaveLength(2))
+    expect(Object.fromEntries(patches.map((b) => [b.id, b.display_order]))).toEqual({ 2: 2, 3: 1 })
+  })
+
+  it('two moves in a row send only the rows each move changes', async () => {
+    const patches = serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
+
+    expect(names()).toEqual(['B', 'C', 'A'])
+    await waitFor(() => expect(patches).toHaveLength(4))
+  })
+
+  it("the first row's Up and the last row's Down stay focusable but do nothing", async () => {
+    const patches = serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    const firstUp = screen.getByRole('button', { name: 'Move A up' })
+    const lastDown = screen.getByRole('button', { name: 'Move C down' })
+    expect(firstUp).toHaveAttribute('aria-disabled', 'true')
+    expect(lastDown).toHaveAttribute('aria-disabled', 'true')
+    expect(firstUp).not.toBeDisabled()
+    await user.click(firstUp)
+    await user.click(lastDown)
+    expect(names()).toEqual(['A', 'B', 'C'])
+    expect(patches).toEqual([])
+  })
+
+  it('after a move the focus follows the category to its new row', async () => {
+    serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
+    expect(screen.getByRole('button', { name: 'Move A down' })).toHaveFocus()
+  })
+
+  it('a move that reaches an end hands the focus to the other button of the same category', async () => {
+    serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move B up' }))
+    // B is first now: its Up is unavailable, its Down takes the focus.
+    expect(screen.getByRole('button', { name: 'Move B down' })).toHaveFocus()
+  })
+
+  it('announces where the moved category landed', async () => {
+    serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    const region = screen.getByTestId('move-announcement')
+    expect(region).toHaveAttribute('aria-live', 'polite')
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
+    expect(region).toHaveTextContent('A moved to position 2 of 3')
+  })
+
+  it('reorders with the keyboard alone', async () => {
+    serveGroups(ABC)
+    const { user } = render()
+    await editGroups(user)
+    screen.getByRole('button', { name: 'Move C up' }).focus()
+    await user.keyboard('{Enter}')
+    await user.keyboard('{Enter}')
+    expect(names()).toEqual(['C', 'A', 'B'])
+    // At the top now: Enter on the focused Down would move it back; it is the
+    // focused control, so the keyboard user is not stranded.
+    expect(screen.getByRole('button', { name: 'Move C down' })).toHaveFocus()
+  })
+
+  it('shows a reorder error and goes back to the server order when a PATCH rejects', async () => {
+    mockGroups(ABC.slice(0, 2))
+    server.use(http.patch(`${BASE}/stock-groups/:id/`, () => new HttpResponse(null, { status: 500 })))
+    const { user } = render()
+    await editGroups(user)
+    await user.click(screen.getByRole('button', { name: 'Move A down' }))
 
     expect(await screen.findByText(/could not save the new order/i)).toBeInTheDocument()
+    expect(names()).toEqual(['A', 'B'])
   })
 
-  it('clears drag-over state on dragLeave and abandons on dragEnd', async () => {
-    mockGroups([
-      { id: 1, name: 'A', display_order: 0 },
-      { id: 2, name: 'B', display_order: 1 },
-    ])
-    let patchCalls = 0
-    server.use(
-      http.patch(`${BASE}/stock-groups/:id/`, () => {
-        patchCalls += 1
-        return HttpResponse.json({})
-      }),
-    )
-
-    render()
-    const rows = await screen.findAllByRole('listitem')
-    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
-    const { fireEvent } = await import('@testing-library/react')
-
-    fireEvent.dragStart(rows[0], { dataTransfer })
-    fireEvent.dragEnter(rows[1], { dataTransfer })
-    // Leaving the row entirely (no relatedTarget inside currentTarget) clears dragOverId.
-    fireEvent.dragLeave(rows[1], { dataTransfer, relatedTarget: document.body })
-    // dragEnd without a drop must not PATCH anything.
-    fireEvent.dragEnd(rows[0], { dataTransfer })
-
-    expect(patchCalls).toBe(0)
-  })
-
-  it('disables all actions when offline', async () => {
+  it('offline: the categories cannot enter edit mode, and create/rename are disabled', async () => {
     reachableRef.current = false
     try {
       mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
-      render()
+      const { user } = render()
 
       await waitFor(() => expect(screen.getByText('Pantry')).toBeInTheDocument())
-      expect(screen.getByRole('button', { name: /rename/i })).toBeDisabled()
-      expect(screen.getByRole('button', { name: /^delete$/i })).toBeDisabled()
-      const createInput = screen.getByLabelText(/category name/i)
-      expect(createInput).toBeDisabled()
+      const edit = screen.getByRole('button', { name: 'Edit: Categories' })
+      expect(edit).toHaveAttribute('aria-disabled', 'true')
+      await user.click(edit)
+      expect(await screen.findAllByText('Requires connection')).not.toHaveLength(0)
+      expect(screen.queryByTestId('row-delete')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Rename Pantry' })).toBeDisabled()
+      expect(screen.getByLabelText(/category name/i)).toBeDisabled()
       expect(screen.getByRole('button', { name: /^add$/i })).toBeDisabled()
     } finally {
       reachableRef.current = true
     }
+  })
+
+  it('«Back» returns to the inventory', async () => {
+    mockGroups([])
+    const { user } = render()
+    await user.click(await screen.findByRole('button', { name: /back to inventory/i }))
+    expect(screen.getByText('Inventory stub')).toBeInTheDocument()
+  })
+
+  it('leaving the rename field saves the new name', async () => {
+    let patchBody = null
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    server.use(
+      http.patch(`${BASE}/stock-groups/1/`, async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({ id: 1, name: patchBody.name, display_order: 0 })
+      }),
+    )
+    const { user } = render()
+    await user.click(await screen.findByRole('button', { name: 'Rename Pantry' }))
+    const input = await screen.findByRole('textbox', { name: /rename/i })
+    await user.clear(input)
+    await user.type(input, 'Despensa')
+    await user.tab()
+    await waitFor(() => expect(patchBody).toEqual({ name: 'Despensa' }))
+  })
+
+  it.each([
+    ['empty', ''],
+    ['unchanged', 'Pantry'],
+  ])('a rename left %s sends nothing', async (_, value) => {
+    let patchCalls = 0
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    server.use(
+      http.patch(`${BASE}/stock-groups/1/`, () => {
+        patchCalls += 1
+        return HttpResponse.json({})
+      }),
+    )
+    const { user } = render()
+    await user.click(await screen.findByRole('button', { name: 'Rename Pantry' }))
+    const input = await screen.findByRole('textbox', { name: /rename/i })
+    await user.clear(input)
+    if (value) await user.type(input, value)
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: /rename/i })).not.toBeInTheDocument())
+    expect(patchCalls).toBe(0)
+  })
+
+  it('if the connection drops while editing, the deletes turn unavailable and say why', async () => {
+    mockGroups([{ id: 1, name: 'Pantry', display_order: 0 }])
+    const { user, rerender } = render()
+    await editGroups(user)
+    reachableRef.current = false
+    rerender(routes())
+    const del = screen.getByRole('button', { name: 'Delete Pantry' })
+    expect(del).toBeDisabled()
+    expect(del).toHaveAttribute('title', 'Requires connection')
+  })
+
+  it('shows the categories by display_order, whatever order the list arrives in', async () => {
+    // A PATCH success updates its category in the cache in place, leaving the
+    // array unsorted: the page must not show the array's order (T154 race).
+    mockGroups([
+      { id: 2, name: 'B', display_order: 1 },
+      { id: 3, name: 'C', display_order: 2 },
+      { id: 1, name: 'A', display_order: 0 },
+    ])
+    render()
+    await screen.findByText('A')
+    expect(names()).toEqual(['A', 'B', 'C'])
   })
 })

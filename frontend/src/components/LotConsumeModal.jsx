@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import ModalFrame from './ModalFrame'
 import { allocateFromGroup } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './LotConsumeModal.module.css'
 
 /**
@@ -176,11 +177,11 @@ export default function LotConsumeModal({
       {shownError && <p className={s.error}>{shownError}</p>}
 
       <div className={s.actions}>
-        <button className={buttons.btnCancel} onClick={onCancel} disabled={busy}>
+        <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel} disabled={busy}>
           {cancelText}
         </button>
         <button
-          className={buttons.btnConfirm}
+          className={cx(buttons.btn, buttons.primary)}
           onClick={handleConfirm}
           disabled={busy || showingEmpty || (!isSingle && total !== needed)}
         >

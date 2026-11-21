@@ -1,10 +1,7 @@
+/* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
+   padding so the text lines up with the content below. */
 .back {
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  padding: 0;
+  margin-left: -0.5rem;
 }
 
 .form {
@@ -25,9 +22,9 @@
   margin-top: 0.4rem;
 }
 
-/* Primary button grows to fill the footer; Cancel stays at the 128 px
-   natural min-width from `.formSecondaryBtn`. Both share 36 px height
-   via that shared class. */
+/* Primary button grows to fill the footer; Cancel keeps the common
+   min-width of `.formSecondaryBtn`. Both are 44 px tall (`buttons.btn`).
+ */
 .submitBtn {
   flex: 1;
 }
@@ -233,7 +230,9 @@ input.phaseCountInput {
 .intervalHeaderActions {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  /* The «?» is 22 px and its tap zone (`buttons.hit`) reaches 11 px past
+     it: 12 px keeps it off the «+» next to it. */
+  gap: 12px;
 }
 
 .intervalInfoBtn {

@@ -41,7 +41,7 @@ export default function InstallCard() {
         </div>
         <p className={s.slogan}>{t('pwa.install.cardSlogan')}</p>
         <p className={s.why}>{t('pwa.install.cardWhy')}</p>
-        <button type="button" className={cx(buttons.btn, buttons.btnPrimary, s.cta)} onClick={handleClick}>
+        <button type="button" className={cx(buttons.btn, buttons.primary, s.cta)} onClick={handleClick}>
           {ctaLabel}
         </button>
       </div>

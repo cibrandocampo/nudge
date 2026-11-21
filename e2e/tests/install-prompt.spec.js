@@ -57,12 +57,27 @@ test.describe('install prompt — iPhone UA', () => {
     await expect(dialog.getByText(/lightweight version of Nudge/)).toBeVisible()
   })
 
-  test('suppresses the push "Notifications are off" AlertBanner', async ({ page }) => {
+  test('shows install, not «Notifications are off»: one notice at a time', async ({ page }) => {
     await loginAsUser1(page)
-    // Install banner is visible; the AlertBanner under Layout must NOT be
-    // rendered. Layout gates it on `!canInstall && !active`.
+    // The notice slot (T155): install comes before notifications — on iPhone
+    // notifications only work once the app is installed.
     await expect(page.getByTestId('install-banner')).toBeVisible()
     await expect(page.getByText(PUSH_ALERT)).toHaveCount(0)
+  })
+
+  test('the × hides the install suggestion for good on this device; Settings still offers it', async ({ page }) => {
+    await loginAsUser1(page)
+    await page.getByTestId('install-dismiss').click()
+    await expect(page.getByTestId('install-banner')).toHaveCount(0)
+    // The next notice takes the slot.
+    await expect(page.getByText(PUSH_ALERT)).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByText(PUSH_ALERT)).toBeVisible()
+    await expect(page.getByTestId('install-banner')).toHaveCount(0)
+
+    await page.goto('/settings')
+    await expect(page.getByTestId('install-card')).toBeVisible()
   })
 
   test('renders the InstallCard at the bottom of /settings', async ({ page }) => {

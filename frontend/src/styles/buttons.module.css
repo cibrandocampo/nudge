@@ -1,354 +1,320 @@
-/* Button primitives — text buttons, icon buttons, add buttons, modal actions.
+/* Button system (T150, UX audit phase 2 — UX-003, 006, 014, 015, 032).
  *
- * Split out of `shared.module.css` in T045. No class was renamed: these are
- * the same rules, in the same order, in a file scoped to one role. */
+ * Five variants on one base, combined as `cx(buttons.btn, buttons.primary)`:
+ *
+ *   .primary    the main action of a screen or modal. Never more than one
+ *               per view.
+ *   .secondary  a bordered action next to the main one. Never for a
+ *               destructive action (use .danger).
+ *   .text       a tertiary action with no box («View all», «Back»). Never
+ *               the only way to reach an important action.
+ *   .icon       an icon-only button, 44×44, with an aria-label. Never
+ *               without a visible label somewhere if the icon is ambiguous.
+ *   .danger     a destructive action, bordered; `.filled` is the final
+ *               confirmation in a modal. Never for a reversible action.
+ *
+ * Every target is at least 44×44 px. Text and icon buttons get it from their
+ * own box; controls of a page that look small on purpose (chips, a close ×, a
+ * password eye) keep their size and take `.hit`, an invisible 44×44 area.
+ *
+ * States: pressed darkens or tints the fill and never uses opacity (UX-006);
+ * disabled has its own fill and text, declared last with a doubled class so no
+ * variant can override it. */
 
-/* ── Buttons ─────────────────────────────────────────────────── */
+/* ── Base ────────────────────────────────────────────────────── */
 
-/* POC tokens (docs/design-poc.html lines 151–165) */
-
+/* Every text button. `min-height` in px: the target stays 44 px whatever the
+   text size; the label is in rem and grows with it. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.875rem;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  font: inherit;
   font-size: var(--fs-sm);
   font-weight: 500;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all var(--transition);
   line-height: 1.25;
+  text-decoration: none;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* A disabled button has to look disabled. Every `.btn` variant kept its full
-   colour while refusing to do anything — the add-lot button under a scan
-   blocker was the case that surfaced it, but it was true app-wide. Same
-   treatment `.btnConfirm:disabled` already used, applied to the base so no
-   variant can forget it. */
-.btn:disabled {
-  cursor: not-allowed;
-}
+/* ── Text variants ───────────────────────────────────────────── */
 
-.btnSm {
-  padding: 0.3rem 0.625rem;
-  font-size: var(--fs-xs);
-}
-
-.btnPrimary {
+/* Main action: filled. Never two on one view. */
+.primary {
   background: var(--c-primary);
   color: var(--c-on-primary);
   border-color: var(--c-primary);
 }
 
-.btnPrimary:hover:not(:disabled) {
+.primary:hover {
   background: var(--c-primary-hover);
+  border-color: var(--c-primary-hover);
 }
 
-.btnSecondary {
+.primary:active {
+  background: var(--c-pressed);
+  border-color: var(--c-pressed);
+}
+
+/* Secondary action: bordered, on the surface. Never destructive. */
+.secondary {
   background: var(--c-surface);
   color: var(--c-text);
   border-color: var(--c-outline);
 }
 
-.btnSecondary:hover:not(:disabled) {
+.secondary:hover {
   background: var(--c-border-inner);
 }
 
-/* Uniform 128×36 box for the three secondary actions (Share with /
-   Add batch / Cancel) so they line up identically across the page.
-   `.btn` alone leaves height to content — with the icons + font
-   stack each button rounds to a slightly different pixel count. */
-
-/* The section-level buttons of the forms share one width
-   (stockform-buttons-visual.spec). In rem so it grows with the type scale and
-   the text-size setting: at 14 px «Share with…» outgrew a fixed 128 px. */
-.formSecondaryBtn {
-  height: 36px;
-  min-width: 9.5rem;
-  padding-top: 0;
-  padding-bottom: 0;
-  justify-content: center;
+.secondary:active {
+  background: color-mix(in srgb, var(--c-text) 14%, var(--c-surface));
 }
 
-.btnGhost {
-  background: transparent;
-  color: var(--c-text-2);
+/* Tertiary action: no box, accent text. Never the only path to a key action. */
+.text {
+  color: var(--c-text-accent);
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
-.btnGhost:hover:not(:disabled) {
+.text:hover {
   background: var(--c-border-inner);
 }
 
-.btnDanger {
-  background: transparent;
+.text:active {
+  background: color-mix(in srgb, var(--c-text) 14%, transparent);
+}
+
+/* Destructive action: bordered, danger text. Never for something undoable. */
+.danger {
+  background: var(--c-surface);
   color: var(--c-danger);
   border-color: var(--c-outline);
 }
 
-.btnDanger:hover:not(:disabled) {
+.danger:hover {
   color: var(--c-danger-hover);
-  background: color-mix(in srgb, var(--c-danger) 5%, transparent);
+  background: color-mix(in srgb, var(--c-danger) 6%, var(--c-surface));
   border-color: var(--c-border-danger);
 }
 
-/* ── Icon buttons (32×32 base + variants) ────────────────────── */
+.danger:active {
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface));
+}
 
-.btnIcon {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: var(--radius);
-  background: var(--c-border-inner);
-  border: none;
-  color: var(--c-text-3);
-  cursor: pointer;
+/* The final confirmation of a destructive action, in a modal. */
+.danger.filled {
+  background: var(--c-danger);
+  color: var(--c-on-danger);
+  border-color: var(--c-danger);
+}
+
+.danger.filled:hover {
+  background: var(--c-danger-hover);
+  border-color: var(--c-danger-hover);
+}
+
+.danger.filled:active {
+  background: color-mix(in srgb, var(--c-danger) 80%, black);
+  border-color: transparent;
+}
+
+/* The section-level buttons of the forms share one width so they line up
+   (stockform-buttons-visual.spec). In rem so it grows with the type scale and
+   the text-size setting: at 14 px «Share with…» outgrew a fixed 128 px. */
+.formSecondaryBtn {
+  min-width: 9.5rem;
+}
+
+/* ── Icon buttons ────────────────────────────────────────────── */
+
+/* Icon only, 44×44 with a 20 px icon. Transparent and in the secondary text
+   colour: the old grey chip read as disabled (UX-003). Always with an
+   aria-label. */
+.icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--c-text-2);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--transition),
+    color var(--transition);
   -webkit-tap-highlight-color: transparent;
 }
 
-.btnIcon:hover {
-  background: var(--c-border);
-  color: var(--c-text-2);
-}
-
-.btnIcon:active {
-  background: color-mix(in srgb, var(--c-text) 18%, transparent);
-}
-
-/* An icon button inside a white card: bordered like `.btnSecondary`, so it
-   reads as enabled next to the card's text buttons (the plain `.btnIcon` grey
-   looks disabled on white). */
-.btnIconOutline {
-  background: var(--c-surface);
-  border: 1px solid var(--c-outline);
-  color: var(--c-text-2);
-}
-
-.btnIconOutline:hover:not(:disabled) {
+.icon:hover {
   background: var(--c-border-inner);
   color: var(--c-text);
 }
 
-.btnIconDone {
-  color: var(--c-on-primary);
-  background: var(--c-primary);
+.icon:active {
+  background: color-mix(in srgb, var(--c-text) 16%, transparent);
 }
 
-.btnIconDone:hover {
-  background: var(--c-primary-hover);
+/* Bordered icon on the surface: next to text buttons in a card or a page
+   header, so it reads as a button of the same family. */
+.outlined {
+  background: var(--c-surface);
+  border-color: var(--c-outline);
 }
 
-.btnIconConsume {
+/* Filled icon: the «+» that creates, and «Consume 1». Never for anything
+   but the main action of its row or bar. */
+.iconFilled {
   position: relative;
-  color: var(--c-on-primary);
   background: var(--c-primary);
+  color: var(--c-on-primary);
+  border-color: var(--c-primary);
 }
 
-.btnIconConsume:hover {
+.iconFilled:hover {
   background: var(--c-primary-hover);
+  color: var(--c-on-primary);
 }
 
+.iconFilled:active {
+  background: var(--c-pressed);
+}
+
+/* Destructive icon, in its full colour (UX-003). */
+.iconDanger {
+  color: var(--c-danger);
+}
+
+.iconDanger:hover {
+  color: var(--c-danger-hover);
+  background: color-mix(in srgb, var(--c-danger) 8%, var(--c-surface));
+  border-color: var(--c-border-danger);
+}
+
+.iconDanger:active {
+  background: color-mix(in srgb, var(--c-danger) 16%, var(--c-surface));
+}
+
+/* Enabling icon (reactivate), the positive twin of .iconDanger. */
+.iconSuccess {
+  color: var(--c-success);
+}
+
+.iconSuccess:hover {
+  color: var(--c-success);
+  background: color-mix(in srgb, var(--c-success) 8%, var(--c-surface));
+  border-color: var(--c-border-success);
+}
+
+.iconSuccess:active {
+  background: color-mix(in srgb, var(--c-success) 16%, var(--c-surface));
+}
+
+/* «Consume 1» glyph: a box with a down arrow in the brand yellow, drawn as
+   two icons inside an .iconFilled button. */
 .consumeBox {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 8px;
+  left: 8px;
 }
 
 .consumeArrow {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   position: absolute;
-  bottom: 4px;
-  right: 4px;
+  bottom: 7px;
+  right: 7px;
   stroke-width: 2.5;
   color: var(--c-brand);
 }
 
-.btnIconShare {
-  color: var(--c-shared-light);
-  background: color-mix(in srgb, var(--c-shared) 5%, transparent);
+/* The same glyph inline, before the text of a «Consume 1» text button. */
+.consumeGlyph {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 22px;
 }
 
-.btnIconShare:hover {
-  color: var(--c-shared);
-  background: color-mix(in srgb, var(--c-shared) 10%, transparent);
+.consumeGlyph > .consumeBox {
+  top: 0;
+  left: 0;
 }
 
-.btnIconShared {
-  color: var(--c-shared);
-  background: color-mix(in srgb, var(--c-shared) 14%, transparent);
-  cursor: default;
+.consumeGlyph > .consumeArrow {
+  bottom: -2px;
+  right: 0;
 }
 
-.btnIconDelete {
-  color: var(--c-danger);
-  background: color-mix(in srgb, var(--c-danger) 4%, transparent);
+/* ── Tappable area ───────────────────────────────────────────── */
+
+/* Completes a control's tappable zone to 44×44 without changing how it
+   looks: an invisible box centred on it. For controls that are small on
+   purpose (a chip, a close ×, a password eye). Never on a control whose
+   neighbour is closer than the area reaches: the two zones would overlap.
+   Clipped by an ancestor with `overflow: hidden`.
+   `:where()` keeps it at zero specificity: a control its own class positions
+   (absolute inside a field, fixed in a toast) stays where it is and still
+   anchors the area. */
+:where(.hit) {
+  position: relative;
 }
 
-.btnIconDelete:hover {
-  color: var(--c-danger-hover);
-  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+.hit::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 
-.btnAdd {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  background: var(--c-primary);
-  border: none;
-  color: var(--c-on-primary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition);
-}
-
-.btnAdd:hover {
-  background: var(--c-primary-hover);
-}
-
-.btnAddSecondary {
-  background: var(--c-surface);
-  border: 1px solid var(--c-outline);
-  color: var(--c-text);
-}
-
-.btnAddSecondary:hover {
-  background: var(--c-border-inner);
-}
-
-/* Destructive twin of .btnAddSecondary — used for top-bar Delete affordances
- * that must match the 40×40 size of .btnAdd while reading as danger. */
-
-.btnAddDanger {
-  background: var(--c-surface);
-  border: 1px solid var(--c-outline);
-  color: var(--c-danger);
-}
-
-.btnAddDanger:hover {
-  color: var(--c-danger-hover);
-  background: color-mix(in srgb, var(--c-danger) 5%, transparent);
-  border-color: var(--c-border-danger);
-}
-
-/* Positive twin of .btnAddSecondary — used for top-bar affordances that
- * trigger an enabling/activating action (pair with the destructive variant
- * above so toggle pairs read as red ↔ green). */
-
-.btnAddSuccess {
-  background: var(--c-surface);
-  border: 1px solid var(--c-outline);
-  color: var(--c-success);
-}
-
-.btnAddSuccess:hover {
-  background: color-mix(in srgb, var(--c-success) 5%, transparent);
-  border-color: var(--c-border-success);
-}
-
-/* ── Modal action buttons ─────────────────────────────────────── */
-
-.btnCancel {
-  padding: 0.6rem 1.2rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--c-outline);
-  background: var(--c-surface);
-  color: var(--c-text);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.btnCancel:hover {
-  background: var(--c-border-inner);
-}
-
-.btnConfirm {
-  padding: 0.6rem 1.2rem;
-  border-radius: var(--radius-lg);
-  border: none;
-  background: var(--c-primary);
-  color: var(--c-on-primary);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.btnConfirm:hover {
-  background: var(--c-primary-hover);
-}
-
-.btnConfirm:disabled {
-  cursor: not-allowed;
-}
-
-.btnConfirmDanger {
-  background: var(--c-danger);
-  color: var(--c-on-danger);
-}
-
-.btnConfirmDanger:hover {
-  background: var(--c-danger);
-  filter: brightness(0.92);
-}
-
-/* ── Icon-button size variants ────────────────────────────────── */
-
-/* Convention:
- *   .btnIcon    → 32x32 (in-card actions)
- *   .btnIconMd  → 36x36 (form-level)
- *   .btnIconLg  → 40x40 (top-bar triggers, primary affordances)
- */
-
-.btnIconMd {
-  width: 36px;
-  height: 36px;
-}
-
-.btnIconLg {
-  width: 40px;
-  height: 40px;
-}
-
-/* ── States: pressed and disabled ─────────────────────────────── */
-
-/* Pressed darkens the fill. It used to be opacity, which made a pressed
-   button look like a disabled one (UX-006: 1.27:1 between the two). */
-.btnPrimary:active:not(:disabled),
-.btnAdd:active,
-.btnConfirm:active:not(:disabled),
-.btnIconDone:active,
-.btnIconConsume:active {
-  background: var(--c-pressed);
-}
+/* ── States: disabled ────────────────────────────────────────── */
 
 /* Disabled has its own fill and text instead of opacity: it reads as
    "not available" and never as "pressed". Doubled class so it wins over any
-   variant (same-file order or a page module's own button class). Declared
-   last on purpose. `.disabledText` is the same cue for things that are not
-   buttons (a nav link, a drag handle) and must not gain a fill. */
+   variant (same-file order or a page module's own class). Declared last on
+   purpose. `.disabledText` is the same cue for things that are not buttons
+   (a nav link, a drag handle) and must not gain a fill. */
 .disabled.disabled,
 .disabled.disabled:hover,
+.disabled.disabled:active,
 .btn:disabled,
 .btn:disabled:hover,
-.btnConfirm:disabled,
-.btnConfirm:disabled:hover {
+.btn:disabled:active,
+.icon:disabled,
+.icon:disabled:hover {
   background: var(--c-disabled-bg);
   color: var(--c-disabled-text);
   border-color: transparent;
-  filter: none;
   cursor: not-allowed;
+}
+
+/* A text button has no box, disabled or not. */
+.text.disabled.disabled,
+.text:disabled {
+  background: transparent;
 }
 
 .disabledText.disabledText {

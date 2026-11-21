@@ -108,7 +108,7 @@
    directly under the app header. */
 .groupHeaderSticky {
   position: sticky;
-  top: calc(48px + var(--inventory-bar-h, 0px));
+  top: calc(var(--header-h) + var(--inventory-bar-h, 0px));
   z-index: 30;
   background: var(--c-surface);
 }

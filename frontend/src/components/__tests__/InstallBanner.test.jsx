@@ -73,6 +73,27 @@ describe('InstallBanner', () => {
     expect(screen.getByText('Add Nudge to your home screen')).toBeInTheDocument()
   })
 
+  it('closing the sheet leaves the banner as it was', async () => {
+    mockHook({ hasNativePrompt: false, platform: 'ios' })
+    const { user } = renderWithProviders(<InstallBanner />)
+
+    await user.click(screen.getByTestId('install-banner'))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('install-banner')).toBeInTheDocument()
+  })
+
+  it('its × reports the dismissal to the slot (T155)', async () => {
+    mockHook()
+    const onDismiss = vi.fn()
+    const { user } = renderWithProviders(<InstallBanner onDismiss={onDismiss} />)
+
+    await user.click(screen.getByTestId('install-dismiss'))
+
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
   it('opens the firefox sheet variant for firefox-android platform', async () => {
     mockHook({ hasNativePrompt: false, platform: 'firefox-android' })
     const { user } = renderWithProviders(<InstallBanner />)

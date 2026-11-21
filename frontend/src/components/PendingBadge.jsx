@@ -8,6 +8,8 @@ import { forceSync } from '../offline/sync'
 import { queueErrorMessage } from '../utils/errors'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './PendingBadge.module.css'
 
 const STATUS_ICON = {
@@ -55,7 +57,7 @@ export default function PendingBadge() {
     <div className={s.wrapper} ref={wrapperRef}>
       <button
         type="button"
-        className={s.badge}
+        className={cx(buttons.hit, s.badge)}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -70,7 +72,12 @@ export default function PendingBadge() {
         <div className={s.panel} role="dialog" aria-label={t('offline.panel.title')}>
           <div className={s.panelHeader}>
             <span className={s.panelTitle}>{t('offline.panel.title')}</span>
-            <button type="button" className={s.close} onClick={() => setOpen(false)} aria-label={t('common.close')}>
+            <button
+              type="button"
+              className={cx(buttons.hit, s.close)}
+              onClick={() => setOpen(false)}
+              aria-label={t('common.close')}
+            >
               <Icon name="x" size="sm" />
             </button>
           </div>

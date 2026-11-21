@@ -80,10 +80,20 @@ export default function StockValuesConfirmModal({
           ))}
         </ul>
         <div className={s.actions}>
-          <button className={buttons.btnCancel} onClick={onCancel} disabled={busy} data-testid="stock-values-keep">
+          <button
+            className={cx(buttons.btn, buttons.secondary)}
+            onClick={onCancel}
+            disabled={busy}
+            data-testid="stock-values-keep"
+          >
             {t('stockValues.keep')}
           </button>
-          <button className={buttons.btnConfirm} onClick={onConfirm} disabled={busy} data-testid="stock-values-update">
+          <button
+            className={cx(buttons.btn, buttons.primary)}
+            onClick={onConfirm}
+            disabled={busy}
+            data-testid="stock-values-update"
+          >
             {t('stockValues.update')}
           </button>
         </div>

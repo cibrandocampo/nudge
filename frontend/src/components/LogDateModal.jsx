@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ModalFrame from './ModalFrame'
 import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './LogDateModal.module.css'
 
 // Format a Date as the local wall-clock value a `datetime-local` input expects
@@ -42,10 +43,10 @@ export default function LogDateModal({ onConfirm, onCancel }) {
         data-testid="log-date-input"
       />
       <div className={s.actions}>
-        <button className={buttons.btnCancel} onClick={onCancel}>
+        <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel}>
           {t('common.cancel')}
         </button>
-        <button className={buttons.btnConfirm} onClick={handleConfirm} data-testid="log-date-confirm">
+        <button className={cx(buttons.btn, buttons.primary)} onClick={handleConfirm} data-testid="log-date-confirm">
           {t('routine.detail.logDateConfirm')}
         </button>
       </div>

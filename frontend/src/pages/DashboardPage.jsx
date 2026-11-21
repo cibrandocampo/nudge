@@ -144,13 +144,17 @@ export default function DashboardPage() {
       <div className={layout.topBar}>
         <h1 className={layout.pageTitle}>{t('dashboard.title')}</h1>
         {reachable ? (
-          <Link to="/routines/new" className={buttons.btnAdd} aria-label={t('dashboard.newRoutine')}>
+          <Link
+            to="/routines/new"
+            className={cx(buttons.icon, buttons.iconFilled)}
+            aria-label={t('dashboard.newRoutine')}
+          >
             <Icon name="plus" />
           </Link>
         ) : (
           <button
             type="button"
-            className={cx(buttons.btnAdd, buttons.disabled)}
+            className={cx(buttons.icon, buttons.iconFilled, buttons.disabled)}
             onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
             aria-disabled="true"
             aria-label={t('dashboard.newRoutine')}

@@ -16,6 +16,12 @@ vi.mock('../../hooks/useServerReachable', () => ({
 
 const BASE = 'http://localhost/api'
 
+// The rare actions live in «More» (T152): open it, then take the item.
+async function menuItem(user, name) {
+  await user.click(await screen.findByRole('button', { name: 'More actions' }))
+  return screen.getByRole('menuitem', { name })
+}
+
 function renderDetail(overrides = {}) {
   return renderWithProviders(
     <Routes>
@@ -158,7 +164,7 @@ describe('RoutineDetailPage', () => {
   it('shows error when toggle active fails', async () => {
     server.use(http.patch(`${BASE}/routines/1/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
-    const deactivate = await screen.findByRole('button', { name: 'Deactivate' })
+    const deactivate = await menuItem(user, 'Deactivate')
     await user.click(deactivate)
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
   })
@@ -186,14 +192,14 @@ describe('RoutineDetailPage', () => {
       }),
     )
     const { user } = renderDetail()
-    const deactivate = await screen.findByRole('button', { name: 'Deactivate' })
+    const deactivate = await menuItem(user, 'Deactivate')
     await user.click(deactivate)
     await waitFor(() => expect(patched).toBe(true))
   })
 
   it('shows delete confirmation and deletes', async () => {
     const { user } = renderDetail()
-    const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
+    const deleteBtn = await menuItem(user, 'Delete routine')
     await user.click(deleteBtn)
     // Confirm modal should appear
     expect(screen.getByText(/Delete "Take vitamins"/)).toBeInTheDocument()
@@ -210,7 +216,7 @@ describe('RoutineDetailPage', () => {
       }),
     )
     const { user } = renderDetail()
-    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await menuItem(user, 'Delete routine'))
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -219,9 +225,9 @@ describe('RoutineDetailPage', () => {
   })
 
   it('renders recent history entries', async () => {
-    renderDetail()
+    const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Recent history')).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: 'View all →' })).toBeInTheDocument()
+    expect(await menuItem(user, 'View history')).toHaveAttribute('href', '/history?type=routines&routine=1')
   })
 
   it('shows lot selection modal when routine requires_lot_selection', async () => {
@@ -322,7 +328,7 @@ describe('RoutineDetailPage', () => {
   it('shows error when delete fails', async () => {
     server.use(http.delete(`${BASE}/routines/1/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()
-    const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
+    const deleteBtn = await menuItem(user, 'Delete routine')
     await user.click(deleteBtn)
     await user.click(screen.getAllByText('Delete').find((btn) => btn.closest('[role="dialog"]')))
     await waitFor(() => expect(screen.getByText(/Something went wrong/)).toBeInTheDocument())
@@ -440,9 +446,9 @@ describe('RoutineDetailPage', () => {
     server.use(
       http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, is_active: false, is_due: false })),
     )
-    renderDetail()
+    const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Inactive')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Activate' })).toBeInTheDocument()
+    expect(await menuItem(user, 'Activate')).toBeInTheDocument()
   })
 
   it('renders back link and edit button', async () => {
@@ -596,7 +602,7 @@ describe('RoutineDetailPage — advance button', () => {
     server.use(mockNetworkError('patch', '/routines/1/'))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Deactivate' }))
+    await user.click(await menuItem(user, 'Deactivate'))
     await waitFor(async () => expect(await list()).toHaveLength(1))
     await clear()
   })
@@ -606,7 +612,7 @@ describe('RoutineDetailPage — advance button', () => {
     server.use(mockNetworkError('delete', '/routines/1/'))
     const { user } = renderDetail()
     await waitFor(() => expect(screen.getByText('Take vitamins')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(await menuItem(user, 'Delete routine'))
     // ConfirmModal exposes its confirm button with the routine.detail.delete label
     const confirmButtons = screen.getAllByText('Delete')
     await user.click(confirmButtons[confirmButtons.length - 1])
@@ -630,27 +636,29 @@ describe('RoutineDetailPage — advance button', () => {
     // actions disappear when ``is_owner === false``.
     const sharedRoutine = { ...routine, is_owner: false, owner_display_name: 'alice' }
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json(sharedRoutine)))
-    renderDetail()
+    const { user } = renderDetail()
     await screen.findByText('Take vitamins')
-    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^deactivate$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^activate$/i })).not.toBeInTheDocument()
-    // The history link survives — read access is allowed for shared users.
-    expect(screen.getByRole('link', { name: /view all/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument()
+    // «More» holds only the history — read access is allowed for shared users.
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['View history'])
   })
 
   it('keeps Edit/Delete/toggle-active visible for owners', async () => {
     // Pinned alongside the previous test: dropping the wrapping condition
     // would make the previous one pass while breaking this one.
     server.use(http.get(`${BASE}/routines/1/`, () => HttpResponse.json({ ...routine, is_owner: true })))
-    renderDetail()
+    const { user } = renderDetail()
     await screen.findByText('Take vitamins')
-    // T182: pencil is a `<button>` (not a `<Link>`).
+    // T182: Edit is a `<button>` (not a `<Link>`) so it can show the offline toast.
     expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
-    // ``is_active: true`` so the button reads "Deactivate".
-    expect(screen.getByRole('button', { name: /^deactivate$/i })).toBeInTheDocument()
+    // ``is_active: true`` so the item reads "Deactivate".
+    await user.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'View history',
+      'Deactivate',
+      'Delete routine',
+    ])
   })
 
   it('renders the shared-with chips when the owner has shared the routine', async () => {

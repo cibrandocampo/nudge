@@ -38,6 +38,7 @@
 }
 
 .btn {
+  min-height: 44px;
   padding: 0.75rem;
   background: var(--c-primary);
   color: var(--c-on-primary);
@@ -63,6 +64,7 @@
 }
 
 .linkBtn {
+  min-height: 44px;
   background: none;
   border: none;
   color: var(--c-text-3);

@@ -1,0 +1,7 @@
+/* The notice slot sticks under the header (T155). One element sticky, not
+   each banner: the old banners each had their own `top: 48px`. */
+.slot {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 49;
+}

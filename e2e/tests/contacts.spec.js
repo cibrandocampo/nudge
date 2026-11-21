@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { SEED, loginAsUser1, resetSeed, goToSettings } from './helpers.js'
+import { SEED, enterEditMode, loginAsUser1, resetSeed, goToSettings } from './helpers.js'
 
 /**
  * T038 / T197 — Contacts management from the Settings page.
@@ -38,9 +38,10 @@ test.describe('Settings › Contacts', () => {
     await expect(list).toContainText(SEED.admin.email)
     await expect(page.getByTestId('add-contact-email')).toHaveValue('')
 
-    // Remove via the X button → React ConfirmModal (no native confirm).
+    // Remove: «Edit» (T153), the row's X → React ConfirmModal (no native confirm).
     const adminRow = list.getByRole('listitem').filter({ hasText: SEED.admin.email })
-    await adminRow.getByRole('button', { name: 'Remove contact', exact: true }).click()
+    await enterEditMode(page)
+    await adminRow.getByTestId('row-delete').click()
     await page.getByRole('dialog').getByRole('button', { name: 'Remove contact', exact: true }).click()
 
     await expect(list).not.toContainText(SEED.admin.email)

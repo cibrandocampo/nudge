@@ -65,3 +65,23 @@ export function getCurrentResourceId(page) {
   if (!match) throw new Error(`URL does not contain a resource id: ${page.url()}`)
   return match[2]
 }
+
+/**
+ * Choose an item of a detail page's «More» menu (T152): history, delete,
+ * deactivate live there now. By test id, so it works in any session
+ * language (user2/user3 are not English, T148).
+ * @param {'menu-history'|'menu-delete'|'menu-toggle-active'} itemTestId
+ */
+export async function chooseFromMoreMenu(page, itemTestId) {
+  await page.getByTestId('more-menu').click()
+  await page.getByTestId(itemTestId).click()
+}
+
+/**
+ * Enter a list section's «Edit» mode (T153): the per-row delete buttons
+ * (`row-delete`) only exist in it. One toggle per page today (a product's
+ * lots, Settings' contacts), so by test id.
+ */
+export async function enterEditMode(page) {
+  await page.getByTestId('edit-toggle').click()
+}

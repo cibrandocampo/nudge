@@ -55,7 +55,7 @@ export default function LeafletAccordion({ stockId, summary, onAvailableChange }
   const retryButton = (
     <button
       type="button"
-      className={cx(buttons.btn, buttons.btnSecondary, s.retry)}
+      className={cx(buttons.btn, buttons.secondary, s.retry)}
       onClick={() => refetch()}
       disabled={isFetching}
       data-testid="leaflet-retry"
@@ -127,7 +127,7 @@ export default function LeafletAccordion({ stockId, summary, onAvailableChange }
         )}
         {sections.length === 0 && data.source_url && (
           <a
-            className={cx(buttons.btn, buttons.btnSecondary, s.sourceLink)}
+            className={cx(buttons.btn, buttons.secondary, s.sourceLink)}
             href={data.source_url}
             target="_blank"
             rel="noopener noreferrer"
@@ -162,7 +162,7 @@ export default function LeafletAccordion({ stockId, summary, onAvailableChange }
         </span>
         {data?.pdf_url && (
           <a
-            className={cx(buttons.btnIcon, buttons.btnIconOutline)}
+            className={cx(buttons.icon, buttons.outlined)}
             href={data.pdf_url}
             target="_blank"
             rel="noopener noreferrer"
