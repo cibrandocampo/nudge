@@ -6,10 +6,6 @@
 
 /* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
    padding so the text lines up with the content below. */
-.backLink {
-  margin-left: -0.5rem;
-}
-
 /* «Consume 1» and «Edit» under the header of the card (T152). Same side
    padding as `cards.cardHeader`. The labels never break; when both do not fit
    (320 px at «Extra large»), «Edit» wraps to a line of its own instead of
@@ -78,6 +74,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 

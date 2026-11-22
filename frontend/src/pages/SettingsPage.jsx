@@ -10,7 +10,7 @@ import { useContacts } from '../hooks/useContacts'
 import { useCreateContact } from '../hooks/mutations/useCreateContact'
 import { useDeleteContact } from '../hooks/mutations/useDeleteContact'
 import { useUpdateMe } from '../hooks/mutations/useUpdateMe'
-import { usePushStatus } from '../hooks/usePushStatus'
+import { notifyPushChanged, usePushStatus } from '../hooks/usePushStatus'
 import { useEditMode } from '../hooks/useEditMode'
 import { useServerReachable } from '../hooks/useServerReachable'
 import AlertBanner from '../components/AlertBanner'
@@ -19,7 +19,7 @@ import Combobox from '../components/Combobox'
 import ConfirmModal from '../components/ConfirmModal'
 import EditToggle from '../components/EditToggle'
 import Icon from '../components/Icon'
-import InstallCard from '../components/InstallCard'
+import PendingActions from '../components/PendingActions'
 import { useToast } from '../components/useToast'
 import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
@@ -94,6 +94,7 @@ export default function SettingsPage() {
   const {
     permission: pushPermission,
     subscribed: pushSubscribed,
+    checked: pushChecked,
     setPermission: setPushPermission,
     setSubscribed: setPushSubscribed,
   } = usePushStatus()
@@ -187,6 +188,7 @@ export default function SettingsPage() {
       alert(t('settings.pushError'))
     } finally {
       setPushLoading(false)
+      notifyPushChanged()
     }
   }
 
@@ -345,6 +347,13 @@ export default function SettingsPage() {
           {t('offline.settingsBlock')}
         </AlertBanner>
       )}
+
+      <PendingActions
+        pushStatus={{ permission: pushPermission, subscribed: pushSubscribed, checked: pushChecked }}
+        onEnablePush={togglePush}
+        pushLoading={pushLoading}
+        disabled={!reachable}
+      />
 
       <Section title={t('settings.profile')}>
         <div className={s.profileRow}>
@@ -581,8 +590,6 @@ export default function SettingsPage() {
           disabled={!reachable}
         />
       </Section>
-
-      <InstallCard />
 
       {/* Last on the page (T104): signing out is deliberate, and it wipes
        * this device. Settings is locked offline, so it only runs online. */}

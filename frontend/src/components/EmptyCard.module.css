@@ -2,6 +2,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   padding: 1.25rem;
   text-align: center;
   color: var(--c-text-2);
@@ -19,22 +20,7 @@
   margin: 0;
 }
 
-/* Shared by the `<Link>` and the `<button>` variants of `action`, so the two
-   read identically — the reset is what a button needs to stop looking like
-   one. */
-.link {
-  display: inline-block;
-  margin-top: 0.6rem;
-  color: var(--c-text-accent);
-  font-weight: 500;
-  text-decoration: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-}
-.link:hover {
-  text-decoration: underline;
+/* The action is a system button (T156); this only separates it from the text. */
+.action {
+  margin-top: 0.75rem;
 }

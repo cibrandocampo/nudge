@@ -4,25 +4,17 @@ import { beforeEach, vi } from 'vitest'
 import { renderWithProviders } from '../../test/helpers'
 import NoticeSlot from '../NoticeSlot'
 
-const state = { reachable: true, entries: [], canInstall: false, pushActive: true }
+const state = { reachable: true, entries: [], count: 0 }
 
 vi.mock('../../hooks/useServerReachable', () => ({ useServerReachable: () => state.reachable }))
 vi.mock('../../hooks/useQueueEntries', () => ({ useQueueEntries: () => state.entries }))
-vi.mock('../../hooks/useInstallPrompt', () => ({
-  useInstallPrompt: () => ({
-    canInstall: state.canInstall,
-    hasNativePrompt: false,
-    platform: 'android',
-    triggerNativePrompt: vi.fn(),
-  }),
-}))
-vi.mock('../../hooks/usePushStatus', () => ({ usePushStatus: () => ({ active: state.pushActive }) }))
+vi.mock('../../hooks/usePendingActions', () => ({ usePendingActions: () => ({ count: state.count }) }))
 
 function Where() {
   return <p data-testid="where">{useLocation().pathname + useLocation().hash}</p>
 }
 
-function setup(overrides = {}) {
+function setup(overrides = {}, path = '/') {
   Object.assign(state, overrides)
   return renderWithProviders(
     <>
@@ -31,16 +23,15 @@ function setup(overrides = {}) {
         <Route path="*" element={<Where />} />
       </Routes>
     </>,
+    { initialEntries: [path] },
   )
 }
 
 // What the slot shows, by test id: exactly one notice or none.
-const shown = () =>
-  ['offline-banner', 'notice-sync-errors', 'install-notice', 'notice-push-off'].filter((id) => screen.queryByTestId(id))
+const shown = () => ['offline-banner', 'notice-sync-errors', 'notice-pending'].filter((id) => screen.queryByTestId(id))
 
 beforeEach(() => {
-  Object.assign(state, { reachable: true, entries: [], canInstall: false, pushActive: true })
-  localStorage.removeItem('nudge.installDismissed')
+  Object.assign(state, { reachable: true, entries: [], count: 0 })
 })
 
 describe('NoticeSlot', () => {
@@ -50,23 +41,36 @@ describe('NoticeSlot', () => {
   })
 
   it('offline wins over everything else', () => {
-    setup({ reachable: false, entries: [{ id: 'e', status: 'error' }], canInstall: true, pushActive: false })
+    setup({ reachable: false, entries: [{ id: 'e', status: 'error' }], count: 2 })
     expect(shown()).toEqual(['offline-banner'])
   })
 
   it('changes that could not be saved come next', () => {
-    setup({ entries: [{ id: 'e', status: 'error' }], canInstall: true, pushActive: false })
+    setup({ entries: [{ id: 'e', status: 'error' }], count: 2 })
     expect(shown()).toEqual(['notice-sync-errors'])
   })
 
-  it('then the install invitation, before the notifications notice', () => {
-    setup({ canInstall: true, pushActive: false })
-    expect(shown()).toEqual(['install-notice'])
+  it('then the pending actions, saying how many are left', () => {
+    setup({ count: 2 })
+    expect(shown()).toEqual(['notice-pending'])
+    expect(screen.getByTestId('notice-pending')).toHaveTextContent('2 pending actions')
   })
 
-  it('then «notifications are off»', () => {
-    setup({ pushActive: false })
-    expect(shown()).toEqual(['notice-push-off'])
+  it('the pending-actions notice cannot be closed', () => {
+    setup({ count: 1 })
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByTestId('notice-pending')).toHaveTextContent('1 pending action')
+  })
+
+  it('leads to the pending actions in Settings', async () => {
+    const { user } = setup({ count: 1 })
+    await user.click(screen.getByTestId('notice-pending-action'))
+    expect(screen.getByTestId('where')).toHaveTextContent('/settings#pending')
+  })
+
+  it.each(['/settings', '/settings#push'])('is not repeated on %s, where the list already is', (path) => {
+    setup({ count: 2 }, path)
+    expect(shown()).toEqual([])
   })
 
   it('waiting changes are not a notice: the header badge has them', () => {
@@ -99,26 +103,9 @@ describe('NoticeSlot', () => {
     }
   })
 
-  it('«notifications are off» leads to the push section of Settings', async () => {
-    const { user } = setup({ pushActive: false })
-    await user.click(screen.getByRole('button', { name: /notifications are off/i }))
-    expect(screen.getByTestId('where')).toHaveTextContent('/settings#push')
-  })
-
-  it('the install ×, once pressed, keeps it hidden on this device — and the next notice takes the slot', async () => {
-    const { user, unmount } = setup({ canInstall: true, pushActive: false })
-    await user.click(screen.getByRole('button', { name: 'Dismiss the install suggestion' }))
-    expect(shown()).toEqual(['notice-push-off'])
-    expect(localStorage.getItem('nudge.installDismissed')).toBe('1')
-
-    unmount()
-    setup({ canInstall: true, pushActive: false })
-    expect(shown()).toEqual(['notice-push-off'])
-  })
-
   it('sticks under the header as one element', () => {
-    const { container } = setup({ pushActive: false })
-    const slot = container.querySelector('[data-testid="notice-push-off"]').parentElement
+    const { container } = setup({ count: 1 })
+    const slot = container.querySelector('[data-testid="notice-pending"]').parentElement
     expect(slot.className).toMatch(/slot/)
   })
 })

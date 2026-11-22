@@ -8,8 +8,7 @@ import { loginAsUser1 } from './helpers.js'
  * reliably (analogous to push permission gotchas — see MEMORY) so this
  * spec only covers what is deterministic from a test runner: visibility
  * gates (mobile UA, desktop UA, standalone), sheet variants by platform,
- * priority of the install banner over the push AlertBanner, and the
- * Settings card mirror behaviour.
+ * and the non-closable notice that leads to the pending actions in Settings.
  *
  * The native prompt path (`hasNativePrompt=true` → `triggerNativePrompt`)
  * and the post-install `appinstalled` event are validated manually on
@@ -19,10 +18,16 @@ import { loginAsUser1 } from './helpers.js'
 const FIREFOX_ANDROID_UA =
   'Mozilla/5.0 (Android 13; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0'
 
-// Banner + sheet copy come straight from `frontend/src/i18n/en.json`. cibran
+// Notice + sheet copy come straight from `frontend/src/i18n/en.json`. cibran
 // (user1) is seeded with language='en', so the locale assertions are stable.
-const BANNER_TEXT = 'Install the app for a better experience'
-const PUSH_ALERT = 'Notifications are off — enable them in settings.'
+const NOTICE_TEXT = /\d pending actions?/
+
+// Install is reached through the notice: Settings lists it with its risk.
+async function openInstallSheet(page) {
+  await page.getByTestId('notice-pending-action').click()
+  await expect(page).toHaveURL(/\/settings#pending$/)
+  await page.getByTestId('pending-install').getByRole('button', { name: 'Install' }).click()
+}
 
 // `devices[...]` from Playwright bundles a `defaultBrowserType` key that, if
 // passed to `test.use()` inside a describe block, forces a new worker and
@@ -37,15 +42,16 @@ function deviceOptions(name) {
 test.describe('install prompt — iPhone UA', () => {
   test.use(deviceOptions('iPhone 13'))
 
-  test('renders the install banner above the page', async ({ page }) => {
+  test('shows the pending-actions notice above the page, with no way to close it', async ({ page }) => {
     await loginAsUser1(page)
-    await expect(page.getByTestId('install-banner')).toBeVisible()
-    await expect(page.getByTestId('install-banner')).toContainText(BANNER_TEXT)
+    const notice = page.getByTestId('notice-pending')
+    await expect(notice).toContainText(NOTICE_TEXT)
+    await expect(notice.getByRole('button')).toHaveCount(1)
   })
 
-  test('opens the iOS sheet variant on banner click', async ({ page }) => {
+  test('opens the iOS sheet variant from the pending actions', async ({ page }) => {
     await loginAsUser1(page)
-    await page.getByTestId('install-banner').click()
+    await openInstallSheet(page)
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -57,54 +63,36 @@ test.describe('install prompt — iPhone UA', () => {
     await expect(dialog.getByText(/lightweight version of Nudge/)).toBeVisible()
   })
 
-  test('shows install, not «Notifications are off»: one notice at a time', async ({ page }) => {
+  test('Settings lists both actions with their risk and does not repeat the notice', async ({ page }) => {
     await loginAsUser1(page)
-    // The notice slot (T155): install comes before notifications — on iPhone
-    // notifications only work once the app is installed.
-    await expect(page.getByTestId('install-banner')).toBeVisible()
-    await expect(page.getByText(PUSH_ALERT)).toHaveCount(0)
+    await page.getByTestId('notice-pending-action').click()
+    await expect(page.getByTestId('pending-install')).toContainText('reminders may arrive late')
+    // On iPhone notifications wait for the install.
+    await expect(page.getByTestId('pending-push')).toContainText('Install the app first')
+    await expect(page.getByTestId('notice-pending')).toHaveCount(0)
   })
 
-  test('the × hides the install suggestion for good on this device; Settings still offers it', async ({ page }) => {
+  test('the notice is back on every other screen, also after a reload', async ({ page }) => {
     await loginAsUser1(page)
-    await page.getByTestId('install-dismiss').click()
-    await expect(page.getByTestId('install-banner')).toHaveCount(0)
-    // The next notice takes the slot.
-    await expect(page.getByText(PUSH_ALERT)).toBeVisible()
-
     await page.reload()
-    await expect(page.getByText(PUSH_ALERT)).toBeVisible()
-    await expect(page.getByTestId('install-banner')).toHaveCount(0)
-
-    await page.goto('/settings')
-    await expect(page.getByTestId('install-card')).toBeVisible()
-  })
-
-  test('renders the InstallCard at the bottom of /settings', async ({ page }) => {
-    await loginAsUser1(page)
-    await page.goto('/settings')
-    await expect(page.getByTestId('install-card')).toBeVisible()
-    await expect(page.getByTestId('install-card')).toContainText('Install Nudge')
+    await expect(page.getByTestId('notice-pending')).toBeVisible()
+    await page.locator('nav a[href="/inventory"]').click()
+    await expect(page.getByTestId('notice-pending')).toBeVisible()
   })
 })
 
 test.describe('install prompt — desktop UA', () => {
-  test('hides the install banner on desktop', async ({ page }) => {
-    await loginAsUser1(page)
-    await expect(page.getByTestId('install-banner')).toHaveCount(0)
-  })
-
-  test('hides the InstallCard in /settings on desktop', async ({ page }) => {
+  test('does not offer installing on desktop', async ({ page }) => {
     await loginAsUser1(page)
     await page.goto('/settings')
-    await expect(page.getByTestId('install-card')).toHaveCount(0)
+    await expect(page.getByTestId('pending-install')).toHaveCount(0)
   })
 })
 
 test.describe('install prompt — standalone mode', () => {
   test.use(deviceOptions('iPhone 13'))
 
-  test('hides the install banner when display-mode: standalone matches', async ({ page }) => {
+  test('does not offer installing when display-mode: standalone matches', async ({ page }) => {
     // Override matchMedia BEFORE any module loads so the singleton's first
     // read of `isStandalone()` returns true.
     await page.addInitScript(() => {
@@ -127,7 +115,8 @@ test.describe('install prompt — standalone mode', () => {
     })
 
     await loginAsUser1(page)
-    await expect(page.getByTestId('install-banner')).toHaveCount(0)
+    await page.goto('/settings')
+    await expect(page.getByTestId('pending-install')).toHaveCount(0)
   })
 })
 
@@ -137,9 +126,9 @@ test.describe('install prompt — Firefox Android UA', () => {
     userAgent: FIREFOX_ANDROID_UA,
   })
 
-  test('opens the Firefox Android sheet variant on banner click', async ({ page }) => {
+  test('opens the Firefox Android sheet variant from the pending actions', async ({ page }) => {
     await loginAsUser1(page)
-    await page.getByTestId('install-banner').click()
+    await openInstallSheet(page)
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -152,13 +141,13 @@ test.describe('install prompt — Firefox Android UA', () => {
 test.describe('install prompt — Android Chromium UA (sheet fallback)', () => {
   // Pixel 5 device descriptor ships a Chrome Android UA, so getPlatform()
   // returns 'android-chromium'. Headless Chromium does not fire a real
-  // `beforeinstallprompt`, so the banner click falls back to opening the
+  // `beforeinstallprompt`, so the Install button falls back to opening the
   // sheet — useful for asserting the new android-chromium variant.
   test.use(deviceOptions('Pixel 5'))
 
-  test('opens the Android Chromium sheet variant on banner click', async ({ page }) => {
+  test('opens the Android Chromium sheet variant from the pending actions', async ({ page }) => {
     await loginAsUser1(page)
-    await page.getByTestId('install-banner').click()
+    await openInstallSheet(page)
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()

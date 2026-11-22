@@ -37,6 +37,7 @@
   min-height: 0;
   overflow: hidden;
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 /* ── Card (front) ─────────────────────────────────────────────────────────── */
@@ -66,6 +67,11 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The shadow is the clip's, which would cut the shared card's own. */
+.clip > .card {
+  box-shadow: none;
+}
+
 /* Press feedback (T107): the whole card darkens a step and shrinks a little
  * while held — but never mid-drag, where the card must follow the finger.
  * `data-pressed` comes from pointer events (see RoutineCard): `:active` is not
@@ -77,12 +83,6 @@
     transform 100ms ease,
     margin-left 150ms ease,
     background-color 100ms ease;
-}
-
-.name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Bare chevron (T107): light grey, no box — it marks the card as opening,

@@ -52,7 +52,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
 
   // Back to inventory — StockGroupsPage uses a button with the "← Back to
   // inventory" label, not a link.
-  await page.getByRole('button', { name: '← Back to inventory' }).click()
+  await page.getByRole('button', { name: 'Back to inventory' }).click()
   await expect(page).toHaveURL('/inventory')
 
   // ── 4. Create a stock item and assign the category inline ──────────────

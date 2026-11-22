@@ -25,6 +25,7 @@ import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './RoutineFormPage.module.css'
+import BackLink from '../components/BackLink'
 
 function toLocalDateTimeString(date) {
   const y = date.getFullYear()
@@ -256,9 +257,7 @@ export default function RoutineFormPage() {
     >
       <div>
         <div className={layout.topBar}>
-          <button type="button" className={cx(buttons.btn, buttons.text, s.back)} onClick={() => navigate(-1)}>
-            {t('common.backToRoutines')}
-          </button>
+          <BackLink onClick={() => navigate(-1)}>{t('common.backToRoutines')}</BackLink>
           <h1 className={layout.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
         </div>
 

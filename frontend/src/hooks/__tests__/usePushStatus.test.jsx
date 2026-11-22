@@ -1,5 +1,5 @@
 import { act, fireEvent, renderHook, waitFor } from '@testing-library/react'
-import { usePushStatus } from '../usePushStatus'
+import { notifyPushChanged, usePushStatus } from '../usePushStatus'
 
 function setNotification(permission) {
   Object.defineProperty(window, 'Notification', {
@@ -97,5 +97,27 @@ describe('usePushStatus', () => {
     } finally {
       window.Notification = original
     }
+  })
+
+  it('knows when the subscription has been read', async () => {
+    setNotification('granted')
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce(null)
+    const { result } = renderHook(() => usePushStatus())
+    expect(result.current.checked).toBe(false)
+    await waitFor(() => expect(result.current.checked).toBe(true))
+  })
+
+  it('re-reads the state when another screen changes it', async () => {
+    setNotification('granted')
+    const reg = await navigator.serviceWorker.ready
+    reg.pushManager.getSubscription.mockResolvedValueOnce(null)
+    const { result } = renderHook(() => usePushStatus())
+    await waitFor(() => expect(result.current.checked).toBe(true))
+
+    reg.pushManager.getSubscription.mockResolvedValueOnce({ endpoint: 'https://push.example.com/sub/1' })
+    act(() => notifyPushChanged())
+
+    await waitFor(() => expect(result.current.active).toBe(true))
   })
 })

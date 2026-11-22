@@ -264,13 +264,27 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {stocks.length === 0 && <EmptyCard title={t('inventory.emptyTitle')} message={t('inventory.emptyBody')} />}
+      {stocks.length === 0 && (
+        <EmptyCard
+          title={t('inventory.emptyTitle')}
+          message={t('inventory.emptyBody')}
+          action={
+            reachable
+              ? { label: t('inventory.emptyAction'), to: '/inventory/new' }
+              : {
+                  label: t('inventory.emptyAction'),
+                  unavailable: true,
+                  onClick: () => showToast({ type: 'error', message: t('offline.pageUnavailable') }),
+                }
+          }
+        />
+      )}
 
       {stocks.length > 0 && visibleStocks.length === 0 && (
         <EmptyCard
           title={t('inventory.noMatchesTitle')}
           message={t('inventory.noMatchesBody')}
-          action={{ label: t('inventory.clearFilters'), onClick: clearFilters }}
+          action={{ label: t('inventory.clearFilters'), onClick: clearFilters, secondary: true }}
         />
       )}
 

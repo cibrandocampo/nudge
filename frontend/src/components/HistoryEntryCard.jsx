@@ -160,7 +160,7 @@ export default function HistoryEntryCard({
           {showTitle && (
             <span className={cx(cards.cardTitle, cards.cardTitleFlex, s.entryName)}>
               <Icon name={isRoutine ? 'badge-check' : 'package'} size="sm" />
-              <span>{title}</span>
+              <span className={cards.clampName}>{title}</span>
             </span>
           )}
           {entry.consumed_lots?.length > 0 && (

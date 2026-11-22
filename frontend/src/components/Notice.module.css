@@ -55,12 +55,6 @@ button.main:active {
   font-weight: 500;
 }
 
-.dismiss {
-  flex-shrink: 0;
-  align-self: center;
-  color: inherit;
-}
-
 /* Tones: the state containers and their «on» colours (T145). */
 .warning {
   background: var(--c-warning-container);
@@ -75,4 +69,63 @@ button.main:active {
 .neutral {
   background: var(--c-surface);
   color: var(--c-text-accent);
+}
+
+/* The actions reminders depend on (install, notifications): the bottom
+   bar's language, a navy tile with rounded corners, brand-yellow icon and a
+   yellow action. Inset on narrow screens, on the content column on wide ones. */
+.action {
+  width: auto;
+  margin: 0.4rem max(0.5rem, calc((100% - 600px) / 2 + 1.25rem));
+  border-bottom: 0;
+  border-radius: var(--radius-lg);
+  background: var(--c-nav-active);
+  color: var(--c-on-nav-active);
+  font-size: var(--fs-sm);
+}
+
+.action .main {
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: inherit;
+  text-align: left;
+}
+
+.action .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--c-brand);
+}
+
+.action .text {
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.action .detail {
+  font-size: var(--fs-xs);
+}
+
+.cta {
+  flex-shrink: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--c-brand);
+  color: var(--c-nav-active);
+  font-weight: 700;
+}
+
+/* 320 px with a larger text size: tighter spacing keeps the message on one
+   line in every language. */
+@media (max-width: 22rem) {
+  .action .main {
+    gap: 0.4rem;
+    padding: 0.5rem;
+  }
+
+  .action .cta {
+    padding: 0.35rem 0.5rem;
+  }
 }

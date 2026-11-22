@@ -41,6 +41,7 @@ import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockDetailPage.module.css'
+import BackLink from '../components/BackLink'
 
 export default function StockDetailPage() {
   const { id } = useParams()
@@ -322,13 +323,7 @@ export default function StockDetailPage() {
       {stock && (
         <div className={s.container}>
           <div className={cx(layout.topBar, s.topBarFlush)}>
-            <Link
-              to="/inventory"
-              className={cx(buttons.btn, buttons.text, s.backLink)}
-              aria-label={t('common.backToInventory')}
-            >
-              <span>{t('common.backToInventory')}</span>
-            </Link>
+            <BackLink to="/inventory">{t('common.backToInventory')}</BackLink>
             {/* Rare actions in «More» (T152, UX-018/034); the frequent ones
                 — consume, edit — are text buttons on the card below. */}
             <OverflowMenu
@@ -362,7 +357,7 @@ export default function StockDetailPage() {
             <div className={cx(cards.cardHeader, s.headerRow)}>
               <div className={cards.cardMeta}>
                 <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-                  <span>{stock.name}</span>
+                  <span className={cards.clampName}>{stock.name}</span>
                   <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
                 </span>
                 <span className={cards.cardSubtitle}>

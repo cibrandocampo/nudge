@@ -1,12 +1,8 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useInstallPrompt } from '../hooks/useInstallPrompt'
-import { usePushStatus } from '../hooks/usePushStatus'
+import { usePendingActions } from '../hooks/usePendingActions'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { useServerReachable } from '../hooks/useServerReachable'
-import { dismissInstall, isInstallDismissed } from '../utils/installDismissal'
-import InstallBanner from './InstallBanner'
 import Notice from './Notice'
 import OfflineBanner from './OfflineBanner'
 import s from './NoticeSlot.module.css'
@@ -20,18 +16,17 @@ import s from './NoticeSlot.module.css'
  *   2. changes that could not be saved (sync errors in the offline queue);
  *      waiting changes are the header's PendingBadge's, not a notice. The
  *      notice opens that badge's panel;
- *   3. install — first because on iPhone notifications only work once
- *      installed; its × hides it for good on this device;
- *   4. notifications are off — leads to Settings.
+ *   3. actions pending for reminders to work (install, notifications): it
+ *      cannot be closed and leads to Settings, which lists them with what is
+ *      at risk. Not shown on Settings itself, where the list already is.
  */
 export default function NoticeSlot() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const reachable = useServerReachable()
   const entries = useQueueEntries()
-  const { canInstall } = useInstallPrompt()
-  const { active: pushActive } = usePushStatus()
-  const [installDismissed, setInstallDismissed] = useState(isInstallDismissed)
+  const { pathname } = useLocation()
+  const { count: pendingActions } = usePendingActions()
 
   const syncErrors = entries.filter((entry) => entry.status === 'error').length
 
@@ -49,19 +44,17 @@ export default function NoticeSlot() {
         {t('notice.syncErrors', { count: syncErrors })}
       </Notice>
     )
-  } else if (canInstall && !installDismissed) {
+  } else if (pendingActions > 0 && !pathname.startsWith('/settings')) {
     notice = (
-      <InstallBanner
-        onDismiss={() => {
-          dismissInstall()
-          setInstallDismissed(true)
-        }}
-      />
-    )
-  } else if (!pushActive) {
-    notice = (
-      <Notice tone="neutral" icon="info" onClick={() => navigate('/settings#push')} testId="notice-push-off">
-        {t('settings.pushAlert')}
+      <Notice
+        tone="action"
+        icon="alert-triangle"
+        cta={t('notice.pendingCta')}
+        onClick={() => navigate('/settings#pending')}
+        testId="notice-pending"
+        actionTestId="notice-pending-action"
+      >
+        {t('notice.pendingActions', { count: pendingActions })}
       </Notice>
     )
   }

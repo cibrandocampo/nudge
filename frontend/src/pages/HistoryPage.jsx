@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Combobox from '../components/Combobox'
+import EmptyCard from '../components/EmptyCard'
 import DateRangePicker from '../components/DateRangePicker'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Spinner from '../components/Spinner'
@@ -100,6 +101,16 @@ export default function HistoryPage() {
   const items = mergedItems(typeFilter, entries, consumptions)
   const grouped = groupEntriesByDate(items)
   const isEmpty = items.length === 0
+  const hasFilters =
+    typeFilter !== 'all' || !!routineFilter || !!stockFilter || dateFrom !== defaultDateFrom() || dateTo !== todayStr()
+
+  const clearFilters = () => {
+    setTypeFilter('all')
+    setRoutineFilter('')
+    setStockFilter('')
+    setDateFrom(defaultDateFrom())
+    setDateTo(todayStr())
+  }
 
   const handleSaveNote = async (type, entry, notes) => {
     const mutation = type === 'routine' ? updateEntry : updateConsumption
@@ -210,7 +221,10 @@ export default function HistoryPage() {
       ) : error ? (
         <p className={layout.muted}>{t('common.error')}</p>
       ) : isEmpty ? (
-        <p className={layout.muted}>{t('history.empty')}</p>
+        <EmptyCard
+          message={t('history.empty')}
+          action={hasFilters ? { label: t('history.clearFilters'), onClick: clearFilters, secondary: true } : undefined}
+        />
       ) : (
         <>
           {grouped.map(({ dateLabel, items: dayItems }) => (

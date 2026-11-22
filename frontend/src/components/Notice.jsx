@@ -1,5 +1,3 @@
-import { useTranslation } from 'react-i18next'
-import buttons from '../styles/buttons.module.css'
 import cx from '../utils/cx'
 import Icon from './Icon'
 import s from './Notice.module.css'
@@ -16,29 +14,16 @@ import s from './Notice.module.css'
  * like every target.
  *
  * Props:
- *   tone      — 'warning' | 'danger' | 'neutral'
+ *   tone      — 'warning' | 'danger' | 'neutral' | 'action' (navy tile, for
+ *               what reminders depend on)
  *   icon      — sprite name, before the text
  *   onClick   — makes the message a button (with a chevron)
- *   onDismiss — adds a close × (its label: `dismissLabel`)
  *   role      — e.g. 'status' for the offline notice
  *   detail    — an optional second, smaller line
- *   testId (the notice), actionTestId (its button, when `onClick`),
- *   dismissTestId
+ *   cta       — visible action label on the button, instead of the chevron
+ *   testId (the notice), actionTestId (its button, when `onClick`)
  */
-export default function Notice({
-  tone = 'neutral',
-  icon,
-  onClick,
-  onDismiss,
-  dismissLabel,
-  role,
-  detail,
-  testId,
-  actionTestId,
-  dismissTestId,
-  children,
-}) {
-  const { t } = useTranslation()
+export default function Notice({ tone = 'neutral', icon, onClick, role, detail, cta, testId, actionTestId, children }) {
   const body = (
     <>
       {icon && <Icon name={icon} size="sm" className={s.icon} />}
@@ -53,22 +38,10 @@ export default function Notice({
       {onClick ? (
         <button type="button" className={s.main} onClick={onClick} data-testid={actionTestId}>
           {body}
-          <Icon name="chevron-right" size="sm" className={s.icon} />
+          {cta ? <span className={s.cta}>{cta}</span> : <Icon name="chevron-right" size="sm" className={s.icon} />}
         </button>
       ) : (
         <div className={s.main}>{body}</div>
-      )}
-      {onDismiss && (
-        <button
-          type="button"
-          className={cx(buttons.icon, s.dismiss)}
-          onClick={onDismiss}
-          aria-label={dismissLabel ?? t('common.close')}
-          title={dismissLabel ?? t('common.close')}
-          data-testid={dismissTestId}
-        >
-          <Icon name="x" size="sm" />
-        </button>
       )}
     </div>
   )

@@ -12,6 +12,7 @@
   max-width: 360px;
   background: var(--c-surface);
   border-radius: var(--radius-xxl);
+  box-shadow: var(--shadow-card);
   padding: 2.5rem 2rem;
   border: 1px solid var(--c-border);
   text-align: center;

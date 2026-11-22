@@ -14,11 +14,16 @@
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 2rem);
 }
 
-/* Bottom bar V2 (T151, UX-012): four labelled tabs, a pill behind the active
- * icon, a translucent background. Its height is `--nav-h` (index.css) plus
- * the safe area; everything that has to clear the bar reads that variable.
- * Overturns T105's «only the active tab shows a label». */
+/* Bottom bar V2 (T151, UX-012): four labelled tabs on an opaque background.
+ * Every tab keeps its icon and label in the same place; the current one turns
+ * solid brand yellow on a navy block that fills its quarter and slides between
+ * tabs. The bar's height is `--nav-h` (index.css) plus the safe area; everything
+ * that has to clear the bar reads that variable. */
 .nav {
+  --nav-motion: 240ms;
+  --nav-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
+  /* What the bar adds under its tabs: the system's gesture/button area. */
+  --nav-bottom: env(safe-area-inset-bottom, 0px);
   position: fixed;
   bottom: 0;
   left: 0;
@@ -26,13 +31,10 @@
   display: flex;
   justify-content: space-around;
   z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--nav-bottom);
   border-top: 1px solid var(--c-border);
-  /* ≥ 88 % opaque (UX-012): the inactive labels keep 4.5:1 whatever scrolls
-   * underneath. The blur only softens what shows through the rest. */
-  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
-  backdrop-filter: blur(12px) saturate(1.4);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  /* Opaque: text scrolling underneath showed through the labels. */
+  background: var(--c-surface);
 }
 
 .link {
@@ -43,7 +45,8 @@
   height: var(--nav-h);
   padding: 0;
   text-decoration: none;
-  color: var(--c-text-2);
+  position: relative;
+  color: var(--c-text-accent);
   transition: color var(--transition);
   background: transparent;
   border: 0;
@@ -53,7 +56,37 @@
 }
 
 .linkActive {
-  color: var(--c-ink);
+  color: var(--c-brand);
+}
+
+/* One block for the whole bar: a quarter wide, exactly the height of the tabs
+ * (it stops at the system's gesture area, so the content has the same space
+ * above and below), moved by `--tab`. The visible tile is inset 2 px, so its
+ * rounded corners never meet the bar's edges. No overshoot: a block that
+ * bounces would run into the edge of the screen. */
+.indicator {
+  position: absolute;
+  top: 0;
+  height: var(--nav-h);
+  left: 0;
+  width: 25%;
+  pointer-events: none;
+  transform: translateX(calc(var(--tab) * 100%));
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 150ms ease;
+}
+
+.indicator::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: var(--radius-lg);
+  background: var(--c-nav-active);
+}
+
+.indicatorHidden {
+  opacity: 0;
 }
 
 .linkInner {
@@ -68,6 +101,11 @@
 .iconWrap {
   position: relative;
   display: inline-flex;
+  transition: transform var(--nav-motion) var(--nav-spring);
+}
+
+.link:not(.linkActive):active .iconWrap {
+  transform: scale(0.9);
 }
 
 .iconWrap > svg {
@@ -76,18 +114,33 @@
   height: 26px;
 }
 
-/* The pill behind the active icon: a tint of the action colour, so it
- * follows the theme without a token of its own. */
-.linkActive .iconWrap::before {
-  content: '';
+/* Outline at rest, solid when current: both drawn, cross-faded. */
+.iconWrap > .iconFill {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 56px;
-  height: 30px;
-  border-radius: 15px;
-  transform: translate(-50%, -50%);
-  background: color-mix(in srgb, var(--c-primary) 16%, transparent);
+  inset: 0;
+  opacity: 0;
+  /* Grows in place: nothing in the tab moves up or down. */
+  transform: scale(0.8);
+  transition:
+    opacity 120ms ease,
+    transform var(--nav-motion) var(--nav-spring);
+}
+
+.iconLine {
+  transition: opacity 120ms ease;
+}
+
+.linkActive .iconWrap > .iconFill {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.linkActive:active .iconWrap > .iconFill {
+  transform: scale(0.92);
+}
+
+.linkActive .iconLine {
+  opacity: 0;
 }
 
 .badge {
@@ -96,24 +149,36 @@
   right: -5px;
 }
 
+/* White on the current tab: the icon and label are already yellow. The ring of
+ * the block separates it from the icon. */
+.linkActive .badge {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px var(--c-nav-active);
+}
+
 /* 12 px at Normal; in rem, so it grows with «Text size» and `--nav-h` with it
  * (line-height 1.2 = the 0.9rem in `--nav-h`). */
 .navLabel {
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
-.linkActive .navLabel {
-  font-weight: 600;
+@media (prefers-reduced-motion: reduce) {
+  .indicator,
+  .iconWrap,
+  .iconWrap > .iconFill,
+  .iconLine {
+    transition: none;
+  }
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
   .nav {
-    position: static;
-    padding-bottom: 0.35rem;
+    position: relative;
+    --nav-bottom: 0.35rem;
   }
   .main {
     padding-bottom: 1.5rem;

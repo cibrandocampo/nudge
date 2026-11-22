@@ -703,10 +703,15 @@ describe('SettingsPage', () => {
   })
 
   it('skips subscribing when user denies the permission prompt', async () => {
-    Object.defineProperty(window, 'Notification', {
-      value: { permission: 'default', requestPermission: vi.fn().mockResolvedValue('denied') },
-      writable: true,
-    })
+    // As in a browser, answering the prompt changes `Notification.permission`.
+    const notification = {
+      permission: 'default',
+      requestPermission: vi.fn(async () => {
+        notification.permission = 'denied'
+        return 'denied'
+      }),
+    }
+    Object.defineProperty(window, 'Notification', { value: notification, writable: true })
     const vapidSpy = vi.fn()
     server.use(
       http.get(`${BASE}/push/vapid-public-key/`, () => {

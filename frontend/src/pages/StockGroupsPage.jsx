@@ -19,6 +19,7 @@ import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockGroupsPage.module.css'
+import BackLink from '../components/BackLink'
 
 export default function StockGroupsPage() {
   const navigate = useNavigate()
@@ -153,9 +154,7 @@ export default function StockGroupsPage() {
   return (
     <div>
       <div className={layout.topBar}>
-        <button type="button" className={cx(buttons.btn, buttons.text, s.back)} onClick={() => navigate('/inventory')}>
-          {t('common.backToInventory')}
-        </button>
+        <BackLink onClick={() => navigate('/inventory')}>{t('common.backToInventory')}</BackLink>
         <h1 className={layout.pageTitle}>{t('stockGroups.title')}</h1>
       </div>
 

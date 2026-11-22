@@ -29,20 +29,4 @@ describe('Notice', () => {
     renderWithProviders(<Notice detail="Last sync 2 min ago">Offline</Notice>)
     expect(screen.getByText('Last sync 2 min ago')).toBeInTheDocument()
   })
-
-  it('a dismissible notice has a named ×, «Close» by default', async () => {
-    const onDismiss = vi.fn()
-    const { user } = renderWithProviders(<Notice onDismiss={onDismiss}>Hello</Notice>)
-    await user.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onDismiss).toHaveBeenCalledTimes(1)
-  })
-
-  it('the × takes its own label', () => {
-    renderWithProviders(
-      <Notice onDismiss={vi.fn()} dismissLabel="Dismiss the install suggestion">
-        Install
-      </Notice>,
-    )
-    expect(screen.getByRole('button', { name: 'Dismiss the install suggestion' })).toBeInTheDocument()
-  })
 })

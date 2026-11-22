@@ -6,6 +6,7 @@ import {
   isMobile,
   isStandalone,
   triggerNativePrompt,
+  waitForNativePrompt,
 } from '../utils/installPrompt'
 
 /**
@@ -14,7 +15,8 @@ import {
  * is captured (often after mount) or when the user completes installation
  * during the current session.
  *
- * Returns `{ canInstall, platform, hasNativePrompt, triggerNativePrompt }`.
+ * Returns `{ canInstall, platform, hasNativePrompt, triggerNativePrompt,
+ * waitForNativePrompt }`.
  * The consumer decides whether to call `triggerNativePrompt` (when
  * `hasNativePrompt === true`) or to open an instructional sheet — the hook
  * holds no UI state.
@@ -39,5 +41,6 @@ export function useInstallPrompt() {
     platform: getPlatform(),
     hasNativePrompt: hasNativePrompt(),
     triggerNativePrompt,
+    waitForNativePrompt,
   }
 }

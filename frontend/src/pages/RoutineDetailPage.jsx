@@ -31,6 +31,7 @@ import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './RoutineDetailPage.module.css'
+import BackLink from '../components/BackLink'
 
 export default function RoutineDetailPage() {
   const { id } = useParams()
@@ -212,9 +213,7 @@ export default function RoutineDetailPage() {
       {routine && (
         <div>
           <div className={layout.topBar}>
-            <Link to="/" className={cx(buttons.btn, buttons.text, s.back)}>
-              {t('common.backToRoutines')}
-            </Link>
+            <BackLink to="/">{t('common.backToRoutines')}</BackLink>
             {/* «Edit» as text and the rare actions in «More» (T152,
                 UX-018/034). «Mark as done», below, is the page's main action,
                 so «Edit» is secondary. A recipient only gets the history. */}

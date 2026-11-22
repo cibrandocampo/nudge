@@ -85,6 +85,20 @@ describe('HistoryPage', () => {
     await waitFor(() => expect(screen.getByText(/Could not load data/)).toBeInTheDocument())
   })
 
+  it('with no filter applied the empty state offers nothing to clear', async () => {
+    renderWithProviders(<HistoryPage />)
+    await screen.findByText('No entries found.')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  it('a filtered empty list can clear its filters', async () => {
+    const { user } = renderWithProviders(<HistoryPage />, { initialEntries: ['/history?type=routines&routine=1'] })
+    await screen.findByText('No entries found.')
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByLabelText('Type')).toHaveValue('all')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
   it('shows empty state when no entries', async () => {
     renderWithProviders(<HistoryPage />)
     await waitFor(() => expect(screen.getByText('No entries found.')).toBeInTheDocument())

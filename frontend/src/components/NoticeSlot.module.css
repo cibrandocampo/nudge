@@ -4,4 +4,7 @@
   position: sticky;
   top: var(--header-h);
   z-index: 49;
+  /* Behind an inset notice, so content does not scroll through its margins. */
+  display: flow-root;
+  background: var(--c-bg);
 }

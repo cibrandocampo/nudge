@@ -23,6 +23,7 @@ import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockFormPage.module.css'
+import BackLink from '../components/BackLink'
 
 const EMPTY_FORM = { name: '', group: '', gtin: '', national_code: '', default_lot_quantity: '' }
 // `crypto.randomUUID` requires a secure context (HTTPS or localhost).
@@ -267,9 +268,7 @@ export default function StockFormPage() {
     >
       <div className={s.container}>
         <div className={s.topBar}>
-          <button type="button" className={cx(buttons.btn, buttons.text, s.back)} onClick={() => navigate(-1)}>
-            {t('common.backToInventory')}
-          </button>
+          <BackLink onClick={() => navigate(-1)}>{t('common.backToInventory')}</BackLink>
           <h1 className={layout.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
         </div>
 

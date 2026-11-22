@@ -1,9 +1,5 @@
 /* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
    padding so the text lines up with the content below. */
-.back {
-  margin-left: -0.5rem;
-}
-
 .form {
   display: flex;
   flex-direction: column;

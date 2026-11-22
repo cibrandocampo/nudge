@@ -662,7 +662,7 @@ export const SCENES = [
     widths: ['m412'],
     run: async ({ page }) => {
       await go(page, '/')
-      await expect(page.getByTestId('install-banner')).toBeVisible()
+      await expect(page.getByTestId('notice-pending')).toBeVisible()
     },
   },
   {
@@ -671,7 +671,8 @@ export const SCENES = [
     widths: ['m412'],
     run: async ({ page }) => {
       await go(page, '/')
-      await page.getByTestId('install-banner').click()
+      await page.getByTestId('notice-pending-action').click()
+      await page.getByTestId('pending-install').getByRole('button').click()
       await expect(page.getByTestId('install-sheet')).toBeVisible()
     },
   },

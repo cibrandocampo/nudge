@@ -453,7 +453,7 @@ describe('RoutineDetailPage', () => {
 
   it('renders back link and edit button', async () => {
     renderDetail()
-    await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Back to routines')).toBeInTheDocument())
     // T182: pencil is a `<button>` so it can show the offline toast.
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })

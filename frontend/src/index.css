@@ -12,6 +12,8 @@
   --c-primary-hover: #5a5f7d;
   --c-pressed: color-mix(in srgb, var(--c-primary) 82%, black);
   --c-on-primary: #ffffff;
+  --c-nav-active: #454961;
+  --c-on-nav-active: #ffffff;
 
   /* Neutral (slate) */
   --c-bg: #fafafa;
@@ -80,6 +82,7 @@
   --radius-xl: 10px;
   --radius-xxl: 12px;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card: 2px 2px 3px rgba(0, 0, 0, 0.16);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.15);
@@ -110,6 +113,8 @@
     --c-primary-hover: #d3d6ee;
     --c-pressed: color-mix(in srgb, var(--c-primary) 78%, white);
     --c-on-primary: #1d2029;
+    --c-nav-active: #2a2e42;
+    --c-on-nav-active: #e6e7ef;
     --c-bg: #14161d;
     --c-surface: #1d2029;
     --c-ink: #f4f4f6;
@@ -144,6 +149,7 @@
     /* Shadows do not separate dark surfaces; the three surface levels and the
        borders do. */
     --shadow-xs: none;
+    --shadow-card: 2px 2px 3px rgba(0, 0, 0, 0.55);
     --shadow-sm: none;
     --shadow-md: none;
     --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -156,6 +162,8 @@
   --c-primary-hover: #d3d6ee;
   --c-pressed: color-mix(in srgb, var(--c-primary) 78%, white);
   --c-on-primary: #1d2029;
+  --c-nav-active: #2a2e42;
+  --c-on-nav-active: #e6e7ef;
   --c-bg: #14161d;
   --c-surface: #1d2029;
   --c-ink: #f4f4f6;
@@ -190,6 +198,7 @@
   /* Shadows do not separate dark surfaces; the three surface levels and the
      borders do. */
   --shadow-xs: none;
+  --shadow-card: 2px 2px 3px rgba(0, 0, 0, 0.55);
   --shadow-sm: none;
   --shadow-md: none;
   --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -263,6 +272,14 @@ input[type='number'] {
   flex-shrink: 0;
   display: inline-block;
   vertical-align: middle;
+}
+/* Details of the solid nav icons: «cut» out of the icon in the colour of the
+   block behind it. Inherited into the sprite's <use> instances. */
+.icon-cut {
+  stroke: var(--c-nav-active);
+}
+.icon-cut-solid {
+  fill: var(--c-nav-active);
 }
 .icon-sm {
   width: 14px;

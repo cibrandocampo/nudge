@@ -777,3 +777,25 @@ describe('InventoryPage — sticky offset and scroll guard', () => {
     window.history.pushState({}, '', '/')
   })
 })
+
+describe('InventoryPage — empty state action (T156)', () => {
+  afterEach(() => {
+    reachableRef.current = true
+  })
+
+  it('with no products, offers to add one', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([])))
+    renderWithProviders(<InventoryPage />)
+    expect(await screen.findByRole('link', { name: 'Add product' })).toHaveAttribute('href', '/inventory/new')
+  })
+
+  it('offline, the action says why it cannot be used', async () => {
+    server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json([])))
+    reachableRef.current = false
+    const { user } = renderWithProviders(<InventoryPage />)
+    const action = await screen.findByRole('button', { name: 'Add product' })
+    expect(action).toHaveAttribute('aria-disabled', 'true')
+    await user.click(action)
+    expect(await screen.findByText('This section is not available offline.')).toBeInTheDocument()
+  })
+})

@@ -67,7 +67,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
       <div className={s.main}>
         <span className={cx(cards.dot, tokens.dot)} />
         <span className={s.nameGroup}>
-          <span className={s.name}>{stock.name}</span>
+          <span className={cx(s.name, cards.clampName)}>{stock.name}</span>
           {isShared && (
             <span
               className={cards.sharedIcon}

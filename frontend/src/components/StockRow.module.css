@@ -4,6 +4,7 @@
    rail reads as noise rather than status, and the dot already says it. */
 
 .row {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
@@ -47,9 +48,6 @@
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .qtyGroup {
@@ -63,6 +61,30 @@
   align-items: center;
   gap: 0.15rem;
   flex: none;
+}
+
+/* A row too narrow for its text size (320 px at «Extra large», T156): the name
+   takes a line of its own and the quantity and actions go below it. Squeezed
+   beside them it had ~80 px and broke mid-word. In rem, so Normal at 320 px and
+   every size at wider screens keep the single line. */
+@container (max-width: 15rem) {
+  .main {
+    flex-wrap: wrap;
+  }
+
+  /* The whole line but the status dot (8 px) and its gap. */
+  .nameGroup {
+    flex: 1 0 calc(100% - 8px - 0.4rem);
+  }
+
+  /* Under the name, as the meta line is. */
+  .qtyGroup {
+    margin-left: calc(8px + 0.4rem);
+  }
+
+  .actions {
+    margin-left: auto;
+  }
 }
 
 .meta {

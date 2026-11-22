@@ -1,9 +1,5 @@
 /* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
    padding so the text lines up with the content below. */
-.back {
-  margin-left: -0.5rem;
-}
-
 .empty {
   color: var(--c-text-3);
   font-size: var(--fs-sm);
@@ -29,6 +25,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--c-border);
   border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
   background: var(--c-surface);
 }
 
