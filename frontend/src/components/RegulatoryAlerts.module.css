@@ -1,0 +1,50 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.alert svg {
+  flex: none;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The labels are shared with the inventory row, where they are lower case. */
+.text::first-letter {
+  text-transform: uppercase;
+}
+
+.danger {
+  border-color: var(--c-border-danger);
+  background: var(--c-danger-container);
+  color: var(--c-on-danger-container);
+}
+
+.warning {
+  border-color: var(--c-border-warning);
+  background: var(--c-warning-container);
+  color: var(--c-on-warning-container);
+}

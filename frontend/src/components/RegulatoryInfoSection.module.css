@@ -4,6 +4,33 @@
   gap: 0.5rem;
 }
 
+/* The section's title as its fold. Clears the sticky header when an alert
+   scrolls to it. */
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  scroll-margin-top: calc(var(--header-h) + 0.5rem);
+}
+
+.toggle > span {
+  margin: 0;
+}
+
+.card[hidden] {
+  display: none;
+}
+
 /* Same surface as the lots card next to it on the page. */
 .card {
   display: flex;

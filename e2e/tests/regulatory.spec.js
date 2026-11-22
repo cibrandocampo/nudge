@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { SEED } from './helpers/constants.js'
 import { loginAsUser1, loginAsUser2, resetSeed } from './helpers/session.js'
+import { openMedicine } from './helpers/navigation.js'
 import { goToStockDetail } from './helpers/navigation.js'
 import { createStock } from './helpers/stocks.js'
 
@@ -32,6 +33,7 @@ test.describe('Regulatory data on the product page', () => {
     await page.getByTestId('stock-values-keep').click()
     await expect(offer(page)).toHaveCount(0)
 
+    await openMedicine(page)
     await expect(section(page).getByTestId('regulatory-official-name')).toHaveText(REG.fastInsulin.officialName)
     await expect(section(page).getByTestId('regulatory-source')).toContainText('Source: AEMPS (CIMA)')
     await expect(section(page).getByTestId('regulatory-supply-chip')).toHaveAttribute('data-tone', 'danger')
@@ -74,6 +76,7 @@ test.describe('Regulatory data on the product page', () => {
     // Pinned in the seed, so it renders twice in the inventory — the helper
     // opens the first one.
     await goToStockDetail(page, 'hidroferol')
+    await openMedicine(page)
     const notices = section(page).getByTestId('regulatory-notices')
     await expect(notices.getByRole('listitem')).toHaveCount(REG.hidroferol.safetyNotices)
     await expect(notices.getByRole('link').first()).toHaveAttribute('href', /^https:\/\/www\.aemps\.gob\.es\//)
@@ -111,6 +114,7 @@ test.describe('Regulatory data on the product page', () => {
 
     await loginAsUser2(page)
     await goToStockDetail(page, 'fastInsulin')
+    await openMedicine(page)
     await expect(section(page).getByTestId('regulatory-official-name')).toHaveText(REG.fastInsulin.officialName)
     await expect(section(page).getByTestId('regulatory-refresh')).toHaveCount(0)
     await expect(offer(page)).toHaveCount(0)
@@ -130,6 +134,7 @@ test.describe('Regulatory data on the product page', () => {
     // is there at once — and so is the first-link name offer.
     await expect(offer(page)).toContainText(REG.fastInsulin.officialName)
     await page.getByTestId('stock-values-keep').click()
+    await openMedicine(page)
     await expect(section(page).getByTestId('regulatory-official-name')).toHaveText(REG.fastInsulin.officialName)
 
     await page.getByRole('button', { name: 'Edit', exact: true }).click()

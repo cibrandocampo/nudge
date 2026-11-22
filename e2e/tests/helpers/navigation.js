@@ -92,3 +92,10 @@ export async function chooseFromMoreMenu(page, itemTestId) {
 export async function enterEditMode(page) {
   await page.getByTestId('edit-toggle').click()
 }
+
+/** Unfold the product page's medicine information (folded by default, T206). */
+export async function openMedicine(page) {
+  const toggle = page.getByTestId('medicine-toggle')
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}

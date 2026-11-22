@@ -7,6 +7,7 @@ import EditToggle from '../components/EditToggle'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import QueryHandler from '../components/QueryHandler'
+import RegulatoryAlerts from '../components/RegulatoryAlerts'
 import RegulatoryInfoSection from '../components/RegulatoryInfoSection'
 import SharedWithChips from '../components/SharedWithChips'
 import LotPickerModal from '../components/LotPickerModal'
@@ -70,9 +71,19 @@ export default function StockDetailPage() {
   // The same flow as the inventory (T129). Queueable, so it also works offline.
   const { consumeOne, consumingId, pickerStock, closePicker, onPickerConsumed } = useConsumeOne()
 
+  // Folded on every product: the id, so moving to another one starts closed.
+  const [medicineOpenFor, setMedicineOpenFor] = useState(null)
+  const medicineOpen = medicineOpenFor === stockId
+  const medicineToggleRef = useRef(null)
+  const openMedicine = () => {
+    setMedicineOpenFor(stockId)
+    medicineToggleRef.current?.focus()
+    medicineToggleRef.current?.scrollIntoView?.({ block: 'start' })
+  }
+
   const tokens = borderTokensFromStock(stock)
   // The header's own reason line: the inventory row's reasons minus the
-  // agency's, which the medicine section below already shows.
+  // agency's, which have their own alerts right below.
   const headerReasons = stockRowReasons(stock).filter((reason) => reason.kind !== 'regulatory')
   // In the user's order; an id not in the cache yet shows nothing rather than
   // an empty pill.
@@ -327,7 +338,7 @@ export default function StockDetailPage() {
             />
           </div>
 
-          <div className={cx(cards.card, tokens.border)}>
+          <div className={cx(cards.card, s.headerCard)}>
             <div className={cx(cards.cardHeader, s.headerRow)}>
               <div className={cards.cardMeta}>
                 <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
@@ -454,47 +465,7 @@ export default function StockDetailPage() {
             </div>
           </div>
 
-          {/* What the regulatory agency says about the medicine. Right under the
-              header: a supply problem or a suspension matters more than who
-              the stock is shared with. Only for a stock with a national code. */}
-          {stock.regulatory && <RegulatoryInfoSection stock={stock} isOwner={isOwner} reachable={reachable} />}
-
-          {/* Non-owner viewer: single card with the owner chip on the left
-              and (if any) the other recipients on the right. Mirrors
-              RoutineDetailPage. */}
-          {stock.is_owner === false && stock.owner_display_name && (
-            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="people-info">
-              <div className={s.peopleSplit}>
-                <div className={s.peopleColumn} data-testid="owner-info">
-                  <span className={forms.formSectionTitle}>{t('sharing.owner')}</span>
-                  <div className={forms.formChipsRow}>
-                    <span className={forms.formChip}>
-                      <span className={forms.formChipAvatar} aria-hidden="true">
-                        {avatarInitial({ first_name: stock.owner_display_name })}
-                      </span>
-                      <span>{stock.owner_display_name}</span>
-                    </span>
-                  </div>
-                </div>
-                {otherStockRecipients.length > 0 && (
-                  <div className={s.peopleColumn} data-testid="shared-with-info">
-                    <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
-                    <SharedWithChips contacts={otherStockRecipients} />
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Owner viewer keeps the standalone "Shared with" card. */}
-          {isOwner && otherStockRecipients.length > 0 && (
-            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="shared-with-info">
-              <div className={forms.formSectionHeader}>
-                <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
-              </div>
-              <SharedWithChips contacts={otherStockRecipients} />
-            </section>
-          )}
+          {stock.regulatory && <RegulatoryAlerts stock={stock} onOpen={openMedicine} />}
 
           {/* The lots table lists what there is; adding a lot is an action of
               its own, so it sits below the table rather than inside it. With
@@ -550,6 +521,56 @@ export default function StockDetailPage() {
                 )}
               </div>
             </section>
+          )}
+
+          {/* Non-owner viewer: single card with the owner chip on the left
+              and (if any) the other recipients on the right. Mirrors
+              RoutineDetailPage. */}
+          {stock.is_owner === false && stock.owner_display_name && (
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="people-info">
+              <div className={s.peopleSplit}>
+                <div className={s.peopleColumn} data-testid="owner-info">
+                  <span className={forms.formSectionTitle}>{t('sharing.owner')}</span>
+                  <div className={forms.formChipsRow}>
+                    <span className={forms.formChip}>
+                      <span className={forms.formChipAvatar} aria-hidden="true">
+                        {avatarInitial({ first_name: stock.owner_display_name })}
+                      </span>
+                      <span>{stock.owner_display_name}</span>
+                    </span>
+                  </div>
+                </div>
+                {otherStockRecipients.length > 0 && (
+                  <div className={s.peopleColumn} data-testid="shared-with-info">
+                    <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
+                    <SharedWithChips contacts={otherStockRecipients} />
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Owner viewer keeps the standalone "Shared with" card. */}
+          {isOwner && otherStockRecipients.length > 0 && (
+            <section className={cx(forms.formSection, s.sharedBlock)} data-testid="shared-with-info">
+              <div className={forms.formSectionHeader}>
+                <span className={forms.formSectionTitle}>{t('sharing.sharedWith')}</span>
+              </div>
+              <SharedWithChips contacts={otherStockRecipients} />
+            </section>
+          )}
+
+          {/* Last and folded: most visits are for the lots. Its warnings stay
+              visible above, under the header. */}
+          {stock.regulatory && (
+            <RegulatoryInfoSection
+              stock={stock}
+              isOwner={isOwner}
+              reachable={reachable}
+              open={medicineOpen}
+              onToggle={() => setMedicineOpenFor(medicineOpen ? null : stockId)}
+              toggleRef={medicineToggleRef}
+            />
           )}
 
           {confirmRemoveLot && (
