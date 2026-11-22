@@ -51,6 +51,7 @@ registerRollback('consumeStock', (qc, { stockId, quantity, lotSelections }) => {
     return {
       ...stock,
       quantity: (stock.quantity ?? 0) + qty,
+      ...(stock.quantity_available != null && { quantity_available: stock.quantity_available + qty }),
       lots: restoreLots(stock.lots),
     }
   }
@@ -99,7 +100,16 @@ export function useConsumeStock() {
         if (!stock) return stock
         const lots = Array.isArray(stock.lots) ? applyConsumption(stock.lots, quantity, lotSelections) : stock.lots
         const nextQty = Math.max(0, (stock.quantity ?? 0) - quantity)
-        return { ...stock, lots, quantity: nextQty }
+        // The row and the product page read `quantity_available` first, so a
+        // queued consumption must move it too or the number would not change.
+        return {
+          ...stock,
+          lots,
+          quantity: nextQty,
+          ...(stock.quantity_available != null && {
+            quantity_available: Math.max(0, stock.quantity_available - quantity),
+          }),
+        }
       }
 
       client.setQueryData(['stock'], (prev) => {

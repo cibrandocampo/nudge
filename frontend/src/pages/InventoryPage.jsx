@@ -8,6 +8,7 @@ import LotPickerModal from '../components/LotPickerModal'
 import Spinner from '../components/Spinner'
 import StockRow from '../components/StockRow'
 import { useToast } from '../components/useToast'
+import { useConsumeOne } from '../hooks/useConsumeOne'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockGroups, useStockList } from '../hooks/useStock'
 import { MAX_PINNED } from '../hooks/mutations/useToggleStockPin'
@@ -37,12 +38,13 @@ export default function InventoryPage() {
   const { data: groups = [] } = useStockGroups()
   const reachable = useServerReachable()
 
-  // Which stock's picker is currently open (−1 consume flow). The picker
-  // itself owns the consumption mutation; this state is just "which row
-  // spawned it".
-  const [pickerStock, setPickerStock] = useState(null)
-  const [consumingId, setConsumingId] = useState(null)
   const [flashId, setFlashId] = useState(null)
+  const { consumeOne, consumingId, pickerStock, closePicker, onPickerConsumed } = useConsumeOne({
+    onConsumed: ({ id }) => {
+      setFlashId(id)
+      setTimeout(() => setFlashId(null), 600)
+    },
+  })
   const [collapsed, setCollapsed] = useState(() => readCollapsedGroups())
   const [query, setQuery] = useState('')
   const [activeChip, setActiveChip] = useState('all')
@@ -70,23 +72,6 @@ export default function InventoryPage() {
   const clearFilters = () => {
     setQuery('')
     setActiveChip('all')
-  }
-
-  const handleConsume = (stock) => {
-    if (consumingId) return
-    if (!stock.lots || stock.lots.length === 0) {
-      showToast({ type: 'error', message: t('common.actionError') })
-      return
-    }
-    setPickerStock(stock)
-  }
-
-  const handlePickerConsumed = () => {
-    const id = pickerStock?.id
-    if (id != null) {
-      setFlashId(id)
-      setTimeout(() => setFlashId(null), 600)
-    }
   }
 
   // Every section that can exist, filter or no filter: a group with nothing
@@ -192,7 +177,7 @@ export default function InventoryPage() {
       stock={stock}
       consuming={consumingId === stock.id}
       flashing={flashId === stock.id}
-      onConsume={handleConsume}
+      onConsume={consumeOne}
     />
   )
 
@@ -340,11 +325,8 @@ export default function InventoryPage() {
           // The live row, not the one clicked: a refused consume refetches the
           // list, and the picker must stop offering a batch that is gone.
           stock={stocks.find((row) => row.id === pickerStock.id) ?? pickerStock}
-          onClose={() => {
-            setPickerStock(null)
-            setConsumingId(null)
-          }}
-          onConsumed={handlePickerConsumed}
+          onClose={closePicker}
+          onConsumed={onPickerConsumed}
         />
       )}
     </div>

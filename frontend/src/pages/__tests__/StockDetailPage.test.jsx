@@ -882,14 +882,13 @@ describe('StockDetailPage', () => {
     expect(within(dialog).getByText('LOT-A')).toBeInTheDocument()
   })
 
-  it('surfaces the offline toast instead of opening the picker', async () => {
+  it('still offers the lots offline: a consumption can be queued', async () => {
     reachableRef.current = false
     const { user } = renderDetail()
     await screen.findByText('Water filter')
     await user.click(screen.getByTestId('consume-one'))
 
-    expect(await screen.findAllByText(/not available offline/i)).not.toHaveLength(0)
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   // ── Scan to prefill (T028) ────────────────────────────────────────────────
@@ -1238,7 +1237,7 @@ describe('StockDetailPage', () => {
     await screen.findByText('Water filter')
     await user.click(screen.getByTestId('consume-one'))
 
-    expect(await screen.findAllByText(/went wrong/i)).not.toHaveLength(0)
+    expect(await screen.findByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 

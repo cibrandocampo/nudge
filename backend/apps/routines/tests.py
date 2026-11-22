@@ -10,6 +10,7 @@ from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from rest_framework.exceptions import NotFound
 from rest_framework.test import APITestCase
 
 from apps.notifications.models import NotificationState
@@ -17,6 +18,7 @@ from apps.notifications.models import NotificationState
 from .exceptions import InsufficientStock, InvalidLotSelection, LotExpired, LotUnavailable
 from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
+from .views import StockConsumptionViewSet
 
 User = get_user_model()
 
@@ -2656,6 +2658,118 @@ class RoutineEntryViewSetTest(APITestCase):
 
 
 # ── Serialized lots: consumption snapshot + undo (T023) ──────────────────────
+
+
+class UndoStockConsumptionTest(APITestCase):
+    """DELETE /api/stock-consumptions/{id}/ (T128): only its author undoes it."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(username="undo-owner", password="pw", email="undo-owner@example.com")
+        self.guest = User.objects.create_user(username="undo-guest", password="pw", email="undo-guest@example.com")
+        self.stranger = User.objects.create_user(username="undo-other", password="pw", email="undo-other@example.com")
+        self.stock = Stock.objects.create(user=self.owner, name="Undo stock")
+        self.stock.shared_with.add(self.guest)
+        self.expiry = date.today() + timedelta(days=60)
+
+    def _consume(self, user, quantity=1):
+        self.client.force_authenticate(user=user)
+        response = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": quantity}, format="json")
+        self.assertEqual(response.status_code, 200)
+        return response.data["consumption_id"]
+
+    def _undo(self, user, consumption_id):
+        self.client.force_authenticate(user=user)
+        return self.client.delete(f"/api/stock-consumptions/{consumption_id}/")
+
+    def test_consume_returns_the_id_of_the_consumption_it_created(self):
+        StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        self.assertEqual(StockConsumption.objects.get(stock=self.stock).id, consumption_id)
+
+    def test_author_undoes_and_the_unit_returns_to_its_lot(self):
+        lot = StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry, lot_number="A")
+        consumption_id = self._consume(self.owner)
+        response = self._undo(self.owner, consumption_id)
+        self.assertEqual(response.status_code, 204)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 3)
+        self.assertFalse(StockConsumption.objects.filter(id=consumption_id).exists())
+
+    def test_undo_bumps_the_stock_updated_at(self):
+        StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        Stock.objects.filter(pk=self.stock.pk).update(updated_at=timezone.now() - timedelta(days=1))
+        before = Stock.objects.get(pk=self.stock.pk).updated_at
+        self._undo(self.owner, consumption_id)
+        self.assertGreater(Stock.objects.get(pk=self.stock.pk).updated_at, before)
+
+    def test_a_lot_emptied_and_deleted_is_recreated(self):
+        StockLot.objects.create(stock=self.stock, quantity=1, expiry_date=self.expiry, lot_number="LAST")
+        consumption_id = self._consume(self.owner)
+        self.assertFalse(StockLot.objects.filter(stock=self.stock).exists())
+        self._undo(self.owner, consumption_id)
+        lot = StockLot.objects.get(stock=self.stock)
+        self.assertEqual((lot.lot_number, lot.expiry_date, lot.quantity), ("LAST", self.expiry, 1))
+
+    def test_a_serialized_box_gets_its_unit_back(self):
+        box = StockLot.objects.create(
+            stock=self.stock, quantity=2, expiry_date=self.expiry, lot_number="A", serial_number="SN-1"
+        )
+        other = StockLot.objects.create(
+            stock=self.stock, quantity=5, expiry_date=self.expiry, lot_number="A", serial_number="SN-2"
+        )
+        consumption_id = self._consume(self.owner)
+        self._undo(self.owner, consumption_id)
+        box.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((box.quantity, other.quantity), (2, 5))
+
+    def test_a_guest_can_undo_their_own_consumption(self):
+        lot = StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.guest)
+        self.assertEqual(self._undo(self.guest, consumption_id).status_code, 204)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 3)
+
+    def test_a_guest_cannot_undo_someone_elses_and_nothing_changes(self):
+        lot = StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        response = self._undo(self.guest, consumption_id)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["detail"], "Only whoever made this consumption can undo it.")
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 2)
+        self.assertTrue(StockConsumption.objects.filter(id=consumption_id).exists())
+
+    def test_the_stock_owner_cannot_undo_a_guests_consumption(self):
+        StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.guest)
+        self.assertEqual(self._undo(self.owner, consumption_id).status_code, 403)
+
+    def test_a_stranger_gets_404(self):
+        StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        self.assertEqual(self._undo(self.stranger, consumption_id).status_code, 404)
+
+    def test_a_second_undo_does_not_give_the_units_back_twice(self):
+        lot = StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        self._undo(self.owner, consumption_id)
+        self.assertEqual(self._undo(self.owner, consumption_id).status_code, 404)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 3)
+
+    def test_a_row_gone_after_the_permission_check_is_not_restored(self):
+        lot = StockLot.objects.create(stock=self.stock, quantity=3, expiry_date=self.expiry)
+        consumption_id = self._consume(self.owner)
+        instance = StockConsumption.objects.get(id=consumption_id)
+        StockConsumption.objects.filter(id=consumption_id).delete()
+        view = StockConsumptionViewSet()
+        view.request = type("Request", (), {"user": self.owner})()
+        with self.assertRaises(NotFound):
+            view.perform_destroy(instance)
+        lot.refresh_from_db()
+        self.assertEqual(lot.quantity, 2)
 
 
 class SerializedLotUndoTest(APITestCase):

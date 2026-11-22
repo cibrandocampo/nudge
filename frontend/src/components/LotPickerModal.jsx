@@ -6,9 +6,8 @@ import { expiryToday, lotsForSelection } from '../utils/lotsForSelection'
 import LotConsumeModal from './LotConsumeModal'
 
 /**
- * Single-unit lot picker invoked from the InventoryPage −1 button.
- * Always opened explicitly (even with one lot) so a tap on a card is
- * never a silent mutation. Fires `useConsumeStock` with quantity = 1.
+ * Single-unit lot picker, opened by `useConsumeOne` when there is more than
+ * one lot to choose from. Fires `useConsumeStock` with quantity = 1.
  *
  * The selection itself is `LotConsumeModal` with `needed = 1`: the same lot
  * list (never the box), the same wire format. What belongs here is only what makes this
@@ -17,7 +16,7 @@ import LotConsumeModal from './LotConsumeModal'
  * Props:
  *   stock      — stock object containing at least `id`, `name`, `lots[]`
  *   onClose    — called when the user dismisses without consuming
- *   onConsumed — optional, fired after a successful consume
+ *   onConsumed — optional, fired with the mutation's result after a success
  */
 export default function LotPickerModal({ stock, onClose, onConsumed }) {
   const { t } = useTranslation()
@@ -29,13 +28,13 @@ export default function LotPickerModal({ stock, onClose, onConsumed }) {
     setSubmitting(true)
     setError(null)
     try {
-      await consumeStock.mutateAsync({
+      const result = await consumeStock.mutateAsync({
         stockId: stock.id,
         stockName: stock.name,
         quantity: 1,
         lotSelections,
       })
-      onConsumed?.()
+      onConsumed?.(result)
       onClose()
     } catch (err) {
       // Never an OfflineError: `useConsumeStock` is queueable, so losing the

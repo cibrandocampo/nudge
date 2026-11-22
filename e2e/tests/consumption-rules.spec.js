@@ -51,12 +51,11 @@ test.describe('Consumption rules', () => {
   test('the opened box goes before the full one', async ({ page }) => {
     const { PARACETAMOL_FULL_BOX: full, PARACETAMOL_OPENED_BOX: opened } = SEED.lots
     await goToStockDetail(page, 'paracetamol')
-    await page.getByTestId('consume-one').click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('radio')).toHaveCount(1)
+    // Both boxes are one lot, so there is nothing to ask (T129).
     const consumed = page.waitForResponse(isConsumePost)
-    await dialog.getByRole('button', { name: 'Consume 1' }).click()
+    await page.getByTestId('consume-one').click()
     expect((await consumed).ok()).toBe(true)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
     const stock = await fetchStock(page, SEED.stocks.paracetamol)
     expect(quantitiesBy(stock.lots, 'serial_number')).toEqual({
