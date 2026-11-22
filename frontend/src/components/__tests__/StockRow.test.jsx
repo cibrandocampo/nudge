@@ -97,9 +97,31 @@ describe('StockRow — line 1', () => {
     expect(screen.getByRole('button', { name: /consume 1 unit/i })).toBeDisabled()
   })
 
-  it('keeps the open-details button, which e2e navigates by', () => {
+  it('is one link to the product, which e2e navigates by', () => {
+    renderRow({ id: 7 })
+    expect(screen.getByTestId('row-open-detail')).toHaveAttribute('href', '/inventory/7')
+  })
+
+  it('has no chevron', () => {
     renderRow()
-    expect(screen.getByRole('button', { name: /open details/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open details' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['ok', {}, 'OK'],
+    ['warning', { stock_severity: 'low' }, 'Needs attention'],
+    ['danger', { quantity_expired: 1 }, 'Urgent'],
+  ])('names the product, the quantity and the %s status', (_status, over, label) => {
+    renderRow({ name: 'Insulin', quantity_available: 5, ...over })
+    const link = screen.getByRole('link')
+    expect(link).toHaveAccessibleName(expect.stringContaining('Insulin'))
+    expect(link).toHaveAccessibleName(expect.stringContaining('5 u.'))
+    expect(link).toHaveAccessibleName(expect.stringContaining(label))
+  })
+
+  it('keeps the consume button outside the link', () => {
+    renderRow()
+    expect(screen.getByRole('link')).not.toContainElement(screen.getByRole('button', { name: 'Consume 1 unit' }))
   })
 
   it('marks a shared stock as owner when the viewer owns it', () => {
@@ -177,19 +199,19 @@ describe('StockRow — line 2', () => {
   it('reports the own rate as a monthly figure', () => {
     renderRow({ daily_consumption_own: 0.04 })
     expect(screen.getByTestId('consumption-row')).toBeInTheDocument()
-    expect(screen.getByText('1.2/month')).toBeInTheDocument()
+    expect(screen.getByText('1.2 a month')).toBeInTheDocument()
   })
 
   it('reports own and shared rates side by side', () => {
     renderRow({ daily_consumption_own: 0.1, daily_consumption_shared: 0.2 })
-    expect(screen.getByText('3/month')).toBeInTheDocument()
-    expect(screen.getByText('6/month (shared)')).toBeInTheDocument()
+    expect(screen.getByText('3 a month')).toBeInTheDocument()
+    expect(screen.getByText('6 a month (shared)')).toBeInTheDocument()
   })
 
   it('reports a shared-only rate without an own figure', () => {
     renderRow({ daily_consumption_own: 0, daily_consumption_shared: 0.2 })
-    expect(screen.getByText('6/month (shared)')).toBeInTheDocument()
-    expect(screen.queryByText(/^6\/month$/)).not.toBeInTheDocument()
+    expect(screen.getByText('6 a month (shared)')).toBeInTheDocument()
+    expect(screen.queryByText(/^6 a month$/)).not.toBeInTheDocument()
   })
 
   it('marks an estimated depletion with the approximation icon', () => {
@@ -301,13 +323,6 @@ describe('StockRow — navigation', () => {
     const user = userEvent.setup()
     renderRouted({ id: 42 })
     await user.click(screen.getByText('Water filter'))
-    expect(await screen.findByText('Detail stub')).toBeInTheDocument()
-  })
-
-  it('opens the detail from the chevron button', async () => {
-    const user = userEvent.setup()
-    renderRouted({ id: 42 })
-    await user.click(screen.getByRole('button', { name: /open details/i }))
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
   })
 

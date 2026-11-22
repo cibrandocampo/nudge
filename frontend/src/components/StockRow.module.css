@@ -1,18 +1,14 @@
-/* The inventory list's compact row (T091).
-
-   No coloured left border: the card carried one, but at 44 px tall a 3 px
-   rail reads as noise rather than status, and the dot already says it. */
+/* The inventory list's row (T205): one link with two lines in columns, and
+   the consume button beside it. One inset for the whole list, so names,
+   quantities and dates line up from row to row. */
 
 .row {
-  container-type: inline-size;
+  --row-inset: 0.75rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
   min-height: 44px;
-  padding: 0.35rem 0.6rem;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border-inner);
-  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -24,17 +20,32 @@
   background: var(--c-border-inner);
 }
 
+.link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: 3.25rem;
+  padding: 0.45rem 0.35rem 0.45rem var(--row-inset);
+  color: inherit;
+  text-decoration: none;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+
 .main {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  min-height: 30px;
 }
 
-/* The name identifies the product, so it is the element that gives way: its
-   group takes the space the fixed-width quantity and actions leave, and the
-   name truncates inside it rather than pushing them off the row. The shared
-   icon (T107) sits right after the name, not at the far end of that space. */
+/* The name is what gives way: it wraps (two lines at most) and the quantity
+   never does. Its group takes the room the quantity leaves. */
 .nameGroup {
   flex: 1;
   min-width: 0;
@@ -50,50 +61,46 @@
   color: var(--c-text);
 }
 
-.qtyGroup {
+.quantity {
   flex: none;
   white-space: nowrap;
   font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 0.15rem;
-  flex: none;
+  padding-right: 0.5rem;
 }
 
-/* A row too narrow for its text size (320 px at «Extra large», T156): the name
-   takes a line of its own and the quantity and actions go below it. Squeezed
-   beside them it had ~80 px and broke mid-word. In rem, so Normal at 320 px and
-   every size at wider screens keep the single line. */
-@container (max-width: 15rem) {
-  .main {
-    flex-wrap: wrap;
-  }
-
-  /* The whole line but the status dot (8 px) and its gap. */
-  .nameGroup {
-    flex: 1 0 calc(100% - 8px - 0.4rem);
-  }
-
-  /* Under the name, as the meta line is. */
-  .qtyGroup {
-    margin-left: calc(8px + 0.4rem);
-  }
-
-  .actions {
-    margin-left: auto;
-  }
-}
-
+/* The second line starts under the name: past the dot and its gap. */
 .meta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  column-gap: 0.5rem;
   padding-left: calc(8px + 0.4rem);
   font-size: var(--fs-xs);
+  color: var(--c-text-3);
+}
+
+.metaText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 0.25rem;
+}
+
+.reasonItem {
+  display: inline-flex;
+  column-gap: 0.25rem;
+}
+
+.separator {
   color: var(--c-text-3);
 }
 
@@ -106,9 +113,12 @@
    T039 bug, which went a whole series unnoticed. Doubling makes specificity
    the tiebreaker, and specificity survives a file move. */
 .depletion {
+  flex: none;
   margin-left: auto;
   font-weight: 500;
   color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .depletionWarning.depletionWarning {
@@ -131,35 +141,19 @@
   font-weight: 500;
 }
 
-/* The open-details chevron looks like the routine card's: a bare grey `›`, no
-   box (it was a grey square, a second "button" next to consume). It stays a
-   real button — the keyboard route to the detail, and E2E's "Open details". */
-.detailChevron.detailChevron {
-  background: transparent;
-  color: var(--c-text-3);
-  transition:
-    transform 150ms ease,
-    color 150ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .row:hover .detailChevron.detailChevron {
-    transform: translateX(2px);
-    color: var(--c-text-2);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .detailChevron.detailChevron,
-  .row:hover .detailChevron.detailChevron {
-    transform: none;
-    transition: none;
-  }
-}
-
 /* Out of stock: the quantity itself says it, in red. */
 .qtyOut.qtyOut {
   color: var(--c-danger);
+}
+
+/* Quiet beside the data: outlined, its arrow in the text colour. Positioned,
+   because the box and the arrow are placed absolutely inside it. */
+.consume.consume {
+  position: relative;
+}
+
+.consume.consume svg {
+  color: var(--c-text-accent);
 }
 
 /* The consume button with nothing to consume: same icon, all grey (the box
@@ -171,7 +165,7 @@
   cursor: default;
 }
 
-.consumeEmpty.consumeEmpty svg {
+.consume.consumeEmpty.consumeEmpty svg {
   color: var(--c-text-3);
 }
 

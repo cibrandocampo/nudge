@@ -138,13 +138,13 @@ describe('InventoryPage — stock cards', () => {
     expect(screen.getByText('Vitamin D')).toBeInTheDocument()
   })
 
-  it('navigates to detail when the Open-details chevron is clicked', async () => {
+  it('navigates to detail from the row', async () => {
     mockStocks([stock()])
     mockGroups([])
     const { user } = renderPage()
     await screen.findByText('Water filter')
 
-    await user.click(screen.getByLabelText('Open details'))
+    await user.click(screen.getByTestId('row-open-detail'))
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
   })
 
