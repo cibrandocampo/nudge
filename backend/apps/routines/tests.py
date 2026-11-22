@@ -1,4 +1,5 @@
 import datetime as dt
+import importlib
 from datetime import date, timedelta
 from math import floor
 from unittest.mock import patch
@@ -7,7 +8,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, connection, transaction
-from django.test import TestCase, override_settings
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
@@ -16,7 +18,17 @@ from rest_framework.test import APITestCase
 from apps.notifications.models import NotificationState
 
 from .exceptions import InsufficientStock, InvalidLotSelection, LotExpired, LotUnavailable
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
+from .models import (
+    Routine,
+    RoutineEntry,
+    Stock,
+    StockConsumption,
+    StockGroup,
+    StockLot,
+    UserStockGroup,
+    UserStockPin,
+    set_user_stock_groups,
+)
 from .serializers import RoutineSerializer, StockLotSerializer, StockSerializer
 from .views import StockConsumptionViewSet
 
@@ -3534,6 +3546,183 @@ class UserStockGroupTest(APITestCase):
         self.stock.shared_with.remove(self.recipient)
         self.assertTrue(UserStockGroup.objects.filter(user=other, stock=self.stock).exists())
         self.assertFalse(UserStockGroup.objects.filter(user=self.recipient, stock=self.stock).exists())
+
+
+# ── Several categories per product (T200) ───────────────────────────────────
+
+
+class SetUserStockGroupsTest(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="cat-owner", password="pw", email="cat-owner@example.com")
+        self.guest = User.objects.create_user(username="cat-guest", password="pw", email="cat-guest@example.com")
+        self.first = StockGroup.objects.create(user=self.owner, name="Zeta", display_order=0)
+        self.second = StockGroup.objects.create(user=self.owner, name="Alpha", display_order=1)
+        self.guest_first = StockGroup.objects.create(user=self.guest, name="Guest B", display_order=0)
+        self.guest_second = StockGroup.objects.create(user=self.guest, name="Guest A", display_order=1)
+        self.stock = Stock.objects.create(user=self.owner, name="Multi")
+        self.stock.shared_with.add(self.guest)
+
+    def _groups(self, user):
+        return set(UserStockGroup.objects.filter(user=user, stock=self.stock).values_list("group_id", flat=True))
+
+    def test_replaces_the_whole_set(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        set_user_stock_groups(self.owner, self.stock, [self.second.id])
+        self.assertEqual(self._groups(self.owner), {self.second.id})
+
+    def test_keeps_several_categories(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id, self.second.id])
+        self.assertEqual(self._groups(self.owner), {self.first.id, self.second.id})
+
+    def test_an_empty_set_clears_them(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        set_user_stock_groups(self.owner, self.stock, [])
+        self.assertEqual(self._groups(self.owner), set())
+        self.stock.refresh_from_db()
+        self.assertIsNone(self.stock.group_id)
+
+    def test_the_owner_mirrors_their_first_category_by_list_order(self):
+        set_user_stock_groups(self.owner, self.stock, [self.second.id, self.first.id])
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.group_id, self.first.id)
+
+    def test_a_recipient_never_touches_the_owners_group(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        set_user_stock_groups(self.guest, self.stock, [self.guest_first.id])
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.group_id, self.first.id)
+        self.assertEqual(self._groups(self.owner), {self.first.id})
+
+    def test_the_same_assignment_cannot_exist_twice(self):
+        UserStockGroup.objects.create(user=self.owner, stock=self.stock, group=self.first)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            UserStockGroup.objects.create(user=self.owner, stock=self.stock, group=self.first)
+
+    def test_deleting_a_category_keeps_the_product(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id, self.second.id])
+        self.first.delete()
+        self.assertTrue(Stock.objects.filter(pk=self.stock.pk).exists())
+        self.assertEqual(self._groups(self.owner), {self.second.id})
+
+    def test_clearing_shared_with_keeps_the_owners_categories(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        set_user_stock_groups(self.guest, self.stock, [self.guest_first.id])
+        self.stock.shared_with.clear()
+        self.assertEqual(self._groups(self.owner), {self.first.id})
+        self.assertEqual(self._groups(self.guest), set())
+
+    def test_creating_with_group_records_the_owners_assignment(self):
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.post("/api/stock/", {"name": "New", "group": self.first.id}, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(
+            UserStockGroup.objects.filter(user=self.owner, stock_id=res.data["id"], group=self.first).exists()
+        )
+
+    def test_patching_group_replaces_the_owners_assignment(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.patch(f"/api/stock/{self.stock.id}/", {"group": self.second.id}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self._groups(self.owner), {self.second.id})
+
+    def test_the_owner_still_reads_no_personal_override(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.data["group"], self.first.id)
+        self.assertIsNone(res.data["my_group"])
+
+    def test_a_recipient_reads_their_first_category(self):
+        set_user_stock_groups(self.guest, self.stock, [self.guest_second.id, self.guest_first.id])
+        self.client.force_authenticate(user=self.guest)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.data["my_group"], self.guest_first.id)
+        self.assertEqual(res.data["my_group_name"], "Guest B")
+
+    def test_my_group_replaces_the_recipients_set(self):
+        set_user_stock_groups(self.guest, self.stock, [self.guest_first.id, self.guest_second.id])
+        self.client.force_authenticate(user=self.guest)
+        res = self.client.patch(f"/api/stock/{self.stock.id}/my-group/", {"group": self.guest_second.id}, format="json")
+        self.assertEqual(res.data["my_group"], self.guest_second.id)
+        self.assertEqual(self._groups(self.guest), {self.guest_second.id})
+
+
+class MultiCategoryMigrationTest(TransactionTestCase):
+    """0019, forwards and backwards, on the real schema."""
+
+    before = [("routines", "0018_stock_name_offer_pending_stock_national_code_and_more")]
+    after = [("routines", "0019_multi_category_assignments")]
+
+    def setUp(self):
+        self.owner = User.objects.create_user(username="mig-owner", password="pw", email="mig-owner@example.com")
+        self.guest = User.objects.create_user(username="mig-guest", password="pw", email="mig-guest@example.com")
+
+    def tearDown(self):
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    def _migrate(self, target):
+        executor = MigrationExecutor(connection)
+        executor.migrate(target)
+        return MigrationExecutor(connection).loader.project_state(target).apps
+
+    def _old_fixture(self):
+        apps = self._migrate(self.before)
+        Group, OldStock, Assignment = (apps.get_model("routines", n) for n in ("StockGroup", "Stock", "UserStockGroup"))
+        owner_group = Group.objects.create(user_id=self.owner.id, name="Owner")
+        guest_group = Group.objects.create(user_id=self.guest.id, name="Guest")
+        filed = OldStock.objects.create(user_id=self.owner.id, name="Filed", group=owner_group)
+        loose = OldStock.objects.create(user_id=self.owner.id, name="Loose")
+        Assignment.objects.create(user_id=self.guest.id, stock=filed, group=guest_group)
+        Assignment.objects.create(user_id=self.guest.id, stock=loose, group=None)
+        return filed.id, loose.id, owner_group.id, guest_group.id
+
+    def test_forwards_keeps_every_real_assignment_and_drops_empty_ones(self):
+        filed, _, owner_group, guest_group = self._old_fixture()
+        apps = self._migrate(self.after)
+        rows = set(apps.get_model("routines", "UserStockGroup").objects.values_list("user_id", "stock_id", "group_id"))
+        self.assertEqual(rows, {(self.owner.id, filed, owner_group), (self.guest.id, filed, guest_group)})
+
+    def test_a_recipient_with_no_row_does_not_inherit_the_owners_category(self):
+        filed, _, _, _ = self._old_fixture()
+        apps = self._migrate(self.before)
+        apps.get_model("routines", "UserStockGroup").objects.filter(user_id=self.guest.id).delete()
+        apps = self._migrate(self.after)
+        rows = apps.get_model("routines", "UserStockGroup").objects.filter(user_id=self.guest.id, stock_id=filed)
+        self.assertFalse(rows.exists())
+
+    def test_running_the_data_step_twice_does_not_duplicate(self):
+        self._old_fixture()
+        apps = self._migrate(self.after)
+        Assignment = apps.get_model("routines", "UserStockGroup")
+        count = Assignment.objects.count()
+        module = importlib.import_module("apps.routines.migrations.0019_multi_category_assignments")
+        with connection.schema_editor() as editor:
+            module.to_assignments(apps, editor)
+        self.assertEqual(Assignment.objects.count(), count)
+
+    def test_backwards_leaves_one_category_per_person(self):
+        filed, _, owner_group, guest_group = self._old_fixture()
+        apps = self._migrate(self.after)
+        Group, Assignment = (apps.get_model("routines", n) for n in ("StockGroup", "UserStockGroup"))
+        late = Group.objects.create(user_id=self.owner.id, name="Late", display_order=9)
+        guest_late = Group.objects.create(user_id=self.guest.id, name="Guest late", display_order=9)
+        Assignment.objects.create(user_id=self.owner.id, stock_id=filed, group=late)
+        Assignment.objects.create(user_id=self.guest.id, stock_id=filed, group=guest_late)
+
+        apps = self._migrate(self.before)
+        self.assertEqual(apps.get_model("routines", "Stock").objects.get(pk=filed).group_id, owner_group)
+        rows = apps.get_model("routines", "UserStockGroup").objects.values_list("user_id", "group_id")
+        self.assertEqual(list(rows), [(self.guest.id, guest_group)])
+
+    def test_backwards_fills_an_empty_owner_group(self):
+        filed, _, owner_group, _ = self._old_fixture()
+        apps = self._migrate(self.after)
+        apps.get_model("routines", "Stock").objects.filter(pk=filed).update(group=None)
+        apps = self._migrate(self.before)
+        self.assertEqual(apps.get_model("routines", "Stock").objects.get(pk=filed).group_id, owner_group)
 
 
 # ── UserStockGroup serializer / my-group action ──────────────────────────────

@@ -65,6 +65,7 @@ from apps.routines.models import (
     StockLot,
     UserStockGroup,
     UserStockPin,
+    set_user_stock_groups,
 )
 
 User = get_user_model()
@@ -591,6 +592,11 @@ class Command(BaseCommand):
             expiry_date=today + timedelta(days=90),
             lot_number="BCP-2026",
         )
+
+        # Each owner's category also lives in UserStockGroup, the source of truth.
+        for stock in stocks.values():
+            if stock.group_id:
+                set_user_stock_groups(stock.user, stock, [stock.group_id])
 
         return stocks
 

@@ -30,6 +30,7 @@ from .models import (
     UserStockGroup,
     UserStockPin,
     restore_consumed_lots,
+    set_user_stock_groups,
 )
 from .serializers import (
     ConsumeInputSerializer,
@@ -89,7 +90,9 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
                 recent_consumptions,
                 Prefetch(
                     "group_overrides",
-                    queryset=UserStockGroup.objects.select_related("group").filter(user=self.request.user),
+                    queryset=UserStockGroup.objects.select_related("group")
+                    .filter(user=self.request.user)
+                    .order_by("group__display_order", "group__name"),
                     to_attr="_my_group_override",
                 ),
                 Prefetch(
@@ -106,8 +109,16 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             return [IsAuthenticated(), IsOwner()]
         return super().get_permissions()
 
+    @staticmethod
+    def _sync_owner_group(serializer, stock):
+        """The single-category `group` field writes through to the owner's categories."""
+        if "group" in serializer.validated_data:
+            group = serializer.validated_data["group"]
+            set_user_stock_groups(stock.user, stock, [group.pk] if group else [])
+
     def perform_create(self, serializer):
         stock = serializer.save(user=self.request.user)
+        self._sync_owner_group(serializer, stock)
         if stock.national_code:
             regulatory_services.link_stock(stock, offer_name=True, touch_updated_at=True)
         logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
@@ -117,6 +128,7 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         # answer must already carry the new (pending) regulatory summary.
         previous_code = serializer.instance.national_code
         stock = serializer.save()
+        self._sync_owner_group(serializer, stock)
         if stock.national_code != previous_code:
             regulatory_services.link_stock(stock, offer_name=True, touch_updated_at=True)
 
@@ -154,16 +166,12 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         else:
             group = None
 
-        if stock.user == request.user:
-            stock.group = group
-            stock.save(update_fields=["group"])
-        else:
-            usg, _ = UserStockGroup.objects.update_or_create(
-                user=request.user,
-                stock=stock,
-                defaults={"group": group},
-            )
-            stock._my_group_override = [usg]
+        set_user_stock_groups(request.user, stock, [group.pk] if group else [])
+        stock._my_group_override = list(
+            UserStockGroup.objects.select_related("group")
+            .filter(user=request.user, stock=stock)
+            .order_by("group__display_order", "group__name")
+        )
 
         serializer = self.get_serializer(stock)
         return Response(serializer.data)

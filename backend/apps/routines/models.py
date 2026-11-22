@@ -286,11 +286,12 @@ def _lot_consumed_dict(lot, qty):
 
 
 class UserStockGroup(models.Model):
-    """Per-user group assignment for a stock.
+    """One person's category for a stock: the source of truth (T200).
 
-    The owner's group lives in Stock.group. For every other user who has
-    access to a shared stock, their personal category is stored here.
-    One record per (user, stock) pair; group may be null (= uncategorised).
+    One row per `(user, stock, group)`, for owners and recipients alike, so a
+    product can be in several personal categories and none means uncategorised.
+    `Stock.group` only mirrors the owner's first category, for clients that
+    still read the single-category API. Write through `set_user_stock_groups`.
     """
 
     user = models.ForeignKey(
@@ -305,14 +306,36 @@ class UserStockGroup(models.Model):
     )
     group = models.ForeignKey(
         "StockGroup",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="stock_overrides",
     )
 
     class Meta:
-        unique_together = [("user", "stock")]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "stock", "group"], name="unique_stock_group_assignment"),
+        ]
+
+
+def set_user_stock_groups(user, stock, group_ids):
+    """Leave exactly `group_ids` as `user`'s categories for `stock`.
+
+    For the owner it also keeps `Stock.group` on their first category by list
+    order (or empty), the value the single-category API still reports.
+    """
+    wanted = set(group_ids)
+    with transaction.atomic():
+        assignments = UserStockGroup.objects.filter(user=user, stock=stock)
+        assignments.exclude(group_id__in=wanted).delete()
+        present = set(assignments.values_list("group_id", flat=True))
+        UserStockGroup.objects.bulk_create(
+            [UserStockGroup(user=user, stock=stock, group_id=group_id) for group_id in wanted - present],
+            ignore_conflicts=True,
+        )
+        if user.pk == stock.user_id:
+            first = StockGroup.objects.filter(id__in=wanted).order_by("display_order", "name").first()
+            if stock.group_id != (first.pk if first else None):
+                stock.group = first
+                stock.save(update_fields=["group"])
 
 
 class UserStockPin(models.Model):
@@ -416,7 +439,7 @@ def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
     """When users are removed from a stock's shared_with, drop what they kept of it.
 
     Their routines lose the link, and their per-user view of the stock — the
-    group override and the pin — goes with it. The owner's own pin survives
+    categories and the pin — goes with it. The owner's own survive
     ``post_clear``: clearing ``shared_with`` revokes everyone else's access,
     not the owner's.
     """
@@ -426,7 +449,7 @@ def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
         UserStockPin.objects.filter(user_id__in=pk_set, stock=instance).delete()
     elif action == "post_clear":
         Routine.objects.filter(stock=instance).exclude(user=instance.user).update(stock=None)
-        UserStockGroup.objects.filter(stock=instance).delete()
+        UserStockGroup.objects.filter(stock=instance).exclude(user=instance.user).delete()
         UserStockPin.objects.filter(stock=instance).exclude(user=instance.user).delete()
 
 
