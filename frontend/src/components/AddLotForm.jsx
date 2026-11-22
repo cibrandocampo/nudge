@@ -258,7 +258,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     }
     const entryButtonProps = {
       type: 'button',
-      className: cx(buttons.btn, buttons.primary, s.entryBtn, !reachable && buttons.disabled),
+      className: cx(buttons.btn, buttons.secondary, s.entryBtn, !reachable && buttons.disabled),
       'aria-disabled': !reachable,
       title: !reachable ? t('offline.pageUnavailable') : undefined,
     }
