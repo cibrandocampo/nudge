@@ -114,9 +114,9 @@ let processing = false
 let rerunRequested = false
 // Scheduled wake-up for the next backoff-delayed entry.
 let nextDrainTimer = null
-// Remember whether the last emit had a pending entry — used to debounce
+// Remember whether the last emit had work to send — used to debounce
 // `registerBackgroundSync` to the 0 → ≥1 transition only.
-let lastHadPending = false
+let lastHadWork = false
 
 export function setQueryClient(client) {
   queryClient = client
@@ -321,17 +321,18 @@ let initialised = false
 let unsubscribeQueue = null
 
 async function handleQueueChange() {
-  // Register a Background Sync tag only when the queue transitions from
-  // "no pending work" to "has pending work" (T065). Every emit (including
-  // `markSyncing` / `markError` / `remove`) fires this handler, so the
-  // naive "if any pending → register" version was spamming `reg.sync.register`
-  // dozens of times per drain.
+  // Register a Background Sync tag only when the queue goes from "nothing to
+  // send" to "something to send" (T065). An entry being sent still counts as
+  // work: if `syncing` read as idle, a failed attempt (`syncing` → `pending`)
+  // would look like new work and register again. With Wi-Fi on and the server
+  // down, Chrome fires that sync at once, so the queue retried dozens of times
+  // a second. Reconnecting is the health poll's job (`reachability.js`).
   const entries = await list()
-  const hasPending = entries.some((e) => e.status === 'pending')
-  if (hasPending && !lastHadPending) {
+  const hasWork = entries.some((e) => e.status === 'pending' || e.status === 'syncing')
+  if (hasWork && !lastHadWork) {
     void registerBackgroundSync()
   }
-  lastHadPending = hasPending
+  lastHadWork = hasWork
 }
 
 /**
@@ -392,5 +393,5 @@ export function __resetSyncWorkerForTests() {
   initialised = false
   processing = false
   rerunRequested = false
-  lastHadPending = false
+  lastHadWork = false
 }
