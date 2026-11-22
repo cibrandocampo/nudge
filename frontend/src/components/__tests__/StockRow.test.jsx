@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/helpers'
@@ -72,7 +72,7 @@ describe('StockRow — line 1', () => {
     const { user } = renderRow({ quantity: 0, quantity_available: 0, stock_severity: 'critical' }, { onConsume })
     const button = screen.getByRole('button', { name: 'No units left to consume' })
     expect(button).toBeDisabled()
-    expect(button).toHaveClass('consumeEmpty')
+    expect(screen.getByTestId('row-action-layer')).toHaveAttribute('data-state', 'blocked')
     expect(screen.queryByRole('button', { name: /consume 1 unit/i })).not.toBeInTheDocument()
     await user.click(button)
     expect(onConsume).not.toHaveBeenCalled()
@@ -97,9 +97,31 @@ describe('StockRow — line 1', () => {
     expect(screen.getByRole('button', { name: /consume 1 unit/i })).toBeDisabled()
   })
 
-  it('keeps the open-details button, which e2e navigates by', () => {
+  it('is one link to the product, which e2e navigates by', () => {
+    renderRow({ id: 7 })
+    expect(screen.getByTestId('row-open-detail')).toHaveAttribute('href', '/inventory/7')
+  })
+
+  it('has no chevron', () => {
     renderRow()
-    expect(screen.getByRole('button', { name: /open details/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open details' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['ok', {}, 'OK'],
+    ['warning', { stock_severity: 'low' }, 'Needs attention'],
+    ['danger', { quantity_expired: 1 }, 'Urgent'],
+  ])('names the product, the quantity and the %s status', (_status, over, label) => {
+    renderRow({ name: 'Insulin', quantity_available: 5, ...over })
+    const link = screen.getByRole('link')
+    expect(link).toHaveAccessibleName(expect.stringContaining('Insulin'))
+    expect(link).toHaveAccessibleName(expect.stringContaining('5 u.'))
+    expect(link).toHaveAccessibleName(expect.stringContaining(label))
+  })
+
+  it('keeps the consume button outside the link', () => {
+    renderRow()
+    expect(screen.getByRole('link')).not.toContainElement(screen.getByRole('button', { name: 'Consume 1 unit' }))
   })
 
   it('marks a shared stock as owner when the viewer owns it', () => {
@@ -177,19 +199,19 @@ describe('StockRow — line 2', () => {
   it('reports the own rate as a monthly figure', () => {
     renderRow({ daily_consumption_own: 0.04 })
     expect(screen.getByTestId('consumption-row')).toBeInTheDocument()
-    expect(screen.getByText('1.2/month')).toBeInTheDocument()
+    expect(screen.getByText('1.2 a month')).toBeInTheDocument()
   })
 
   it('reports own and shared rates side by side', () => {
     renderRow({ daily_consumption_own: 0.1, daily_consumption_shared: 0.2 })
-    expect(screen.getByText('3/month')).toBeInTheDocument()
-    expect(screen.getByText('6/month (shared)')).toBeInTheDocument()
+    expect(screen.getByText('3 a month')).toBeInTheDocument()
+    expect(screen.getByText('6 a month (shared)')).toBeInTheDocument()
   })
 
   it('reports a shared-only rate without an own figure', () => {
     renderRow({ daily_consumption_own: 0, daily_consumption_shared: 0.2 })
-    expect(screen.getByText('6/month (shared)')).toBeInTheDocument()
-    expect(screen.queryByText(/^6\/month$/)).not.toBeInTheDocument()
+    expect(screen.getByText('6 a month (shared)')).toBeInTheDocument()
+    expect(screen.queryByText(/^6 a month$/)).not.toBeInTheDocument()
   })
 
   it('marks an estimated depletion with the approximation icon', () => {
@@ -304,13 +326,6 @@ describe('StockRow — navigation', () => {
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
   })
 
-  it('opens the detail from the chevron button', async () => {
-    const user = userEvent.setup()
-    renderRouted({ id: 42 })
-    await user.click(screen.getByRole('button', { name: /open details/i }))
-    expect(await screen.findByText('Detail stub')).toBeInTheDocument()
-  })
-
   it('does not navigate when the consume button is pressed', async () => {
     const user = userEvent.setup()
     const onConsume = vi.fn()
@@ -326,5 +341,106 @@ describe('StockRow — navigation', () => {
     renderRouted({ id: 42, shared_with: [2] })
     await user.click(screen.getByTestId('shared-badge'))
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
+  })
+})
+
+describe('StockRow — swipe to consume', () => {
+  // 300 px wide: the row stops at 100 px, a third.
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 300 })
+    Element.prototype.setPointerCapture = vi.fn()
+    navigator.vibrate = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete Element.prototype.setPointerCapture
+    delete navigator.vibrate
+  })
+
+  const drag = (to, { release = true } = {}) => {
+    const link = screen.getByTestId('row-open-detail')
+    fireEvent.pointerDown(link, { pointerId: 1, isPrimary: true, button: 0, clientX: 0, clientY: 0 })
+    for (let x = 20; x <= to; x += 20) {
+      fireEvent.pointerMove(link, { pointerId: 1, clientX: x, clientY: 0 })
+    }
+    if (release) fireEvent.pointerUp(link, { pointerId: 1, clientX: to, clientY: 0 })
+    return link
+  }
+  const dragPx = (link) => Number.parseFloat(link.style.getPropertyValue('--drag'))
+
+  it('consumes one unit on reaching the stop, and springs back', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = drag(120)
+    expect(onConsume).toHaveBeenCalledTimes(1)
+    expect(dragPx(link)).toBe(0)
+  })
+
+  it('does not consume short of the stop', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = drag(80)
+    expect(onConsume).not.toHaveBeenCalled()
+    expect(dragPx(link)).toBe(0)
+  })
+
+  it('does not consume on a quick flick short of the stop', () => {
+    const now = vi.spyOn(Date, 'now')
+    now.mockReturnValue(1000)
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = screen.getByTestId('row-open-detail')
+    fireEvent.pointerDown(link, { pointerId: 1, isPrimary: true, button: 0, clientX: 0, clientY: 0 })
+    now.mockReturnValue(1010)
+    fireEvent.pointerMove(link, { pointerId: 1, clientX: 60, clientY: 0 })
+    now.mockReturnValue(1020)
+    fireEvent.pointerUp(link, { pointerId: 1, clientX: 60, clientY: 0 })
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('stops at a third of its width, with only a little give', () => {
+    renderRow()
+    const link = drag(280, { release: false })
+    expect(dragPx(link)).toBeGreaterThanOrEqual(100)
+    expect(dragPx(link)).toBeLessThan(125)
+  })
+
+  it('arms the layer and buzzes once at the stop', () => {
+    renderRow()
+    drag(200, { release: false })
+    expect(screen.getByTestId('row-action-layer')).toHaveAttribute('data-state', 'armed')
+    expect(navigator.vibrate).toHaveBeenCalledTimes(1)
+  })
+
+  it('out of stock it resists and consumes nothing', () => {
+    const onConsume = vi.fn()
+    renderRow({ quantity: 0, quantity_available: 0, stock_severity: 'critical' }, { onConsume })
+    drag(280)
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('does not swipe while that product is being consumed', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume, consuming: true })
+    drag(120)
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('a drag does not open the product', () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<StockRow stock={stock()} consuming={false} onConsume={vi.fn()} />} />
+        <Route path="/inventory/:id" element={<div>Detail stub</div>} />
+      </Routes>,
+    )
+    const link = drag(120)
+    fireEvent.click(link)
+    expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
+  })
+
+  it('offers «Consume 1 unit» exactly once', () => {
+    renderRow()
+    expect(screen.getAllByRole('button', { name: 'Consume 1 unit' })).toHaveLength(1)
   })
 })

@@ -66,7 +66,9 @@ test.describe('Stock expiry and dedup', () => {
     // `.first()`: the seed pins Hidroferol, so it renders twice (Destacados +
     // its group). Both rows consume from the same stock.
     const card = stockCard(page, 'hidroferol').first()
-    await card.getByRole('button', { name: 'Consume 1 unit' }).click()
+    // Focus + Enter: on touch the button sits behind the row (T130).
+    await card.getByRole('button', { name: 'Consume 1 unit' }).focus()
+    await page.keyboard.press('Enter')
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()

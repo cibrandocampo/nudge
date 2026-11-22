@@ -90,7 +90,9 @@ export async function consumeStock(page, stockKeyOrName, quantity = 1) {
   // stock.
   const card = stockCard(page, stockKeyOrName).first()
   for (let i = 0; i < quantity; i += 1) {
-    await card.getByRole('button', { name: 'Consume 1 unit' }).click()
+    // Focus + Enter: on touch the button sits behind the row (T130).
+    await card.getByRole('button', { name: 'Consume 1 unit' }).focus()
+    await page.keyboard.press('Enter')
   }
 }
 

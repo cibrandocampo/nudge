@@ -40,7 +40,7 @@ describe('lotExpirySeverity', () => {
   })
 })
 
-describe('borderTokensFromStock — 3-tier, stock-only (T165)', () => {
+describe('borderTokensFromStock — the one status (T203)', () => {
   it('stock_severity=critical → danger', () => {
     expect(borderTokensFromStock({ stock_severity: 'critical' })).toEqual({
       border: cards.cardBorderDanger,
@@ -83,18 +83,17 @@ describe('borderTokensFromStock — 3-tier, stock-only (T165)', () => {
     })
   })
 
-  // Documents the no-worst-of-two contract: expiry_severity is ignored.
-  it('ignores expiry_severity=soon when stock_severity is ok → still success', () => {
+  it('expiring soon with healthy stock → warning, never green', () => {
     expect(borderTokensFromStock({ stock_severity: 'ok', expiry_severity: 'soon' })).toEqual({
-      border: cards.cardBorderSuccess,
-      dot: cards.dotSuccess,
+      border: cards.cardBorderWarning,
+      dot: cards.dotWarning,
     })
   })
 
-  it('ignores expiry_severity=reached when stock_severity is ok → still success', () => {
+  it('expired units with healthy stock → danger, never green', () => {
     expect(borderTokensFromStock({ stock_severity: 'ok', expiry_severity: 'reached' })).toEqual({
-      border: cards.cardBorderSuccess,
-      dot: cards.dotSuccess,
+      border: cards.cardBorderDanger,
+      dot: cards.dotDanger,
     })
   })
 })

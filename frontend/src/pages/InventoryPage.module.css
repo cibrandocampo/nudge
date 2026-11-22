@@ -4,124 +4,41 @@
   gap: 0.5rem;
 }
 
-/* One surface per section, rows separated by their own bottom border
-   (`StockRow.module.css`). The card layout gave every product its own border,
-   radius and margin — about 14 px of chrome per item, which at 44 px rows
-   would have been a third of the list. */
+/* The list: one surface, rows separated by their own bottom border
+   (`StockRow.module.css`). */
 .rowList {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-}
-
-/* A group is one card with its title inside (chosen 2026-11-18 over a 3 px
-   rail outside the left edge, which users read as decoration). The rows sit in
-   the same box as the title, so what belongs together shares one surface; a
-   folded group is a card with a chevron, plainly something to open. No
-   `overflow: hidden` here: it would break the sticky header. */
-.groupCard {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
   border-radius: var(--radius-xxl);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
   margin-bottom: 0.9rem;
 }
 
-.groupCardHeader {
+/* The one-time tip on how to consume from a row. */
+.swipeHint {
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: 100%;
-  min-height: 48px;
-  padding: 0.6rem 0.9rem;
-  border: none;
-  border-radius: var(--radius-xxl) var(--radius-xxl) 0 0;
-  font: inherit;
-  text-align: left;
-  color: var(--c-ink);
-  cursor: pointer;
-}
-
-/* Folded: the header is the whole card, rounded all round. */
-.groupCardHeader[aria-expanded='false'] {
-  border-radius: var(--radius-xxl);
-}
-
-.groupCardName {
-  font-size: var(--fs-md);
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.groupCardCount {
-  flex: none;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--c-text-2);
-  background: var(--c-border-inner);
-  border-radius: 999px;
-  padding: 0.05rem 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Severity dot and chevron, pushed to the far end of the header. */
-.groupCardEnd {
-  margin-left: auto;
-  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-lg);
+  background: var(--c-border-inner);
   color: var(--c-text-2);
-}
-
-.groupCardRows {
-  border-top: 1px solid var(--c-border-inner);
-  border-radius: 0 0 var(--radius-xxl) var(--radius-xxl);
-  overflow: hidden;
-}
-
-/* Pinned products. Deliberately quieter than a group section — no card, no
-   count — because it is a shortcut into the list below, not a category of
-   its own. */
-.pinnedSection {
-  margin-bottom: 1.25rem;
-}
-
-.pinnedTitle {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin: 0 0 0.35rem;
-  padding: 0.5rem 0 0;
   font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--c-text-2);
 }
 
-/* Section headers stick under the search bar, whose measured height arrives as
-   `--inventory-bar-h` on the page root. `z-index` below the bar's 40 so the
-   header slides under it rather than over it. The fallback matters: with no
-   search bar (an empty inventory) the property is 0px and the header pins
-   directly under the app header. */
-.groupHeaderSticky {
-  position: sticky;
-  top: calc(var(--header-h) + var(--inventory-bar-h, 0px));
-  z-index: 30;
-  background: var(--c-surface);
+.swipeHintText {
+  flex: 1;
+  min-width: 0;
 }
 
-/* Products with no category: the same box as a group card, without a title or
-   a fold. With no categories at all it is simply the list. */
-.looseCard {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-xxl);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-  margin-bottom: 0.9rem;
+.swipeHintClose {
+  flex: none;
+  display: inline-flex;
+  padding: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }

@@ -26,7 +26,7 @@ export default function EmptyCard({ title, message, action }) {
     s.action,
   )
   return (
-    <div className={s.card}>
+    <div className={s.card} data-testid="empty-card">
       {title && <p className={s.title}>{title}</p>}
       {message && <p className={s.body}>{message}</p>}
       {action?.onClick && (

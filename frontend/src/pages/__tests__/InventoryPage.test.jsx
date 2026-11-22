@@ -25,6 +25,17 @@ function renderPage() {
   )
 }
 
+const chipButton = (id) => screen.getAllByTestId('stock-filter-chip').find((chip) => chip.dataset.chip === id)
+const rowNames = (list) =>
+  within(list)
+    .getAllByTestId('product-card')
+    .map((row) => row.querySelector('[class*="name"]').textContent)
+
+beforeEach(() => {
+  sessionStorage.clear()
+  localStorage.removeItem('inventory_collapsed_groups')
+})
+
 function mockStocks(stocks) {
   server.use(http.get(`${BASE}/stock/`, () => HttpResponse.json(stocks)))
 }
@@ -38,7 +49,8 @@ function stock(overrides = {}) {
     id: 1,
     name: 'Water filter',
     quantity: 5,
-    group: null,
+    my_groups: [],
+    is_pinned: false,
     estimated_depletion_date: null,
     daily_consumption_own: null,
     daily_consumption_shared: null,
@@ -126,13 +138,13 @@ describe('InventoryPage — stock cards', () => {
     expect(screen.getByText('Vitamin D')).toBeInTheDocument()
   })
 
-  it('navigates to detail when the Open-details chevron is clicked', async () => {
+  it('navigates to detail from the row', async () => {
     mockStocks([stock()])
     mockGroups([])
     const { user } = renderPage()
     await screen.findByText('Water filter')
 
-    await user.click(screen.getByLabelText('Open details'))
+    await user.click(screen.getByTestId('row-open-detail'))
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
   })
 
@@ -331,39 +343,96 @@ describe('InventoryPage — −1 lot picker', () => {
   })
 })
 
-describe('InventoryPage — grouping', () => {
-  it('renders stocks grouped by category with collapsible sections', async () => {
-    mockStocks([
-      stock({ id: 1, name: 'Ibuprofen', group: 10 }),
-      stock({ id: 2, name: 'Vitamin D', group: 10 }),
-      stock({ id: 3, name: 'Water filter', group: null }),
-    ])
-    mockGroups([{ id: 10, name: 'Medicine', display_order: 0 }])
-    const { user } = renderPage()
-
-    await waitFor(() => expect(screen.getByText('Ibuprofen')).toBeInTheDocument())
-    // One titled card per category; the ungrouped stock follows in a box of
-    // its own with no title.
-    expect(screen.getAllByTestId('group-box').map((b) => b.dataset.section)).toEqual(['10'])
-    expect(within(screen.getByTestId('ungrouped-list')).getByText('Water filter')).toBeInTheDocument()
-
-    // Scoped to this group's own section: the name also labels its filter chip
-    // (T093).
-    await user.click(
-      within(document.querySelector('[data-testid="group-box"][data-section="10"]')).getByText('Medicine'),
-    )
-    expect(screen.queryByText('Ibuprofen')).not.toBeInTheDocument()
-    // Ungrouped stock stays visible.
-    expect(screen.getByText('Water filter')).toBeInTheDocument()
+describe('InventoryPage — one list', () => {
+  it('lists every product alphabetically in one card', async () => {
+    mockStocks([stock({ id: 1, name: 'Vitamin D' }), stock({ id: 2, name: 'Aspirin' })])
+    mockGroups([])
+    renderPage()
+    const list = await screen.findByTestId('inventory-list')
+    expect(rowNames(list)).toEqual(['Aspirin', 'Vitamin D'])
   })
 
-  it('does not render empty group sections', async () => {
-    mockStocks([stock({ group: null })])
-    mockGroups([{ id: 10, name: 'Empty group', display_order: 0 }])
+  it('shows a product in two categories only once', async () => {
+    mockStocks([stock({ my_groups: [10, 20], is_pinned: true })])
+    mockGroups([
+      { id: 10, name: 'Medicine', display_order: 0 },
+      { id: 20, name: 'Travel', display_order: 1 },
+    ])
+    const { user } = renderPage()
+    await screen.findByTestId('inventory-list')
+    await user.click(chipButton('all'))
+    expect(screen.getAllByTestId('product-card')).toHaveLength(1)
+  })
+})
+
+describe('InventoryPage — default view', () => {
+  it('opens on Featured, showing nothing else', async () => {
+    mockStocks([stock({ id: 1, name: 'Insulin', is_pinned: true }), stock({ id: 2, name: 'Aspirin' })])
+    mockGroups([])
+    renderPage()
+    const list = await screen.findByTestId('inventory-list')
+    expect(rowNames(list)).toEqual(['Insulin'])
+    expect(chipButton('featured')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens on All when nothing is featured', async () => {
+    mockStocks([stock({ id: 2, name: 'Aspirin' })])
+    mockGroups([])
+    renderPage()
+    await screen.findByText('Aspirin')
+    expect(chipButton('all')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps Attention on offer from the default view', async () => {
+    mockStocks([stock({ id: 1, name: 'Insulin', is_pinned: true }), stock({ id: 2, stock_severity: 'critical' })])
+    mockGroups([])
+    renderPage()
+    await screen.findByTestId('inventory-list')
+    expect(chipButton('attention')).toHaveTextContent('1')
+  })
+
+  it('restores the chosen filter on coming back', async () => {
+    const stocks = [stock({ id: 1, name: 'Insulin', is_pinned: true }), stock({ id: 2, name: 'Aspirin' })]
+    mockStocks(stocks)
+    mockGroups([])
+    const first = renderPage()
+    await screen.findByTestId('inventory-list')
+    await first.user.click(chipButton('all'))
+    first.unmount()
+
+    renderPage()
+    const list = await screen.findByTestId('inventory-list')
+    expect(rowNames(list)).toEqual(['Aspirin', 'Insulin'])
+  })
+
+  it('falls back to All when the chosen category is gone', async () => {
+    sessionStorage.setItem('inventory_filter', 'group-99')
+    mockStocks([stock({ id: 2, name: 'Aspirin' })])
+    mockGroups([])
+    renderPage()
+    await screen.findByText('Aspirin')
+    expect(chipButton('all')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('with nothing needing attention, says so and offers the way back', async () => {
+    mockStocks([stock({ id: 2, name: 'Aspirin' })])
+    mockGroups([])
+    const { user } = renderPage()
+    await screen.findByText('Aspirin')
+    await user.click(chipButton('attention'))
+    expect(await screen.findByText('All in order')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'All' }))
+    expect(await screen.findByText('Aspirin')).toBeInTheDocument()
+  })
+
+  it('forgets the folded sections of the old list', async () => {
+    localStorage.setItem('inventory_collapsed_groups', '{"10":true}')
+    mockStocks([stock()])
+    mockGroups([])
     renderPage()
     await screen.findByText('Water filter')
-    // The empty group is absent; the stock is in the untitled loose list.
-    expect(document.querySelector('[data-testid="group-box"][data-section="10"]')).toBeNull()
+    expect(localStorage.getItem('inventory_collapsed_groups')).toBeNull()
   })
 })
 
@@ -389,15 +458,15 @@ describe('InventoryPage — attention on the rows', () => {
     mockGroups([])
     const { user } = renderPage()
     await screen.findByText('Insulin')
-    await user.click(screen.getAllByTestId('stock-filter-chip').find((c) => c.dataset.chip === 'attention'))
+    await user.click(chipButton('attention'))
 
     const rows = screen.getAllByTestId('product-card')
     expect(rows.map((r) => within(r).getByText(/^(Vitamin D|Insulin|Ibuprofen)$/).textContent)).toEqual([
-      'Vitamin D',
-      'Insulin',
       'Ibuprofen',
+      'Insulin',
+      'Vitamin D',
     ])
-    const [vitamin, insulin, ibuprofen] = rows
+    const [ibuprofen, insulin, vitamin] = rows
     expect(within(vitamin).getByTestId('row-quantity')).toHaveAttribute('data-out-of-stock', 'true')
     expect(within(insulin).getByTestId('row-reason')).toHaveTextContent('low stock')
     expect(within(ibuprofen).getByTestId('row-reason')).toHaveTextContent('expired')
@@ -406,9 +475,9 @@ describe('InventoryPage — attention on the rows', () => {
 
 describe('InventoryPage — search and filter', () => {
   const POPULATION = [
-    stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes', stock_severity: 'low' }),
-    stock({ id: 2, name: 'Lancets', group: 10, group_name: 'Diabetes' }),
-    stock({ id: 3, name: 'Aspirin', group: 20, group_name: 'Botiquin' }),
+    stock({ id: 1, name: 'Insulin', my_groups: [10], stock_severity: 'low' }),
+    stock({ id: 2, name: 'Lancets', my_groups: [10] }),
+    stock({ id: 3, name: 'Aspirin', my_groups: [20] }),
     stock({ id: 4, name: 'Loose item' }),
   ]
   const POPULATION_GROUPS = [
@@ -470,277 +539,71 @@ describe('InventoryPage — search and filter', () => {
     expect(rowNames()).toHaveLength(4)
   })
 
-  it('flattens the groups while filtering', async () => {
+  it('filters to a category when its chip is chosen', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
-    expect(screen.getAllByTestId('group-box').length).toBeGreaterThan(0)
-
-    await user.type(screen.getByTestId('stock-search'), 'in')
-    expect(screen.queryByTestId('group-box')).not.toBeInTheDocument()
-    expect(rowNames()).toEqual(['Insulin', 'Aspirin'])
-  })
-
-  it('filters to a group when its chip is chosen', async () => {
-    const { user } = renderPopulated()
-    await screen.findByText('Insulin')
-
-    await user.click(chip('group-10'))
-    expect(rowNames()).toEqual(['Insulin', 'Lancets'])
+    await user.click(chipButton('group-10'))
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Insulin', 'Lancets'])
   })
 
   it('filters to the products needing attention', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
-
-    await user.click(chip('attention'))
-    expect(rowNames()).toEqual(['Insulin'])
+    await user.click(chipButton('attention'))
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Insulin'])
   })
 
   it('filters to the products with no category', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
-
-    await user.click(chip('ungrouped'))
-    expect(rowNames()).toEqual(['Loose item'])
+    await user.click(chipButton('ungrouped'))
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Loose item'])
   })
 
-  it('shows a filtered empty state that can be cleared', async () => {
+  it('searches everything from a narrower filter, and returns to it when cleared', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
+    await user.click(chipButton('group-20'))
+    await user.type(screen.getByTestId('stock-search'), 'insulin')
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Insulin'])
+    expect(chipButton('group-20')).toHaveAttribute('aria-pressed', 'true')
 
-    await user.type(screen.getByTestId('stock-search'), 'zzzzz')
-    expect(screen.getByText(/nothing matches/i)).toBeInTheDocument()
-    // Not the "no items yet" copy: the user does have products.
-    expect(screen.queryByText(/no items yet/i)).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('stock-search-clear'))
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Aspirin'])
+  })
 
-    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+  it('choosing a filter clears the text', async () => {
+    const { user } = renderPopulated()
+    await screen.findByText('Insulin')
+    await user.type(screen.getByTestId('stock-search'), 'insulin')
+    await user.click(chipButton('group-20'))
     expect(screen.getByTestId('stock-search')).toHaveValue('')
-    expect(rowNames()).toEqual(['Insulin', 'Lancets', 'Aspirin', 'Loose item'])
+    expect(rowNames(screen.getByTestId('inventory-list'))).toEqual(['Aspirin'])
   })
 
-  it('restores the groups when the filter is cleared', async () => {
+  it('a search with no matches can be cleared', async () => {
     const { user } = renderPopulated()
     await screen.findByText('Insulin')
-
-    await user.click(chip('group-10'))
-    expect(screen.queryByTestId('group-box')).not.toBeInTheDocument()
-
-    await user.click(chip('all'))
-    expect(screen.getAllByTestId('group-box').length).toBeGreaterThan(0)
+    await user.type(screen.getByTestId('stock-search'), 'zzz')
+    await user.click(await screen.findByRole('button', { name: 'Clear filters' }))
+    expect(await screen.findByText('Insulin')).toBeInTheDocument()
   })
 })
 
-describe('InventoryPage — pinned section', () => {
-  const GROUPS = [{ id: 10, name: 'Diabetes', display_order: 0 }]
-
+describe('InventoryPage — scroll', () => {
   const renderWith = (stocks) => {
     mockStocks(stocks)
-    mockGroups(GROUPS)
+    mockGroups([])
     return renderPage()
   }
 
-  const pinnedNames = () => {
-    const section = screen.queryByTestId('pinned-section')
-    if (!section) return null
-    return within(section)
-      .getAllByTestId('product-card')
-      .map((row) => row.querySelector('.name').textContent)
-  }
-
-  it('is absent when nothing is pinned', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10, is_pinned: false })])
-    await screen.findByText('Insulin')
-    expect(screen.queryByTestId('pinned-section')).not.toBeInTheDocument()
-  })
-
-  it('lists pinned products alphabetically', async () => {
-    renderWith([
-      stock({ id: 1, name: 'Zinc', group: 10, is_pinned: true }),
-      stock({ id: 2, name: 'Aspirin', group: 10, is_pinned: true }),
-      stock({ id: 3, name: 'Lancets', group: 10, is_pinned: false }),
-    ])
-    await screen.findByTestId('pinned-section')
-    expect(pinnedNames()).toEqual(['Aspirin', 'Zinc'])
-  })
-
-  it('keeps a pinned product in its group as well', async () => {
-    // Deliberate duplication: removing it from the group would make the
-    // group's count wrong.
-    renderWith([
-      stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes', is_pinned: true }),
-      stock({ id: 2, name: 'Lancets', group: 10, group_name: 'Diabetes', is_pinned: false }),
-    ])
-    await screen.findByTestId('pinned-section')
-
-    const group = screen.getByTestId('group-box')
-    const inGroup = within(group)
-      .getAllByTestId('product-card')
-      .map((row) => row.querySelector('.name').textContent)
-    expect(inGroup).toEqual(['Insulin', 'Lancets'])
-    expect(within(group).getByText('2')).toBeInTheDocument()
-    // Two rows on screen for the same product: one pinned, one in the group.
-    expect(screen.getAllByText('Insulin')).toHaveLength(2)
-  })
-
-  it('shows every featured product: there is no limit', async () => {
-    renderWith(['A', 'B', 'C', 'D', 'E'].map((name, i) => stock({ id: i + 1, name, group: 10, is_pinned: true })))
-    await screen.findByTestId('pinned-section')
-    expect(pinnedNames()).toEqual(['A', 'B', 'C', 'D', 'E'])
-  })
-
-  it('hides while a chip filter is active', async () => {
-    const { user } = renderWith([
-      stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes', is_pinned: true, stock_severity: 'low' }),
-    ])
-    await screen.findByTestId('pinned-section')
-
-    const chip = screen.getAllByTestId('stock-filter-chip').find((c) => c.dataset.chip === 'attention')
-    await user.click(chip)
-    expect(screen.queryByTestId('pinned-section')).not.toBeInTheDocument()
-  })
-
-  it('hides while a search is active, and comes back when cleared', async () => {
-    const { user } = renderWith([stock({ id: 1, name: 'Insulin', group: 10, is_pinned: true })])
-    await screen.findByTestId('pinned-section')
-
-    await user.type(screen.getByTestId('stock-search'), 'ins')
-    expect(screen.queryByTestId('pinned-section')).not.toBeInTheDocument()
-
-    await user.click(screen.getByTestId('stock-search-clear'))
-    expect(screen.getByTestId('pinned-section')).toBeInTheDocument()
-  })
-})
-
-describe('InventoryPage — sections, persistence and scroll', () => {
-  const GROUPS = [
-    { id: 10, name: 'Diabetes', display_order: 0 },
-    { id: 20, name: 'Household', display_order: 1 },
-  ]
-
-  beforeEach(() => {
-    localStorage.removeItem('inventory_collapsed_groups')
-    sessionStorage.removeItem('inventory_scroll_y')
-    // RTL's unmount can land either side of this hook, and unmounting writes
-    // `window.scrollY` to storage. Pinning it to 0 makes that write harmless
-    // whichever order the hooks run in — the same reasoning `setup.js` gives
-    // for draining the offline queue in `beforeEach`.
-    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
-  })
-
-  // `vi.spyOn` returns the *existing* mock when one is already installed, so
-  // an unrestored `window.scrollTo` spy carries its call history into the next
-  // test and makes "was not called" assertions meaningless.
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  const renderWith = (stocks, groups = GROUPS) => {
-    mockStocks(stocks)
-    mockGroups(groups)
-    return renderPage()
-  }
-
-  const section = (key) => document.querySelector(`[data-testid="group-box"][data-section="${key}"]`)
-
-  it('lists ungrouped products after the categories, in a box with no title', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10 }), stock({ id: 2, name: 'Loose item', group: null })])
-    await screen.findByText('Insulin')
-
-    expect(screen.getAllByTestId('group-box').map((b) => b.dataset.section)).toEqual(['10'])
-    const loose = screen.getByTestId('ungrouped-list')
-    expect(within(loose).getByText('Loose item')).toBeInTheDocument()
-    expect(within(loose).queryByRole('button', { name: /No category/ })).toBeNull()
-    expect(within(loose).queryByTestId('group-count')).toBeNull()
-    // After the last category, not before it.
-    expect(section('10').compareDocumentPosition(loose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('shows a plain list, with no category card, when the user has no categories', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: null }), stock({ id: 2, name: 'Lancets', group: null })], [])
-    await screen.findByText('Insulin')
-    expect(screen.queryByTestId('group-box')).toBeNull()
-    expect(screen.queryByText('No category')).toBeNull()
-    expect(within(screen.getByTestId('ungrouped-list')).getAllByTestId('product-card')).toHaveLength(2)
-  })
-
-  it('omits the loose list when every product has a group', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
-    await screen.findByText('Insulin')
-    expect(screen.queryByTestId('ungrouped-list')).toBeNull()
-  })
-
-  it('treats a product in a group the viewer cannot see as ungrouped', async () => {
-    // The group is per user, so a shared product routinely lands here.
-    renderWith([stock({ id: 1, name: 'Shared thing', group: 999 })])
-    await screen.findByText('Shared thing')
-    expect(within(screen.getByTestId('ungrouped-list')).getByText('Shared thing')).toBeInTheDocument()
-  })
-
-  it('remembers a collapsed section across an unmount', async () => {
-    const stocks = [stock({ id: 1, name: 'Insulin', group: 10 })]
-    const first = renderWith(stocks)
-    await screen.findByText('Insulin')
-    await first.user.click(within(section('10')).getByText('Diabetes'))
-    expect(screen.queryByText('Insulin')).not.toBeInTheDocument()
-    first.unmount()
-
-    renderWith(stocks)
-    // Not `findByText('Diabetes')`: the group's name labels its filter chip
-    // too, so a bare text query matches twice.
-    await screen.findByTestId('group-box')
-    expect(screen.queryByText('Insulin')).not.toBeInTheDocument()
-    expect(within(section('10')).getByRole('button')).toHaveAttribute('aria-expanded', 'false')
-  })
-
-  it('renders everything expanded when the stored preference is corrupt', async () => {
-    localStorage.setItem('inventory_collapsed_groups', '{{{not json')
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
-    expect(await screen.findByText('Insulin')).toBeInTheDocument()
-  })
-
-  it('forgets a section that no longer exists when another is collapsed', async () => {
-    localStorage.setItem('inventory_collapsed_groups', JSON.stringify({ 99: true }))
-    const { user } = renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
-    await screen.findByText('Insulin')
-
-    await user.click(within(section('10')).getByText('Diabetes'))
-    expect(JSON.parse(localStorage.getItem('inventory_collapsed_groups'))).toEqual({ 10: true })
-  })
-
-  it('marks a section danger when anything inside is critical', async () => {
-    renderWith([
-      stock({ id: 1, name: 'Insulin', group: 10, stock_severity: 'critical' }),
-      stock({ id: 2, name: 'Lancets', group: 10, stock_severity: 'ok' }),
-    ])
-    await screen.findByText('Insulin')
-    expect(within(section('10')).getByTestId('group-severity-dot')).toHaveAttribute('data-severity', 'danger')
-  })
-
-  it('keeps the severity dot visible once the section is collapsed', async () => {
-    // The whole point: folding a group must not hide that something is red.
-    const { user } = renderWith([stock({ id: 1, name: 'Insulin', group: 10, stock_severity: 'critical' })])
-    await screen.findByText('Insulin')
-
-    await user.click(within(section('10')).getByText('Diabetes'))
-    expect(screen.queryByText('Insulin')).not.toBeInTheDocument()
-    expect(within(section('10')).getByTestId('group-severity-dot')).toHaveAttribute('data-severity', 'danger')
-  })
-
-  it('marks a section warning when the worst inside is amber', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10, expiry_severity: 'soon' })])
-    await screen.findByText('Insulin')
-    expect(within(section('10')).getByTestId('group-severity-dot')).toHaveAttribute('data-severity', 'warning')
-  })
-
-  it('shows no dot when everything in the section is healthy', async () => {
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
-    await screen.findByText('Insulin')
-    expect(within(section('10')).queryByTestId('group-severity-dot')).not.toBeInTheDocument()
-  })
-
   it('restores the scroll position it saved on unmount', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-    const stocks = [stock({ id: 1, name: 'Insulin', group: 10 })]
+    const stocks = [stock({ id: 1, name: 'Insulin' })]
     const first = renderWith(stocks)
     await screen.findByText('Insulin')
 
@@ -760,48 +623,41 @@ describe('InventoryPage — sections, persistence and scroll', () => {
 
   it('does not scroll when there is no saved position', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-    renderWith([stock({ id: 1, name: 'Insulin', group: 10 })])
+    renderWith([stock({ id: 1, name: 'Insulin' })])
     await screen.findByText('Insulin')
     expect(scrollTo).not.toHaveBeenCalled()
   })
+
+  it('choosing a filter goes back to the top', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const { user } = renderWith([stock({ id: 1, name: 'Insulin' })])
+    await screen.findByText('Insulin')
+    await user.click(chipButton('attention'))
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+  })
+
+  it('does not restore a position saved from a search', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const { user, unmount } = renderWith([stock({ id: 1, name: 'Insulin' })])
+    await screen.findByText('Insulin')
+    await user.type(screen.getByTestId('stock-search'), 'ins')
+    Object.defineProperty(window, 'scrollY', { value: 300, configurable: true })
+    window.dispatchEvent(new Event('scroll'))
+    unmount()
+    expect(sessionStorage.getItem('inventory_scroll_y')).toBe('0')
+  })
 })
 
-describe('InventoryPage — sticky offset and scroll guard', () => {
+describe('InventoryPage — scroll guard', () => {
   const GROUPS = [{ id: 10, name: 'Diabetes', display_order: 0 }]
 
   afterEach(() => {
-    delete window.ResizeObserver
     sessionStorage.clear()
     vi.restoreAllMocks()
   })
 
-  it('publishes the search bar height so section headers can stick under it', async () => {
-    // jsdom has no ResizeObserver, so the effect bails out and the mechanism
-    // that keeps the two sticky layers apart would go untested.
-    let notify
-    window.ResizeObserver = class {
-      constructor(cb) {
-        notify = cb
-      }
-      observe() {}
-      disconnect() {}
-    }
-    // Border-box height, which is what the effect must read: `contentRect`
-    // would omit the bar's padding and let headers slide under it.
-    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 88 })
-
-    mockStocks([stock({ id: 1, name: 'Insulin', group: 10 })])
-    mockGroups(GROUPS)
-    const { container } = renderPage()
-    await screen.findByText('Insulin')
-
-    act(() => notify())
-    expect(container.firstChild).toHaveStyle({ '--inventory-bar-h': '88px' })
-    rect.mockRestore()
-  })
-
   it('ignores the reset-to-top scroll that fires once the route has changed', async () => {
-    mockStocks([stock({ id: 1, name: 'Insulin', group: 10 })])
+    mockStocks([stock({ id: 1, name: 'Insulin' })])
     mockGroups(GROUPS)
     const { unmount } = renderPage()
     await screen.findByText('Insulin')
@@ -819,6 +675,65 @@ describe('InventoryPage — sticky offset and scroll guard', () => {
     unmount()
     expect(sessionStorage.getItem('inventory_scroll_y')).toBe('500')
     window.history.pushState({}, '', '/')
+  })
+})
+
+describe('InventoryPage — swipe hint', () => {
+  const touch = (matches) =>
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })
+
+  beforeEach(() => {
+    localStorage.removeItem('inventory_swipe_hint_seen')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.removeItem('inventory_swipe_hint_seen')
+  })
+
+  it('teaches the gesture once on a touch device', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    renderPage()
+    expect(await screen.findByTestId('swipe-hint')).toBeInTheDocument()
+  })
+
+  it('is not shown with a mouse', async () => {
+    touch(false)
+    mockStocks([stock()])
+    mockGroups([])
+    renderPage()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument()
+  })
+
+  it('closing it is remembered', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    const { user } = renderPage()
+    const hint = await screen.findByTestId('swipe-hint')
+    await user.click(within(hint).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument()
+    expect(localStorage.getItem('inventory_swipe_hint_seen')).toBe('true')
+  })
+
+  it('goes away after the first consumption', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    server.use(
+      http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ ...stock(), quantity: 4, consumption_id: 5 })),
+    )
+    const { user } = renderPage()
+    await screen.findByTestId('swipe-hint')
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+    await waitFor(() => expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument())
   })
 })
 

@@ -1,5 +1,4 @@
 import { needsAttention } from './stockAlerts'
-import { effectiveGroupId, effectiveGroupName } from './stockGroup'
 
 /**
  * Casefold and strip diacritics, so "Hidroferol" matches "hidroferól" and
@@ -24,85 +23,89 @@ export function normalise(value) {
 /**
  * Whether a stock matches a free-text query.
  *
- * Searchable: the product name, its effective group name, and any batch
- * number among its lots — the three things a person actually types. `gtin` is
- * deliberately **not** searchable: it is a 14-digit code that would only ever
- * match by pasting, never by typing, and including it would let a stray digit
- * in the query pull in unrelated products.
+ * Searchable: the product name, the names of the viewer's categories for it,
+ * and any batch number among its lots — the three things a person actually
+ * types. `gtin` is deliberately **not** searchable: it is a 14-digit code that
+ * would only ever match by pasting, and a stray digit would pull in unrelated
+ * products.
  *
  * An empty query matches everything, so callers can apply this unconditionally.
  */
-export function matchesStock(stock, query) {
+export function matchesStock(stock, query, groups = []) {
   const needle = normalise(query).trim()
   if (!needle) return true
   if (normalise(stock?.name).includes(needle)) return true
-  if (normalise(effectiveGroupName(stock)).includes(needle)) return true
+  const mine = stock?.my_groups ?? []
+  if (groups.some((group) => mine.includes(group.id) && normalise(group.name).includes(needle))) return true
   return (stock?.lots ?? []).some((lot) => lot.lot_number && normalise(lot.lot_number).includes(needle))
 }
 
-/** Whether a stock belongs to no group the viewer knows about. */
-function isUngrouped(stock, knownGroupIds) {
-  const id = effectiveGroupId(stock)
-  return !id || !knownGroupIds.has(id)
-}
-
-/**
- * The predicate behind each filter chip, keyed by the chip's id.
- *
- * `attention` reuses `needsAttention` rather than restating it, so the chip
- * and the alert banner can never disagree about which products are in trouble.
- */
-function chipPredicate(chipId, knownGroupIds) {
-  if (chipId === 'all') return () => true
+/** The predicate behind each filter chip, keyed by the chip's id. */
+function chipPredicate(chipId) {
+  if (chipId === 'featured') return (stock) => Boolean(stock.is_pinned)
   if (chipId === 'attention') return needsAttention
-  if (chipId === 'ungrouped') return (stock) => isUngrouped(stock, knownGroupIds)
+  if (chipId === 'all') return () => true
+  if (chipId === 'ungrouped') return (stock) => (stock.my_groups ?? []).length === 0
   const groupId = Number(chipId.replace(/^group-/, ''))
-  return (stock) => effectiveGroupId(stock) === groupId
+  return (stock) => (stock.my_groups ?? []).includes(groupId)
 }
 
 /**
- * The stocks a given chip + query combination should show.
+ * The products to list, alphabetically, each once.
  *
- * Chip first, then query — the chip narrows the population and the query
- * searches within it.
+ * With text in the search box the active filter is ignored: the search always
+ * covers the whole inventory, so a product outside Featured can still be found.
  */
-export function filterStocks(stocks, groups, chipId, query) {
-  const knownGroupIds = new Set((groups ?? []).map((g) => g.id))
-  const predicate = chipPredicate(chipId, knownGroupIds)
-  return (stocks ?? []).filter((stock) => predicate(stock) && matchesStock(stock, query))
+export function filterStocks(stocks, groups, chipId, query, locale) {
+  const list = (stocks ?? []).filter(
+    query?.trim() ? (stock) => matchesStock(stock, query, groups ?? []) : chipPredicate(chipId),
+  )
+  return list.sort((a, b) => a.name.localeCompare(b.name, locale))
 }
 
 /**
- * The chips to offer, with the count each one would show.
+ * The chips to offer, in their fixed order: Featured, Attention, All, the
+ * user's categories, No category.
  *
- * Counts are computed **after** the query, so they say what clicking would
- * actually produce rather than advertising results the search has already
- * excluded. Chips that would show nothing are dropped — except `all`, which
- * always stays so there is always a way back to the full list.
+ * Each counts what pressing it shows, over the whole inventory; a product in
+ * two categories counts in both, so they need not add up to All. A chip with
+ * nothing to show is dropped, except All (always a way back) and Attention
+ * (always visible: «0» is an answer too). «No category» only appears once the
+ * user has categories: without any it would be All under another name.
  *
  * Returns descriptors, not text: `kind` and `name` are for the caller to
  * translate, keeping this module free of i18next.
  */
-export function buildFilterChips(stocks, groups, query) {
-  const knownGroupIds = new Set((groups ?? []).map((g) => g.id))
-  const matching = (stocks ?? []).filter((stock) => matchesStock(stock, query))
-  const count = (predicate) => matching.filter(predicate).length
+export function buildFilterChips(stocks, groups) {
+  const list = stocks ?? []
+  const count = (id) => list.filter(chipPredicate(id)).length
 
-  const chips = [{ id: 'all', kind: 'all', name: null, count: matching.length }]
-
-  const attention = count(needsAttention)
-  if (attention > 0) chips.push({ id: 'attention', kind: 'attention', name: null, count: attention })
+  const chips = []
+  const featured = count('featured')
+  if (featured > 0) chips.push({ id: 'featured', kind: 'featured', name: null, count: featured })
+  chips.push({ id: 'attention', kind: 'attention', name: null, count: count('attention') })
+  chips.push({ id: 'all', kind: 'all', name: null, count: list.length })
 
   for (const group of groups ?? []) {
-    const inGroup = count((stock) => effectiveGroupId(stock) === group.id)
-    if (inGroup > 0) chips.push({ id: `group-${group.id}`, kind: 'group', name: group.name, count: inGroup })
+    const id = `group-${group.id}`
+    const inGroup = count(id)
+    if (inGroup > 0) chips.push({ id, kind: 'group', name: group.name, count: inGroup })
   }
 
-  // Only beside a category chip: with no categories, "No category" would be
-  // "All" under another name, labelling what the user never organised.
-  const hasGroupChip = chips.some((chip) => chip.kind === 'group')
-  const ungrouped = count((stock) => isUngrouped(stock, knownGroupIds))
-  if (hasGroupChip && ungrouped > 0) chips.push({ id: 'ungrouped', kind: 'ungrouped', name: null, count: ungrouped })
-
+  const ungrouped = count('ungrouped')
+  if ((groups ?? []).length > 0 && ungrouped > 0) {
+    chips.push({ id: 'ungrouped', kind: 'ungrouped', name: null, count: ungrouped })
+  }
   return chips
+}
+
+/**
+ * The filter in effect. With no choice yet (`null`), Featured if there is any,
+ * else All. A chosen filter that no longer exists (last featured product
+ * removed, category deleted) falls back to All.
+ */
+export function resolveChip(chosen, chips) {
+  if (chosen && chips.some((chip) => chip.id === chosen)) return chosen
+  if (chosen) return 'all'
+  return chips.some((chip) => chip.id === 'featured') ? 'featured' : 'all'
 }

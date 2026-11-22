@@ -20,15 +20,15 @@ test.describe('Pinned products', () => {
   test.beforeEach(async ({ page, context }) => {
     await resetSeed(context)
     await loginAsUser1(page)
-    await goToInventory(page)
+    await goToInventory(page, { filter: 'featured' })
     await expect(page.getByTestId('product-card').first()).toBeVisible()
   })
 
-  const pinnedSection = (page) => page.getByTestId('pinned-section')
+  const featured = (page) => page.getByTestId('inventory-list')
 
-  test('pinning from the detail page adds a shortcut without leaving its group', async ({ page }) => {
-    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEEDED)
-    await expect(pinnedSection(page).getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(0)
+  test('pinning from the detail page adds it to Featured', async ({ page }) => {
+    await expect(featured(page).getByTestId('product-card')).toHaveCount(SEEDED)
+    await expect(featured(page).getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(0)
 
     await goToStockDetail(page, KEY)
     const pin = page.getByTestId('pin-toggle')
@@ -36,32 +36,15 @@ test.describe('Pinned products', () => {
     await pin.click()
     await expect(pin).toHaveAttribute('data-pinned', 'true')
 
-    await goToInventory(page)
-    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEEDED + 1)
-    await expect(pinnedSection(page).getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(1)
-
-    // Still in its group: the section is a shortcut, not a move.
-    const inGroup = page.getByTestId('group-box').getByTestId('product-card').filter({ hasText: STOCK })
-    await expect(inGroup).toHaveCount(1)
-    // Two rows on screen for the same product.
-    await expect(page.getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(2)
+    await goToInventory(page, { filter: 'featured' })
+    await expect(featured(page).getByTestId('product-card')).toHaveCount(SEEDED + 1)
+    await expect(featured(page).getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(1)
 
     await goToStockDetail(page, KEY)
     await page.getByTestId('pin-toggle').click()
     await expect(page.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'false')
-    await goToInventory(page)
-    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEEDED)
-    await expect(pinnedSection(page).getByTestId('product-card').filter({ hasText: STOCK })).toHaveCount(0)
-  })
-
-  test('the section hides while filtering and returns when cleared', async ({ page }) => {
-    await expect(pinnedSection(page)).toBeVisible()
-
-    await page.getByTestId('stock-search').fill('hidro')
-    await expect(pinnedSection(page)).toHaveCount(0)
-
-    await page.getByTestId('stock-search-clear').click()
-    await expect(pinnedSection(page)).toBeVisible()
+    await goToInventory(page, { filter: 'featured' })
+    await expect(featured(page).getByTestId('product-card')).toHaveCount(SEEDED)
   })
 
   test('there is no limit on featured products', async ({ page }) => {
@@ -71,7 +54,7 @@ test.describe('Pinned products', () => {
       await expect(page.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'true')
     }
 
-    await goToInventory(page)
-    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEEDED + 3)
+    await goToInventory(page, { filter: 'featured' })
+    await expect(featured(page).getByTestId('product-card')).toHaveCount(SEEDED + 3)
   })
 })

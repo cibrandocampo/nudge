@@ -90,3 +90,28 @@ describe('InventorySearchBar — chips', () => {
     expect(screen.queryByText('Attention')).not.toBeInTheDocument()
   })
 })
+
+describe('InventorySearchBar — filters', () => {
+  it('labels Featured', () => {
+    renderBar({ chips: [{ id: 'featured', kind: 'featured', name: null, count: 3 }], activeChip: 'featured' })
+    expect(screen.getByRole('button', { name: /Pinned/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps Attention neutral at zero', () => {
+    renderBar({ chips: [{ id: 'attention', kind: 'attention', name: null, count: 0 }] })
+    expect(screen.getByTestId('stock-filter-chip').className).not.toMatch(/chipAttention/)
+  })
+
+  it('colours Attention when something needs it', () => {
+    renderBar()
+    const chip = screen.getAllByTestId('stock-filter-chip').find((c) => c.dataset.chip === 'attention')
+    expect(chip.className).toMatch(/chipAttention/)
+  })
+
+  it('brings the active chip into view by moving only its row', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    renderBar({ activeChip: 'ungrouped' })
+    expect(scrollTo).not.toHaveBeenCalled()
+    scrollTo.mockRestore()
+  })
+})
