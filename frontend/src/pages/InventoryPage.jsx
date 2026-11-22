@@ -211,7 +211,7 @@ export default function InventoryPage() {
           product would cost more than the row itself. */}
       {showSwipeHint && visibleStocks.length > 0 && (
         <p className={s.swipeHint} data-testid="swipe-hint">
-          <Icon name="arrow-right" size="sm" />
+          <Icon name="chevron-right" size="sm" />
           <span className={s.swipeHintText}>{t('inventory.swipeHint')}</span>
           <button
             type="button"
