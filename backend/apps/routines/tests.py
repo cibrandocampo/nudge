@@ -4,7 +4,6 @@ from datetime import date, timedelta
 from math import floor
 from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, connection, transaction
@@ -3648,6 +3647,115 @@ class SetUserStockGroupsTest(APITestCase):
         self.assertEqual(self._groups(self.guest), {self.guest_second.id})
 
 
+class MyGroupsApiTest(APITestCase):
+    """`my_groups` and PUT my-groups (T201): each viewer's own categories."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(username="api-owner", password="pw", email="api-owner@example.com")
+        self.guest = User.objects.create_user(username="api-guest", password="pw", email="api-guest@example.com")
+        self.stranger = User.objects.create_user(username="api-other", password="pw", email="api-other@example.com")
+        self.first = StockGroup.objects.create(user=self.owner, name="Zeta", display_order=0)
+        self.second = StockGroup.objects.create(user=self.owner, name="Alpha", display_order=1)
+        self.guest_group = StockGroup.objects.create(user=self.guest, name="Guest")
+        self.stock = Stock.objects.create(user=self.owner, name="Shared")
+        self.stock.shared_with.add(self.guest)
+        self.url = f"/api/stock/{self.stock.id}/my-groups/"
+
+    def _put(self, user, groups):
+        self.client.force_authenticate(user=user)
+        return self.client.put(self.url, {"groups": groups}, format="json")
+
+    def test_the_owner_reads_their_categories_in_list_order(self):
+        set_user_stock_groups(self.owner, self.stock, [self.second.id, self.first.id])
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.data["my_groups"], [self.first.id, self.second.id])
+
+    def test_a_recipient_does_not_see_the_owners_categories(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        self.client.force_authenticate(user=self.guest)
+        res = self.client.get(f"/api/stock/{self.stock.id}/")
+        self.assertEqual(res.data["my_groups"], [])
+
+    def test_put_replaces_the_set_and_answers_with_the_stock(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        res = self._put(self.owner, [self.second.id])
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["my_groups"], [self.second.id])
+
+    def test_put_with_an_empty_list_clears_them(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        self.assertEqual(self._put(self.owner, []).data["my_groups"], [])
+
+    def test_repeated_ids_count_once(self):
+        res = self._put(self.owner, [self.first.id, self.first.id])
+        self.assertEqual(res.data["my_groups"], [self.first.id])
+
+    def test_a_recipient_can_file_a_shared_stock(self):
+        res = self._put(self.guest, [self.guest_group.id])
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["my_groups"], [self.guest_group.id])
+
+    def test_someone_elses_category_is_refused_and_nothing_changes(self):
+        set_user_stock_groups(self.guest, self.stock, [self.guest_group.id])
+        res = self._put(self.guest, [self.first.id])
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data["groups"], ["Invalid group."])
+        self.assertTrue(UserStockGroup.objects.filter(user=self.guest, group=self.guest_group).exists())
+
+    def test_a_malformed_body_is_refused(self):
+        for value in ("1", [True], ["1"], None):
+            with self.subTest(value=value):
+                self.assertEqual(self._put(self.owner, value).status_code, 400)
+
+    def test_without_access_it_is_404(self):
+        self.assertEqual(self._put(self.stranger, []).status_code, 404)
+
+    def test_create_accepts_my_groups(self):
+        self.client.force_authenticate(user=self.owner)
+        body = {"name": "New", "my_groups": [self.first.id, self.second.id]}
+        res = self.client.post("/api/stock/", body, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["my_groups"], [self.first.id, self.second.id])
+
+    def test_create_refuses_a_foreign_category_and_creates_nothing(self):
+        self.client.force_authenticate(user=self.owner)
+        res = self.client.post("/api/stock/", {"name": "Nope", "my_groups": [self.guest_group.id]}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Stock.objects.filter(name="Nope").exists())
+
+    def test_patch_does_not_write_my_groups(self):
+        set_user_stock_groups(self.owner, self.stock, [self.first.id])
+        self.client.force_authenticate(user=self.owner)
+        self.client.patch(f"/api/stock/{self.stock.id}/", {"my_groups": [self.second.id]}, format="json")
+        self.assertEqual(
+            list(UserStockGroup.objects.filter(user=self.owner, stock=self.stock).values_list("group_id", flat=True)),
+            [self.first.id],
+        )
+
+    def test_the_consume_response_keeps_the_viewers_own_fields(self):
+        set_user_stock_groups(self.guest, self.stock, [self.guest_group.id])
+        UserStockPin.objects.create(user=self.guest, stock=self.stock)
+        StockLot.objects.create(stock=self.stock, quantity=2, expiry_date=date.today() + timedelta(days=30))
+        self.client.force_authenticate(user=self.guest)
+        res = self.client.post(f"/api/stock/{self.stock.id}/consume/", {"quantity": 1}, format="json")
+        self.assertTrue(res.data["is_pinned"])
+        self.assertEqual(res.data["my_groups"], [self.guest_group.id])
+
+    def test_the_list_costs_the_same_with_more_assignments(self):
+        for i in range(3):
+            stock = Stock.objects.create(user=self.owner, name=f"Budget {i}")
+            set_user_stock_groups(self.owner, stock, [self.first.id])
+        self.client.force_authenticate(user=self.owner)
+        with CaptureQueriesContext(connection) as few:
+            self.client.get("/api/stock/")
+        for stock in Stock.objects.filter(user=self.owner):
+            set_user_stock_groups(self.owner, stock, [self.first.id, self.second.id])
+        with CaptureQueriesContext(connection) as many:
+            self.client.get("/api/stock/")
+        self.assertEqual(len(many), len(few))
+
+
 class MultiCategoryMigrationTest(TransactionTestCase):
     """0019, forwards and backwards, on the real schema."""
 
@@ -5517,28 +5625,12 @@ class UserStockPinTest(APITestCase):
         res = self.client.delete(f"/api/stock/{self.stock.id}/pin/")
         self.assertEqual(res.status_code, 204)
 
-    def test_pin_beyond_the_limit_is_rejected(self):
-        limit = settings.STOCK_MAX_PINNED_ITEMS
+    def test_there_is_no_limit_on_pins(self):
         self.client.force_authenticate(self.owner)
-        for i in range(limit):
+        for i in range(6):
             stock = make_stock(self.owner, name=f"Filler {i}")
             self.assertEqual(self.client.post(f"/api/stock/{stock.id}/pin/").status_code, 200)
-
-        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.data["code"], "max_pinned_reached")
-        self.assertEqual(res.data["max"], limit)
-        # The rejected create is rolled back, not left behind.
-        self.assertEqual(UserStockPin.objects.filter(user=self.owner).count(), limit)
-
-    def test_the_limit_is_per_user(self):
-        limit = settings.STOCK_MAX_PINNED_ITEMS
-        for i in range(limit):
-            UserStockPin.objects.create(user=self.owner, stock=make_stock(self.owner, name=f"Filler {i}"))
-
-        self.client.force_authenticate(self.recipient)
-        res = self.client.post(f"/api/stock/{self.stock.id}/pin/")
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(UserStockPin.objects.filter(user=self.owner).count(), 6)
 
     def test_pin_deleted_on_unshare(self):
         UserStockPin.objects.create(user=self.recipient, stock=self.stock)
@@ -5582,14 +5674,14 @@ class UserStockPinTest(APITestCase):
             self.assertEqual(res.status_code, 200)
         baseline = len(unpinned.captured_queries)
 
-        for stock in Stock.objects.filter(user=self.owner)[: settings.STOCK_MAX_PINNED_ITEMS]:
+        for stock in Stock.objects.filter(user=self.owner)[:4]:
             UserStockPin.objects.create(user=self.owner, stock=stock)
 
         with CaptureQueriesContext(connection) as pinned:
             res = self.client.get("/api/stock/")
             self.assertEqual(res.status_code, 200)
         self.assertEqual(len(pinned.captured_queries), baseline)
-        self.assertEqual(sum(1 for row in res.data["results"] if row["is_pinned"]), settings.STOCK_MAX_PINNED_ITEMS)
+        self.assertEqual(sum(1 for row in res.data["results"] if row["is_pinned"]), 4)
 
 
 # ── Regulatory data on the stock API (T111) ───────────────────────────────────

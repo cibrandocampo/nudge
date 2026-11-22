@@ -8,7 +8,7 @@ from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -110,6 +110,25 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
         return super().get_permissions()
 
     @staticmethod
+    def _parse_group_ids(user, raw, field):
+        """The set of `user`'s own group ids in `raw`, or a 400 under `field`."""
+        if not isinstance(raw, list) or any(not isinstance(value, int) or isinstance(value, bool) for value in raw):
+            raise ValidationError({field: ["A list of group ids is required."]})
+        ids = set(raw)
+        if StockGroup.objects.filter(user=user, id__in=ids).count() != len(ids):
+            raise ValidationError({field: ["Invalid group."]})
+        return ids
+
+    @staticmethod
+    def _load_my_groups(stock, user):
+        """Refresh the prefetch the serializer reads after a category write."""
+        stock._my_group_override = list(
+            UserStockGroup.objects.select_related("group")
+            .filter(user=user, stock=stock)
+            .order_by("group__display_order", "group__name")
+        )
+
+    @staticmethod
     def _sync_owner_group(serializer, stock):
         """The single-category `group` field writes through to the owner's categories."""
         if "group" in serializer.validated_data:
@@ -117,8 +136,13 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             set_user_stock_groups(stock.user, stock, [group.pk] if group else [])
 
     def perform_create(self, serializer):
+        my_groups = None
+        if "my_groups" in self.request.data:
+            my_groups = self._parse_group_ids(self.request.user, self.request.data["my_groups"], "my_groups")
         stock = serializer.save(user=self.request.user)
         self._sync_owner_group(serializer, stock)
+        if my_groups is not None:
+            set_user_stock_groups(stock.user, stock, my_groups)
         if stock.national_code:
             regulatory_services.link_stock(stock, offer_name=True, touch_updated_at=True)
         logger.info("Stock %r created (user %s).", stock.name, self.request.user.username)
@@ -167,14 +191,23 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             group = None
 
         set_user_stock_groups(request.user, stock, [group.pk] if group else [])
-        stock._my_group_override = list(
-            UserStockGroup.objects.select_related("group")
-            .filter(user=request.user, stock=stock)
-            .order_by("group__display_order", "group__name")
-        )
+        self._load_my_groups(stock, request.user)
 
         serializer = self.get_serializer(stock)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["put"], url_path="my-groups")
+    def my_groups(self, request, pk=None):
+        """Replace the requesting user's categories for this stock.
+
+        Anyone with access may call it: categories are personal, so a
+        recipient files a shared stock without being able to edit it.
+        """
+        stock = self.get_object()
+        group_ids = self._parse_group_ids(request.user, request.data.get("groups"), "groups")
+        set_user_stock_groups(request.user, stock, group_ids)
+        self._load_my_groups(stock, request.user)
+        return Response(self.get_serializer(stock).data)
 
     @action(detail=True, methods=["post", "delete"], url_path="pin")
     def pin(self, request, pk=None):
@@ -194,34 +227,11 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             UserStockPin.objects.filter(user=request.user, stock=stock).delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        limit = settings.STOCK_MAX_PINNED_ITEMS
-        # Create first, then check: two tabs racing past a count-then-create
-        # would both pass the check and leave the user over the limit. Doing
-        # it in this order inside one transaction makes the count authoritative.
-        with transaction.atomic():
-            existing = UserStockPin.objects.filter(user=request.user).count()
-            pin, created = UserStockPin.objects.get_or_create(
-                user=request.user,
-                stock=stock,
-                defaults={"display_order": existing},
-            )
-            over_limit = created and UserStockPin.objects.filter(user=request.user).count() > limit
-            if over_limit:
-                pin.delete()
-
-        if over_limit:
-            # A plain Response rather than a raised ValidationError: DRF
-            # coerces every value in a ValidationError detail to a string, and
-            # the client needs `max` as a number and `code` unwrapped.
-            return Response(
-                {
-                    "code": "max_pinned_reached",
-                    "max": limit,
-                    "detail": f"You can pin at most {limit} items.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        pin, _ = UserStockPin.objects.get_or_create(
+            user=request.user,
+            stock=stock,
+            defaults={"display_order": UserStockPin.objects.filter(user=request.user).count()},
+        )
         stock._my_pin = [pin]
         return Response(self.get_serializer(stock).data)
 
@@ -252,10 +262,11 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             stock.save(update_fields=["updated_at"])
 
         logger.info("Stock %r consumed %d unit(s) (user %s).", stock.name, quantity, request.user.username)
-        stock.refresh_from_db()
-        stock = Stock.objects.prefetch_related("lots").get(pk=stock.pk)
+        # Through the viewer's queryset and context: this response replaces the
+        # cached row, so its per-viewer fields (pin, categories) must be real.
+        stock = self.get_queryset().get(pk=stock.pk)
         # Additive: clients keep reading the stock; the id is what Undo needs.
-        return Response({**StockSerializer(stock).data, "consumption_id": consumption.id})
+        return Response({**self.get_serializer(stock).data, "consumption_id": consumption.id})
 
     @action(detail=True, methods=["get"], url_path="regulatory")
     def regulatory(self, request, pk=None):

@@ -345,10 +345,6 @@ class UserStockPin(models.Model):
     ``UserStockGroup`` exists: on a shared stock each person keeps their own
     view. It also sidesteps ``IsOwner`` on stock writes — a recipient must be
     able to pin something they do not own.
-
-    The cap on how many a user may pin is a product decision and lives in
-    settings (``STOCK_MAX_PINNED_ITEMS``), not in a database constraint that
-    would turn changing the number into a migration.
     """
 
     user = models.ForeignKey(

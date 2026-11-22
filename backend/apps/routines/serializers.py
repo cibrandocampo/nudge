@@ -204,6 +204,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
     user_timezone = serializers.CharField(source="user.timezone", read_only=True)
     my_group = serializers.SerializerMethodField()
     my_group_name = serializers.SerializerMethodField()
+    my_groups = serializers.SerializerMethodField()
     regulatory = serializers.SerializerMethodField()
 
     class Meta:
@@ -215,6 +216,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "group_name",
             "my_group",
             "my_group_name",
+            "my_groups",
             "quantity",
             "quantity_available",
             "quantity_soon",
@@ -252,6 +254,7 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
             "group_name",
             "my_group",
             "my_group_name",
+            "my_groups",
             "lots",
             "requires_lot_selection",
             "is_pinned",
@@ -592,6 +595,21 @@ class StockSerializer(SharedWithMixin, FlexFieldsModelSerializer):
         if not override or not override.group:
             return None
         return override.group.name
+
+    def get_my_groups(self, obj):
+        """The viewer's categories for this stock, in their list order.
+
+        Reads the `_my_group_override` prefetch so list endpoints stay
+        query-free; a stock that did not come through it (just created) is
+        looked up.
+        """
+        request = self.context.get("request")
+        if not request:
+            return []
+        rows = getattr(obj, "_my_group_override", None)
+        if rows is None:
+            rows = obj.group_overrides.filter(user=request.user).order_by("group__display_order", "group__name")
+        return [row.group_id for row in rows]
 
     def get_is_pinned(self, obj):
         """Whether the viewer has pinned this stock.
