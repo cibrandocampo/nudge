@@ -3,8 +3,8 @@ import { loginAsUser1 } from './helpers.js'
 
 /**
  * Bottom bar V2 (T151, UX-012): every tab is labelled, not only the active
- * one (that was T105, overturned), and the active tab carries a pill behind
- * its icon. jsdom applies no CSS, so these two contracts live here.
+ * one (that was T105, overturned), and a sliding tile sits behind the active
+ * tab. jsdom applies no CSS, so these two contracts live here.
  */
 test.describe('Bottom bar', () => {
   // A phone: T105 hid the inactive labels only below 600 px.
@@ -38,13 +38,16 @@ test.describe('Bottom bar', () => {
     ])
   })
 
-  test('only the active tab carries the pill', async ({ page }) => {
-    const pills = await page.locator('nav').first().evaluate((nav) =>
-      [...nav.querySelectorAll('a, button')].map((tab) => {
-        const before = getComputedStyle(tab.querySelector(':scope > span > span:first-child'), '::before')
-        return before.content !== 'none' && before.backgroundColor !== 'rgba(0, 0, 0, 0)'
-      }),
-    )
-    expect(pills).toEqual([true, false, false, false])
+  test('the selection tile sits on the active tab', async ({ page }) => {
+    const nav = page.locator('nav').first()
+    await page.locator('nav a[href="/inventory"]').click()
+    await expect(page.locator('nav a[aria-current="page"]')).toHaveAttribute('href', '/inventory')
+    await expect
+      .poll(async () => {
+        const tile = await nav.getByTestId('nav-indicator').boundingBox()
+        const tab = await nav.locator('a[href="/inventory"]').boundingBox()
+        return Math.abs(tile.x - tab.x) <= 1 && Math.abs(tile.width - tab.width) <= 1
+      })
+      .toBe(true)
   })
 })

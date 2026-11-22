@@ -66,7 +66,7 @@ test.describe('install prompt — iPhone UA', () => {
   test('Settings lists both actions with their risk and does not repeat the notice', async ({ page }) => {
     await loginAsUser1(page)
     await page.getByTestId('notice-pending-action').click()
-    await expect(page.getByTestId('pending-install')).toContainText('reminders may arrive late')
+    await expect(page.getByTestId('pending-install')).toContainText("On iPhone, you won't get reminders")
     // On iPhone notifications wait for the install.
     await expect(page.getByTestId('pending-push')).toContainText('Install the app first')
     await expect(page.getByTestId('notice-pending')).toHaveCount(0)
