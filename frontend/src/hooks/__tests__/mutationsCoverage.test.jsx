@@ -17,6 +17,7 @@ import { useUpdateMe } from '../mutations/useUpdateMe'
 import { useUpdateRoutine } from '../mutations/useUpdateRoutine'
 import { useLogRoutine } from '../mutations/useLogRoutine'
 import { useConsumeStock } from '../mutations/useConsumeStock'
+import { useUndoConsumeStock } from '../mutations/useUndoConsumeStock'
 import { useUpdateStockLot } from '../mutations/useUpdateStockLot'
 import { useCreateStockLot } from '../mutations/useCreateStockLot'
 import { useDeleteStockLot } from '../mutations/useDeleteStockLot'
@@ -897,6 +898,15 @@ describe('T109 — label persistence across the rest of the queueable hooks', ()
       vars: { entryId: 55, routineName: 'Stretch' },
       expectedKey: 'offline.label.undoLogRoutine',
       expectedArgs: { name: 'Stretch' },
+    },
+    {
+      name: 'useUndoConsumeStock',
+      hook: () => useUndoConsumeStock(),
+      method: 'delete',
+      path: '/stock-consumptions/9/',
+      vars: { consumptionId: 9, stockId: 4, stockName: 'Filters' },
+      expectedKey: 'offline.label.undoConsumeStock',
+      expectedArgs: { name: 'Filters' },
     },
     {
       name: 'useUpdateRoutine',

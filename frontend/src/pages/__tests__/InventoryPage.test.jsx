@@ -156,8 +156,15 @@ describe('InventoryPage — stock cards', () => {
 })
 
 describe('InventoryPage — −1 lot picker', () => {
-  it('opens LotPickerModal when the −1 button is clicked', async () => {
-    mockStocks([stock()])
+  it('opens LotPickerModal when there is more than one lot to choose from', async () => {
+    mockStocks([
+      stock({
+        lots: [
+          { id: 10, quantity: 3, expiry_date: '2099-01-01', lot_number: 'LOT-A' },
+          { id: 11, quantity: 2, expiry_date: '2100-01-01', lot_number: 'LOT-B' },
+        ],
+      }),
+    ])
     mockGroups([])
     const { user } = renderPage()
     await screen.findByText('Water filter')
@@ -233,7 +240,20 @@ describe('InventoryPage — −1 lot picker', () => {
     let gone = false
     mockGroups([])
     server.use(
-      http.get(`${BASE}/stock/`, () => HttpResponse.json(gone ? [] : [stock()])),
+      http.get(`${BASE}/stock/`, () =>
+        HttpResponse.json(
+          gone
+            ? []
+            : [
+                stock({
+                  lots: [
+                    { id: 10, quantity: 3, expiry_date: '2099-01-01', lot_number: 'LOT-A' },
+                    { id: 11, quantity: 2, expiry_date: '2100-01-01', lot_number: 'LOT-B' },
+                  ],
+                }),
+              ],
+        ),
+      ),
       http.post(`${BASE}/stock/1/consume/`, () => {
         gone = true
         return HttpResponse.json({ detail: 'Not found.' }, { status: 404 })
@@ -251,23 +271,47 @@ describe('InventoryPage — −1 lot picker', () => {
     expect(within(dialog).getByText('LOT-A')).toBeInTheDocument()
   })
 
-  it('shows an error toast and does not open the picker when the stock has no lots', async () => {
-    // Defensive guard: the card hides the −1 button when quantity is 0, but
-    // backend drift could surface a stock whose quantity > 0 yet whose lots
-    // array is empty. In that case handleConsume short-circuits to a toast.
+  it('consumes directly, with Undo, when there is a single lot', async () => {
+    let consumeBody = null
+    mockStocks([stock()])
+    mockGroups([])
+    server.use(
+      http.post(`${BASE}/stock/1/consume/`, async ({ request }) => {
+        consumeBody = await request.json()
+        return HttpResponse.json({ ...stock(), quantity: 4, consumption_id: 5 })
+      }),
+    )
+    const { user } = renderPage()
+    await screen.findByText('Water filter')
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+
+    expect(await screen.findByRole('button', { name: 'Undo' })).toBeInTheDocument()
+    expect(consumeBody.lot_selections).toBeUndefined()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('refuses without opening the picker when the stock has no lots', async () => {
+    // Backend drift could surface a quantity > 0 with an empty lots array.
     mockStocks([stock({ lots: [] })])
     mockGroups([])
     const { user } = renderPage()
     await screen.findByText('Water filter')
 
     await user.click(screen.getByLabelText('Consume 1 unit'))
-    expect(await screen.findByText('Something went wrong. Please try again.')).toBeInTheDocument()
+    expect(await screen.findByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('cancelling the modal does not consume', async () => {
     let consumeCalls = 0
-    mockStocks([stock()])
+    mockStocks([
+      stock({
+        lots: [
+          { id: 10, quantity: 3, expiry_date: '2099-01-01', lot_number: 'LOT-A' },
+          { id: 11, quantity: 2, expiry_date: '2100-01-01', lot_number: 'LOT-B' },
+        ],
+      }),
+    ])
     mockGroups([])
     server.use(
       http.post(`${BASE}/stock/1/consume/`, () => {
