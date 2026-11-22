@@ -135,7 +135,9 @@
    (stockform-buttons-visual.spec). In rem so it grows with the type scale and
    the text-size setting: at 14 px «Share with…» outgrew a fixed 128 px. */
 .formSecondaryBtn {
-  min-width: 9.5rem;
+  /* Never wider than its row: at 320 px with «Extra large», 9.5rem pushed the
+     second button off the screen and the browser zoomed the page out (T158). */
+  min-width: min(9.5rem, 100%);
 }
 
 /* ── Icon buttons ────────────────────────────────────────────── */

@@ -23,9 +23,10 @@
   gap: 0.4rem;
 }
 
-/* Single mode (radio) row */
+/* Single mode (radio) row. The expiry drops to its own line when narrow. */
 .item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
   padding: 0.55rem 0.75rem;
@@ -82,7 +83,8 @@
 }
 
 .label {
-  flex: 1;
+  flex: 1 1 3.5rem;
+  min-width: 0;
   font-size: var(--fs-sm);
   color: var(--c-text);
 }
@@ -96,6 +98,7 @@
 .expiry {
   font-size: var(--fs-xs);
   color: var(--c-text-3);
+  white-space: nowrap;
 }
 
 .qtyRow {
