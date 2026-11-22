@@ -295,6 +295,7 @@ export const SCENES = [
     user: 'user1',
     run: async ({ page, ids }) => {
       await go(page, `/inventory/${ids.stock(S.hidroferol)}`)
+      await page.getByTestId('medicine-toggle').click()
       await expect(page.getByTestId('regulatory-official-name')).toBeVisible()
       await expect(page.getByTestId('leaflet-sections')).toBeVisible()
     },

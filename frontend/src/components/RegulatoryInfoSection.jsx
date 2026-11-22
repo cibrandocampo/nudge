@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OfflineError } from '../api/errors'
 import { useRefreshRegulatory } from '../hooks/mutations/useRefreshRegulatory'
@@ -48,9 +48,14 @@ function packDescription(officialName, presentationName) {
  * States of the fetch: `pending` (in flight: a first fetch has nothing to
  * show yet, a refresh keeps the last data under an indicator), `not_found`
  * (the agency has no such code), `error` (the last good data stays, if any).
+ *
+ * Foldable on the product page (T206): pass `onToggle` and `open`. The content
+ * stays mounted while folded, so it keeps its state and the data keeps loading.
+ * `toggleRef` lets the page move the focus to the title.
  */
-export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
+export default function RegulatoryInfoSection({ stock, isOwner, reachable, open = true, onToggle, toggleRef }) {
   const { t, i18n } = useTranslation()
+  const bodyId = useId()
   const { showToast } = useToast()
   const summary = stock.regulatory
   const { data: detail } = useRegulatoryDetail(stock.id, summary)
@@ -96,8 +101,23 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
 
   return (
     <section className={s.section} data-testid="regulatory-section">
-      <p className={layout.sectionTitle}>{t('regulatory.title')}</p>
-      <div className={s.card}>
+      {onToggle ? (
+        <button
+          ref={toggleRef}
+          type="button"
+          className={s.toggle}
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={onToggle}
+          data-testid="medicine-toggle"
+        >
+          <span className={layout.sectionTitle}>{t('regulatory.title')}</span>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size="sm" />
+        </button>
+      ) : (
+        <p className={layout.sectionTitle}>{t('regulatory.title')}</p>
+      )}
+      <div id={bodyId} className={s.card} hidden={!open}>
         {hasData && (
           <div className={s.identity}>
             {/* The agency's name is long and upper case: labelled and kept
