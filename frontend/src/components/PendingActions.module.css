@@ -1,0 +1,109 @@
+/* The bottom bar's language (navy tile, yellow accents): what reminders depend
+   on is the first thing in Settings. */
+.panel {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  background: var(--c-nav-active);
+  color: var(--c-on-nav-active);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--c-brand);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.intro {
+  margin: 0.1rem 0 0;
+  font-size: var(--fs-sm);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.row:last-child {
+  padding-bottom: 0;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowTitle {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.risk,
+.note {
+  margin: 0.15rem 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.note {
+  font-weight: 700;
+  color: var(--c-brand);
+}
+
+.cta {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--c-brand);
+  color: var(--c-nav-active);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* No room beside the text: the action takes a line of its own. */
+@container (max-width: 20rem) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .text {
+    flex: 1 1 0;
+  }
+
+  .cta {
+    flex-basis: 100%;
+  }
+}

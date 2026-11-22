@@ -2784,6 +2784,20 @@ class SerializedLotUndoTest(APITestCase):
         self.assertEqual(response.status_code, 403)
         self.assertTrue(RoutineEntry.objects.filter(pk=entry.pk).exists())
 
+    def test_shared_user_can_undo_their_own_entry(self):
+        """A recipient who logged a shared routine can reverse that log."""
+        recipient = make_user(username="recipient")
+        self.routine.shared_with.add(recipient)
+        entry = make_entry(self.routine)
+        entry.completed_by = recipient
+        entry.save(update_fields=["completed_by"])
+
+        self.client.force_authenticate(user=recipient)
+        response = self.client.delete(f"/api/entries/{entry.id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(RoutineEntry.objects.filter(pk=entry.pk).exists())
+
 
 # ── Dashboard view ────────────────────────────────────────────────────────────
 

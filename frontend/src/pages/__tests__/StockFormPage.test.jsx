@@ -1004,7 +1004,7 @@ describe('StockFormPage — leaving the form and batch details', () => {
 
   it('the back link returns to where the form was opened from', async () => {
     const { user } = renderFromInventory()
-    await user.click(screen.getByRole('button', { name: '← Back to inventory' }))
+    await user.click(screen.getByRole('button', { name: 'Back to inventory' }))
     expect(await screen.findByText('Inventory stub')).toBeInTheDocument()
   })
 

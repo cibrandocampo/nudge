@@ -591,11 +591,11 @@ class RoutineEntryViewSet(
         `.get()` returning None is treated as "no serial".
         """
         entry = self.get_object()
-        # Only the owner can delete history entries. Shared users can see
-        # but not undo another user's action.
-        if entry.routine.user_id != request.user.id:
+        # The owner, or whoever completed it: a recipient can log a shared
+        # routine, so they can undo their own log, but not someone else's.
+        if request.user.id not in (entry.routine.user_id, entry.completed_by_id):
             return Response(
-                {"detail": "Only the owner can delete this entry."},
+                {"detail": "Only the owner or who completed it can delete this entry."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

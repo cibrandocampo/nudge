@@ -425,6 +425,19 @@ describe('BarcodeScannerModal', () => {
     expect(navigator.mediaDevices.getUserMedia.mock.calls[0][0].video.deviceId).toEqual({ exact: 'id-0' })
   })
 
+  it('the camera switch shows the app icon and its text, with no emoji (UX-037)', async () => {
+    mockCamera({ activeDeviceId: 'id-0' })
+    mockDevices([
+      { deviceId: 'id-0', label: 'camera 0, facing back' },
+      { deviceId: 'id-2', label: 'camera 2, facing back' },
+    ])
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
+    const button = await screen.findByTestId('scan-camera')
+    expect(button).toHaveTextContent('Switch camera')
+    expect(button.textContent).not.toMatch(/\p{Extended_Pictographic}/u)
+    expect(button.querySelector('use')).toHaveAttribute('href', '#i-switch-camera')
+  })
+
   it('cycles to the next rear lens on request rather than reopening the current one', async () => {
     mockCamera({ activeDeviceId: 'id-0' })
     mockDevices([

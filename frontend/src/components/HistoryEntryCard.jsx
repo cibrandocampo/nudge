@@ -160,7 +160,7 @@ export default function HistoryEntryCard({
           {showTitle && (
             <span className={cx(cards.cardTitle, cards.cardTitleFlex, s.entryName)}>
               <Icon name={isRoutine ? 'badge-check' : 'package'} size="sm" />
-              <span>{title}</span>
+              <span className={cards.clampName}>{title}</span>
             </span>
           )}
           {entry.consumed_lots?.length > 0 && (
@@ -238,7 +238,7 @@ export default function HistoryEntryCard({
           {editable && !entry.notes && (
             <button
               type="button"
-              className={buttons.btnIcon}
+              className={buttons.icon}
               onClick={onStartEdit}
               aria-label={t('history.addNote')}
               title={t('history.addNote')}
@@ -274,7 +274,7 @@ export default function HistoryEntryCard({
               />
               <button
                 type="button"
-                className={cx(buttons.btnIcon, s.notesEdit)}
+                className={cx(buttons.icon, s.notesEdit)}
                 onClick={() => onSave(draft)}
                 aria-label={t('common.save')}
                 title={t('common.save')}
@@ -294,7 +294,7 @@ export default function HistoryEntryCard({
               {editable && (
                 <button
                   type="button"
-                  className={cx(buttons.btnIcon, s.notesEdit)}
+                  className={cx(buttons.icon, s.notesEdit)}
                   onClick={onStartEdit}
                   aria-label={t('history.editNotes')}
                   title={t('history.editNotes')}

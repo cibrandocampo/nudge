@@ -11,21 +11,8 @@
   gap: 0.75rem;
 }
 
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  padding: 0.25rem 0.5rem 0.25rem 0;
-}
-.back:hover {
-  color: var(--c-text-2);
-}
-
+/* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
+   padding so the text lines up with the content below. */
 .form {
   display: flex;
   flex-direction: column;
@@ -86,9 +73,9 @@
   flex-shrink: 0;
 }
 
-/* Submit button grows to fill the footer while Cancel stays at 128 px
-   via `.formSecondaryBtn`. Both share the same 36 px height through
-   that shared class. */
+/* Submit button grows to fill the footer while Cancel keeps the common
+   min-width of `.formSecondaryBtn`. Both are 44 px tall (`buttons.btn`).
+ */
 .submitBtn {
   flex: 1;
 }

@@ -1,17 +1,13 @@
 import { useLayoutEffect } from 'react'
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, matchPath, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
-import { useInstallPrompt } from '../hooks/useInstallPrompt'
-import { usePushStatus } from '../hooks/usePushStatus'
 import { useRoutines } from '../hooks/useRoutines'
 import { useServerReachable } from '../hooks/useServerReachable'
-import AlertBanner from './AlertBanner'
 import AutoUpdater from './AutoUpdater'
 import Header from './Header'
 import Icon from './Icon'
-import InstallBanner from './InstallBanner'
-import OfflineBanner from './OfflineBanner'
+import NoticeSlot from './NoticeSlot'
 import { useToast } from './useToast'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
@@ -25,10 +21,7 @@ import s from './Layout.module.css'
 const LOCKED_OFFLINE_ROUTES = new Set(['/history', '/settings'])
 
 export default function Layout() {
-  const { active } = usePushStatus()
-  const { canInstall } = useInstallPrompt()
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { data: routines = [] } = useRoutines()
   const hasPendingRoutines = routines.some((r) => r.is_due)
   const reachable = useServerReachable()
@@ -47,22 +40,28 @@ export default function Layout() {
 
   // Pending routines show as the brand dot on the icon, not as a different
   // icon (T105).
+  // `match`: the routes that belong to each tab, so a routine's or a product's
+  // own screens keep their section marked.
   const NAV = [
-    { to: '/', icon: 'list-checks', label: t('nav.home'), end: true },
-    { to: '/inventory', icon: 'nav-inventory', label: t('nav.inventory'), end: false },
-    { to: '/history', icon: 'history', label: t('nav.history'), end: false },
-    { to: '/settings', icon: 'nav-settings', label: t('nav.settings'), end: false },
+    { to: '/', icon: 'list-checks', label: t('nav.home'), match: ['/', '/routines/*'] },
+    { to: '/inventory', icon: 'nav-inventory', label: t('nav.inventory'), match: ['/inventory/*'] },
+    { to: '/history', icon: 'history', label: t('nav.history'), match: ['/history/*'] },
+    { to: '/settings', icon: 'nav-settings', label: t('nav.settings'), match: ['/settings/*'] },
   ]
+
+  // The block is one element that slides between tabs. A locked tab cannot be
+  // the current one, so it never sits under a disabled control.
+  const activeTab = NAV.findIndex(
+    ({ to, match }) => match.some((path) => matchPath(path, pathname)) && (reachable || !LOCKED_OFFLINE_ROUTES.has(to)),
+  )
 
   // The dots hang off `iconWrap`, not `linkInner`: the label can be wider
   // than the icon, and the dot belongs on the icon's corner at either size.
   const renderInner = (icon, label, to) => (
     <span className={s.linkInner}>
       <span className={s.iconWrap}>
-        <Icon name={icon} size="lg" />
-        {to === '/settings' && !active && (
-          <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
-        )}
+        <Icon name={icon} size="lg" className={s.iconLine} />
+        <Icon name={`${icon}-fill`} size="lg" className={s.iconFill} />
         {to === '/' && hasPendingRoutines && (
           <span className={cx(cards.dot, cards.dotBrand, s.badge)} aria-hidden="true" />
         )}
@@ -75,18 +74,19 @@ export default function Layout() {
     <div className={s.root}>
       <AutoUpdater />
       <Header />
-      <InstallBanner />
-      <OfflineBanner />
-      {!canInstall && !active && (
-        <AlertBanner variant="warning" icon="alert-triangle" onClick={() => navigate('/settings#push')}>
-          {t('settings.pushAlert')}
-        </AlertBanner>
-      )}
+      {/* One notice at a time: offline, unsaved changes, install, notifications (T155). */}
+      <NoticeSlot />
       <main className={s.main}>
         <Outlet />
       </main>
       <nav className={s.nav}>
-        {NAV.map(({ to, icon, label, end }) => {
+        <span
+          className={cx(s.indicator, activeTab < 0 && s.indicatorHidden)}
+          style={{ '--tab': Math.max(activeTab, 0) }}
+          aria-hidden="true"
+          data-testid="nav-indicator"
+        />
+        {NAV.map(({ to, icon, label }, index) => {
           const isLocked = !reachable && LOCKED_OFFLINE_ROUTES.has(to)
           if (isLocked) {
             return (
@@ -104,15 +104,15 @@ export default function Layout() {
             )
           }
           return (
-            <NavLink
+            <Link
               key={to}
               to={to}
-              end={end}
               aria-label={label}
-              className={({ isActive }) => cx(s.link, isActive && s.linkActive)}
+              aria-current={index === activeTab ? 'page' : undefined}
+              className={cx(s.link, index === activeTab && s.linkActive)}
             >
               {renderInner(icon, label, to)}
-            </NavLink>
+            </Link>
           )
         })}
       </nav>

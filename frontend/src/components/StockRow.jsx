@@ -67,7 +67,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
       <div className={s.main}>
         <span className={cx(cards.dot, tokens.dot)} />
         <span className={s.nameGroup}>
-          <span className={s.name}>{stock.name}</span>
+          <span className={cx(s.name, cards.clampName)}>{stock.name}</span>
           {isShared && (
             <span
               className={cards.sharedIcon}
@@ -100,8 +100,8 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           <button
             type="button"
             className={cx(
-              buttons.btnIcon,
-              buttons.btnIconConsume,
+              buttons.icon,
+              buttons.iconFilled,
               outOfStock && s.consumeEmpty,
               consuming && buttons.disabled,
             )}
@@ -116,7 +116,7 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           </button>
           <button
             type="button"
-            className={cx(buttons.btnIcon, s.detailChevron)}
+            className={cx(buttons.icon, s.detailChevron)}
             onClick={goDetail}
             aria-label={t('common.openDetail')}
             title={t('common.openDetail')}

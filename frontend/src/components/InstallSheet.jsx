@@ -2,6 +2,8 @@ import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Icon from './Icon'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './InstallSheet.module.css'
 
 /**
@@ -75,7 +77,12 @@ export default function InstallSheet({ platform, onClose }) {
           <h2 id={titleId} className={s.title}>
             {t(variant.titleKey)}
           </h2>
-          <button type="button" className={s.closeBtn} onClick={onClose} aria-label={t('pwa.install.sheetClose')}>
+          <button
+            type="button"
+            className={cx(buttons.hit, s.closeBtn)}
+            onClick={onClose}
+            aria-label={t('pwa.install.sheetClose')}
+          >
             <Icon name="x" size="sm" />
           </button>
         </div>

@@ -12,6 +12,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 8px;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   margin-bottom: 0.75rem;
 }
@@ -25,6 +26,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-xxl);
+  box-shadow: var(--shadow-card);
   margin-bottom: 0.9rem;
 }
 
@@ -108,7 +110,7 @@
    directly under the app header. */
 .groupHeaderSticky {
   position: sticky;
-  top: calc(48px + var(--inventory-bar-h, 0px));
+  top: calc(var(--header-h) + var(--inventory-bar-h, 0px));
   z-index: 30;
   background: var(--c-surface);
 }
@@ -119,6 +121,7 @@
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-xxl);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   margin-bottom: 0.9rem;
 }

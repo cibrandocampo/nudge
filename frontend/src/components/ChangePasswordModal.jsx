@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import ModalFrame from './ModalFrame'
 import PasswordInput from './PasswordInput'
 import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import forms from '../styles/forms.module.css'
 import s from './ChangePasswordModal.module.css'
 
@@ -60,10 +61,10 @@ export default function ChangePasswordModal({ onClose }) {
           />
           {error && <p className={forms.error}>{error}</p>}
           <div className={s.actions}>
-            <button type="button" className={buttons.btnCancel} onClick={onClose}>
+            <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={onClose}>
               {t('common.cancel')}
             </button>
-            <button type="submit" className={buttons.btnConfirm} disabled={saving}>
+            <button type="submit" className={cx(buttons.btn, buttons.primary)} disabled={saving}>
               {saving ? t('header.saving') : t('header.save')}
             </button>
           </div>

@@ -28,9 +28,13 @@ import s from './StockLotsList.module.css'
  *                  'reached'). Passed in rather than computed here so the page
  *                  and this list can never disagree by a millisecond.
  *   reachable    — from `useServerReachable()`; gates the delete affordance
+ *   editing      — «Edit» mode (`useEditMode`, T153): only then does a row
+ *                  show its delete button; at rest the list carries no trash
+ *                  per row (UX-036)
  *   onRemoveLot  — called with the full lot row (needs `id` and `updated_at`)
+ *   id           — on the list, so the section's `EditToggle` can point at it
  */
-export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
+export default function StockLotsList({ lots, today, reachable, editing = false, onRemoveLot, id }) {
   const { t } = useTranslation()
 
   // Keys of the lot groups whose individual boxes are on screen. Purely local:
@@ -46,21 +50,38 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
 
   if (lotGroups.length === 0) return null
 
-  const deleteButton = (lot) => (
-    <button
-      type="button"
-      className={cx(buttons.btnIcon, buttons.btnIconDelete, !reachable && buttons.disabled)}
-      onClick={() => onRemoveLot(lot)}
-      aria-disabled={!reachable}
-      aria-label={t('inventory.deleteTooltip')}
-      title={!reachable ? t('offline.pageUnavailable') : t('inventory.deleteTooltip')}
-    >
-      <Icon name="trash" size="sm" />
-    </button>
-  )
+  // Only in «Edit» mode. Its name says which lot or box it removes: in edit
+  // mode every row has one, and a list of identical «Delete» is no help to a
+  // screen reader.
+  const deleteButton = (lot, label) =>
+    editing && (
+      <button
+        type="button"
+        className={cx(buttons.icon, buttons.iconDanger, !reachable && buttons.disabled)}
+        onClick={() => onRemoveLot(lot)}
+        aria-disabled={!reachable}
+        aria-label={label}
+        title={!reachable ? t('offline.pageUnavailable') : label}
+        data-testid="row-delete"
+      >
+        <Icon name="trash" size="sm" />
+      </button>
+    )
+
+  const groupLabel = (group) =>
+    group.lot_number ? t('stockDetail.deleteLot', { name: group.lot_number }) : t('stockDetail.deleteLotNoNumber')
+
+  const packLabel = (lot) =>
+    lot.serial_number
+      ? t('stockDetail.deleteBox', { serial: lot.serial_number })
+      : t('stockDetail.deleteBoxUnidentified')
+
+  const isExpandable = (group) => group.rows.length > 1 || group.rows.some((row) => row.serial_number)
 
   return (
-    <LotRowList lots={lots} trailing className={s.lotsList}>
+    // The trailing column exists when a row has a control in it: an expander,
+    // or a delete button in edit mode.
+    <LotRowList lots={lots} trailing={editing || lotGroups.some(isExpandable)} className={s.lotsList} id={id}>
       {lotGroups.map((group) => {
         // Several rows sharing lot number and expiry are several physical
         // boxes: the group collapses them and expands to show each one by its
@@ -71,15 +92,15 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
         // is the delete button and the serial has nowhere to appear — so the
         // last remaining box of a batch becomes impossible to look up, which
         // is the opposite of what a serial is for.
-        const isExpandable = group.rows.length > 1 || group.rows.some((row) => row.serial_number)
+        const expandable = isExpandable(group)
         const expanded = expandedGroups.includes(group.key)
         return (
           <Fragment key={group.key}>
             <LotRow group={group} today={today} testId="lot-row">
-              {isExpandable ? (
+              {expandable ? (
                 <button
                   type="button"
-                  className={cx(buttons.btnIcon, s.groupExpander)}
+                  className={cx(buttons.icon, s.groupExpander)}
                   onClick={() => toggleGroup(group.key)}
                   aria-expanded={expanded}
                   // The name starts with the visible count (WCAG 2.5.3): someone
@@ -95,10 +116,10 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
                   <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size="sm" />
                 </button>
               ) : (
-                deleteButton(group.rows[0])
+                deleteButton(group.rows[0], groupLabel(group))
               )}
             </LotRow>
-            {isExpandable &&
+            {expandable &&
               expanded &&
               group.rows.map((lot) => (
                 <LotRowShell
@@ -120,7 +141,7 @@ export default function StockLotsList({ lots, today, reachable, onRemoveLot }) {
                       {lot.serial_number || t('lot.modal.unidentifiedUnits')}
                     </span>
                   }
-                  trailing={deleteButton(lot)}
+                  trailing={deleteButton(lot, packLabel(lot))}
                 />
               ))}
           </Fragment>

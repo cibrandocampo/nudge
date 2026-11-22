@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers.js'
+import { chooseFromMoreMenu, enterEditMode, login } from './helpers.js'
 
 test.describe('Inventory', () => {
   test.beforeEach(async ({ page }) => {
@@ -58,7 +58,7 @@ test.describe('Inventory', () => {
     await page.getByRole('button', { name: 'Create' }).click()
     await expect(page).toHaveURL(/\/inventory\/\d+$/)
 
-    await page.getByRole('button', { name: 'Delete stock' }).click()
+    await chooseFromMoreMenu(page, 'menu-delete')
     await page.getByRole('dialog').getByRole('button', { name: 'Delete stock' }).click()
 
     await expect(page).toHaveURL('/inventory')
@@ -82,15 +82,11 @@ test.describe('Inventory', () => {
     // Wait for the optimistic lot to settle into the list.
     await expect(page.getByText('3 total', { exact: false })).toBeVisible({ timeout: 10_000 })
 
-    // Delete the lot via the trash icon + confirm. Scope the trash icon
-    // to the lot row so we don't hit the top-bar "Delete stock" button
-    // by accident — `getByTitle('Delete').last()` is fragile because
-    // both buttons share the same title prefix.
-    // Use the stable testid; the CSS module class was renamed to
-    // ``cardLotRow`` in T169, which a `[class*="lotRow"]` substring
-    // selector does not match (the camelCase L is uppercase).
+    // Delete the lot: the lots' «Edit» mode (T153) shows its trash, scoped
+    // to the row by the stable test ids, then confirm.
     const lotRow = page.getByTestId('lot-row').first()
-    await lotRow.getByRole('button', { name: 'Delete' }).click()
+    await enterEditMode(page)
+    await lotRow.getByTestId('row-delete').click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
 
     await expect(page.getByText('0 total', { exact: false })).toBeVisible({ timeout: 10_000 })

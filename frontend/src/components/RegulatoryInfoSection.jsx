@@ -204,7 +204,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                 {activeNote.urls.map((url) => (
                   <a
                     key={url}
-                    className={cx(buttons.btn, buttons.btnSecondary, s.actionBtn, s.problemOpen)}
+                    className={cx(buttons.btn, buttons.secondary, s.actionBtn, s.problemOpen)}
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -264,7 +264,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
                           only a web address is followed. */}
                       {WEB_URL.test(notice.url) && (
                         <a
-                          className={cx(buttons.btnIcon, buttons.btnIconOutline, s.noticeOpen)}
+                          className={cx(buttons.icon, buttons.outlined, s.noticeOpen)}
                           href={notice.url}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -297,7 +297,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
             <div className={s.footerActions}>
               {detail?.agency_url && (
                 <a
-                  className={cx(buttons.btn, buttons.btnSecondary, s.actionBtn)}
+                  className={cx(buttons.btn, buttons.secondary, s.actionBtn)}
                   href={detail.agency_url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -310,7 +310,7 @@ export default function RegulatoryInfoSection({ stock, isOwner, reachable }) {
               {isOwner && (
                 <button
                   type="button"
-                  className={cx(buttons.btnIcon, buttons.btnIconOutline)}
+                  className={cx(buttons.icon, buttons.outlined)}
                   onClick={onRefresh}
                   disabled={!reachable || refresh.isPending}
                   aria-label={t('regulatory.refresh')}

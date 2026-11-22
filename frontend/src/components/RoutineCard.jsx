@@ -220,7 +220,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
     <div className={cards.cardHeader}>
       <div className={cards.cardMeta}>
         <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-          <span className={s.name}>{routine.name}</span>
+          <span className={cards.clampName}>{routine.name}</span>
           {sharedBadge}
           <SyncStatusBadge resourceKey={resourceKey} className={s.syncBadge} />
         </span>

@@ -108,34 +108,6 @@
   justify-content: flex-end;
 }
 
-.btn {
-  padding: 0.3rem 0.75rem;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  border-radius: var(--radius);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all var(--transition);
-}
-
-.btnPrimary {
-  background: var(--c-primary);
-  color: var(--c-on-primary);
-  border-color: var(--c-primary);
-}
-.btnPrimary:hover {
-  background: var(--c-primary-hover);
-}
-
-.btnSecondary {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border-color: var(--c-outline);
-}
-.btnSecondary:hover {
-  background: var(--c-border-inner);
-}
-
 @media (min-width: 520px) {
   .diffCell {
     flex-direction: row;

@@ -13,8 +13,11 @@
  *   getPlatform()            — 'ios' | 'android-chromium' | 'firefox-android' | 'other'
  *   hasNativePrompt()        — `beforeinstallprompt` was captured?
  *   isInstalledThisSession() — user installed during this page lifetime?
+ *   waitForNativePrompt()    — is a prompt available, waiting briefly for it where one can come?
  *   triggerNativePrompt()    — fire the captured prompt; resolves with userChoice.
  */
+
+const NATIVE_PROMPT_WAIT_MS = 1500
 
 let _installEvent = null
 let _installedThisSession = false
@@ -69,6 +72,28 @@ export function hasNativePrompt() {
 
 export function isInstalledThisSession() {
   return _installedThisSession
+}
+
+/**
+ * Chrome can deliver `beforeinstallprompt` after the first tap, and again
+ * shortly after the user cancels its dialog. On Android Chromium in a secure
+ * context, wait a moment rather than fall back to manual instructions; the
+ * tap's user activation outlasts the wait, so `prompt()` is still allowed.
+ * Elsewhere the event never comes, so answer at once.
+ */
+export function waitForNativePrompt(timeoutMs = NATIVE_PROMPT_WAIT_MS) {
+  if (_installEvent) return Promise.resolve(true)
+  if (getPlatform() !== 'android-chromium' || !window.isSecureContext) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const finish = (ready) => {
+      clearTimeout(timer)
+      window.removeEventListener('nudge:install-prompt-ready', onReady)
+      resolve(ready)
+    }
+    const onReady = () => finish(true)
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    window.addEventListener('nudge:install-prompt-ready', onReady)
+  })
 }
 
 export async function triggerNativePrompt() {

@@ -3,16 +3,19 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import AddLotForm from '../components/AddLotForm'
 import ConfirmModal from '../components/ConfirmModal'
+import EditToggle from '../components/EditToggle'
 import HistoryEntryCard from '../components/HistoryEntryCard'
 import Icon from '../components/Icon'
 import QueryHandler from '../components/QueryHandler'
 import RegulatoryInfoSection from '../components/RegulatoryInfoSection'
 import SharedWithChips from '../components/SharedWithChips'
 import LotPickerModal from '../components/LotPickerModal'
+import OverflowMenu from '../components/OverflowMenu'
 import StockLotsList from '../components/StockLotsList'
 import StockValuesConfirmModal from '../components/StockValuesConfirmModal'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
+import { useEditMode } from '../hooks/useEditMode'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups, useStockList } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
@@ -38,6 +41,7 @@ import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockDetailPage.module.css'
+import BackLink from '../components/BackLink'
 
 export default function StockDetailPage() {
   const { id } = useParams()
@@ -55,6 +59,8 @@ export default function StockDetailPage() {
   const deleteLot = useDeleteStockLot()
   const updateStock = useUpdateStock()
   const reachable = useServerReachable()
+  // «Edit» mode of the lots list (T153); ends when the last lot goes.
+  const lotsEdit = useEditMode({ count: (stock?.lots ?? []).length })
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmRemoveLot, setConfirmRemoveLot] = useState(null)
@@ -317,60 +323,41 @@ export default function StockDetailPage() {
       {stock && (
         <div className={s.container}>
           <div className={cx(layout.topBar, s.topBarFlush)}>
-            <Link to="/inventory" className={s.backLink} aria-label={t('common.backToInventory')}>
-              <span>{t('common.backToInventory')}</span>
-            </Link>
-            <div className={s.topActions}>
-              <Link
-                to={`/history?type=consumptions&stock=${stockId}`}
-                className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
-                aria-label={t('stockDetail.viewAll')}
-                title={t('stockDetail.viewAll')}
-              >
-                <Icon name="history" />
-              </Link>
-              {isOwner && (
-                <button
-                  type="button"
-                  className={cx(buttons.btnAdd, buttons.btnAddDanger, !reachable && buttons.disabled)}
-                  onClick={() => {
-                    if (!reachable) {
-                      showToast({ type: 'error', message: t('offline.pageUnavailable') })
-                      return
-                    }
-                    setConfirmDelete(true)
-                  }}
-                  aria-disabled={!reachable}
-                  aria-label={t('stockDetail.deleteStock')}
-                  title={!reachable ? t('offline.pageUnavailable') : t('stockDetail.deleteStock')}
-                >
-                  <Icon name="trash" />
-                </button>
-              )}
-              <button
-                type="button"
-                className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
-                onClick={() => {
-                  if (!reachable) {
-                    showToast({ type: 'error', message: t('offline.pageUnavailable') })
-                    return
-                  }
-                  navigate(`/inventory/${stockId}/edit`)
-                }}
-                aria-disabled={!reachable}
-                aria-label={t('stockDetail.edit')}
-                title={!reachable ? t('offline.pageUnavailable') : t('stockDetail.edit')}
-              >
-                <Icon name="pencil" />
-              </button>
-            </div>
+            <BackLink to="/inventory">{t('common.backToInventory')}</BackLink>
+            {/* Rare actions in «More» (T152, UX-018/034); the frequent ones
+                — consume, edit — are text buttons on the card below. */}
+            <OverflowMenu
+              items={[
+                {
+                  key: 'history',
+                  label: t('menu.viewHistory'),
+                  icon: 'history',
+                  to: `/history?type=consumptions&stock=${stockId}`,
+                  testId: 'menu-history',
+                },
+                ...(isOwner
+                  ? [
+                      {
+                        key: 'delete',
+                        label: t('stockDetail.deleteStock'),
+                        icon: 'trash',
+                        danger: true,
+                        disabled: !reachable,
+                        onDisabledSelect: () => showToast({ type: 'error', message: t('offline.pageUnavailable') }),
+                        onSelect: () => setConfirmDelete(true),
+                        testId: 'menu-delete',
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
 
           <div className={cx(cards.card, tokens.border)}>
             <div className={cx(cards.cardHeader, s.headerRow)}>
               <div className={cards.cardMeta}>
                 <span className={cx(cards.cardTitle, cards.cardTitleFlex)}>
-                  <span>{stock.name}</span>
+                  <span className={cards.clampName}>{stock.name}</span>
                   <SyncStatusBadge resourceKey={`stock:${stock.id}`} />
                 </span>
                 <span className={cards.cardSubtitle}>
@@ -433,8 +420,8 @@ export default function StockDetailPage() {
                 <button
                   type="button"
                   className={cx(
-                    buttons.btnIcon,
-                    isPinned ? s.pinOn : buttons.btnIconOutline,
+                    buttons.icon,
+                    isPinned ? s.pinOn : buttons.outlined,
                     (!reachable || pinCapReached) && buttons.disabled,
                     isPinned && s.pinnedIcon,
                   )}
@@ -456,26 +443,47 @@ export default function StockDetailPage() {
                 >
                   <Icon name="pin" size="sm" />
                 </button>
-                {/* Consume one unit, the most frequent action on a stock. It
-                  lives on the card rather than in the top bar so it sits next
-                  to the number it decrements, mirrors where `StockRow` puts
-                  it in the inventory list, and stays away from the destructive
-                  delete button. Hidden at zero: it could only fail. */}
-                {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
-                  <button
-                    type="button"
-                    className={cx(buttons.btnIcon, buttons.btnIconConsume, !reachable && buttons.disabled)}
-                    onClick={handleConsume}
-                    aria-disabled={!reachable}
-                    aria-label={t('inventory.consumeTooltip')}
-                    title={!reachable ? t('offline.pageUnavailable') : t('inventory.consumeTooltip')}
-                    data-testid="consume-one"
-                  >
+              </div>
+            </div>
+            {/* The two frequent actions, as text (T152, UX-018/034), on the
+                card that shows the number they change and within the thumb's
+                reach. «Consume 1» is the main one, hidden at zero units: it
+                could only fail. */}
+            <div className={s.cardActions}>
+              {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
+                <button
+                  type="button"
+                  className={cx(buttons.btn, buttons.primary, s.consumeBtn, !reachable && buttons.disabled)}
+                  onClick={handleConsume}
+                  aria-disabled={!reachable}
+                  aria-label={t('inventory.consumeTooltip')}
+                  title={!reachable ? t('offline.pageUnavailable') : undefined}
+                  data-testid="consume-one"
+                >
+                  <span className={buttons.consumeGlyph} aria-hidden="true">
                     <Icon name="package" className={buttons.consumeBox} />
                     <Icon name="arrow-down" className={buttons.consumeArrow} />
-                  </button>
-                )}
-              </div>
+                  </span>
+                  {t('inventory.consumeOne')}
+                </button>
+              )}
+              <button
+                type="button"
+                className={cx(buttons.btn, buttons.secondary, s.editBtn, !reachable && buttons.disabled)}
+                onClick={() => {
+                  if (!reachable) {
+                    showToast({ type: 'error', message: t('offline.pageUnavailable') })
+                    return
+                  }
+                  navigate(`/inventory/${stockId}/edit`)
+                }}
+                aria-disabled={!reachable}
+                title={!reachable ? t('offline.pageUnavailable') : undefined}
+                data-testid="edit-stock"
+              >
+                <Icon name="pencil" size="sm" />
+                {t('stockDetail.edit')}
+              </button>
             </div>
           </div>
 
@@ -526,9 +534,29 @@ export default function StockDetailPage() {
               no lots there is no table, only the way to add one. */}
           {(stock.lots ?? []).length > 0 && (
             <section className={s.section}>
-              <p className={layout.sectionTitle}>{t('stockDetail.lots')}</p>
+              {/* «Edit» reveals the delete buttons (T153, UX-036): at rest the
+                  list shows no trash per row. */}
+              <div className={s.sectionHeader}>
+                <p className={layout.sectionTitle}>{t('stockDetail.lots')}</p>
+                <EditToggle
+                  section={t('stockDetail.lots')}
+                  editing={lotsEdit.editing}
+                  onToggle={lotsEdit.toggle}
+                  controls="stock-lots"
+                  reachable={reachable}
+                  offlineTitle={t('offline.pageUnavailable')}
+                  onOffline={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
+                />
+              </div>
               <div className={s.lotsCard}>
-                <StockLotsList lots={stock.lots} today={today} reachable={reachable} onRemoveLot={askRemoveLot} />
+                <StockLotsList
+                  id="stock-lots"
+                  lots={stock.lots}
+                  today={today}
+                  reachable={reachable}
+                  editing={lotsEdit.editing}
+                  onRemoveLot={askRemoveLot}
+                />
               </div>
             </section>
           )}

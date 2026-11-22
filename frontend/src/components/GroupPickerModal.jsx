@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
 import ModalFrame from './ModalFrame'
+import buttons from '../styles/buttons.module.css'
+import cx from '../utils/cx'
 import s from './GroupPickerModal.module.css'
 
 export default function GroupPickerModal({ groups, currentGroupId, onSelect, onClose }) {
@@ -10,7 +12,7 @@ export default function GroupPickerModal({ groups, currentGroupId, onSelect, onC
     <ModalFrame onClose={onClose} size="md">
       <div className={s.header}>
         <h2 className={s.title}>{t('inventory.assignGroup')}</h2>
-        <button type="button" className={s.xBtn} onClick={onClose} aria-label={t('common.close')}>
+        <button type="button" className={cx(buttons.hit, s.xBtn)} onClick={onClose} aria-label={t('common.close')}>
           <Icon name="x" size="sm" />
         </button>
       </div>

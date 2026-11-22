@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 
 vi.mock('../../hooks/useInstallPrompt', () => ({
@@ -38,6 +38,10 @@ async function stubSubscription(sub) {
   reg.pushManager.getSubscription.mockResolvedValue(sub)
 }
 
+// Each test starts from no permission: a `granted` left by a previous one
+// would make the notice read the subscription after that test has ended.
+beforeEach(() => setNotification('default'))
+
 describe('Layout', () => {
   it('renders 4 nav links', () => {
     renderWithProviders(<Layout />)
@@ -64,68 +68,44 @@ describe('Layout', () => {
     expect(screen.getByText('nudge')).toBeInTheDocument()
   })
 
-  it('shows push badge on Settings when push is not fully active', async () => {
+  it('Settings carries no dot with actions pending: the notice says it', async () => {
     setNotification('default')
     await stubSubscription(null)
-    const { container } = renderWithProviders(<Layout />)
-    await waitFor(() => expect(container.querySelector('.badge')).toBeInTheDocument())
-  })
-
-  it('updates push badge on window focus when status changes', async () => {
-    setNotification('default')
-    await stubSubscription(null)
-    const { container } = renderWithProviders(<Layout />)
-    await waitFor(() => expect(container.querySelector('.badge')).toBeInTheDocument())
-
-    setNotification('granted')
-    await stubSubscription({
-      endpoint: 'https://push.example.com/sub/abc',
-      unsubscribe: vi.fn(),
-    })
-    fireEvent.focus(window)
-
-    await waitFor(() => expect(container.querySelector('.badge')).not.toBeInTheDocument())
-  })
-
-  it('hides push badge when push is fully active', async () => {
-    setNotification('granted')
-    await stubSubscription({
-      endpoint: 'https://push.example.com/sub/xyz',
-      unsubscribe: vi.fn(),
-    })
-    const { container } = renderWithProviders(<Layout />)
-    // Wait for the hook's effect to resolve before asserting absence.
-    await waitFor(() => expect(container.querySelector('.badge')).not.toBeInTheDocument())
+    renderWithProviders(<Layout />)
+    await screen.findByText(/pending action/i)
+    expect(screen.getByRole('link', { name: 'Settings' }).querySelector('.badge')).toBeNull()
   })
 
   // ── AlertBanner placement (T053) ───────────────────────────────────────────
 
-  it('renders the push alert banner when push is not active', async () => {
+  it('renders the pending-actions notice when push is not active', async () => {
     setNotification('default')
     await stubSubscription(null)
     renderWithProviders(<Layout />)
-    expect(await screen.findByText(/Notifications are off/)).toBeInTheDocument()
+    expect(await screen.findByText(/pending action/i)).toBeInTheDocument()
   })
 
-  it('the push alert banner takes the user to Settings', async () => {
+  it('the pending-actions notice takes the user to Settings', async () => {
     setNotification('default')
     await stubSubscription(null)
     const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
 
-    await user.click(await screen.findByRole('button', { name: /Notifications are off/ }))
+    await user.click(await screen.findByRole('button', { name: /pending action/i }))
 
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('does not render the banner when push is fully active', async () => {
+  it('does not render the notice when push is fully active', async () => {
     setNotification('granted')
     await stubSubscription({
       endpoint: 'https://push.example.com/sub/abc',
       unsubscribe: vi.fn(),
     })
-    const { container } = renderWithProviders(<Layout />)
-    await waitFor(() => expect(container.querySelector('.badge')).not.toBeInTheDocument())
-    expect(screen.queryByText(/Notifications are off/)).not.toBeInTheDocument()
+    const reg = await navigator.serviceWorker.ready
+    renderWithProviders(<Layout />)
+    await waitFor(() => expect(reg.pushManager.getSubscription).toHaveBeenCalled())
+    await act(async () => {})
+    expect(screen.queryByText(/pending action/i)).not.toBeInTheDocument()
   })
 
   it('shows a pending-routines dot on the Routines nav entry when any routine is due', async () => {
@@ -144,8 +124,7 @@ describe('Layout', () => {
       const routinesLink = screen.getByText('Routines').closest('a')
       expect(routinesLink.querySelector('.badge')).toBeInTheDocument()
     })
-    // When push is active, the only badge should be the routines dot.
-    expect(container.querySelectorAll('.badge').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('.badge')).toHaveLength(1)
   })
 
   // The icon a nav entry draws from the sprite (`<use href="#i-NAME">`).
@@ -177,7 +156,7 @@ describe('Layout', () => {
     expect(navIcon('History')).toBe('#i-history')
   })
 
-  it('the active tab carries its label, and moves with navigation', async () => {
+  it('the active tab keeps its name for assistive tech, and moves with navigation', async () => {
     const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
     const routines = screen.getByRole('link', { name: 'Routines' })
     expect(routines).toHaveAttribute('aria-current', 'page')
@@ -189,42 +168,43 @@ describe('Layout', () => {
     expect(screen.getByRole('link', { name: 'Routines' })).not.toHaveAttribute('aria-current')
   })
 
+  it('the sliding block follows the current tab', async () => {
+    const { user } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    const pill = screen.getByTestId('nav-indicator')
+    expect(pill.style.getPropertyValue('--tab')).toBe('0')
+
+    await user.click(screen.getByRole('link', { name: 'History' }))
+
+    expect(pill.style.getPropertyValue('--tab')).toBe('2')
+  })
+
+  it.each([
+    ['/routines/7', 'Routines', '0'],
+    ['/routines/7/edit', 'Routines', '0'],
+    ['/inventory/3', 'Inventory', '1'],
+  ])('%s keeps %s as the current tab', async (path, name, tab) => {
+    const { queryClient } = renderWithProviders(<Layout />, { initialEntries: [path] })
+    await routinesLoaded(queryClient)
+    expect(screen.getByRole('link', { name })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('nav-indicator').style.getPropertyValue('--tab')).toBe(tab)
+  })
+
+  it('every tab carries its own label as text, not only the active one (T151)', async () => {
+    const { queryClient } = renderWithProviders(<Layout />, { initialEntries: ['/'] })
+    await routinesLoaded(queryClient)
+    for (const label of ['Routines', 'Inventory', 'History', 'Settings']) {
+      expect(screen.getByRole('link', { name: label })).toHaveTextContent(label)
+    }
+  })
+
   it('places the banner before the main element in the DOM', async () => {
     setNotification('default')
     await stubSubscription(null)
     const { container } = renderWithProviders(<Layout />)
-    const banner = await screen.findByText(/Notifications are off/)
+    const banner = await screen.findByText(/pending action/i)
     const main = container.querySelector('main')
     expect(main).not.toBeNull()
     expect(banner.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  // ── Install banner priority over notif AlertBanner (T149) ──────────────────
-
-  it('suppresses the push alert banner when the install banner is visible', async () => {
-    useInstallPrompt.mockReturnValueOnce({
-      canInstall: true,
-      hasNativePrompt: false,
-      platform: 'ios',
-      triggerNativePrompt: vi.fn(),
-    })
-    setNotification('default')
-    await stubSubscription(null)
-    renderWithProviders(<Layout />)
-    expect(screen.queryByText(/Notifications are off/)).not.toBeInTheDocument()
-  })
-
-  it('keeps the bottom-nav push badge even when the install banner suppresses the alert', async () => {
-    useInstallPrompt.mockReturnValueOnce({
-      canInstall: true,
-      hasNativePrompt: false,
-      platform: 'ios',
-      triggerNativePrompt: vi.fn(),
-    })
-    setNotification('default')
-    await stubSubscription(null)
-    const { container } = renderWithProviders(<Layout />)
-    await waitFor(() => expect(container.querySelector('.badge')).toBeInTheDocument())
   })
 })
 

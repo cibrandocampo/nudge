@@ -49,6 +49,7 @@
   border: 1px solid var(--c-border);
   border-left: 3px solid var(--c-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   margin-bottom: 0.5rem;
 }
@@ -91,12 +92,24 @@
 }
 
 .cardTitle {
+  min-width: 0;
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--c-text);
-  white-space: nowrap;
+}
+
+/* A product or routine name (T156, UX-013): up to two lines before an
+   ellipsis, because at narrow widths one line cut names that differ only at
+   the end («… 500 mg» / «… 1 g»). On the name's own element: a flex title also
+   holds badges. */
+.clampName {
+  display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .cardTitleFlex {

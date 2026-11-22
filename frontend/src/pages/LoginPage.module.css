@@ -12,6 +12,7 @@
   max-width: 360px;
   background: var(--c-surface);
   border-radius: var(--radius-xxl);
+  box-shadow: var(--shadow-card);
   padding: 2.5rem 2rem;
   border: 1px solid var(--c-border);
   text-align: center;
@@ -38,6 +39,7 @@
 }
 
 .btn {
+  min-height: 44px;
   padding: 0.75rem;
   background: var(--c-primary);
   color: var(--c-on-primary);
@@ -63,6 +65,7 @@
 }
 
 .linkBtn {
+  min-height: 44px;
   background: none;
   border: none;
   color: var(--c-text-3);

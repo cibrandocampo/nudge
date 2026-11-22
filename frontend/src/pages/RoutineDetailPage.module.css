@@ -1,9 +1,5 @@
-.back {
-  color: var(--c-text-3);
-  text-decoration: none;
-  font-size: var(--fs-sm);
-}
-
+/* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
+   padding so the text lines up with the content below. */
 .title {
   margin: 0 0 0.5rem;
   color: var(--c-text);
@@ -65,7 +61,7 @@
 }
 
 /* Subtle inline chevron that opens the linked stock's detail page. Lighter
- * than the 32x32 card-action btnIcon since it sits inline with the value. */
+ * than an icon button (`buttons.icon`) since it sits inline with the value. */
 .stockLink {
   display: inline-flex;
   align-items: center;

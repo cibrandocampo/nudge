@@ -23,6 +23,7 @@ import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockFormPage.module.css'
+import BackLink from '../components/BackLink'
 
 const EMPTY_FORM = { name: '', group: '', gtin: '', national_code: '', default_lot_quantity: '' }
 // `crypto.randomUUID` requires a secure context (HTTPS or localhost).
@@ -267,9 +268,7 @@ export default function StockFormPage() {
     >
       <div className={s.container}>
         <div className={s.topBar}>
-          <button type="button" className={s.back} onClick={() => navigate(-1)}>
-            {t('common.backToInventory')}
-          </button>
+          <BackLink onClick={() => navigate(-1)}>{t('common.backToInventory')}</BackLink>
           <h1 className={layout.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
         </div>
 
@@ -387,7 +386,7 @@ export default function StockFormPage() {
                 <span className={forms.formSectionTitle}>{t('stockForm.batchesLabel')}</span>
                 <button
                   type="button"
-                  className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
+                  className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
                   onClick={addBatch}
                 >
                   <Icon name="plus" size="sm" />
@@ -452,7 +451,7 @@ export default function StockFormPage() {
                       </div>
                       <button
                         type="button"
-                        className={cx(buttons.btnIcon, buttons.btnIconDelete, s.batchRemove)}
+                        className={cx(buttons.icon, buttons.iconDanger, s.batchRemove)}
                         onClick={() => removeBatch(b.uid)}
                         aria-label={t('stockForm.removeBatch', { index: idx + 1 })}
                         title={t('stockForm.removeBatch', { index: idx + 1 })}
@@ -484,7 +483,7 @@ export default function StockFormPage() {
           <div className={forms.formFooter}>
             <button
               type="submit"
-              className={cx(buttons.btn, buttons.btnPrimary, buttons.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.primary, buttons.formSecondaryBtn, s.submitBtn)}
               disabled={submitting || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
@@ -492,7 +491,7 @@ export default function StockFormPage() {
             </button>
             <button
               type="button"
-              className={cx(buttons.btn, buttons.btnSecondary, buttons.formSecondaryBtn)}
+              className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
               onClick={() => navigate(-1)}
             >
               {t('stockForm.cancel')}

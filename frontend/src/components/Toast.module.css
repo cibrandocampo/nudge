@@ -1,6 +1,7 @@
 .stack {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+  /* Just above the bottom bar (T151). */
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 0.75rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;

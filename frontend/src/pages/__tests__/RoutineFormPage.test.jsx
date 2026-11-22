@@ -169,7 +169,7 @@ describe('RoutineFormPage', () => {
 
   it('renders back button', async () => {
     renderCreate()
-    await waitFor(() => expect(screen.getByText('← Back to routines')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Back to routines')).toBeInTheDocument())
   })
 
   it('edits with stock pre-selected', async () => {

@@ -208,7 +208,7 @@ export default function InventoryPage() {
         <div className={s.topActions}>
           <button
             type="button"
-            className={cx(buttons.btnAdd, buttons.btnAddSecondary)}
+            className={cx(buttons.icon, buttons.outlined)}
             onClick={() => navigate('/inventory/groups')}
             aria-label={t('inventory.manageGroups')}
             title={t('inventory.manageGroups')}
@@ -217,7 +217,7 @@ export default function InventoryPage() {
           </button>
           <button
             type="button"
-            className={cx(buttons.btnAdd, !reachable && buttons.disabled)}
+            className={cx(buttons.icon, buttons.iconFilled, !reachable && buttons.disabled)}
             onClick={() => {
               if (!reachable) {
                 showToast({ type: 'error', message: t('offline.pageUnavailable') })
@@ -264,13 +264,27 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {stocks.length === 0 && <EmptyCard title={t('inventory.emptyTitle')} message={t('inventory.emptyBody')} />}
+      {stocks.length === 0 && (
+        <EmptyCard
+          title={t('inventory.emptyTitle')}
+          message={t('inventory.emptyBody')}
+          action={
+            reachable
+              ? { label: t('inventory.emptyAction'), to: '/inventory/new' }
+              : {
+                  label: t('inventory.emptyAction'),
+                  unavailable: true,
+                  onClick: () => showToast({ type: 'error', message: t('offline.pageUnavailable') }),
+                }
+          }
+        />
+      )}
 
       {stocks.length > 0 && visibleStocks.length === 0 && (
         <EmptyCard
           title={t('inventory.noMatchesTitle')}
           message={t('inventory.noMatchesBody')}
-          action={{ label: t('inventory.clearFilters'), onClick: clearFilters }}
+          action={{ label: t('inventory.clearFilters'), onClick: clearFilters, secondary: true }}
         />
       )}
 

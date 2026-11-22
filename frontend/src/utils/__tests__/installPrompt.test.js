@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   __resetForTests,
   getPlatform,
@@ -7,6 +7,7 @@ import {
   isMobile,
   isStandalone,
   triggerNativePrompt,
+  waitForNativePrompt,
 } from '../installPrompt'
 
 const UA = {
@@ -173,5 +174,50 @@ describe('beforeinstallprompt capture', () => {
 
     expect(isInstalledThisSession()).toBe(true)
     expect(hasNativePrompt()).toBe(false)
+  })
+})
+
+describe('waitForNativePrompt', () => {
+  const secure = (value) => Object.defineProperty(window, 'isSecureContext', { value, configurable: true })
+  const android = () => setNavigator({ userAgent: UA.androidChrome })
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    secure(true)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    secure(undefined)
+  })
+
+  it('answers true at once when the prompt is already captured', async () => {
+    fireBeforeInstallPrompt()
+    await expect(waitForNativePrompt()).resolves.toBe(true)
+  })
+
+  it('on Android Chromium, resolves true when the prompt arrives during the wait', async () => {
+    android()
+    const waiting = waitForNativePrompt()
+    fireBeforeInstallPrompt()
+    await expect(waiting).resolves.toBe(true)
+  })
+
+  it('on Android Chromium, gives up when the prompt never arrives', async () => {
+    android()
+    const waiting = waitForNativePrompt(1500)
+    await vi.advanceTimersByTimeAsync(1500)
+    await expect(waiting).resolves.toBe(false)
+  })
+
+  it('does not wait on plain HTTP, where Chrome never sends the prompt', async () => {
+    android()
+    secure(false)
+    await expect(waitForNativePrompt()).resolves.toBe(false)
+  })
+
+  it('does not wait on a browser without the prompt', async () => {
+    setNavigator({ userAgent: UA.firefoxAndroid })
+    await expect(waitForNativePrompt()).resolves.toBe(false)
   })
 })

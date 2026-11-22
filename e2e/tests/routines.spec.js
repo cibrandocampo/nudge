@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers.js'
+import { chooseFromMoreMenu, login } from './helpers.js'
 
 const ROUTINE_NAME = `E2E routine ${Date.now()}`
 
@@ -62,8 +62,8 @@ test.describe('Routines', () => {
     await page.waitForURL(/\/routines\/\d+$/)
 
     // Delete — opens ConfirmModal, then confirm
-    await page.getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('button', { name: 'Delete' }).last().click()
+    await chooseFromMoreMenu(page, 'menu-delete')
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
     await expect(page).toHaveURL('/')
   })
 

@@ -490,7 +490,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null,
   const manualButton = onManual ? (
     <button
       type="button"
-      className={cx(buttons.btn, buttons.btnSecondary, s.manualBtn)}
+      className={cx(buttons.btn, buttons.secondary, s.manualBtn)}
       onClick={() => onManual()}
       data-testid="scan-manual-fallback"
     >
@@ -542,7 +542,7 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null,
               {torchAvailable && (
                 <button
                   type="button"
-                  className={cx(buttons.btn, buttons.btnSecondary, s.controlBtn)}
+                  className={cx(buttons.btn, buttons.secondary, s.controlBtn)}
                   onClick={toggleTorch}
                   aria-pressed={torchOn}
                   data-testid="scan-torch"
@@ -554,19 +554,12 @@ export default function BarcodeScannerModal({ onDecoded, onClose, notice = null,
               {cameras.length > 1 && (
                 <button
                   type="button"
-                  className={cx(buttons.btn, buttons.btnSecondary, s.controlBtn, s.cameraBtn)}
+                  className={cx(buttons.btn, buttons.secondary, s.controlBtn)}
                   onClick={switchCamera}
-                  aria-label={t('scan.camera')}
-                  title={t('scan.camera')}
                   data-testid="scan-camera"
                 >
-                  {/* The same emoji on both sides on purpose: 📸 reads as "camera
-                      with flash", which would collide with the torch button. */}
-                  <span aria-hidden="true">📷</span>
-                  <span aria-hidden="true" className={s.cameraArrow}>
-                    →
-                  </span>
-                  <span aria-hidden="true">📷</span>
+                  <Icon name="switch-camera" size="sm" />
+                  {t('scan.camera')}
                 </button>
               )}
             </div>

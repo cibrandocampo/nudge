@@ -1,17 +1,17 @@
 /* Find controls for the inventory (T093): a text box and a chip row, both
    sticky so they stay reachable however far down the list you are.
 
-   Sticky layering: the app header is `sticky; top: 0; height: 48px;
+   Sticky layering: the app header is `sticky; top: 0; height: --header-h;
    z-index: 50` (`Header.module.css`), so this sits directly under it at
-   `top: 48px` with a lower z-index. The section headers stick under this bar
-   (T096) at `48px + --inventory-bar-h`, a custom property `InventoryPage`
+   `top: var(--header-h)` with a lower z-index. The section headers stick under this bar
+   (T096) at `--header-h + --inventory-bar-h`, a custom property `InventoryPage`
    publishes from a ResizeObserver on this element — measured, not written
    down twice, so a wrapped chip row or a larger text size cannot slide the
    headers underneath. */
 
 .bar {
   position: sticky;
-  top: 48px;
+  top: var(--header-h);
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -93,7 +93,10 @@
   gap: 0.3rem;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 0.1rem;
+  /* Room above and below for the chips' 44 px tap zone (`buttons.hit`):
+     the scroller clips it, and without the padding it would reach the
+     search field. */
+  padding: 10px 0;
 }
 
 .chips::-webkit-scrollbar {

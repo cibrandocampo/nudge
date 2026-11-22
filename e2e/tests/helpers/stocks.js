@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { SEED } from './constants.js'
 import { stockCard } from './locators.js'
-import { goToInventory, goToStockDetail } from './navigation.js'
+import { chooseFromMoreMenu, enterEditMode, goToInventory, goToStockDetail } from './navigation.js'
 
 export async function createStock(page, { name }) {
   await goToInventory(page)
@@ -17,8 +17,8 @@ export async function createStock(page, { name }) {
 export async function deleteStock(page, stockKeyOrName) {
   const name = SEED.stocks[stockKeyOrName] ?? stockKeyOrName
   await goToStockDetail(page, stockKeyOrName)
-  await page.getByRole('button', { name: 'Delete stock' }).click()
-  await page.getByRole('button', { name: 'Delete stock' }).last().click()
+  await chooseFromMoreMenu(page, 'menu-delete')
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete stock' }).click()
   await page.waitForURL('/inventory')
   await expect(page.getByTestId('product-card').filter({ hasText: name })).toHaveCount(0)
 }
@@ -73,8 +73,10 @@ export async function deleteLot(page, stockKeyOrName, lotNumber) {
   // `[class*="lotRow"]` selector is case-sensitive and no longer
   // matches. Use the stable `data-testid="lot-row"` instead.
   const row = page.getByTestId('lot-row').filter({ hasText: lotNumber }).first()
-  await row.getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('button', { name: 'Delete' }).last().click()
+  // Lot deletes only show in the lots' «Edit» mode (T153).
+  await enterEditMode(page)
+  await row.getByTestId('row-delete').click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
 }
 
 /**

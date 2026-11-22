@@ -1,0 +1,67 @@
+/* The trigger anchors the menu, which opens below it, aligned to its right
+   edge (the trigger is the last control of a header). */
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 150;
+  min-width: 13rem;
+  max-width: calc(100vw - 2rem);
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* One row per action: icon + text, 44 px tall like every target. */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.item > svg {
+  flex-shrink: 0;
+  color: var(--c-text-2);
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--c-border-inner);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+
+.item:active {
+  background: color-mix(in srgb, var(--c-text) 14%, transparent);
+}
+
+/* Destructive item: its text and icon in the danger colour, never only
+   the icon. */
+.danger,
+.danger > svg {
+  color: var(--c-danger);
+}

@@ -4,23 +4,30 @@
   gap: 1.25rem;
 }
 
-.backLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--c-text-3);
-  font-size: var(--fs-sm);
-  text-decoration: none;
-  padding: 0.25rem 0;
-}
-.backLink:hover {
-  color: var(--c-text-2);
+/* «← Back to …» is a `buttons.text` button (T150); pulled left by its own
+   padding so the text lines up with the content below. */
+/* «Consume 1» and «Edit» under the header of the card (T152). Same side
+   padding as `cards.cardHeader`. The labels never break; when both do not fit
+   (320 px at «Extra large»), «Edit» wraps to a line of its own instead of
+   running out of the card, which clips it. «Consume 1» takes twice the spare
+   room. */
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.75rem;
 }
 
-.topActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.cardActions > * {
+  white-space: nowrap;
+}
+
+.consumeBtn {
+  flex: 2 0 auto;
+}
+
+.editBtn {
+  flex: 1 0 auto;
 }
 
 .section {
@@ -54,10 +61,20 @@
 
 /* Wraps the lot list + add-lot form in a single white card so every row
  * renders against --c-surface (readable) instead of the page background. */
+/* A section title with its «Edit» toggle on the right (T153). The toggle is
+   a 44 px text button: the row takes its height, the title stays centred. */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .lotsCard {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 

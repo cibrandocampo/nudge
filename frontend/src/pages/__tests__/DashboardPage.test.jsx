@@ -836,3 +836,41 @@ describe('DashboardPage — when confirming asks for a lot (T126)', () => {
     expect(screen.queryByText('Select items to consume')).not.toBeInTheDocument()
   })
 })
+
+describe('DashboardPage — empty state action (T156)', () => {
+  const noRoutines = () =>
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([])),
+    )
+
+  afterEach(() => {
+    reachableRef.current = true
+  })
+
+  it('with no routines at all, offers to create one', async () => {
+    noRoutines()
+    renderWithProviders(<DashboardPage />)
+    expect(await screen.findByRole('link', { name: 'Create routine' })).toHaveAttribute('href', '/routines/new')
+  })
+
+  it('offline, the action says why it cannot be used', async () => {
+    noRoutines()
+    reachableRef.current = false
+    const { user } = renderWithProviders(<DashboardPage />)
+    const action = await screen.findByRole('button', { name: 'Create routine' })
+    expect(action).toHaveAttribute('aria-disabled', 'true')
+    await user.click(action)
+    expect(await screen.findByText('This section is not available offline.')).toBeInTheDocument()
+  })
+
+  it('«all caught up» asks for nothing', async () => {
+    server.use(
+      http.get(`${BASE}/dashboard/`, () => HttpResponse.json({ due: [], upcoming: [] })),
+      http.get(`${BASE}/routines/`, () => HttpResponse.json([{ id: 1, name: 'Vitamins', next_due_at: null }])),
+    )
+    renderWithProviders(<DashboardPage />)
+    await screen.findByText('All caught up!')
+    expect(screen.queryByRole('link', { name: 'Create routine' })).not.toBeInTheDocument()
+  })
+})

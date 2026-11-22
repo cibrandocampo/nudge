@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import cx from '../utils/cx'
 import Icon from './Icon'
+import buttons from '../styles/buttons.module.css'
 import s from './IconChip.module.css'
 
 /**
@@ -22,7 +23,7 @@ export default function IconChip({ icon, label, className, open: openProp, onTog
   return (
     <button
       type="button"
-      className={cx(s.chip, open && s.open, className)}
+      className={cx(buttons.hit, s.chip, open && s.open, className)}
       aria-expanded={open}
       onClick={() => (controlled ? onToggle?.() : setOpenState((value) => !value))}
       {...rest}

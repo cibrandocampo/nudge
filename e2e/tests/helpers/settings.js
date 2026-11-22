@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { goToSettings } from './navigation.js'
+import { enterEditMode, goToSettings } from './navigation.js'
 import { expectInContactList, expectLanguage, expectNotInContactList } from './assertions.js'
 
 export async function changeTimezone(page, tzName) {
@@ -34,7 +34,10 @@ export async function addContact(page, username) {
 export async function removeContact(page, username) {
   await goToSettings(page)
   const row = page.getByRole('listitem').filter({ hasText: username })
-  await row.getByRole('button', { name: 'Remove' }).click()
+  // Removing is behind the contacts' «Edit» mode (T153), then confirmed.
+  await enterEditMode(page)
+  await row.getByTestId('row-delete').click()
+  await page.getByRole('dialog').getByRole('button').last().click()
   await expectNotInContactList(page, username)
 }
 

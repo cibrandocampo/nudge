@@ -89,8 +89,12 @@ export default function DashboardPage() {
           duration: 5000,
           action: {
             label: t('card.undo'),
-            onClick: () => {
-              undoLogMutation.mutate({ entryId, routineName })
+            onClick: async () => {
+              try {
+                await undoLogMutation.mutateAsync({ entryId, routineName })
+              } catch (undoError) {
+                showToast({ type: 'error', message: errorToastMessage(undoError, t) })
+              }
             },
           },
         })
@@ -144,13 +148,17 @@ export default function DashboardPage() {
       <div className={layout.topBar}>
         <h1 className={layout.pageTitle}>{t('dashboard.title')}</h1>
         {reachable ? (
-          <Link to="/routines/new" className={buttons.btnAdd} aria-label={t('dashboard.newRoutine')}>
+          <Link
+            to="/routines/new"
+            className={cx(buttons.icon, buttons.iconFilled)}
+            aria-label={t('dashboard.newRoutine')}
+          >
             <Icon name="plus" />
           </Link>
         ) : (
           <button
             type="button"
-            className={cx(buttons.btnAdd, buttons.disabled)}
+            className={cx(buttons.icon, buttons.iconFilled, buttons.disabled)}
             onClick={() => showToast({ type: 'error', message: t('offline.pageUnavailable') })}
             aria-disabled="true"
             aria-label={t('dashboard.newRoutine')}
@@ -168,7 +176,19 @@ export default function DashboardPage() {
         highlightId={highlightId}
         empty={
           allRoutinesData.length === 0 ? (
-            <EmptyCard title={t('dashboard.noRoutinesTitle')} message={t('dashboard.noRoutinesBody')} />
+            <EmptyCard
+              title={t('dashboard.noRoutinesTitle')}
+              message={t('dashboard.noRoutinesBody')}
+              action={
+                reachable
+                  ? { label: t('dashboard.emptyAction'), to: '/routines/new' }
+                  : {
+                      label: t('dashboard.emptyAction'),
+                      unavailable: true,
+                      onClick: () => showToast({ type: 'error', message: t('offline.pageUnavailable') }),
+                    }
+              }
+            />
           ) : (
             <EmptyCard title={t('dashboard.empty')} message={t('dashboard.emptyBody')} />
           )
