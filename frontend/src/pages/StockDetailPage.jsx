@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import AddLotForm from '../components/AddLotForm'
 import ConfirmModal from '../components/ConfirmModal'
@@ -76,7 +77,8 @@ export default function StockDetailPage() {
   const medicineOpen = medicineOpenFor === stockId
   const medicineToggleRef = useRef(null)
   const openMedicine = () => {
-    setMedicineOpenFor(stockId)
+    // Synchronously: while folded the page may be too short to scroll there.
+    flushSync(() => setMedicineOpenFor(stockId))
     medicineToggleRef.current?.focus()
     medicineToggleRef.current?.scrollIntoView?.({ block: 'start' })
   }
