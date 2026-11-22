@@ -8,7 +8,7 @@ from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -20,7 +20,17 @@ from apps.regulatory import services as regulatory_services
 from apps.regulatory.models import MedicineLeaflet, Presentation
 from apps.regulatory.serializers import MedicineLeafletSerializer, RegulatoryDetailSerializer
 
-from .models import Routine, RoutineEntry, Stock, StockConsumption, StockGroup, StockLot, UserStockGroup, UserStockPin
+from .models import (
+    Routine,
+    RoutineEntry,
+    Stock,
+    StockConsumption,
+    StockGroup,
+    StockLot,
+    UserStockGroup,
+    UserStockPin,
+    restore_consumed_lots,
+)
 from .serializers import (
     ConsumeInputSerializer,
     LogInputSerializer,
@@ -230,13 +240,14 @@ class StockViewSet(OptimisticLockingMixin, viewsets.ModelViewSet):
             }
             if client_created_at is not None:
                 consumption_kwargs["client_created_at"] = client_created_at
-            StockConsumption.objects.create(**consumption_kwargs)
+            consumption = StockConsumption.objects.create(**consumption_kwargs)
             stock.save(update_fields=["updated_at"])
 
         logger.info("Stock %r consumed %d unit(s) (user %s).", stock.name, quantity, request.user.username)
         stock.refresh_from_db()
         stock = Stock.objects.prefetch_related("lots").get(pk=stock.pk)
-        return Response(StockSerializer(stock).data)
+        # Additive: clients keep reading the stock; the id is what Undo needs.
+        return Response({**StockSerializer(stock).data, "consumption_id": consumption.id})
 
     @action(detail=True, methods=["get"], url_path="regulatory")
     def regulatory(self, request, pk=None):
@@ -512,9 +523,10 @@ class StockConsumptionViewSet(
     OptimisticLockingMixin,
     mixins.ListModelMixin,
     mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """List stock consumptions and edit notes."""
+    """List stock consumptions, edit notes and undo your own."""
 
     serializer_class = StockConsumptionSerializer
 
@@ -536,6 +548,35 @@ class StockConsumptionViewSet(
         if date_to:
             qs = qs.filter(client_created_at__date__lte=date_to)
         return qs
+
+    def perform_destroy(self, instance):
+        """Undo a consumption: only its author, and only once.
+
+        The row is locked and read again inside the transaction, so two Undo
+        requests racing (a double tap, a replayed queue entry) cannot give the
+        units back twice: the second finds nothing and answers 404.
+
+        `OptimisticLockingMixin` still applies, against the consumption's own
+        `updated_at`. Consuming bumps the stock's, not this row's, so an Undo
+        right after the consumption never fails its precondition.
+        """
+        if instance.consumed_by_id != self.request.user.id:
+            raise PermissionDenied("Only whoever made this consumption can undo it.")
+
+        with transaction.atomic():
+            consumption = StockConsumption.objects.select_for_update().filter(pk=instance.pk).first()
+            if consumption is None:
+                raise NotFound
+            restore_consumed_lots(instance.stock, consumption.consumed_lots)
+            consumption.delete()
+            instance.stock.save(update_fields=["updated_at"])
+
+        logger.info(
+            "Stock %r consumption of %d undone (user %s).",
+            instance.stock.name,
+            instance.quantity,
+            self.request.user.username,
+        )
 
 
 class RoutineEntryViewSet(
@@ -575,20 +616,7 @@ class RoutineEntryViewSet(
 
         Used by the Undo flow after "Mark done" (T036): clicking the
         toast's Undo button within its lifetime must fully reverse the
-        action. For each lot listed in `entry.consumed_lots` we look
-        up the matching StockLot and increment its quantity — or
-        re-create the lot if the `delete_empty_lot` signal wiped it when
-        the last unit was consumed.
-
-        Matching honours the no-merge invariant (T023). A snapshot that
-        carries a `serial_number` identifies one physical pack, so it
-        matches **only** that exact serial and is recreated with it. A
-        snapshot without one matches only unserialized rows, so it can
-        never land on someone else's box — several packs of the same lot
-        and expiry are indistinguishable by `(lot_number, expiry_date)`
-        alone, and merging them would conflate two physical boxes into a
-        single row. Snapshots written before T023 have no such key;
-        `.get()` returning None is treated as "no serial".
+        action: the units go back through `restore_consumed_lots`.
         """
         entry = self.get_object()
         # The owner, or whoever completed it: a recipient can log a shared
@@ -602,33 +630,7 @@ class RoutineEntryViewSet(
         with transaction.atomic():
             stock = entry.routine.stock
             if stock and entry.consumed_lots:
-                for lot_data in entry.consumed_lots:
-                    qty = int(lot_data.get("quantity", 0) or 0)
-                    if qty <= 0:
-                        continue
-                    lot_number = lot_data.get("lot_number") or ""
-                    expiry_date = lot_data.get("expiry_date")
-                    serial_number = lot_data.get("serial_number") or ""
-                    if serial_number:
-                        lookup = {"serial_number": serial_number}
-                    else:
-                        lookup = {
-                            "lot_number": lot_number,
-                            "expiry_date": expiry_date,
-                            "serial_number": "",
-                        }
-                    lot = StockLot.objects.select_for_update().filter(stock=stock, **lookup).first()
-                    if lot is not None:
-                        lot.quantity += qty
-                        lot.save(update_fields=["quantity"])
-                    else:
-                        StockLot.objects.create(
-                            stock=stock,
-                            lot_number=lot_number,
-                            expiry_date=expiry_date,
-                            serial_number=serial_number,
-                            quantity=qty,
-                        )
+                restore_consumed_lots(stock, entry.consumed_lots)
             entry.delete()
 
         return Response(status=status.HTTP_204_NO_CONTENT)

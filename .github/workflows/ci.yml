@@ -100,7 +100,8 @@ jobs:
   # keep depending on the unit jobs.
   test-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # One worker over both projects takes about 21 min on a hosted runner.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
       - name: Write the dev stack's .env

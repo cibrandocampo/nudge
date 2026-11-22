@@ -590,9 +590,9 @@ export const SCENES = [
     run: async ({ page, ids }) => {
       await go(page, `/inventory/${ids.stock(S.hidroferol)}`)
       await setReachable(page, false)
-      // Offline the button is aria-disabled: Playwright refuses to click it,
-      // a finger does not. force = the user's tap.
-      await page.getByTestId('consume-one').click({ force: true })
+      // Offline «Edit» is aria-disabled: Playwright refuses to click it, a
+      // finger does not. force = the user's tap.
+      await page.getByTestId('edit-stock').click({ force: true })
       await expect(page.getByTestId('toast-error')).toBeVisible()
       return () => setReachable(page, true)
     },

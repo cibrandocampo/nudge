@@ -430,6 +430,45 @@ def unlink_routines_on_unshare(sender, instance, action, pk_set, **kwargs):
         UserStockPin.objects.filter(stock=instance).exclude(user=instance.user).delete()
 
 
+def restore_consumed_lots(stock, consumed_lots):
+    """Give back the units of a `consumed_lots` snapshot to `stock`.
+
+    Shared by every undo (a routine entry, a stock consumption). Call it inside
+    a transaction. Each snapshot row goes back to the row it came from, or is
+    re-created if the `delete_empty_lot` signal removed it at zero.
+
+    Matching honours the no-merge invariant (T023). A snapshot that carries a
+    `serial_number` identifies one physical pack, so it matches **only** that
+    exact serial and is recreated with it. A snapshot without one matches only
+    unserialized rows of that lot and expiry, so it can never land on someone
+    else's box. Snapshots written before T023 have no such key; `.get()`
+    returning None is treated as "no serial".
+    """
+    for lot_data in consumed_lots:
+        qty = int(lot_data.get("quantity", 0) or 0)
+        if qty <= 0:
+            continue
+        lot_number = lot_data.get("lot_number") or ""
+        expiry_date = lot_data.get("expiry_date")
+        serial_number = lot_data.get("serial_number") or ""
+        if serial_number:
+            lookup = {"serial_number": serial_number}
+        else:
+            lookup = {"lot_number": lot_number, "expiry_date": expiry_date, "serial_number": ""}
+        lot = StockLot.objects.select_for_update().filter(stock=stock, **lookup).first()
+        if lot is not None:
+            lot.quantity += qty
+            lot.save(update_fields=["quantity"])
+        else:
+            StockLot.objects.create(
+                stock=stock,
+                lot_number=lot_number,
+                expiry_date=expiry_date,
+                serial_number=serial_number,
+                quantity=qty,
+            )
+
+
 class StockConsumption(models.Model):
     """Audit record of a direct stock consumption (outside routines)."""
 

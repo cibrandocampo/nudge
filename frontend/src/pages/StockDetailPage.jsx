@@ -16,6 +16,7 @@ import StockValuesConfirmModal from '../components/StockValuesConfirmModal'
 import SyncStatusBadge from '../components/SyncStatusBadge'
 import { useToast } from '../components/useToast'
 import { useEditMode } from '../hooks/useEditMode'
+import { useConsumeOne } from '../hooks/useConsumeOne'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStock, useStockGroups, useStockList } from '../hooks/useStock'
 import { useStockConsumptions } from '../hooks/useEntries'
@@ -67,8 +68,8 @@ export default function StockDetailPage() {
   // Set only when a save disagrees with the product's stored values; holds the
   // pending submission — and the form's unsettled promise — until the user decides.
   const [pendingReconcile, setPendingReconcile] = useState(null)
-  // Single-unit consumption from the header card, handled by LotPickerModal.
-  const [consumeOpen, setConsumeOpen] = useState(false)
+  // The same flow as the inventory (T129). Queueable, so it also works offline.
+  const { consumeOne, consumingId, pickerStock, closePicker, onPickerConsumed } = useConsumeOne()
 
   const tokens = borderTokensFromStock(stock)
   // The header's own reason line: the inventory row's reasons minus the
@@ -115,23 +116,6 @@ export default function StockDetailPage() {
         showToast({ type: 'error', message: errorToastMessage(err, t) })
       }
     }
-  }
-
-  /**
-   * Open the pack picker for a single unit. `LotPickerModal` owns the whole
-   * flow from here — choosing the lot and, when that lot holds serialised
-   * packs, which box — so this only has to refuse the impossible case.
-   */
-  const handleConsume = () => {
-    if (!reachable) {
-      showToast({ type: 'error', message: t('offline.pageUnavailable') })
-      return
-    }
-    if (!stock?.lots?.length) {
-      showToast({ type: 'error', message: t('common.actionError') })
-      return
-    }
-    setConsumeOpen(true)
   }
 
   /**
@@ -283,7 +267,7 @@ export default function StockDetailPage() {
   const sameOfficialName = nameOfferReady && regulatory.official_name === stock.name
   // Never stack two modals: a lot reconciliation, a consumption or a delete
   // confirmation in progress goes first, and the offer waits for it.
-  const otherModalOpen = Boolean(pendingReconcile || consumeOpen || confirmDelete || confirmRemoveLot)
+  const otherModalOpen = Boolean(pendingReconcile || pickerStock || confirmDelete || confirmRemoveLot)
   const showNameOffer = nameOfferReady && !sameOfficialName && !otherModalOpen
 
   // Nothing to ask when the names already match: clear the flag, once.
@@ -453,11 +437,10 @@ export default function StockDetailPage() {
               {(stock.quantity_available ?? stock.quantity ?? 0) > 0 && (
                 <button
                   type="button"
-                  className={cx(buttons.btn, buttons.primary, s.consumeBtn, !reachable && buttons.disabled)}
-                  onClick={handleConsume}
-                  aria-disabled={!reachable}
+                  className={cx(buttons.btn, buttons.primary, s.consumeBtn, consumingId && buttons.disabled)}
+                  onClick={() => consumeOne(stock)}
+                  disabled={Boolean(consumingId)}
                   aria-label={t('inventory.consumeTooltip')}
-                  title={!reachable ? t('offline.pageUnavailable') : undefined}
                   data-testid="consume-one"
                 >
                   <span className={buttons.consumeGlyph} aria-hidden="true">
@@ -598,13 +581,7 @@ export default function StockDetailPage() {
             />
           )}
 
-          {consumeOpen && (
-            <LotPickerModal
-              stock={stock}
-              onClose={() => setConsumeOpen(false)}
-              onConsumed={() => setConsumeOpen(false)}
-            />
-          )}
+          {pickerStock && <LotPickerModal stock={stock} onClose={closePicker} onConsumed={onPickerConsumed} />}
 
           {pendingReconcile && (
             <StockValuesConfirmModal
