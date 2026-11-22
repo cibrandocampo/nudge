@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/helpers'
@@ -72,7 +72,7 @@ describe('StockRow — line 1', () => {
     const { user } = renderRow({ quantity: 0, quantity_available: 0, stock_severity: 'critical' }, { onConsume })
     const button = screen.getByRole('button', { name: 'No units left to consume' })
     expect(button).toBeDisabled()
-    expect(button).toHaveClass('consumeEmpty')
+    expect(screen.getByTestId('row-action-layer')).toHaveAttribute('data-state', 'blocked')
     expect(screen.queryByRole('button', { name: /consume 1 unit/i })).not.toBeInTheDocument()
     await user.click(button)
     expect(onConsume).not.toHaveBeenCalled()
@@ -341,5 +341,106 @@ describe('StockRow — navigation', () => {
     renderRouted({ id: 42, shared_with: [2] })
     await user.click(screen.getByTestId('shared-badge'))
     expect(await screen.findByText('Detail stub')).toBeInTheDocument()
+  })
+})
+
+describe('StockRow — swipe to consume', () => {
+  // 300 px wide: the row stops at 100 px, a third.
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 300 })
+    Element.prototype.setPointerCapture = vi.fn()
+    navigator.vibrate = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete Element.prototype.setPointerCapture
+    delete navigator.vibrate
+  })
+
+  const drag = (to, { release = true } = {}) => {
+    const link = screen.getByTestId('row-open-detail')
+    fireEvent.pointerDown(link, { pointerId: 1, isPrimary: true, button: 0, clientX: 0, clientY: 0 })
+    for (let x = 20; x <= to; x += 20) {
+      fireEvent.pointerMove(link, { pointerId: 1, clientX: x, clientY: 0 })
+    }
+    if (release) fireEvent.pointerUp(link, { pointerId: 1, clientX: to, clientY: 0 })
+    return link
+  }
+  const dragPx = (link) => Number.parseFloat(link.style.getPropertyValue('--drag'))
+
+  it('consumes one unit on reaching the stop, and springs back', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = drag(120)
+    expect(onConsume).toHaveBeenCalledTimes(1)
+    expect(dragPx(link)).toBe(0)
+  })
+
+  it('does not consume short of the stop', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = drag(80)
+    expect(onConsume).not.toHaveBeenCalled()
+    expect(dragPx(link)).toBe(0)
+  })
+
+  it('does not consume on a quick flick short of the stop', () => {
+    const now = vi.spyOn(Date, 'now')
+    now.mockReturnValue(1000)
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume })
+    const link = screen.getByTestId('row-open-detail')
+    fireEvent.pointerDown(link, { pointerId: 1, isPrimary: true, button: 0, clientX: 0, clientY: 0 })
+    now.mockReturnValue(1010)
+    fireEvent.pointerMove(link, { pointerId: 1, clientX: 60, clientY: 0 })
+    now.mockReturnValue(1020)
+    fireEvent.pointerUp(link, { pointerId: 1, clientX: 60, clientY: 0 })
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('stops at a third of its width, with only a little give', () => {
+    renderRow()
+    const link = drag(280, { release: false })
+    expect(dragPx(link)).toBeGreaterThanOrEqual(100)
+    expect(dragPx(link)).toBeLessThan(125)
+  })
+
+  it('arms the layer and buzzes once at the stop', () => {
+    renderRow()
+    drag(200, { release: false })
+    expect(screen.getByTestId('row-action-layer')).toHaveAttribute('data-state', 'armed')
+    expect(navigator.vibrate).toHaveBeenCalledTimes(1)
+  })
+
+  it('out of stock it resists and consumes nothing', () => {
+    const onConsume = vi.fn()
+    renderRow({ quantity: 0, quantity_available: 0, stock_severity: 'critical' }, { onConsume })
+    drag(280)
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('does not swipe while that product is being consumed', () => {
+    const onConsume = vi.fn()
+    renderRow({}, { onConsume, consuming: true })
+    drag(120)
+    expect(onConsume).not.toHaveBeenCalled()
+  })
+
+  it('a drag does not open the product', () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/" element={<StockRow stock={stock()} consuming={false} onConsume={vi.fn()} />} />
+        <Route path="/inventory/:id" element={<div>Detail stub</div>} />
+      </Routes>,
+    )
+    const link = drag(120)
+    fireEvent.click(link)
+    expect(screen.queryByText('Detail stub')).not.toBeInTheDocument()
+  })
+
+  it('offers «Consume 1 unit» exactly once', () => {
+    renderRow()
+    expect(screen.getAllByRole('button', { name: 'Consume 1 unit' })).toHaveLength(1)
   })
 })

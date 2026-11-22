@@ -319,3 +319,43 @@ describe('useSwipeAction', () => {
     expect(mediaListeners).toHaveLength(0)
   })
 })
+
+describe('useSwipeAction — a stop and no flick (T130)', () => {
+  it('stops following the finger at maxRatio, with a little give', () => {
+    const { target } = renderHarness({ maxRatio: 1 / 3 })
+    down(target)
+    slowDragTo(target, 280)
+    expect(swipe.offset).toBeGreaterThanOrEqual(100)
+    expect(swipe.offset).toBeLessThan(125)
+  })
+
+  it('arms at the stop', () => {
+    const { target } = renderHarness({ maxRatio: 1 / 3 })
+    down(target)
+    slowDragTo(target, 120)
+    expect(swipe.armed).toBe(true)
+  })
+
+  it('caps a blocked drag at the stop too', () => {
+    const { target } = renderHarness({ maxRatio: 1 / 3, blocked: true })
+    down(target)
+    slowDragTo(target, 280)
+    expect(swipe.offset).toBeCloseTo(100)
+  })
+
+  it('with allowFlick off, a quick flick short of the threshold does not commit', () => {
+    const { target, props } = renderHarness({ maxRatio: 1 / 3, allowFlick: false })
+    down(target)
+    move(target, 60, 0, 10)
+    up(target, 60, 10)
+    expect(props.onCommit).not.toHaveBeenCalled()
+  })
+
+  it('without the options, a flick still commits, as routines rely on', () => {
+    const { target, props } = renderHarness()
+    down(target)
+    move(target, 60, 0, 10)
+    up(target, 60, 10)
+    expect(props.onCommit).toHaveBeenCalledTimes(1)
+  })
+})

@@ -16,8 +16,10 @@ import {
   clearLegacyInventoryPrefs,
   readInventoryFilter,
   readInventoryScroll,
+  readSwipeHintSeen,
   writeInventoryFilter,
   writeInventoryScroll,
+  writeSwipeHintSeen,
 } from '../utils/inventoryPrefs'
 import { buildFilterChips, filterStocks, resolveChip } from '../utils/stockSearch'
 import { getLocale } from '../utils/time'
@@ -35,8 +37,17 @@ export default function InventoryPage() {
   const reachable = useServerReachable()
 
   const [flashId, setFlashId] = useState(null)
+  // The gesture has no visible control on touch, so it is taught once.
+  const [showSwipeHint, setShowSwipeHint] = useState(
+    () => !readSwipeHintSeen() && window.matchMedia('(hover: none)').matches,
+  )
+  const dismissSwipeHint = () => {
+    writeSwipeHintSeen()
+    setShowSwipeHint(false)
+  }
   const { consumeOne, consumingId, pickerStock, closePicker, onPickerConsumed } = useConsumeOne({
     onConsumed: ({ id }) => {
+      dismissSwipeHint()
       setFlashId(id)
       setTimeout(() => setFlashId(null), 600)
     },
@@ -198,6 +209,22 @@ export default function InventoryPage() {
       {/* One list, each product once. Rows are separators inside one surface,
           not free-floating cards: at this height a border and margin per
           product would cost more than the row itself. */}
+      {showSwipeHint && visibleStocks.length > 0 && (
+        <p className={s.swipeHint} data-testid="swipe-hint">
+          <Icon name="arrow-right" size="sm" />
+          <span className={s.swipeHintText}>{t('inventory.swipeHint')}</span>
+          <button
+            type="button"
+            className={cx(buttons.hit, s.swipeHintClose)}
+            onClick={dismissSwipeHint}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+          >
+            <Icon name="x" size="sm" />
+          </button>
+        </p>
+      )}
+
       {visibleStocks.length > 0 && (
         <div className={s.rowList} data-testid="inventory-list">
           {visibleStocks.map((stock) => (

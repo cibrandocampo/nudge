@@ -3,8 +3,10 @@ import {
   clearLegacyInventoryPrefs,
   readInventoryFilter,
   readInventoryScroll,
+  readSwipeHintSeen,
   writeInventoryFilter,
   writeInventoryScroll,
+  writeSwipeHintSeen,
 } from '../inventoryPrefs'
 
 const SCROLL_KEY = 'inventory_scroll_y'
@@ -61,6 +63,31 @@ describe('inventory filter', () => {
       throw new Error('full')
     })
     expect(() => writeInventoryFilter('all')).not.toThrow()
+  })
+})
+
+describe('swipe hint', () => {
+  it('has not been seen on a new device', () => {
+    expect(readSwipeHintSeen()).toBe(false)
+  })
+
+  it('stays seen once marked', () => {
+    writeSwipeHintSeen()
+    expect(readSwipeHintSeen()).toBe(true)
+  })
+
+  it('counts as seen when storage is unavailable, so it never nags', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    expect(readSwipeHintSeen()).toBe(true)
+  })
+
+  it('survives a failed write', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full')
+    })
+    expect(() => writeSwipeHintSeen()).not.toThrow()
   })
 })
 

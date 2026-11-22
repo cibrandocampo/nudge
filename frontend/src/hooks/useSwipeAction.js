@@ -16,6 +16,8 @@ export const LEFT_MAX_PX = 16
 // for the "No stock available" label behind the card.
 export const BLOCKED_RESISTANCE = 0.5
 export const BLOCKED_MAX_RATIO = 0.4
+// Past a `maxRatio` stop, the element only gives this much more of the drag.
+export const STOP_RESISTANCE = 0.12
 // Only the last stretch of movement counts towards the release velocity, so a
 // slow drag that ends in a quick flick still commits.
 const VELOCITY_WINDOW_MS = 100
@@ -47,8 +49,13 @@ function dampLeft(dx) {
  * @param {Function} options.onCommit - released armed, or flicked right.
  * @param {Function} [options.onBlockedAttempt] - a blocked element was
  *   released at its cap, i.e. the user really tried.
+ * @param {number} [options.maxRatio] - stop the drag at this fraction of the
+ *   width (with a little give past it) and arm there. For an action that
+ *   leaves the element in place, like consuming one unit.
+ * @param {boolean} [options.allowFlick] - false: a quick flick short of the
+ *   threshold does not commit, for actions a stray gesture must not trigger.
  */
-export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt }) {
+export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt, maxRatio, allowFlick = true }) {
   const [offset, setOffsetState] = useState(0)
   const [dragging, setDragging] = useState(false)
   const [width, setWidth] = useState(0)
@@ -78,8 +85,8 @@ export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt })
     setOffset(0)
   }
 
-  const threshold = width * THRESHOLD_RATIO
-  const blockedCap = width * BLOCKED_MAX_RATIO
+  const threshold = width * (maxRatio ?? THRESHOLD_RATIO)
+  const blockedCap = width * Math.min(BLOCKED_MAX_RATIO, maxRatio ?? BLOCKED_MAX_RATIO)
 
   function onPointerDown(event) {
     // Only the first finger, or a mouse's main button, starts a gesture: a
@@ -124,6 +131,7 @@ export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt })
 
     if (dx < 0) setOffset(dampLeft(dx))
     else if (blocked) setOffset(Math.min(dx * BLOCKED_RESISTANCE, blockedCap))
+    else if (maxRatio && dx > threshold) setOffset(threshold + (dx - threshold) * STOP_RESISTANCE)
     else setOffset(dx)
   }
 
@@ -143,7 +151,8 @@ export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt })
       reset()
       return
     }
-    if (released >= threshold || (released > 0 && velocity >= FLICK_VELOCITY)) {
+    const flicked = allowFlick && released > 0 && velocity >= FLICK_VELOCITY
+    if (released >= threshold || flicked) {
       setDragging(false)
       onCommit()
       return

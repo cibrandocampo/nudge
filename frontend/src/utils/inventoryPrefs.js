@@ -1,5 +1,6 @@
 const LEGACY_COLLAPSED_KEY = 'inventory_collapsed_groups'
 const FILTER_KEY = 'inventory_filter'
+const SWIPE_HINT_KEY = 'inventory_swipe_hint_seen'
 const SCROLL_KEY = 'inventory_scroll_y'
 
 /**
@@ -31,6 +32,27 @@ export function writeInventoryFilter(chipId) {
     sessionStorage.setItem(FILTER_KEY, chipId)
   } catch {
     // Not worth failing a tap over: the filter still applies on screen.
+  }
+}
+
+/**
+ * Whether the user has already learned to swipe a row. `localStorage`: the tip
+ * is shown until it is dismissed or the first unit is consumed, once per device.
+ * Unreadable storage counts as seen, so the tip never nags on every visit.
+ */
+export function readSwipeHintSeen() {
+  try {
+    return localStorage.getItem(SWIPE_HINT_KEY) === 'true'
+  } catch {
+    return true
+  }
+}
+
+export function writeSwipeHintSeen() {
+  try {
+    localStorage.setItem(SWIPE_HINT_KEY, 'true')
+  } catch {
+    // Not worth failing a tap over.
   }
 }
 

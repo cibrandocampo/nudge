@@ -678,6 +678,65 @@ describe('InventoryPage — scroll guard', () => {
   })
 })
 
+describe('InventoryPage — swipe hint', () => {
+  const touch = (matches) =>
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })
+
+  beforeEach(() => {
+    localStorage.removeItem('inventory_swipe_hint_seen')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.removeItem('inventory_swipe_hint_seen')
+  })
+
+  it('teaches the gesture once on a touch device', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    renderPage()
+    expect(await screen.findByTestId('swipe-hint')).toBeInTheDocument()
+  })
+
+  it('is not shown with a mouse', async () => {
+    touch(false)
+    mockStocks([stock()])
+    mockGroups([])
+    renderPage()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument()
+  })
+
+  it('closing it is remembered', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    const { user } = renderPage()
+    const hint = await screen.findByTestId('swipe-hint')
+    await user.click(within(hint).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument()
+    expect(localStorage.getItem('inventory_swipe_hint_seen')).toBe('true')
+  })
+
+  it('goes away after the first consumption', async () => {
+    touch(true)
+    mockStocks([stock()])
+    mockGroups([])
+    server.use(
+      http.post(`${BASE}/stock/1/consume/`, () => HttpResponse.json({ ...stock(), quantity: 4, consumption_id: 5 })),
+    )
+    const { user } = renderPage()
+    await screen.findByTestId('swipe-hint')
+    await user.click(screen.getByLabelText('Consume 1 unit'))
+    await waitFor(() => expect(screen.queryByTestId('swipe-hint')).not.toBeInTheDocument())
+  })
+})
+
 describe('InventoryPage — empty state action (T156)', () => {
   afterEach(() => {
     reachableRef.current = true

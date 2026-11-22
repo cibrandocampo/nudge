@@ -176,6 +176,7 @@
   "inventory.statusOk": "En orden",
   "inventory.statusWarning": "Requiere atención",
   "inventory.statusDanger": "Urgente",
+  "inventory.swipeHint": "Desliza una fila a la derecha para descontar una unidad.",
   "inventory.filterAll": "Todo",
   "inventory.filterAttention": "Atención",
   "inventory.filterUngrouped": "Sin categoría",

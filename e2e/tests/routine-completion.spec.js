@@ -52,7 +52,7 @@ test.describe('Routine completion', () => {
     // selection through and the UI reflects the decrement.
     await goToInventory(page)
     const pillsCard = stockCard(page, 'ebastine')
-    const before = await readNumericValue(pillsCard)
+    const before = await readNumericValue(pillsCard.getByTestId('row-quantity'))
     expect(before).toBeGreaterThan(0)
 
     await goToDashboard(page)
@@ -65,7 +65,7 @@ test.describe('Routine completion', () => {
     await goToInventory(page)
     await expect(stockCard(page, 'ebastine')).toBeVisible()
     await expect
-      .poll(async () => readNumericValue(stockCard(page, 'ebastine')), { timeout: 5_000 })
+      .poll(async () => readNumericValue(stockCard(page, 'ebastine').getByTestId('row-quantity')), { timeout: 5_000 })
       .toBe(before - 1)
 
     // History entry records the specific lot consumed.
@@ -97,7 +97,7 @@ test.describe('Routine completion', () => {
     // put the unit back.
     await goToInventory(page)
     const filterCard = stockCard(page, 'britaFilter')
-    const before = await readNumericValue(filterCard)
+    const before = await readNumericValue(filterCard.getByTestId('row-quantity'))
     expect(before).toBe(1)
 
     await goToDashboard(page)
@@ -112,7 +112,7 @@ test.describe('Routine completion', () => {
     await goToInventory(page)
     await expect(filterCard).toBeVisible()
     await expect
-      .poll(async () => readNumericValue(stockCard(page, 'britaFilter')), { timeout: 5_000 })
+      .poll(async () => readNumericValue(stockCard(page, 'britaFilter').getByTestId('row-quantity')), { timeout: 5_000 })
       .toBe(before)
 
     // History has no waterFilter entry.

@@ -176,6 +176,7 @@
   "inventory.statusOk": "OK",
   "inventory.statusWarning": "Needs attention",
   "inventory.statusDanger": "Urgent",
+  "inventory.swipeHint": "Swipe a row to the right to take one unit.",
   "inventory.filterAll": "All",
   "inventory.filterAttention": "Attention",
   "inventory.filterUngrouped": "No category",

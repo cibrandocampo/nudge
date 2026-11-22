@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useSwipeAction } from '../hooks/useSwipeAction'
 import { toMonthly } from '../utils/consumption'
 import cx from '../utils/cx'
 import { stockRowReasons, stockStatus } from '../utils/stockAlerts'
@@ -10,6 +12,9 @@ import SyncStatusBadge from './SyncStatusBadge'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import s from './StockRow.module.css'
+
+// How far a row travels: enough to mean it, and it comes back.
+export const SWIPE_STOP_RATIO = 1 / 3
 
 const STATUS_LABEL = {
   danger: 'inventory.statusDanger',
@@ -22,11 +27,15 @@ const STATUS_LABEL = {
  * left on line 1, why it matters and until when on line 2, in columns that
  * line up down the list. Line 2 only exists when there is something to say.
  *
- * The row is one link to the product (T205). The consume button sits beside it
- * and not inside: a control nested in a link is invalid and unreachable by
- * assistive tech. E2E opens a product by the link's `row-open-detail` test id
- * (`helpers/navigation.js`; a label would break for a Spanish or Galician
- * profile) and consumes by the button's "Consume 1 unit" name.
+ * The row is one link to the product (T205), in front of a consume layer
+ * (T130). Swiping it right up to a third of its width consumes one unit; it
+ * then springs back, since the product stays in the list. A flick short of the
+ * stop does nothing: this takes a unit of someone's medication.
+ *
+ * The layer holds a real «Consume 1 unit» button, never nested in the link. A
+ * mouse sees it at rest, the keyboard uncovers it on focus, and on touch it
+ * stays behind the row. E2E opens a product by the link's `row-open-detail`
+ * test id and consumes by that button's name (`focus()` + Enter on touch).
  */
 export default function StockRow({ stock, consuming, flashing, onConsume }) {
   const { t } = useTranslation()
@@ -57,9 +66,56 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
   const rate = (daily) => new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(toMonthly(daily))
   const hasMeta = totalRate > 0 || reasons.length > 0
 
+  const swipe = useSwipeAction({
+    enabled: !consuming,
+    blocked: outOfStock,
+    maxRatio: SWIPE_STOP_RATIO,
+    allowFlick: false,
+    onCommit: () => {
+      swipe.reset()
+      onConsume(stock)
+    },
+  })
+
+  // A short buzz on reaching the stop, where supported (Android).
+  const wasArmedRef = useRef(false)
+  useEffect(() => {
+    if (swipe.armed && !wasArmedRef.current && !swipe.reducedMotion) navigator.vibrate?.(10)
+    wasArmedRef.current = swipe.armed
+  }, [swipe.armed, swipe.reducedMotion])
+
+  let layerState = 'idle'
+  if (outOfStock) layerState = 'blocked'
+  else if (swipe.armed) layerState = 'armed'
+
   return (
-    <div className={s.row} data-testid="product-card">
-      <Link to={`/inventory/${stock.id}`} className={s.link} data-testid="row-open-detail">
+    <div className={s.row} data-testid="product-card" data-dragging={swipe.dragging}>
+      <div className={s.actionLayer} data-state={layerState} data-testid="row-action-layer">
+        <button
+          type="button"
+          className={cx(buttons.hit, s.consume)}
+          onClick={() => onConsume(stock)}
+          disabled={outOfStock || consuming}
+          aria-label={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
+          title={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
+          data-testid="row-consume"
+        >
+          <Icon name="package" className={buttons.consumeBox} />
+          <Icon name="arrow-down" className={buttons.consumeArrow} />
+        </button>
+        <span className={s.minusOne} aria-hidden="true">
+          −1
+        </span>
+      </div>
+
+      <Link
+        to={`/inventory/${stock.id}`}
+        className={s.link}
+        style={{ '--drag': `${swipe.offset}px` }}
+        draggable={false}
+        data-testid="row-open-detail"
+        {...swipe.handlers}
+      >
         <span className={s.main}>
           <span
             className={cx(cards.dot, tokens.dot)}
@@ -145,29 +201,6 @@ export default function StockRow({ stock, consuming, flashing, onConsume }) {
           </span>
         )}
       </Link>
-
-      <div className={s.actions}>
-        {/* Out of stock keeps the same button, greyed and disabled, so the
-            column stays aligned and the row says "nothing to consume". */}
-        <button
-          type="button"
-          className={cx(
-            buttons.icon,
-            buttons.outlined,
-            s.consume,
-            outOfStock && s.consumeEmpty,
-            consuming && buttons.disabled,
-          )}
-          onClick={() => onConsume(stock)}
-          disabled={outOfStock || consuming}
-          aria-label={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
-          title={outOfStock ? t('inventory.consumeEmpty') : t('inventory.consumeTooltip')}
-          data-testid="row-consume"
-        >
-          <Icon name="package" className={buttons.consumeBox} />
-          <Icon name="arrow-down" className={buttons.consumeArrow} />
-        </button>
-      </div>
     </div>
   )
 }
