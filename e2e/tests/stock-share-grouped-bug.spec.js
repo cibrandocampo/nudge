@@ -59,7 +59,7 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   await page.getByRole('button', { name: '+ New' }).click()
   await expect(page).toHaveURL('/inventory/new')
   await page.getByPlaceholder(/ibuprofen/i).fill(stockName)
-  await page.getByRole('combobox').selectOption({ label: groupName })
+  await page.getByRole('button', { name: groupName }).click()
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page).toHaveURL(/\/inventory\/\d+$/)
 

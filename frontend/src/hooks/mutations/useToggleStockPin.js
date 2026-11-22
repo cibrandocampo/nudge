@@ -2,33 +2,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 
 /**
- * How many stocks a user may pin, mirroring the backend's
- * `STOCK_MAX_PINNED_ITEMS`.
- *
- * The server is the authority — it enforces the cap and answers 400 with
- * `code: "max_pinned_reached"`. This copy exists only so the UI can disable
- * the control *before* the user presses it and explain why, which is a better
- * experience than a rejection after the fact. If the two ever disagree
- * (the deployment overrides the env var), the server wins and the 400 handler
- * shows its number, not this one.
- */
-export const MAX_PINNED = 4
-
-/**
  * Pin or unpin a stock for the current user.
  *
- * **Online-only, deliberately not queueable.** Two reasons:
+ * **Online-only, deliberately not queueable.** The queue exists so actions the
+ * user *performed* survive a dropout: a unit consumed, a routine completed. A
+ * pin is a preference about how a list is arranged, and nothing is lost by
+ * asking again when back online.
  *
- *   1. The cap on how many stocks may be pinned lives on the server
- *      (`STOCK_MAX_PINNED_ITEMS`). Offline the client cannot know whether a
- *      pin will be accepted — another device may have spent the budget — so
- *      queueing would defer a rejection the user can neither see nor act on
- *      at the time they made the choice.
- *   2. The queue exists so actions the user *performed* survive a dropout: a
- *      unit consumed, a routine completed. A pin is a preference about how a
- *      list is arranged, and nothing is lost by asking again when back online.
- *
- * So it stays a plain `useMutation`, like `useSetMyStockGroup` — the other
+ * So it stays a plain `useMutation`, like `useSetMyStockGroups` — the other
  * per-user setting on a stock. Callers gate the control on
  * `useServerReachable` and catch `OfflineError` for the case where the
  * connection drops between render and click. That catch is live code precisely

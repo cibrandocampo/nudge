@@ -43,9 +43,11 @@ beforeEach(() => {
 })
 
 describe('StockFormPage — create', () => {
-  it('names the category select by its visible label', async () => {
+  it('names the category chips by their visible label', async () => {
+    mockGroups([{ id: 5, name: 'Supplements', display_order: 0 }])
+    mockContacts()
     renderCreate()
-    expect((await screen.findByLabelText('Category')).tagName).toBe('SELECT')
+    expect(await screen.findByRole('group', { name: 'Category' })).toBeInTheDocument()
   })
 
   it('creates a stock with name only (no batches, no share)', async () => {
@@ -73,7 +75,7 @@ describe('StockFormPage — create', () => {
     // state the serializer expects.
     expect(stockBody).toEqual({
       name: 'Paracetamol',
-      group: null,
+      my_groups: [],
       gtin: '',
       national_code: '',
       default_lot_quantity: null,
@@ -560,7 +562,6 @@ describe('StockFormPage — edit', () => {
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
     expect(patchBody).toEqual({
       name: 'Vitamin D3',
-      group: 5,
       shared_with: [],
       gtin: '',
       national_code: '',
@@ -610,22 +611,21 @@ describe('StockFormPage — edit as recipient (shared stock)', () => {
     renderEdit()
     const nameInput = await screen.findByDisplayValue('Brita filter')
     expect(nameInput).toBeDisabled()
-    const select = screen.getByRole('combobox')
-    expect(within(select).getByRole('option', { name: 'Household' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Household', pressed: false })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /share with/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add batch' })).not.toBeInTheDocument()
   })
 
-  it('submits via PATCH /stock/:id/my-group/ instead of the generic update', async () => {
-    mockStock(sharedStock)
+  it('saves through my-groups instead of the generic update', async () => {
+    mockStock({ ...sharedStock, my_groups: [] })
     mockGroups([{ id: 7, name: 'Household', display_order: 0 }])
     mockContacts()
-    let myGroupBody = null
+    let body = null
     let genericPatchCalled = false
     server.use(
-      http.patch(`${BASE}/stock/1/my-group/`, async ({ request }) => {
-        myGroupBody = await request.json()
-        return HttpResponse.json({ ...sharedStock, group: myGroupBody.group })
+      http.put(`${BASE}/stock/1/my-groups/`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ ...sharedStock, my_groups: body.groups })
       }),
       http.patch(`${BASE}/stock/1/`, () => {
         genericPatchCalled = true
@@ -634,13 +634,102 @@ describe('StockFormPage — edit as recipient (shared stock)', () => {
     )
 
     const { user } = renderEdit()
-    const select = await screen.findByRole('combobox')
-    await user.selectOptions(select, '7')
+    await user.click(await screen.findByRole('button', { name: 'Household' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
-    expect(myGroupBody).toEqual({ group: 7 })
+    expect(body).toEqual({ groups: [7] })
     expect(genericPatchCalled).toBe(false)
+  })
+})
+
+describe('StockFormPage — several categories', () => {
+  const groups = [
+    { id: 5, name: 'Supplements', display_order: 0 },
+    { id: 6, name: 'Travel', display_order: 1 },
+  ]
+  const owned = { id: 1, name: 'Vitamin D', my_groups: [5], shared_with: [], updated_at: '2026-04-22T10:00:00Z' }
+
+  const mockSave = () => {
+    const calls = []
+    server.use(
+      http.patch(`${BASE}/stock/1/`, () => HttpResponse.json(owned)),
+      http.put(`${BASE}/stock/1/my-groups/`, async ({ request }) => {
+        const body = await request.json()
+        calls.push(body.groups)
+        return HttpResponse.json({ ...owned, my_groups: body.groups })
+      }),
+    )
+    return calls
+  }
+
+  it('marks the categories the product already has', async () => {
+    mockStock(owned)
+    mockGroups(groups)
+    mockContacts()
+    renderEdit()
+    expect(await screen.findByRole('button', { name: 'Supplements', pressed: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Travel', pressed: false })).toBeInTheDocument()
+  })
+
+  it('adds a second category', async () => {
+    mockStock(owned)
+    mockGroups(groups)
+    mockContacts()
+    const calls = mockSave()
+    const { user } = renderEdit()
+    await user.click(await screen.findByRole('button', { name: 'Travel' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls).toEqual([[5, 6]]))
+  })
+
+  it('removes a category', async () => {
+    mockStock(owned)
+    mockGroups(groups)
+    mockContacts()
+    const calls = mockSave()
+    const { user } = renderEdit()
+    await user.click(await screen.findByRole('button', { name: 'Supplements', pressed: true }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls).toEqual([[]]))
+  })
+
+  it('does not call my-groups when they did not change', async () => {
+    mockStock(owned)
+    mockGroups(groups)
+    mockContacts()
+    const calls = mockSave()
+    const { user } = renderEdit()
+    await screen.findByRole('button', { name: 'Supplements', pressed: true })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.getByText('Detail stub')).toBeInTheDocument())
+    expect(calls).toEqual([])
+  })
+
+  it('creates a product with the chosen categories', async () => {
+    mockGroups(groups)
+    mockContacts()
+    let body = null
+    server.use(
+      http.post(`${BASE}/stock/`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ ...owned, id: 42 }, { status: 201 })
+      }),
+    )
+    const { user } = renderCreate()
+    await user.type(screen.getByPlaceholderText('e.g. Ibuprofen 400mg'), 'New')
+    await user.click(await screen.findByRole('button', { name: 'Supplements' }))
+    await user.click(screen.getByRole('button', { name: 'Travel' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(body?.my_groups).toEqual([5, 6]))
+  })
+
+  it('without categories it points to where they are created', async () => {
+    mockGroups([])
+    mockContacts()
+    renderCreate()
+    const link = await screen.findByRole('link', { name: 'Categories' })
+    expect(link).toHaveAttribute('href', '/inventory/groups')
   })
 })
 

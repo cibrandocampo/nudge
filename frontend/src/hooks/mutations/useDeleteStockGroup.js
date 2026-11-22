@@ -11,10 +11,14 @@ export function useDeleteStockGroup() {
     }),
     onSuccess: (_data, { groupId }) => {
       qc.setQueryData(['stock-groups'], (prev = []) => prev.filter((g) => g.id !== groupId))
-      // Stocks that pointed at the deleted group need their `group` field
-      // cleared locally so they show up in the ungrouped section.
+      // The category leaves every product that had it, so none keeps pointing
+      // at a group that is gone until the refetch lands.
       qc.setQueryData(['stock'], (prev = []) =>
-        prev.map((s) => (s.group === groupId ? { ...s, group: null, group_name: null } : s)),
+        prev.map((s) => ({
+          ...s,
+          ...(s.group === groupId && { group: null, group_name: null }),
+          ...(s.my_groups && { my_groups: s.my_groups.filter((id) => id !== groupId) }),
+        })),
       )
       qc.invalidateQueries({ queryKey: ['stock-groups'] })
       qc.invalidateQueries({ queryKey: ['stock'] })

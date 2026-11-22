@@ -365,7 +365,7 @@ describe('stock mutation hooks — online + offline paths', () => {
     qc.setQueryData(
       ['stock'],
       [
-        { id: 10, group: 2, group_name: 'Bath' },
+        { id: 10, group: 2, group_name: 'Bath', my_groups: [2, 3] },
         { id: 11, group: 3, group_name: 'Kitchen' },
       ],
     )
@@ -375,7 +375,7 @@ describe('stock mutation hooks — online + offline paths', () => {
     })
     expect(qc.getQueryData(['stock-groups'])).toEqual([])
     expect(qc.getQueryData(['stock'])).toEqual([
-      { id: 10, group: null, group_name: null },
+      { id: 10, group: null, group_name: null, my_groups: [3] },
       { id: 11, group: 3, group_name: 'Kitchen' },
     ])
   })

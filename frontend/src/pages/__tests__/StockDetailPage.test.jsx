@@ -406,23 +406,33 @@ describe('StockDetailPage', () => {
     expect(container.querySelector('[class*="cardBorderDanger"]')).toBeInTheDocument()
   })
 
-  it('renders the group name when the stock belongs to a group', async () => {
-    const groupedStock = { ...stock, group: 1 }
+  it('shows every category of the viewer, in their order', async () => {
     server.use(
-      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(groupedStock)),
+      http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, my_groups: [2, 1] })),
       http.get(`${BASE}/stock-groups/`, () =>
-        HttpResponse.json({ results: [{ id: 1, name: 'Household', display_order: 0 }] }),
+        HttpResponse.json({
+          results: [
+            { id: 1, name: 'Household', display_order: 0 },
+            { id: 2, name: 'Travel', display_order: 1 },
+            { id: 3, name: 'Unused', display_order: 2 },
+          ],
+        }),
       ),
     )
     renderDetail()
-    await waitFor(() => expect(screen.getByText('Household')).toBeInTheDocument())
+    const pills = await screen.findByTestId('stock-categories')
+    await waitFor(() => expect(pills.textContent).toBe('HouseholdTravel'))
   })
 
-  it('falls back to the owner group when no personal override exists (T176)', async () => {
-    // ``my_group`` is null → frontend reads ``group`` (the owner's). The
-    // group label rendered must match the owner's group name. Pins the
-    // T176 fallback behaviour against regressions in `effectiveGroupId`.
-    const sharedStock = { ...stock, group: 1, my_group: null, my_group_name: null, is_owner: false }
+  it('shows no pill for a category that is not in the cache', async () => {
+    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, my_groups: [9] })))
+    renderDetail()
+    await screen.findByText('Water filter')
+    expect(screen.queryByTestId('stock-categories')).not.toBeInTheDocument()
+  })
+
+  it("does not show the owner's category to a recipient", async () => {
+    const sharedStock = { ...stock, group: 1, my_groups: [], is_owner: false }
     server.use(
       http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
       http.get(`${BASE}/stock-groups/`, () =>
@@ -430,33 +440,7 @@ describe('StockDetailPage', () => {
       ),
     )
     renderDetail()
-    await waitFor(() => expect(screen.getByText('Owner Group')).toBeInTheDocument())
-  })
-
-  it('shows the personal override over the owner group when present (T176)', async () => {
-    // ``my_group`` is set → frontend prefers it over ``group``. The label
-    // shown is the override's name, not the owner's. Pairs with the
-    // fallback test above to lock in the ``my_group ?? group`` rule.
-    const sharedStock = {
-      ...stock,
-      group: 1,
-      my_group: 2,
-      my_group_name: 'My Override',
-      is_owner: false,
-    }
-    server.use(
-      http.get(`${BASE}/stock/1/`, () => HttpResponse.json(sharedStock)),
-      http.get(`${BASE}/stock-groups/`, () =>
-        HttpResponse.json({
-          results: [
-            { id: 1, name: 'Owner Group', display_order: 0 },
-            { id: 2, name: 'My Override', display_order: 1 },
-          ],
-        }),
-      ),
-    )
-    renderDetail()
-    await waitFor(() => expect(screen.getByText('My Override')).toBeInTheDocument())
+    await screen.findByText('Water filter')
     expect(screen.queryByText('Owner Group')).not.toBeInTheDocument()
   })
 
@@ -1486,7 +1470,7 @@ describe('StockDetailPage — pin control', () => {
     await waitFor(() => expect(deleted).toBe(true))
   })
 
-  it('refuses and explains when the cap is already spent', async () => {
+  it('has no limit: a fifth product can be pinned', async () => {
     mockOtherPinned(4)
     let posted = false
     server.use(
@@ -1497,38 +1481,13 @@ describe('StockDetailPage — pin control', () => {
     )
     const { user } = renderDetail()
     const pin = await screen.findByTestId('pin-toggle')
-    await waitFor(() => expect(pin).toHaveAttribute('aria-disabled', 'true'))
-
-    await user.click(pin)
-    // The message says how to make room, not just "no".
-    expect(await screen.findByText(/remove one to add this/i)).toBeInTheDocument()
-    expect(posted).toBe(false)
-  })
-
-  it('still lets an already-pinned stock be unpinned at the cap', async () => {
-    server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json({ ...stock, is_pinned: true })))
-    mockOtherPinned(4)
-    renderDetail()
-    const pin = await screen.findByTestId('pin-toggle')
-    await waitFor(() => expect(pin).toHaveAttribute('data-pinned', 'true'))
     expect(pin).toHaveAttribute('aria-disabled', 'false')
-  })
-
-  it('surfaces the server cap rejection when two tabs race', async () => {
-    // Our local count was under the cap when read, and stale by the time the
-    // request landed.
-    server.use(
-      http.post(`${BASE}/stock/1/pin/`, () =>
-        HttpResponse.json({ code: 'max_pinned_reached', max: 4, detail: 'nope' }, { status: 400 }),
-      ),
-    )
-    const { user } = renderDetail()
-    await user.click(await screen.findByTestId('pin-toggle'))
-    expect(await screen.findByText(/remove one to add this/i)).toBeInTheDocument()
+    await user.click(pin)
+    await waitFor(() => expect(posted).toBe(true))
   })
 
   it('reports an unexpected server failure with the generic error toast', async () => {
-    // Neither offline nor the cap: a 500 must still tell the user something
+    // Not offline: a 500 must still tell the user something
     // rather than failing silently.
     server.use(http.post(`${BASE}/stock/1/pin/`, () => new HttpResponse(null, { status: 500 })))
     const { user } = renderDetail()

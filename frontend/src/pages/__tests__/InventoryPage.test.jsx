@@ -582,10 +582,10 @@ describe('InventoryPage — pinned section', () => {
     expect(screen.getAllByText('Insulin')).toHaveLength(2)
   })
 
-  it('never shows more than the cap, even if the cache holds more', async () => {
+  it('shows every featured product: there is no limit', async () => {
     renderWith(['A', 'B', 'C', 'D', 'E'].map((name, i) => stock({ id: i + 1, name, group: 10, is_pinned: true })))
     await screen.findByTestId('pinned-section')
-    expect(pinnedNames()).toEqual(['A', 'B', 'C', 'D'])
+    expect(pinnedNames()).toEqual(['A', 'B', 'C', 'D', 'E'])
   })
 
   it('hides while a chip filter is active', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import CategoryChips from '../components/CategoryChips'
 import FormField from '../components/FormField'
 import Icon from '../components/Icon'
 import QueryHandler from '../components/QueryHandler'
@@ -11,21 +12,20 @@ import { useFieldDisclosure } from '../hooks/useFieldDisclosure'
 import { useStock, useStockGroups } from '../hooks/useStock'
 import { useCreateStock } from '../hooks/mutations/useCreateStock'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
-import { useSetMyStockGroup } from '../hooks/mutations/useSetMyStockGroup'
+import { useSetMyStockGroups } from '../hooks/mutations/useSetMyStockGroups'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
 import { isValidGtin, spanishCnFromGtin } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
-import { effectiveGroupId } from '../utils/stockGroup'
 import buttons from '../styles/buttons.module.css'
 import forms from '../styles/forms.module.css'
 import layout from '../styles/layout.module.css'
 import s from './StockFormPage.module.css'
 import BackLink from '../components/BackLink'
 
-const EMPTY_FORM = { name: '', group: '', gtin: '', national_code: '', default_lot_quantity: '' }
+const EMPTY_FORM = { name: '', gtin: '', national_code: '', default_lot_quantity: '' }
 // `crypto.randomUUID` requires a secure context (HTTPS or localhost).
 // Production may run over plain HTTP on a LAN (Synology) and e2e hits
 // `host.docker.internal`, where the API is unavailable. The fallback
@@ -68,11 +68,12 @@ export default function StockFormPage() {
   const createStock = useCreateStock()
   const updateStock = useUpdateStock()
   const createStockLot = useCreateStockLot()
-  const setMyGroup = useSetMyStockGroup()
+  const setMyGroups = useSetMyStockGroups()
   const reachable = useServerReachable()
   const isOwner = !isEditing || stock?.is_owner !== false
 
   const [form, setForm] = useState(EMPTY_FORM)
+  const [myGroups, setMyGroupIds] = useState([])
   const [sharedWith, setSharedWith] = useState([])
   const [batches, setBatches] = useState([])
   const [errors, setErrors] = useState({})
@@ -83,11 +84,11 @@ export default function StockFormPage() {
     if (!isEditing || !stock) return
     setForm({
       name: stock.name ?? '',
-      group: effectiveGroupId(stock) ?? '',
       gtin: stock.gtin ?? '',
       national_code: stock.national_code ?? '',
       default_lot_quantity: stock.default_lot_quantity ?? '',
     })
+    setMyGroupIds(stock.my_groups ?? [])
     setSharedWith(Array.isArray(stock.shared_with) ? stock.shared_with : [])
   }, [isEditing, stock])
 
@@ -144,8 +145,6 @@ export default function StockFormPage() {
     return firstBatch > 0 ? firstBatch : null
   }
 
-  const groupValue = form.group === '' || form.group === null ? null : Number(form.group)
-
   // An NTIN (a Spanish GTIN) carries the CN: the field then shows it, read-only,
   // and nothing is sent — the backend derives it from the GTIN on save.
   const derivedCn = spanishCnFromGtin(form.gtin.trim())
@@ -174,15 +173,12 @@ export default function StockFormPage() {
 
     try {
       if (isEditing) {
-        if (!isOwner) {
-          await setMyGroup.mutateAsync({ stockId, group: groupValue })
-        } else {
+        if (isOwner) {
           await updateStock.mutateAsync({
             stockId,
             stockName: form.name.trim(),
             patch: {
               name: form.name.trim(),
-              group: groupValue,
               shared_with: sharedWith,
               gtin: form.gtin.trim(),
               ...nationalCodeBody,
@@ -191,13 +187,16 @@ export default function StockFormPage() {
             updatedAt: stock?.updated_at,
           })
         }
+        const current = stock?.my_groups ?? []
+        const changed = current.length !== myGroups.length || myGroups.some((groupId) => !current.includes(groupId))
+        if (changed) await setMyGroups.mutateAsync({ stockId, groups: myGroups })
         navigate(`/inventory/${stockId}`)
         return
       }
 
       const created = await createStock.mutateAsync({
         name: form.name.trim(),
-        group: groupValue,
+        myGroups,
         gtin: form.gtin.trim(),
         nationalCode: nationalCodeBody.national_code ?? '',
         defaultLotQuantity: resolvedDefaultLotQuantity(),
@@ -293,14 +292,7 @@ export default function StockFormPage() {
             </FormField>
 
             <FormField label={t('stockForm.groupLabel')}>
-              <select className={forms.input} value={form.group} onChange={field('group')}>
-                <option value="">{t('stockForm.groupNone')}</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+              <CategoryChips groups={groups} value={myGroups} onChange={setMyGroupIds} />
             </FormField>
 
             {/* Product identity. Both optional and learned from scans over time,

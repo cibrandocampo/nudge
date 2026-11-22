@@ -6,7 +6,7 @@ import { goToInventory, goToStockDetail } from './helpers/navigation.js'
 /**
  * Pinned products (T095): a per-user shortcut at the top of the inventory.
  *
- * The seed already pins `SEED.pinnedForUser1` (three of the four allowed),
+ * The seed already pins `SEED.pinnedForUser1` (there is no limit),
  * so every test starts from that state, and resets the seed first: a pin
  * survives in the database, and one leaked by a failed test would shift
  * the counts of the next.
@@ -64,29 +64,14 @@ test.describe('Pinned products', () => {
     await expect(pinnedSection(page)).toBeVisible()
   })
 
-  test('the fifth pin is refused with a message that says how to make room', async ({ page }) => {
-    // Top the seeded pins up to the cap.
-    const toCap = ['ebastine', 'paracetamol', 'biodramina'].slice(0, SEED.maxPinnedItems - SEEDED)
-    for (const key of toCap) {
+  test('there is no limit on featured products', async ({ page }) => {
+    for (const key of ['ebastine', 'paracetamol', 'biodramina']) {
       await goToStockDetail(page, key)
       await page.getByTestId('pin-toggle').click()
       await expect(page.getByTestId('pin-toggle')).toHaveAttribute('data-pinned', 'true')
     }
 
     await goToInventory(page)
-    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEED.maxPinnedItems)
-
-    await goToStockDetail(page, 'ibuprofen')
-    const fifth = page.getByTestId('pin-toggle')
-    await expect(fifth).toHaveAttribute('aria-disabled', 'true')
-    await expect(fifth).toHaveAttribute('title', /remove one to add this/i)
-
-    // `force` because Playwright treats `aria-disabled` as not actionable and
-    // would wait for ever. A real pointer click does reach the handler, and
-    // that is the path being tested: the control explains itself instead of
-    // failing silently.
-    await fifth.click({ force: true })
-    await expect(page.getByText(/remove one to add this/i)).toBeVisible()
-    await expect(fifth).toHaveAttribute('data-pinned', 'false')
+    await expect(pinnedSection(page).getByTestId('product-card')).toHaveCount(SEEDED + 3)
   })
 })

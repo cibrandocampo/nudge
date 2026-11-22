@@ -1,0 +1,55 @@
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* 44 px tall in rem, so it grows with the text size. Long names wrap. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--c-outline);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-accent);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip:hover {
+  background: var(--c-border-inner);
+}
+
+.chosen,
+.chosen:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.chip svg {
+  flex: none;
+}
+
+.empty {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.manage {
+  display: inline-block;
+  padding: 0.6rem 0;
+  color: var(--c-text-accent);
+  font-weight: 600;
+}
