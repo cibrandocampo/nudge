@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { needsAttention, regulatoryLabels, stockRowReasons, worstSeverity } from '../stockAlerts'
+import { needsAttention, regulatoryLabels, stockRowReasons, stockStatus, worstSeverity } from '../stockAlerts'
 
 const stock = (over = {}) => ({
   id: 1,
@@ -24,6 +24,75 @@ const regulatory = (over = {}) => ({
 
 const labelOf = (over) => regulatoryLabels(stock({ regulatory: regulatory(over) }))
 const reasonKeys = (over) => stockRowReasons(stock(over)).map((r) => r.key)
+
+/** Every combination of the inputs the row's status and reasons read. */
+function statusMatrix() {
+  const rows = []
+  for (const stock_severity of ['ok', 'low', 'critical'])
+    for (const expiry_severity of ['none', 'soon', 'reached'])
+      for (const quantity_expired of [0, 1])
+        for (const quantity_available of [0, 5])
+          for (const estimated_depletion_date of [null, '2030-01-01'])
+            for (const supply_severity of [null, 'warning', 'danger'])
+              rows.push(
+                stock({
+                  stock_severity,
+                  expiry_severity,
+                  quantity_expired,
+                  quantity_available,
+                  estimated_depletion_date,
+                  regulatory: regulatory({ supply_severity }),
+                }),
+              )
+  return rows
+}
+
+describe('stockStatus', () => {
+  it.each([
+    ['healthy', {}, 'ok'],
+    ['low stock', { stock_severity: 'low' }, 'warning'],
+    ['critical stock', { stock_severity: 'critical' }, 'danger'],
+    ['expiring soon', { expiry_severity: 'soon' }, 'warning'],
+    ['expiry reached', { expiry_severity: 'reached' }, 'danger'],
+    ['expired units', { quantity_expired: 1 }, 'danger'],
+    ['active supply problem', { regulatory: regulatory({ supply_severity: 'danger' }) }, 'danger'],
+    ['limited supply', { regulatory: regulatory({ supply_severity: 'warning' }) }, 'warning'],
+    ['not marketed', { regulatory: regulatory({ marketed: false }) }, 'warning'],
+    ['suspended', { regulatory: regulatory({ status: 'suspended' }) }, 'danger'],
+    ['worst of several', { stock_severity: 'low', quantity_expired: 2 }, 'danger'],
+    ['a stale severity', { stock_severity: 'out' }, 'danger'],
+    ['no severity', { stock_severity: undefined }, 'danger'],
+  ])('%s', (_name, over, expected) => {
+    expect(stockStatus(stock(over))).toBe(expected)
+  })
+
+  it('reads a missing stock as danger', () => {
+    expect(stockStatus(null)).toBe('danger')
+  })
+
+  it('never calls ok a product with a reason on its row', () => {
+    for (const row of statusMatrix()) {
+      if (stockRowReasons(row).length > 0) expect(stockStatus(row)).not.toBe('ok')
+    }
+  })
+
+  it('never flags a product without saying why on its row', () => {
+    for (const row of statusMatrix()) {
+      if (stockStatus(row) === 'ok') continue
+      const quantity = row.quantity_available
+      const shown = stockRowReasons(row).length > 0 || quantity === 0 || Boolean(row.estimated_depletion_date)
+      expect(shown).toBe(true)
+    }
+  })
+
+  it('agrees with the Attention filter and the group severity', () => {
+    for (const row of statusMatrix()) {
+      const status = stockStatus(row)
+      expect(needsAttention(row)).toBe(status !== 'ok')
+      expect(worstSeverity([row])).toBe(status === 'ok' ? null : status)
+    }
+  })
+})
 
 describe('worstSeverity', () => {
   it('reports nothing for an empty or healthy set', () => {

@@ -30,23 +30,36 @@ export function regulatoryLabels(stock) {
   return labels
 }
 
+const KNOWN_STOCK_SEVERITIES = new Set(['ok', 'low', 'critical'])
+
 /**
- * Whether a stock needs the user's attention on any axis: stock, expiry or
- * what the regulatory agency says (`regulatoryLabels`).
+ * The one status of a product: `'danger'`, `'warning'` or `'ok'`, the worst of
+ * its stock, its expiry and what the regulatory agency says (T203).
  *
- * The single definition of "in trouble" in the app: the inventory's Atención
- * filter chip selects with it, and `stockRowReasons` says why on each row it
- * selects. Two copies would drift the first time a tier is added or a
- * threshold moves.
+ * Everything that colours or selects a product comes from here (the dot, the
+ * Atención filter, a group's severity), so a green dot can never sit next to a
+ * red reason. A missing or unknown `stock_severity` (a stale cached snapshot)
+ * reads as danger: better a false alarm than a false green on a medicine.
  */
+export function stockStatus(stock) {
+  const severity = stock?.stock_severity
+  if (!KNOWN_STOCK_SEVERITIES.has(severity)) return 'danger'
+  const tones = regulatoryLabels(stock).map((label) => label.tone)
+  if (
+    severity === 'critical' ||
+    stock.expiry_severity === 'reached' ||
+    (stock.quantity_expired ?? 0) > 0 ||
+    tones.includes('danger')
+  ) {
+    return 'danger'
+  }
+  if (severity === 'low' || stock.expiry_severity === 'soon' || tones.length > 0) return 'warning'
+  return 'ok'
+}
+
+/** Whether a product needs the user's attention: anything but `ok`. */
 export function needsAttention(stock) {
-  return (
-    stock?.stock_severity === 'critical' ||
-    stock?.stock_severity === 'low' ||
-    stock?.expiry_severity === 'reached' ||
-    stock?.expiry_severity === 'soon' ||
-    regulatoryLabels(stock).length > 0
-  )
+  return stockStatus(stock) !== 'ok'
 }
 
 /**
@@ -97,21 +110,11 @@ export function stockRowReasons(stock) {
 }
 
 /**
- * The worst severity present in a set of stocks: `'danger'`, `'warning'`, or
+ * The worst `stockStatus` in a set of stocks: `'danger'`, `'warning'`, or
  * `null` when everything is healthy.
- *
- * Lets a collapsed group still say that something inside needs attention,
- * which is what makes collapsing safe to do. Same vocabulary as the labels
- * above — anything red on any axis is danger, anything amber is warning.
  */
 export function worstSeverity(stocks) {
-  let warning = false
-  for (const stock of stocks ?? []) {
-    if (stock?.stock_severity === 'critical' || stock?.expiry_severity === 'reached') return 'danger'
-    if (stock?.stock_severity === 'low' || stock?.expiry_severity === 'soon') warning = true
-    const tones = regulatoryLabels(stock).map((label) => label.tone)
-    if (tones.includes('danger')) return 'danger'
-    if (tones.length > 0) warning = true
-  }
-  return warning ? 'warning' : null
+  const statuses = (stocks ?? []).map(stockStatus)
+  if (statuses.includes('danger')) return 'danger'
+  return statuses.includes('warning') ? 'warning' : null
 }

@@ -1,4 +1,5 @@
 import cards from '../styles/cards.module.css'
+import { stockStatus } from './stockAlerts'
 // Tri-state lot expiry severity derived from the lot's own expiry_date.
 // Used by per-lot icon tint and (after T166/T167) per-lot expiry date tint.
 // Returned values match the data-expiring attribute on lot rows.
@@ -12,29 +13,17 @@ export function lotExpirySeverity(lot, today) {
   return 'none'
 }
 
-// Stock-only border tokens (T165). The backend's `stock_severity` integrates
-// the rules from `docs/plans/stock-severity-revised.md` (Tipo 1 + Tipo 2,
-// `quantity_available`-based depletion). The frontend just maps tier → tokens.
-//
-// `expiry_severity` is intentionally NOT consulted here — the per-lot icon
-// tint and per-lot expiry date tint carry the expiry signal. Bundling expiry
-// into the stock-level border was the worst-of-two model from T159–T162;
-// the revised plan reverts that coupling.
-//
-// Default branch covers: null/undefined stock, and any unknown value (e.g.
-// a stale cached snapshot serialised under the old `'out'` contract). Render
-// danger so the user notices the anomaly.
+// Dot and border of a product: its one status (`stockStatus`, T203), the worst
+// of stock, expiry and the regulatory agency. An unknown status renders danger,
+// so the user notices the anomaly.
+const STATUS_TOKENS = {
+  danger: { border: cards.cardBorderDanger, dot: cards.dotDanger },
+  warning: { border: cards.cardBorderWarning, dot: cards.dotWarning },
+  ok: { border: cards.cardBorderSuccess, dot: cards.dotSuccess },
+}
+
 export function borderTokensFromStock(stock) {
-  switch (stock?.stock_severity) {
-    case 'critical':
-      return { border: cards.cardBorderDanger, dot: cards.dotDanger }
-    case 'low':
-      return { border: cards.cardBorderWarning, dot: cards.dotWarning }
-    case 'ok':
-      return { border: cards.cardBorderSuccess, dot: cards.dotSuccess }
-    default:
-      return { border: cards.cardBorderDanger, dot: cards.dotDanger }
-  }
+  return STATUS_TOKENS[stockStatus(stock)]
 }
 
 export function iconClassForLot(lot, today) {
