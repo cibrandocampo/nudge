@@ -398,12 +398,12 @@ describe('StockDetailPage', () => {
     expect(screen.queryByTestId('shared-with-info')).not.toBeInTheDocument()
   })
 
-  it('renders the danger border when stock_severity is "critical"', async () => {
+  it('renders the danger dot when stock_severity is "critical"', async () => {
     const empty = { ...stock, quantity: 0, quantity_available: 0, stock_severity: 'critical', lots: [] }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(empty)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
-    expect(container.querySelector('[class*="cardBorderDanger"]')).toBeInTheDocument()
+    expect(container.querySelector('[class*="dotDanger"]')).toBeInTheDocument()
   })
 
   it('shows every category of the viewer, in their order', async () => {
@@ -549,23 +549,19 @@ describe('StockDetailPage', () => {
     expect(row).toHaveAttribute('data-expiring', 'none')
   })
 
-  // T167: stock-only border (no worst-of-two). The expiry signal lives on
-  // per-lot indicators only — see iconClassForLot tests below.
-  it('paints the header card border warning when stock_severity is "low"', async () => {
+  it('paints the header dot warning when stock_severity is "low"', async () => {
     const lowStock = { ...stock, stock_severity: 'low' }
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(lowStock)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
-    const card = container.querySelector('.card')
-    expect(card.getAttribute('class') ?? '').toContain('cardBorderWarning')
+    expect(container.querySelector('[class*="dotWarning"]')).toBeInTheDocument()
   })
 
-  it('paints the header card border success when stock_severity is "ok"', async () => {
+  it('paints the header dot success when stock_severity is "ok"', async () => {
     server.use(http.get(`${BASE}/stock/1/`, () => HttpResponse.json(stock)))
     const { container } = renderDetail()
     await screen.findByText('Water filter')
-    const card = container.querySelector('.card')
-    expect(card.getAttribute('class') ?? '').toContain('cardBorderSuccess')
+    expect(container.querySelector('[class*="dotSuccess"]')).toBeInTheDocument()
   })
 
   // T167: header rendering — quantity_available, and the expired count on the
@@ -1906,6 +1902,86 @@ describe('StockDetailPage — medicine information section (T113)', () => {
     await new Promise((resolve) => setTimeout(resolve, 3500))
     expect(state.gets).toBe(gets)
   }, 15000)
+
+  it('puts the lots before the folded medicine section', async () => {
+    serveSequence([summary()])
+    renderDetail()
+    const toggle = await screen.findByTestId('medicine-toggle')
+    const lots = screen.getAllByTestId('lot-row')[0]
+    expect(lots.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('regulatory-official-name')).not.toBeVisible()
+  })
+
+  it('unfolds and folds the medicine section', async () => {
+    serveSequence([summary()])
+    const { user } = renderDetail()
+    const toggle = await screen.findByTestId('medicine-toggle')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('regulatory-official-name')).toBeVisible()
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('unfolds with the keyboard', async () => {
+    serveSequence([summary()])
+    const { user } = renderDetail()
+    const toggle = await screen.findByTestId('medicine-toggle')
+    toggle.focus()
+    await user.keyboard('{Enter}')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps a supply problem visible while the section is folded', async () => {
+    serveSequence([summary({ supply_severity: 'danger' })])
+    renderDetail()
+    const alert = await screen.findByTestId('regulatory-alert')
+    expect(alert).toBeVisible()
+    expect(alert).toHaveAttribute('data-tone', 'danger')
+    expect(alert).toHaveTextContent('supply problem')
+  })
+
+  it('keeps the safety notices visible while the section is folded', async () => {
+    const state = serveSequence([summary()])
+    server.use(
+      http.get(`${BASE}/stock/1/regulatory/`, () => {
+        state.detailGets += 1
+        return HttpResponse.json({
+          ...detailOf(state.current.regulatory),
+          safety_notices: [
+            { reference: 'a', title: 'One', url: 'https://x.test/a' },
+            { reference: 'b', title: 'Two', url: 'https://x.test/b' },
+          ],
+        })
+      }),
+    )
+    renderDetail()
+    expect(await screen.findByText('2 safety notices')).toBeVisible()
+  })
+
+  it('an alert unfolds the section and moves the focus to it', async () => {
+    serveSequence([summary({ supply_severity: 'danger' })])
+    const { user } = renderDetail()
+    await user.click(await screen.findByTestId('regulatory-alert'))
+    const toggle = screen.getByTestId('medicine-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveFocus()
+  })
+
+  it('shows no alerts when the agency has nothing to warn about', async () => {
+    serveSequence([summary()])
+    renderDetail()
+    await screen.findByTestId('medicine-toggle')
+    expect(screen.queryByTestId('regulatory-alerts')).not.toBeInTheDocument()
+  })
+
+  it('the name offer still appears with the section folded', async () => {
+    serveSequence([summary({ name_offer_pending: true })], { name: 'Water filter' })
+    renderDetail()
+    expect(await screen.findByText('Use the official name?')).toBeInTheDocument()
+    expect(screen.getByTestId('medicine-toggle')).toHaveAttribute('aria-expanded', 'false')
+  })
 
   it('a refresh polls until the new data lands, refetches the detail and asks about the name again', async () => {
     const fresh = summary({ fetched_at: '2026-11-11T09:00:00Z', name_offer_pending: true })

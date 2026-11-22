@@ -32,6 +32,7 @@
   align-items: center;
   column-gap: 0.5rem;
   padding: 0 0.75rem 0 0;
+  container-type: inline-size;
 }
 
 /* The fourth track exists only for lists whose rows carry a trailing control.
@@ -108,6 +109,19 @@
 }
 [data-with-pills] .trailing {
   grid-column: 4;
+}
+
+/* Too narrow for its text size (320 px at «Extra large»): the expiry takes a
+ * line of its own under the quantity instead of breaking over four. In rem, so
+ * Normal at 320 px keeps the single line. */
+@container (max-width: 15rem) {
+  [data-with-pills] .cardLotExpiry {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0 0 0.15rem calc(0.75rem + 1rem + 0.4rem);
+    text-align: left;
+    white-space: nowrap;
+  }
 }
 
 .cardLotIcon {

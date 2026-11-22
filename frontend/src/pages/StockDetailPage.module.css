@@ -193,3 +193,9 @@
   flex-shrink: 1;
   overflow-wrap: anywhere;
 }
+
+/* The status is the dot's: no coloured rail on the card (T206). */
+.headerCard.headerCard {
+  border-left-width: 1px;
+  border-left-color: var(--c-border);
+}
