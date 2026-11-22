@@ -13,20 +13,17 @@ import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockGroups, useStockList } from '../hooks/useStock'
 import cx from '../utils/cx'
 import {
-  readCollapsedGroups,
+  clearLegacyInventoryPrefs,
+  readInventoryFilter,
   readInventoryScroll,
-  writeCollapsedGroups,
+  writeInventoryFilter,
   writeInventoryScroll,
 } from '../utils/inventoryPrefs'
-import { worstSeverity } from '../utils/stockAlerts'
-import { effectiveGroupId } from '../utils/stockGroup'
-import { buildFilterChips, filterStocks } from '../utils/stockSearch'
+import { buildFilterChips, filterStocks, resolveChip } from '../utils/stockSearch'
+import { getLocale } from '../utils/time'
 import buttons from '../styles/buttons.module.css'
-import cards from '../styles/cards.module.css'
 import layout from '../styles/layout.module.css'
 import s from './InventoryPage.module.css'
-
-/** Section key for products with no group of the viewer's own. */
 
 export default function InventoryPage() {
   const { t } = useTranslation()
@@ -44,47 +41,29 @@ export default function InventoryPage() {
       setTimeout(() => setFlashId(null), 600)
     },
   })
-  const [collapsed, setCollapsed] = useState(() => readCollapsedGroups())
   const [query, setQuery] = useState('')
-  const [activeChip, setActiveChip] = useState('all')
-
-  // Two sticky layers: the search bar sits under the app header, and the
-  // section headers stick under the bar. The bar's height is measured rather
-  // than written down twice — the chips row is one line today, but a longer
-  // translation or a larger text size changes it, and a stale number would
-  // slide the headers under the bar.
-  const barRef = useRef(null)
+  // The filter the user chose; `null` until they do (see `resolveChip`).
+  const [chosenChip, setChosenChip] = useState(() => readInventoryFilter())
   const scrollYRef = useRef(0)
-  const [barHeight, setBarHeight] = useState(0)
+  // Read at teardown: a search result is a different list, so its offset is
+  // not worth restoring.
+  const searchingRef = useRef(false)
 
   useEffect(() => {
-    const el = barRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    // Border-box, not `contentRect`: the latter excludes the bar's padding,
-    // which is ~18px here — enough for a pinned section header to sit under
-    // the bar instead of below it.
-    const observer = new ResizeObserver(() => setBarHeight(el.getBoundingClientRect().height))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [stocks.length])
+    searchingRef.current = query.trim().length > 0
+  }, [query])
 
-  const clearFilters = () => {
+  useEffect(() => {
+    clearLegacyInventoryPrefs()
+  }, [])
+
+  const chooseChip = (chipId) => {
     setQuery('')
-    setActiveChip('all')
+    setChosenChip(chipId)
+    writeInventoryFilter(chipId)
+    scrollYRef.current = 0
+    window.scrollTo(0, 0)
   }
-
-  // Every section that can exist, filter or no filter: a group with nothing
-  // visible under the current search still exists, and its folded state should
-  // outlive the search. Derived from `groups` rather than from what is on
-  // screen, so a deleted group is pruned but a temporarily empty one is not.
-  const validSectionKeys = groups.map((group) => String(group.id))
-
-  const toggleCollapse = (key) =>
-    setCollapsed((prev) => {
-      const next = { ...prev, [key]: !prev[key] }
-      writeCollapsedGroups(next, validSectionKeys)
-      return next
-    })
 
   // Where the user was when they left. Restoring on mount rather than making
   // the detail page's back link a history `back`: there are three ways into a
@@ -93,9 +72,8 @@ export default function InventoryPage() {
   //
   // `useLayoutEffect` so the jump happens before paint, and only once the list
   // has rendered — restoring while the spinner is up would scroll a page with
-  // no height. The saved offset is discarded when a filter is active: the
-  // filtered list is a different, shorter list, and an offset into it means
-  // nothing.
+  // no height. The filter is restored with it, so the offset is into the same
+  // list; leaving from a search saves 0.
   useLayoutEffect(() => {
     if (isLoading) return
     const y = readInventoryScroll()
@@ -127,7 +105,7 @@ export default function InventoryPage() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       window.removeEventListener('scroll', onScroll)
-      writeInventoryScroll(scrollYRef.current)
+      writeInventoryScroll(searchingRef.current ? 0 : scrollYRef.current)
     }
   }, [])
 
@@ -136,53 +114,13 @@ export default function InventoryPage() {
   // Filtering is client-side by design: `useStockList` holds the whole
   // collection with no pagination and the cache is persisted, so this is
   // instant and works offline without a round trip.
-  const isFiltering = query.trim().length > 0 || activeChip !== 'all'
-  const chips = buildFilterChips(stocks, groups, query)
-  const visibleStocks = filterStocks(stocks, groups, activeChip, query)
-
-  // Alphabetical: a list that never reshuffles is what makes it worth having.
-  const pinnedStocks = stocks
-    .filter((st) => st.is_pinned)
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  const knownGroupIds = new Set(groups.map((g) => g.id))
-  const ungroupedStocks = visibleStocks.filter((st) => {
-    const gid = effectiveGroupId(st)
-    return !gid || !knownGroupIds.has(gid)
-  })
-
-  // Only categories get a titled, foldable card. Products with no category
-  // follow in a card of the same look with no title (2026-11-19): someone who
-  // never made categories sees a plain list, not everything under "No
-  // category"; with categories, the loose products no longer read as part of
-  // the last one, since each category sits in its own card. Shared products
-  // routinely land here (the group is per viewer, `my_group ?? group`).
-  const sections = groups
-    .map((group) => ({
-      key: String(group.id),
-      label: group.name,
-      stocks: visibleStocks.filter((st) => effectiveGroupId(st) === group.id),
-    }))
-    .filter((section) => section.stocks.length > 0)
-
-  const renderStockRow = (stock) => (
-    <StockRow
-      key={stock.id}
-      stock={stock}
-      consuming={consumingId === stock.id}
-      flashing={flashId === stock.id}
-      onConsume={consumeOne}
-    />
-  )
-
-  // Rows are separators inside one surface, not a stack of free-floating
-  // cards: at 44 px each, a per-product border and margin would cost more
-  // vertical space than the row itself.
-  const rowList = (rows) => <div className={s.rowList}>{rows.map(renderStockRow)}</div>
+  const searching = query.trim().length > 0
+  const chips = buildFilterChips(stocks, groups)
+  const activeChip = resolveChip(chosenChip, chips)
+  const visibleStocks = filterStocks(stocks, groups, activeChip, query, getLocale())
 
   return (
-    <div style={{ '--inventory-bar-h': `${barHeight}px` }}>
+    <div>
       <div className={layout.topBar}>
         <h1 className={layout.pageTitle}>{t('inventory.title')}</h1>
         <div className={s.topActions}>
@@ -216,32 +154,12 @@ export default function InventoryPage() {
 
       {stocks.length > 0 && (
         <InventorySearchBar
-          barRef={barRef}
           query={query}
           onQueryChange={setQuery}
           chips={chips}
           activeChip={activeChip}
-          onChipChange={setActiveChip}
+          onChipChange={chooseChip}
         />
-      )}
-
-      {/* No "N products need attention" banner: the Atención chip above filters
-          them in one tap, and each row says its own reason (StockRow,
-          `stockRowReasons`). */}
-
-      {/* Pinned products, repeated here and left in their group below. The
-          duplication is the point: it removes a scroll from the most frequent
-          action for four items, and taking them out of their group would make
-          "Diabetes (5)" a lie. Hidden while filtering: it is a shortcut over
-          the whole inventory, not part of a filtered result. */}
-      {!isFiltering && pinnedStocks.length > 0 && (
-        <div className={s.pinnedSection} data-testid="pinned-section">
-          <h2 className={s.pinnedTitle}>
-            <Icon name="pin" size="sm" />
-            {t('inventory.pinnedTitle')}
-          </h2>
-          {rowList(pinnedStocks)}
-        </div>
       )}
 
       {stocks.length === 0 && (
@@ -260,58 +178,37 @@ export default function InventoryPage() {
         />
       )}
 
-      {stocks.length > 0 && visibleStocks.length === 0 && (
+      {searching && visibleStocks.length === 0 && (
         <EmptyCard
           title={t('inventory.noMatchesTitle')}
           message={t('inventory.noMatchesBody')}
-          action={{ label: t('inventory.clearFilters'), onClick: clearFilters, secondary: true }}
+          action={{ label: t('inventory.clearFilters'), onClick: () => setQuery(''), secondary: true }}
         />
       )}
 
-      {/* Grouping is turned off while filtering: section headers over a
-          handful of results are noise, and the user is looking for one thing,
-          not browsing a taxonomy. */}
-      {isFiltering
-        ? visibleStocks.length > 0 && rowList(visibleStocks)
-        : sections.map((section) => {
-            const severity = worstSeverity(section.stocks)
-            return (
-              // A group is one card with its title inside: what belongs together
-              // shares a box (it replaced a 3 px rail outside the left edge,
-              // which read as decoration, not as grouping), and a folded group
-              // stays a card with a chevron — clearly something to open.
-              <div key={section.key} className={s.groupCard} data-testid="group-box" data-section={section.key}>
-                <button
-                  type="button"
-                  className={cx(s.groupCardHeader, s.groupHeaderSticky)}
-                  onClick={() => toggleCollapse(section.key)}
-                  aria-expanded={!collapsed[section.key]}
-                >
-                  <span className={s.groupCardName}>{section.label}</span>
-                  <span className={s.groupCardCount} data-testid="group-count">
-                    {section.stocks.length}
-                  </span>
-                  <span className={s.groupCardEnd}>
-                    {/* Survives collapsing, which is the point: folding a group
-                        must not hide that something inside is red. */}
-                    {severity && (
-                      <span
-                        className={cx(cards.dot, severity === 'danger' ? cards.dotDanger : cards.dotWarning)}
-                        data-testid="group-severity-dot"
-                        data-severity={severity}
-                      />
-                    )}
-                    <Icon name={collapsed[section.key] ? 'chevron-right' : 'chevron-down'} size="sm" />
-                  </span>
-                </button>
-                {!collapsed[section.key] && <div className={s.groupCardRows}>{section.stocks.map(renderStockRow)}</div>}
-              </div>
-            )
-          })}
+      {/* Attention stays on offer at 0, and that is good news. */}
+      {stocks.length > 0 && !searching && visibleStocks.length === 0 && (
+        <EmptyCard
+          title={t('inventory.noAttentionTitle')}
+          message={t('inventory.noAttentionBody')}
+          action={{ label: t('inventory.filterAll'), onClick: () => chooseChip('all'), secondary: true }}
+        />
+      )}
 
-      {!isFiltering && ungroupedStocks.length > 0 && (
-        <div className={s.looseCard} data-testid="ungrouped-list">
-          {ungroupedStocks.map(renderStockRow)}
+      {/* One list, each product once. Rows are separators inside one surface,
+          not free-floating cards: at this height a border and margin per
+          product would cost more than the row itself. */}
+      {visibleStocks.length > 0 && (
+        <div className={s.rowList} data-testid="inventory-list">
+          {visibleStocks.map((stock) => (
+            <StockRow
+              key={stock.id}
+              stock={stock}
+              consuming={consumingId === stock.id}
+              flashing={flashId === stock.id}
+              onConsume={consumeOne}
+            />
+          ))}
         </div>
       )}
 

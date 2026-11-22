@@ -12,9 +12,19 @@ export async function goToDashboard(page) {
   await page.waitForURL('/')
 }
 
-export async function goToInventory(page) {
+/**
+ * Open the inventory. It opens on Featured (T204), so by default this moves to
+ * All, where every product can be found; `{ filter: null }` leaves the view as
+ * it opened, for specs about that view.
+ */
+export async function goToInventory(page, { filter = 'all' } = {}) {
   await navLink(page, '/inventory').click()
   await page.waitForURL('/inventory')
+  if (!filter) return
+  const chip = page.locator(`[data-testid="stock-filter-chip"][data-chip="${filter}"]`)
+  // An empty inventory has no filters to choose from.
+  await expect(chip.or(page.getByTestId('empty-card')).first()).toBeVisible()
+  if ((await chip.count()) > 0 && (await chip.getAttribute('data-active')) === null) await chip.click()
 }
 
 export async function goToHistory(page) {
@@ -47,10 +57,7 @@ export async function goToStockDetail(page, stockKey) {
   // the actions group, because those children use `onClick={stop}` to guard
   // their own buttons. The open-details chevron routes via `goDetail`
   // unambiguously.
-  //
-  // `.first()` because a pinned product renders twice since T095 — once in
-  // the Destacados section and once in its group. Either row opens the same
-  // detail page, so the first one will do.
+
   await stockCard(page, stockKey).first().getByTestId('row-open-detail').click()
   await expect(page).toHaveURL(/\/inventory\/\d+$/)
   await expect(page.getByText(name).first()).toBeVisible()

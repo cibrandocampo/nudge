@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildFilterChips, filterStocks, matchesStock, normalise } from '../stockSearch'
+import { buildFilterChips, filterStocks, matchesStock, normalise, resolveChip } from '../stockSearch'
 
 const stock = (over = {}) => ({
   id: 1,
   name: 'Water filter',
-  group: null,
-  group_name: null,
-  my_group: null,
-  my_group_name: null,
+  my_groups: [],
+  is_pinned: false,
   gtin: '',
   stock_severity: 'ok',
   expiry_severity: 'none',
@@ -53,14 +51,14 @@ describe('matchesStock', () => {
     expect(matchesStock(stock({ name }), query)).toBe(true)
   })
 
-  it('matches the effective group name', () => {
-    expect(matchesStock(stock({ group: 20, group_name: 'Botiquín' }), 'botiquin')).toBe(true)
+  it('matches the name of any of its categories', () => {
+    const filed = stock({ my_groups: [10, 20] })
+    expect(matchesStock(filed, 'botiquin', GROUPS)).toBe(true)
+    expect(matchesStock(filed, 'diabetes', GROUPS)).toBe(true)
   })
 
-  it("prefers the viewer's own group name over the owner's", () => {
-    const shared = stock({ group: 20, group_name: 'Botiquín', my_group: 10, my_group_name: 'Diabetes' })
-    expect(matchesStock(shared, 'diabetes')).toBe(true)
-    expect(matchesStock(shared, 'botiquin')).toBe(false)
+  it('does not match a category the product is not in', () => {
+    expect(matchesStock(stock({ my_groups: [10] }), 'botiquin', GROUPS)).toBe(false)
   })
 
   it('matches a batch number on any of its lots', () => {
@@ -90,92 +88,138 @@ describe('matchesStock', () => {
 
 describe('filterStocks', () => {
   const population = [
-    stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes', stock_severity: 'low' }),
-    stock({ id: 2, name: 'Lancets', group: 10, group_name: 'Diabetes' }),
-    stock({ id: 3, name: 'Aspirin', group: 20, group_name: 'Botiquín', expiry_severity: 'reached' }),
+    stock({ id: 1, name: 'Lancets', my_groups: [10] }),
+    stock({ id: 2, name: 'Insulin', my_groups: [10, 20], stock_severity: 'low', is_pinned: true }),
+    stock({ id: 3, name: 'Aspirin', my_groups: [20], expiry_severity: 'reached' }),
     stock({ id: 4, name: 'Loose item' }),
-    stock({ id: 5, name: 'Orphan', group: 99, group_name: 'Deleted group' }),
   ]
 
-  it('returns everything under the all chip with no query', () => {
-    expect(filterStocks(population, GROUPS, 'all', '')).toHaveLength(5)
+  it('lists everything under All, alphabetically', () => {
+    expect(names(filterStocks(population, GROUPS, 'all', ''))).toEqual(['Aspirin', 'Insulin', 'Lancets', 'Loose item'])
   })
 
-  it('narrows to a group', () => {
-    expect(names(filterStocks(population, GROUPS, 'group-10', ''))).toEqual(['Insulin', 'Lancets'])
+  it('sorts with the given locale', () => {
+    const accented = [stock({ id: 1, name: 'Zinc' }), stock({ id: 2, name: 'Ácido' })]
+    expect(names(filterStocks(accented, [], 'all', '', 'es-ES'))).toEqual(['Ácido', 'Zinc'])
+  })
+
+  it('narrows to the featured products', () => {
+    expect(names(filterStocks(population, GROUPS, 'featured', ''))).toEqual(['Insulin'])
   })
 
   it('narrows to the products needing attention', () => {
-    expect(names(filterStocks(population, GROUPS, 'attention', ''))).toEqual(['Insulin', 'Aspirin'])
+    expect(names(filterStocks(population, GROUPS, 'attention', ''))).toEqual(['Aspirin', 'Insulin'])
   })
 
-  it('treats a stock in an unknown group as ungrouped', () => {
-    // A group the viewer cannot see (deleted, or the owner's own) must not
-    // strand the product outside every chip.
-    expect(names(filterStocks(population, GROUPS, 'ungrouped', ''))).toEqual(['Loose item', 'Orphan'])
+  it('shows a product in each of its categories', () => {
+    expect(names(filterStocks(population, GROUPS, 'group-10', ''))).toEqual(['Insulin', 'Lancets'])
+    expect(names(filterStocks(population, GROUPS, 'group-20', ''))).toEqual(['Aspirin', 'Insulin'])
   })
 
-  it('applies the chip and the query together', () => {
-    expect(names(filterStocks(population, GROUPS, 'group-10', 'lanc'))).toEqual(['Lancets'])
-    expect(filterStocks(population, GROUPS, 'group-20', 'lanc')).toEqual([])
+  it('lists a product in two categories once under All', () => {
+    expect(names(filterStocks(population, GROUPS, 'all', '')).filter((name) => name === 'Insulin')).toHaveLength(1)
+  })
+
+  it('narrows to the products with no category', () => {
+    expect(names(filterStocks(population, GROUPS, 'ungrouped', ''))).toEqual(['Loose item'])
+  })
+
+  it('searches the whole inventory, ignoring the active filter', () => {
+    expect(names(filterStocks(population, GROUPS, 'featured', 'aspirin'))).toEqual(['Aspirin'])
+  })
+
+  it('applies the filter again when the query is only spaces', () => {
+    expect(names(filterStocks(population, GROUPS, 'featured', '   '))).toEqual(['Insulin'])
+  })
+
+  it('does not reorder the list it was given', () => {
+    filterStocks(population, GROUPS, 'all', '')
+    expect(population[0].name).toBe('Lancets')
   })
 
   it('treats missing inputs as empty', () => {
     expect(filterStocks(undefined, undefined, 'all', '')).toEqual([])
+    expect(filterStocks([stock({ my_groups: undefined })], undefined, 'ungrouped', 'water')).toHaveLength(1)
   })
 })
 
 describe('buildFilterChips', () => {
   const population = [
-    stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes', stock_severity: 'low' }),
-    stock({ id: 2, name: 'Lancets', group: 10, group_name: 'Diabetes' }),
-    stock({ id: 3, name: 'Aspirin', group: 20, group_name: 'Botiquín' }),
-    stock({ id: 4, name: 'Loose item' }),
+    stock({ id: 1, name: 'Lancets', my_groups: [10], is_pinned: true }),
+    stock({ id: 2, name: 'Insulin', my_groups: [10, 20], stock_severity: 'low' }),
+    stock({ id: 3, name: 'Loose item' }),
   ]
+  const ids = (chips) => chips.map((chip) => chip.id)
+  const countOf = (chips, id) => chips.find((chip) => chip.id === id)?.count
 
-  it('offers all, attention, one per non-empty group, and ungrouped', () => {
-    const chips = buildFilterChips(population, GROUPS, '')
-    expect(chips.map((c) => c.id)).toEqual(['all', 'attention', 'group-10', 'group-20', 'ungrouped'])
-    expect(chips.map((c) => c.count)).toEqual([4, 1, 2, 1, 1])
+  it('keeps the fixed order', () => {
+    expect(ids(buildFilterChips(population, GROUPS))).toEqual([
+      'featured',
+      'attention',
+      'all',
+      'group-10',
+      'group-20',
+      'ungrouped',
+    ])
   })
 
-  it('drops chips that would show nothing', () => {
-    const healthy = [stock({ id: 1, name: 'Insulin', group: 10, group_name: 'Diabetes' })]
-    const chips = buildFilterChips(healthy, GROUPS, '')
-    // No attention (all healthy), no Botiquín (empty), no ungrouped.
-    expect(chips.map((c) => c.id)).toEqual(['all', 'group-10'])
+  it('counts a product in each of its categories', () => {
+    const chips = buildFilterChips(population, GROUPS)
+    expect(countOf(chips, 'group-10')).toBe(2)
+    expect(countOf(chips, 'group-20')).toBe(1)
+    expect(countOf(chips, 'all')).toBe(3)
   })
 
-  it('offers no ungrouped chip when there is no category chip beside it', () => {
-    // Without categories "No category" is just "All" under another name.
-    const loose = [stock({ id: 1, name: 'Insulin' }), stock({ id: 2, name: 'Lancets' })]
-    expect(buildFilterChips(loose, [], '').map((c) => c.id)).toEqual(['all'])
-    // Categories that exist but hold nothing visible count as none.
-    expect(buildFilterChips(loose, GROUPS, '').map((c) => c.id)).toEqual(['all'])
+  it('drops Featured with nothing featured', () => {
+    expect(ids(buildFilterChips([stock()], GROUPS))).not.toContain('featured')
   })
 
-  it('keeps the all chip even when the query matches nothing', () => {
-    const chips = buildFilterChips(population, GROUPS, 'zzzzz')
-    expect(chips.map((c) => c.id)).toEqual(['all'])
-    expect(chips[0].count).toBe(0)
+  it('keeps Attention at zero', () => {
+    expect(countOf(buildFilterChips([stock()], []), 'attention')).toBe(0)
   })
 
-  it('counts after the query, so a chip says what clicking would show', () => {
-    const chips = buildFilterChips(population, GROUPS, 'in')
-    // 'Insulin' and 'Aspirin' contain "in"; Lancets and Loose item do not.
-    expect(chips.find((c) => c.id === 'all').count).toBe(2)
-    expect(chips.find((c) => c.id === 'group-10').count).toBe(1)
-    expect(chips.find((c) => c.id === 'group-20').count).toBe(1)
+  it('drops a category with no products', () => {
+    expect(ids(buildFilterChips([stock({ my_groups: [10] })], GROUPS))).not.toContain('group-20')
   })
 
-  it('carries the group name for group chips and nothing for the rest', () => {
-    const chips = buildFilterChips(population, GROUPS, '')
-    expect(chips.find((c) => c.id === 'group-10').name).toBe('Diabetes')
-    expect(chips.find((c) => c.id === 'all').name).toBeNull()
+  it('offers no «No category» to someone without categories', () => {
+    expect(ids(buildFilterChips([stock()], []))).not.toContain('ungrouped')
+  })
+
+  it('offers no «No category» when every product has one', () => {
+    expect(ids(buildFilterChips([stock({ my_groups: [10] })], GROUPS))).not.toContain('ungrouped')
+  })
+
+  it('carries the name only on category chips', () => {
+    const chips = buildFilterChips(population, GROUPS)
+    expect(chips.find((chip) => chip.id === 'group-10').name).toBe('Diabetes')
+    expect(chips.find((chip) => chip.id === 'all').name).toBeNull()
   })
 
   it('treats missing inputs as empty', () => {
-    expect(buildFilterChips(undefined, undefined, '')).toEqual([{ id: 'all', kind: 'all', name: null, count: 0 }])
+    expect(ids(buildFilterChips(undefined, undefined))).toEqual(['attention', 'all'])
+  })
+})
+
+describe('resolveChip', () => {
+  const withFeatured = [{ id: 'featured' }, { id: 'attention' }, { id: 'all' }, { id: 'group-10' }]
+  const withoutFeatured = [{ id: 'attention' }, { id: 'all' }]
+
+  it('opens on Featured when there is any', () => {
+    expect(resolveChip(null, withFeatured)).toBe('featured')
+  })
+
+  it('opens on All with nothing featured', () => {
+    expect(resolveChip(null, withoutFeatured)).toBe('all')
+  })
+
+  it('keeps a choice that still exists', () => {
+    expect(resolveChip('group-10', withFeatured)).toBe('group-10')
+  })
+
+  it('falls back to All when the chosen filter is gone', () => {
+    expect(resolveChip('featured', withoutFeatured)).toBe('all')
+    expect(resolveChip('group-10', withoutFeatured)).toBe('all')
   })
 })
 

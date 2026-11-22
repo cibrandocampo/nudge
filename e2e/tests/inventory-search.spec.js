@@ -55,8 +55,6 @@ test.describe('Inventory search and filters', () => {
 
     await expect(groupChip).toHaveAttribute('data-active', 'true')
     await expect(rows(page)).toHaveCount(count)
-    // Grouping is off while filtering — the results are one flat list.
-    await expect(page.getByTestId('group-box')).toHaveCount(0)
   })
 
   test('the attention chip lists its products, and each row says why', async ({ page }) => {
@@ -81,6 +79,5 @@ test.describe('Inventory search and filters', () => {
     await page.getByRole('button', { name: /clear filters/i }).click()
     await expect(page.getByTestId('stock-search')).toHaveValue('')
     await expect(rows(page).first()).toBeVisible()
-    await expect(page.getByTestId('group-box').first()).toBeVisible()
   })
 })

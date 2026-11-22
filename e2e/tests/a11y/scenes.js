@@ -226,7 +226,7 @@ export const SCENES = [
     user: 'user1',
     run: async ({ page }) => {
       await go(page, '/inventory')
-      await expect(page.getByTestId('group-box').first()).toBeVisible()
+      await expect(page.getByTestId('inventory-list')).toBeVisible()
     },
   },
   {
@@ -239,11 +239,13 @@ export const SCENES = [
     widths: ['m412'],
     run: async ({ page }) => {
       await go(page, '/inventory')
-      await expect(page.getByTestId('group-box').first()).toBeVisible()
+      // All: Featured alone may not reach the bar.
+      await page.locator('[data-testid="stock-filter-chip"][data-chip="all"]').click()
+      await expect(page.getByTestId('inventory-list')).toBeVisible()
       await page.evaluate(() => window.scrollTo(0, 0))
       const underneath = await page.evaluate(() => {
         const bar = document.querySelector('nav').getBoundingClientRect()
-        return [...document.querySelectorAll('[data-testid="product-card"], [data-testid="group-box"]')].some((el) => {
+        return [...document.querySelectorAll('[data-testid="product-card"]')].some((el) => {
           const r = el.getBoundingClientRect()
           return r.top < bar.bottom && r.bottom > bar.top
         })

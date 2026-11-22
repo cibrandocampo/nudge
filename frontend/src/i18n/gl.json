@@ -171,6 +171,8 @@
   "inventory.unpinAction": "Quitar de destacados",
   "inventory.searchPlaceholder": "Buscar produto, categoría ou lote",
   "inventory.searchClear": "Limpar busca",
+  "inventory.noAttentionTitle": "Todo en orde",
+  "inventory.noAttentionBody": "Ningún produto necesita a túa atención agora mesmo.",
   "inventory.filterAll": "Todo",
   "inventory.filterAttention": "Atención",
   "inventory.filterUngrouped": "Sen categoría",

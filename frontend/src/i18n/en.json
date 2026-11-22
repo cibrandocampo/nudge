@@ -171,6 +171,8 @@
   "inventory.unpinAction": "Remove from pinned",
   "inventory.searchPlaceholder": "Search product, category or batch",
   "inventory.searchClear": "Clear search",
+  "inventory.noAttentionTitle": "All in order",
+  "inventory.noAttentionBody": "No product needs your attention right now.",
   "inventory.filterAll": "All",
   "inventory.filterAttention": "Attention",
   "inventory.filterUngrouped": "No category",

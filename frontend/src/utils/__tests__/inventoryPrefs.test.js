@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { readCollapsedGroups, readInventoryScroll, writeCollapsedGroups, writeInventoryScroll } from '../inventoryPrefs'
+import {
+  clearLegacyInventoryPrefs,
+  readInventoryFilter,
+  readInventoryScroll,
+  writeInventoryFilter,
+  writeInventoryScroll,
+} from '../inventoryPrefs'
 
-const COLLAPSED_KEY = 'inventory_collapsed_groups'
 const SCROLL_KEY = 'inventory_scroll_y'
 
 beforeEach(() => {
@@ -13,72 +18,49 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('readCollapsedGroups', () => {
-  it('returns nothing collapsed when the preference has never been written', () => {
-    expect(readCollapsedGroups()).toEqual({})
-  })
-
-  it('reads back what was written', () => {
-    writeCollapsedGroups({ 10: true, ungrouped: true })
-    expect(readCollapsedGroups()).toEqual({ 10: true, ungrouped: true })
-  })
-
-  it.each([
-    ['invalid JSON', 'not json at all'],
-    ['a JSON array', '[1,2,3]'],
-    ['a JSON scalar', '42'],
-    ['null', 'null'],
-  ])('falls back to nothing collapsed when the stored value is %s', (_label, raw) => {
-    // An unreadable preference must never blank the page: everything expanded
-    // is the safe reading, because the user still sees their stock.
-    localStorage.setItem(COLLAPSED_KEY, raw)
-    expect(readCollapsedGroups()).toEqual({})
-  })
-
-  it('ignores entries that are not exactly true', () => {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify({ 10: true, 20: false, 30: 'yes', 40: 1 }))
-    expect(readCollapsedGroups()).toEqual({ 10: true })
-  })
-
-  it('drops sections that no longer exist', () => {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify({ 10: true, 99: true }))
-    expect(readCollapsedGroups(['10', 'ungrouped'])).toEqual({ 10: true })
-  })
-
-  it('accepts numeric section keys, which is how group ids arrive', () => {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify({ 10: true }))
-    expect(readCollapsedGroups([10, 'ungrouped'])).toEqual({ 10: true })
+describe('clearLegacyInventoryPrefs', () => {
+  it('forgets the folded sections of the old list', () => {
+    localStorage.setItem('inventory_collapsed_groups', '{"10":true}')
+    clearLegacyInventoryPrefs()
+    expect(localStorage.getItem('inventory_collapsed_groups')).toBeNull()
   })
 
   it('survives storage being unavailable', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('denied')
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('blocked')
     })
-    expect(readCollapsedGroups()).toEqual({})
+    expect(() => clearLegacyInventoryPrefs()).not.toThrow()
   })
 })
 
-describe('writeCollapsedGroups', () => {
-  it('prunes deleted sections as it writes', () => {
-    writeCollapsedGroups({ 10: true, 99: true }, ['10'])
-    expect(JSON.parse(localStorage.getItem(COLLAPSED_KEY))).toEqual({ 10: true })
+describe('inventory filter', () => {
+  it('has no choice until one is made', () => {
+    expect(readInventoryFilter()).toBeNull()
   })
 
-  it('stores only the collapsed sections, not the expanded ones', () => {
-    writeCollapsedGroups({ 10: true, 20: false })
-    expect(JSON.parse(localStorage.getItem(COLLAPSED_KEY))).toEqual({ 10: true })
+  it('round-trips the chosen filter', () => {
+    writeInventoryFilter('group-10')
+    expect(readInventoryFilter()).toBe('group-10')
   })
 
-  it('treats a missing map as nothing collapsed', () => {
-    writeCollapsedGroups(undefined)
-    expect(JSON.parse(localStorage.getItem(COLLAPSED_KEY))).toEqual({})
+  it('lives in the session, so a new visit starts from the default', () => {
+    writeInventoryFilter('attention')
+    expect(sessionStorage.getItem('inventory_filter')).toBe('attention')
+    expect(localStorage.getItem('inventory_filter')).toBeNull()
   })
 
-  it('survives storage being unavailable', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('quota')
+  it('reads as no choice when storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
     })
-    expect(() => writeCollapsedGroups({ 10: true })).not.toThrow()
+    expect(readInventoryFilter()).toBeNull()
+  })
+
+  it('survives a failed write', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full')
+    })
+    expect(() => writeInventoryFilter('all')).not.toThrow()
   })
 })
 

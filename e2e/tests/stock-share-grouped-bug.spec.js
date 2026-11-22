@@ -67,7 +67,8 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
   await page.getByRole('link', { name: /back to inventory/i }).click()
   const ownerCard = page.locator('[data-testid="product-card"]').filter({ hasText: stockName })
   await expect(ownerCard).toBeVisible()
-  await expect(page.locator('[data-testid="group-box"]').filter({ hasText: groupName })).toBeVisible()
+  const groupChip = page.locator('[data-testid="stock-filter-chip"]').filter({ hasText: groupName })
+  await expect(groupChip).toBeVisible()
 
   // ── 5. Share the stock with user2 via API ─────────────────────────────
   await page.evaluate(
@@ -96,7 +97,8 @@ test('shared stock in a group is visible to recipient (grouped-stock bug)', asyn
 
   // ── Screenshot 1: owner's inventory (stock inside a group) ────────────
   await page.reload()
-  const groupBox = page.locator('[data-testid="group-box"]').filter({ hasText: groupName })
+  await groupChip.click()
+  const groupBox = page.getByTestId('inventory-list')
   await expect(groupBox).toBeVisible()
   const ownerCardInGroup = page.locator('[data-testid="product-card"]').filter({ hasText: stockName })
   await expect(ownerCardInGroup).toBeVisible()

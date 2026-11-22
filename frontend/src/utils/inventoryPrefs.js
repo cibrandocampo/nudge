@@ -1,55 +1,36 @@
-const COLLAPSED_KEY = 'inventory_collapsed_groups'
+const LEGACY_COLLAPSED_KEY = 'inventory_collapsed_groups'
+const FILTER_KEY = 'inventory_filter'
 const SCROLL_KEY = 'inventory_scroll_y'
 
 /**
- * Which inventory sections the user has folded away.
- *
- * Persisted because collapsing was previously component state: opening a
- * product and coming back expanded everything again, so folding never paid off
- * and the feature was effectively dead. One key holding `{ [sectionKey]: true }`
- * rather than a key per group, so clearing the preference is one removal and
- * the storage cannot accumulate orphans indefinitely.
- *
- * Every read is defensive. Storage can be disabled (private mode, blocked
- * cookies) and the value can be anything if a user or another tab wrote
- * nonsense — none of which is worth breaking the page for. An unreadable
- * preference means "nothing collapsed", which is the safe default: the user
- * sees their stock rather than an empty screen.
+ * Forget the folded sections of the old grouped list. Sections are gone, so the
+ * stored value would otherwise stay on the device for ever.
  */
-export function readCollapsedGroups(validKeys) {
-  let parsed
+export function clearLegacyInventoryPrefs() {
   try {
-    parsed = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? 'null')
+    localStorage.removeItem(LEGACY_COLLAPSED_KEY)
   } catch {
-    return {}
+    // Storage disabled: there is nothing stored to forget.
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-
-  // Drop entries for sections that no longer exist — a deleted group must not
-  // keep a live one folded by colliding on a recycled id.
-  const allowed = validKeys && new Set(validKeys.map(String))
-  const result = {}
-  for (const [key, value] of Object.entries(parsed)) {
-    if (value !== true) continue
-    if (allowed && !allowed.has(key)) continue
-    result[key] = true
-  }
-  return result
 }
 
-/** Persist the collapsed map, keeping only the sections that still exist. */
-export function writeCollapsedGroups(collapsed, validKeys) {
-  const allowed = validKeys && new Set(validKeys.map(String))
-  const pruned = {}
-  for (const [key, value] of Object.entries(collapsed ?? {})) {
-    if (value !== true) continue
-    if (allowed && !allowed.has(key)) continue
-    pruned[key] = true
-  }
+/**
+ * The filter chosen in this session, so coming back from a product keeps it.
+ * `sessionStorage`: opening the app again starts from the default view.
+ */
+export function readInventoryFilter() {
   try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(pruned))
+    return sessionStorage.getItem(FILTER_KEY)
   } catch {
-    // Nothing to do: the choice simply will not survive this session.
+    return null
+  }
+}
+
+export function writeInventoryFilter(chipId) {
+  try {
+    sessionStorage.setItem(FILTER_KEY, chipId)
+  } catch {
+    // Not worth failing a tap over: the filter still applies on screen.
   }
 }
 
