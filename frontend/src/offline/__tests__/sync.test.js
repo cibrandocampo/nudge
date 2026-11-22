@@ -334,6 +334,57 @@ describe('offline sync worker', () => {
     }
   })
 
+  describe('Background Sync with the server down', () => {
+    let registerSpy
+    let originalSw
+    let originalSync
+    const settle = () => new Promise((r) => setTimeout(r, 30))
+
+    beforeEach(() => {
+      registerSpy = vi.fn().mockResolvedValue(undefined)
+      originalSw = navigator.serviceWorker
+      originalSync = window.SyncManager
+      navigator.serviceWorker = {
+        ready: Promise.resolve({ sync: { register: registerSpy } }),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }
+      window.SyncManager = function SyncManager() {}
+      server.use(http.post(`${BASE}/routines/1/log/`, () => HttpResponse.error()))
+    })
+
+    afterEach(() => {
+      navigator.serviceWorker = originalSw
+      if (originalSync === undefined) delete window.SyncManager
+      else window.SyncManager = originalSync
+    })
+
+    it('a failed attempt does not ask for another sync', async () => {
+      initSyncWorker(fakeQueryClient())
+      await enqueue(pendingEntry())
+      await vi.waitFor(() => expect(registerSpy).toHaveBeenCalledTimes(1))
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await processQueue()
+        await settle()
+      }
+
+      expect((await list())[0].status).toBe('pending')
+      expect(registerSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('asks again for new work once the queue has emptied', async () => {
+      initSyncWorker(fakeQueryClient())
+      await enqueue(pendingEntry())
+      await vi.waitFor(() => expect(registerSpy).toHaveBeenCalledTimes(1))
+      await remove('k-1')
+      await settle()
+
+      await enqueue(pendingEntry({ id: 'k-2' }))
+      await vi.waitFor(() => expect(registerSpy).toHaveBeenCalledTimes(2))
+    })
+  })
+
   it('__resetSyncWorkerForTests is safe to call before initSyncWorker', () => {
     expect(() => __resetSyncWorkerForTests()).not.toThrow()
   })
