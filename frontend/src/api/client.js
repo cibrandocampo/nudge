@@ -160,6 +160,7 @@ export const api = {
   get: (path, opts = {}) => request(path, { ...opts, method: 'GET' }),
   post: (path, body, opts = {}) => request(path, makeMutationOptions('POST', body, opts)),
   patch: (path, body, opts = {}) => request(path, makeMutationOptions('PATCH', body, opts)),
+  put: (path, body, opts = {}) => request(path, makeMutationOptions('PUT', body, opts)),
   delete: (path, body, opts = {}) => request(path, makeMutationOptions('DELETE', body, opts)),
 }
 

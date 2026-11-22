@@ -65,6 +65,7 @@ from apps.routines.models import (
     StockLot,
     UserStockGroup,
     UserStockPin,
+    set_user_stock_groups,
 )
 
 User = get_user_model()
@@ -566,9 +567,7 @@ class Command(BaseCommand):
         stocks["descaler"].shared_with.add(cibran)
         StockLot.objects.create(stock=stocks["descaler"], quantity=2)
 
-        # Pinned to the top of cibran's inventory. Three rather than the
-        # maximum of four, so the section reads as a deliberate shortcut and
-        # not a filled quota, and chosen to span the states the row can show:
+        # Cibran's Featured products, chosen to span the states the row can show:
         # one healthy with a consumption rate, one with a batch expiring soon,
         # one out of stock. Pinning is per user — maria's inventory is
         # unaffected, which is the point of `UserStockPin` existing at all.
@@ -590,6 +589,18 @@ class Command(BaseCommand):
             quantity=21,
             expiry_date=today + timedelta(days=90),
             lot_number="BCP-2026",
+        )
+
+        # Each owner's category also lives in UserStockGroup, the source of truth.
+        for stock in stocks.values():
+            if stock.group_id:
+                set_user_stock_groups(stock.user, stock, [stock.group_id])
+        # A product in two categories. Diabetes comes first in cibran's order,
+        # so the single-category API keeps reporting it there.
+        set_user_stock_groups(
+            cibran,
+            stocks["hidroferol"],
+            [groups[("cibran", "Diabetes")].id, groups[("cibran", "Medicine cabinet")].id],
         )
 
         return stocks

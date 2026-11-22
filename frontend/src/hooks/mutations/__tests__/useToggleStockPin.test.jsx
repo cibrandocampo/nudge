@@ -72,12 +72,8 @@ describe('useToggleStockPin', () => {
     expect(qc.getQueryData(['stock', 7])).toBeUndefined()
   })
 
-  it('surfaces the cap rejection with its code and limit', async () => {
-    server.use(
-      http.post(`${BASE}/stock/7/pin/`, () =>
-        HttpResponse.json({ code: 'max_pinned_reached', max: 4, detail: 'nope' }, { status: 400 }),
-      ),
-    )
+  it('reports a refused pin with its status', async () => {
+    server.use(http.post(`${BASE}/stock/7/pin/`, () => HttpResponse.json({ detail: 'nope' }, { status: 400 })))
     const { result } = renderWithCache([stock()])
 
     let caught
@@ -86,8 +82,7 @@ describe('useToggleStockPin', () => {
     })
 
     expect(caught.status).toBe(400)
-    expect(caught.body.code).toBe('max_pinned_reached')
-    expect(caught.body.max).toBe(4)
+    expect(caught.body.detail).toBe('nope')
   })
 
   it('reports a failed unpin instead of pretending it worked', async () => {

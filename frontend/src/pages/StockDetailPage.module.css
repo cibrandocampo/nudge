@@ -177,3 +177,19 @@
 .headerRow .headerQty {
   white-space: nowrap;
 }
+
+/* All the viewer's categories, on a line of their own that wraps. Same side
+   padding as the header and the actions around it. */
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0 0.75rem 0.6rem;
+}
+
+.categories > .categoryPill {
+  max-width: 100%;
+  margin-left: 0;
+  flex-shrink: 1;
+  overflow-wrap: anywhere;
+}

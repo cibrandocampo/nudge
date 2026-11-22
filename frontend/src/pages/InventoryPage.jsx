@@ -11,7 +11,6 @@ import { useToast } from '../components/useToast'
 import { useConsumeOne } from '../hooks/useConsumeOne'
 import { useServerReachable } from '../hooks/useServerReachable'
 import { useStockGroups, useStockList } from '../hooks/useStock'
-import { MAX_PINNED } from '../hooks/mutations/useToggleStockPin'
 import cx from '../utils/cx'
 import {
   readCollapsedGroups,
@@ -141,15 +140,11 @@ export default function InventoryPage() {
   const chips = buildFilterChips(stocks, groups, query)
   const visibleStocks = filterStocks(stocks, groups, activeChip, query)
 
-  // Alphabetical rather than by pin order: with at most four items the order
-  // barely matters, and a list that never reshuffles is what makes the section
-  // worth having. Sliced defensively — the server caps this, but a stale cache
-  // or a raised limit must not turn a shortcut into a second list.
+  // Alphabetical: a list that never reshuffles is what makes it worth having.
   const pinnedStocks = stocks
     .filter((st) => st.is_pinned)
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, MAX_PINNED)
 
   const knownGroupIds = new Set(groups.map((g) => g.id))
   const ungroupedStocks = visibleStocks.filter((st) => {

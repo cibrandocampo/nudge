@@ -23,7 +23,7 @@ import { useStockConsumptions } from '../hooks/useEntries'
 import { useCreateStockLot } from '../hooks/mutations/useCreateStockLot'
 import { useDeleteStock } from '../hooks/mutations/useDeleteStock'
 import { useDeleteStockLot } from '../hooks/mutations/useDeleteStockLot'
-import { MAX_PINNED, useToggleStockPin } from '../hooks/mutations/useToggleStockPin'
+import { useToggleStockPin } from '../hooks/mutations/useToggleStockPin'
 import { useAnswerNameOffer } from '../hooks/mutations/useAnswerNameOffer'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useAuth } from '../contexts/AuthContext'
@@ -32,7 +32,6 @@ import { avatarInitial } from '../utils/displayName'
 import { OfflineError } from '../api/errors'
 import { errorToastMessage } from '../utils/errors'
 import { groupEntriesByDate } from '../utils/historyGroups'
-import { effectiveGroupId } from '../utils/stockGroup'
 import { reconcileStockFromLot } from '../utils/stockScanReconcile'
 import { stockRowReasons } from '../utils/stockAlerts'
 import { borderTokensFromStock } from '../utils/stockSeverity'
@@ -75,21 +74,20 @@ export default function StockDetailPage() {
   // The header's own reason line: the inventory row's reasons minus the
   // agency's, which the medicine section below already shows.
   const headerReasons = stockRowReasons(stock).filter((reason) => reason.kind !== 'regulatory')
-  const groupName = stock ? groups.find((g) => g.id === effectiveGroupId(stock))?.name : undefined
+  // In the user's order; an id not in the cache yet shows nothing rather than
+  // an empty pill.
+  const categories = groups.filter((group) => stock?.my_groups?.includes(group.id))
   // Local-midnight today for lot expiry comparison; matches the backend's
   // `date.today()` semantics (a lot expiring today reads as 'reached'). Shared
   // with both children so an expired lot never reads differently in each.
   const today = new Date(new Date().toISOString().slice(0, 10))
 
-  // Pinning is a per-user preference the server caps, so the control needs to
-  // know how many are already pinned. That comes from the list cache the
-  // inventory already holds — no extra request for a number we have.
-  const { data: allStocks = [] } = useStockList()
-  // Not `s` for the parameter: that is the stylesheet import in this file,
-  // and shadowing it trips the CSS-module reference guard.
-  const pinnedCount = allStocks.filter((item) => item.is_pinned).length
+  // Not read here, on purpose: a product opened from the list is seeded from it
+  // and never fetched on its own, so the service worker only holds the list.
+  // Keeping it subscribed is what brings the product back on a reload with the
+  // server down.
+  useStockList()
   const isPinned = Boolean(stock?.is_pinned)
-  const pinCapReached = !isPinned && pinnedCount >= MAX_PINNED
   const togglePin = useToggleStockPin()
 
   const handleTogglePin = async () => {
@@ -97,21 +95,13 @@ export default function StockDetailPage() {
       showToast({ type: 'error', message: t('offline.pageUnavailable') })
       return
     }
-    if (pinCapReached) {
-      showToast({ type: 'error', message: t('inventory.pinCapReached', { max: MAX_PINNED }) })
-      return
-    }
     try {
       await togglePin.mutateAsync({ stockId, pinned: !isPinned })
     } catch (err) {
       // Live because this mutation is not queueable: offline it rejects
-      // rather than enqueueing. The 400 branch covers two tabs racing past
-      // the cap, where our local count was right when it was read and stale
-      // by the time the request landed.
+      // rather than enqueueing.
       if (err instanceof OfflineError) {
         showToast({ type: 'error', message: t('offline.pageUnavailable') })
-      } else if (err?.body?.code === 'max_pinned_reached') {
-        showToast({ type: 'error', message: t('inventory.pinCapReached', { max: err.body.max }) })
       } else {
         showToast({ type: 'error', message: errorToastMessage(err, t) })
       }
@@ -384,43 +374,27 @@ export default function StockDetailPage() {
                 )}
               </div>
               <div className={s.headerActions}>
-                {/* The category pill lives in the header row, not inside the
-                  subtitle. `cardCategoryPill` pushes itself right with
-                  `margin-left: auto`, which used to land it against the card
-                  edge — but with the consume button there it ended up beside a
-                  control it did not share a baseline with. As a sibling of the
-                  button it shares `headerActions`' vertical centring, so the
-                  two line up; the group wraps as one when the name needs the room. */}
-                {groupName && (
-                  <span className={cards.cardCategoryPill}>
-                    <Icon name="tag" size="sm" />
-                    {groupName}
-                  </span>
-                )}
                 {/* Pin to the top of the inventory. A per-user preference, so a
                   recipient of a shared stock gets it too — the endpoint is
-                  not gated on ownership. Disabled rather than hidden at the
-                  cap, with a title that says how to make room. */}
+                  not gated on ownership. */}
                 <button
                   type="button"
                   className={cx(
                     buttons.icon,
                     isPinned ? s.pinOn : buttons.outlined,
-                    (!reachable || pinCapReached) && buttons.disabled,
+                    !reachable && buttons.disabled,
                     isPinned && s.pinnedIcon,
                   )}
                   onClick={handleTogglePin}
                   aria-pressed={isPinned}
-                  aria-disabled={!reachable || pinCapReached}
+                  aria-disabled={!reachable}
                   aria-label={isPinned ? t('inventory.unpinAction') : t('inventory.pinAction')}
                   title={
                     !reachable
                       ? t('offline.pageUnavailable')
-                      : pinCapReached
-                        ? t('inventory.pinCapReached', { max: MAX_PINNED })
-                        : isPinned
-                          ? t('inventory.unpinAction')
-                          : t('inventory.pinAction')
+                      : isPinned
+                        ? t('inventory.unpinAction')
+                        : t('inventory.pinAction')
                   }
                   data-testid="pin-toggle"
                   data-pinned={isPinned}
@@ -429,6 +403,16 @@ export default function StockDetailPage() {
                 </button>
               </div>
             </div>
+            {categories.length > 0 && (
+              <div className={s.categories} data-testid="stock-categories">
+                {categories.map((group) => (
+                  <span key={group.id} className={cx(cards.cardCategoryPill, s.categoryPill)}>
+                    <Icon name="tag" size="sm" />
+                    {group.name}
+                  </span>
+                ))}
+              </div>
+            )}
             {/* The two frequent actions, as text (T152, UX-018/034), on the
                 card that shows the number they change and within the thumb's
                 reach. «Consume 1» is the main one, hidden at zero units: it
