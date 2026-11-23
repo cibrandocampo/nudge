@@ -40,9 +40,9 @@ is a true page-specific one-off.
    between these files is otherwise a silent, unstyled failure.
 3. **Shared components** — `src/components/`. Notable primitives:
    `ModalFrame`, `Icon`, `AlertBanner`, `OfflineBanner`, `Toast`,
-   `SharePopover`, `ShareWithSection`, `IntervalPicker`, `DateRangePicker`,
+   `SharePopover`, `ShareWithSection`, `IntervalPicker`, `DateRangePicker`, `FormActions`,
    `Combobox`, `PendingBadge`.
-4. **Shared hooks** — `src/hooks/`. TanStack Query data hooks
+4. **Shared hooks** — `src/hooks/`. `useOverlay`, `useKeyboardOpen`, TanStack Query data hooks
    (`useRoutines`, `useStock`, `useMe`…), `useEscapeKey`,
    `useClickOutside`, `useServerReachable`, `usePushStatus`,
    `useOfflineMutation`.
@@ -230,35 +230,49 @@ Tests in `src/components/__tests__/`.
 
 ### Modal pattern
 
-Always use `shared.overlay` + `shared.modalBox`. Modal structure:
+Every modal goes through `ModalFrame`. It owns the scrim, the box, the close
+button, focus, Escape and Android «back»:
 
 ```jsx
-<div className={shared.overlay} onClick={onClose} role="dialog" aria-modal="true">
-  <div className={shared.modalBox} onClick={e => e.stopPropagation()}>
-    <div className={s.header}>
-      <h2 className={s.title}>{t('...')}</h2>
-      <button className={s.xBtn} onClick={onClose}>✕</button>
-    </div>
-    <p className={s.subtitle}>{t('...')}</p>
-    {/* content */}
-  </div>
-</div>
+<ModalFrame onClose={onClose} title={t('...')} subtitle={t('...')} dirty={hasTypedText}>
+  {/* content */}
+  <FormActions>
+    <button type="button" className={cx(buttons.btn, buttons.secondary)}>…</button>
+    <button type="submit" className={cx(buttons.btn, buttons.primary)}>…</button>
+  </FormActions>
+</ModalFrame>
 ```
 
-- **No "Cancel" button inside modals** — use an ✕ button in the top-right of the header instead
-- Add a subtitle (`<p className={s.subtitle}>`) below the title for context
-- `shared.modalBox` is `max-width: 360px`, `border-radius: 12px`, `padding: 1.5rem`
-- Use `shared.modalTitle` for the title if no custom header layout is needed
+- **`showClose={false}`** only where a visible «Cancel» is already the way out
+  (`ConfirmModal`). Everywhere else the frame draws a 44 px ✕. Never draw your own.
+- **`dirty`**: the modal holds typed content, so a tap on the scrim does not
+  close it. Back, ✕ and Escape still do.
+- **`variant`**: `box` (default), `framed` (the children draw header and footer;
+  pass `labelledBy`) or `sheet` (anchored to the bottom).
+- Focus enters the dialog, Tab cycles inside it, and it returns to the trigger.
 
-Header + xBtn pattern CSS:
+### Overlays and Android back (`useOverlay`)
 
-```css
-.header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.25rem; }
-.title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--c-text); letter-spacing: -0.01em; }
-.xBtn { background: none; border: none; font-size: 1rem; color: var(--c-text-3); cursor: pointer; padding: 0.1rem 0.25rem; line-height: 1; }
-.xBtn:hover { color: var(--c-text); }
-.subtitle { margin: -0.5rem 0 1rem; font-size: 0.825rem; color: var(--c-muted); }
-```
+Anything that floats over a page registers with `useOverlay({ open, onClose })`:
+only the top overlay answers Escape and «back». `ModalFrame` already does it.
+Each overlay adds one history entry at the same URL, so:
+
+- effects must key on `location.pathname`, never on `location.key`;
+- anything rendering a modal needs a router, in tests too;
+- `OverlayHistory` (in `App.jsx`) skips the entries of closed overlays.
+
+### Form actions, errors and autofocus
+
+- **`FormActions`**: secondary on the left, primary on the right, written in that
+  order. `fill` for equal widths, `inset` for page forms under `.formSection`.
+- **Failed submit**: `showInvalid(formEl, () => setErrors(err))` (`utils/forms.js`)
+  renders the errors and moves focus to the first `data-invalid="true"`.
+  `FormField` marks itself when it has an `error`; an error with no single field
+  marks its message with `tabIndex={-1}`.
+- **Autofocus**: `autoFocus={shouldAutoFocus()}`, so a touch screen does not open
+  the keyboard over the buttons. A bare `autoFocus` is only for a field the user
+  has just asked to edit (inline rename, note editor).
+- **Keyboard**: `useKeyboardOpen` hides the bottom bar and sets `--nav-h` to 0.
 
 ### Selectable list items (radio / multi-select)
 

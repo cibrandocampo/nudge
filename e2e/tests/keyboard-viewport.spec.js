@@ -36,7 +36,7 @@ test.describe('On-screen keyboard', () => {
 
   test('the bottom bar hides while the keyboard is up', async ({ page }) => {
     await openChangePassword(page)
-    await page.getByPlaceholder('Current password').focus()
+    await page.getByLabel('Current password').focus()
 
     await page.setViewportSize(WITH_KEYBOARD)
 
@@ -45,7 +45,7 @@ test.describe('On-screen keyboard', () => {
 
   test('the bottom bar comes back when the keyboard closes', async ({ page }) => {
     await openChangePassword(page)
-    await page.getByPlaceholder('Current password').focus()
+    await page.getByLabel('Current password').focus()
     await page.setViewportSize(WITH_KEYBOARD)
     await expect(page.locator('nav')).toBeHidden()
 

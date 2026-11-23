@@ -45,6 +45,18 @@ const editRoutine = {
 }
 
 describe('RoutineFormPage', () => {
+  it('focuses the name after submitting it empty', async () => {
+    const { user } = renderCreate()
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
+
+    expect(screen.getByPlaceholderText('e.g. Change water filter')).toHaveFocus()
+  })
+
+  it('does not focus the name by itself on a touch screen', async () => {
+    renderCreate()
+    expect(await screen.findByPlaceholderText('e.g. Change water filter')).not.toHaveFocus()
+  })
+
   it('puts Cancel before the primary action', async () => {
     renderCreate()
     const cancel = await screen.findByRole('button', { name: 'Cancel' })

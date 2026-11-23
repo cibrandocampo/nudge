@@ -9,6 +9,7 @@ import { useFieldDisclosure } from '../hooks/useFieldDisclosure'
 import { useScannerAvailable } from '../hooks/useScannerAvailable'
 import { useServerReachable } from '../hooks/useServerReachable'
 import cx from '../utils/cx'
+import { showInvalid } from '../utils/forms'
 import { parseGs1 } from '../utils/gs1'
 import { lotSuggestions } from '../utils/lotSuggestions'
 import { parseIntSafe } from '../utils/number'
@@ -89,7 +90,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
   // A past expiry is a property of the code that was read, so it is set once by
   // the scan. The duplicate serial is not — see `duplicateSerial` below.
   const [expiredBlocker, setExpiredBlocker] = useState(null)
-  const qtyRef = useRef(null)
+  const formRef = useRef(null)
   const scannerAvailable = useScannerAvailable()
   const disclosure = useFieldDisclosure(FOLDABLE)
   // The batches this product already has, each carrying the expiry that picking
@@ -218,8 +219,7 @@ export default function AddLotForm({ stock, today, onSubmit }) {
     if (quantity < 0) {
       // Was a bare `return`: with the browser popup gone, an empty quantity
       // would have failed silently.
-      setQtyError(t('inventory.errorQtyRequired'))
-      qtyRef.current?.focus()
+      showInvalid(formRef.current, () => setQtyError(t('inventory.errorQtyRequired')))
       return
     }
     setQtyError(null)
@@ -300,11 +300,10 @@ export default function AddLotForm({ stock, today, onSubmit }) {
       {/* Same heading as the resting state, so opening the form does not
           change what the section is called. */}
       <p className={layout.sectionTitle}>{t('inventory.addLot')}</p>
-      <form onSubmit={handleSubmit} className={s.addLotForm}>
+      <form ref={formRef} onSubmit={handleSubmit} className={s.addLotForm}>
         <div className={s.addLotRow}>
           <FormField label={t('inventory.lotQty')} required error={qtyError}>
             <input
-              ref={qtyRef}
               className={cx(forms.input, s.addLotInput)}
               type="number"
               min={0}
