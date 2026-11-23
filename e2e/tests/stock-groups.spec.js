@@ -22,8 +22,23 @@ async function serverOrder(page) {
   })
 }
 
-const patched = (page) =>
-  page.waitForResponse((r) => /\/stock-groups\/\d+\/$/.test(r.url()) && r.request().method() === 'PATCH')
+/**
+ * Resolves once both PATCHes of a swap have answered. Not two `waitForResponse`:
+ * both would resolve on the first response, and the API could then be read with
+ * the second write still in flight.
+ */
+const bothSaved = (page) =>
+  new Promise((resolve) => {
+    let answered = 0
+    const onResponse = (r) => {
+      if (!/\/stock-groups\/\d+\/$/.test(r.url()) || r.request().method() !== 'PATCH') return
+      answered += 1
+      if (answered < 2) return
+      page.off('response', onResponse)
+      resolve()
+    }
+    page.on('response', onResponse)
+  })
 
 test.describe('Categories reorder', () => {
   test.beforeEach(async ({ page, context }) => {
@@ -38,12 +53,12 @@ test.describe('Categories reorder', () => {
   test('Down and Up move a category and the order is saved', async ({ page }) => {
     await enterEditMode(page)
 
-    let saves = Promise.all([patched(page), patched(page)])
+    let saves = bothSaved(page)
     await page.getByRole('button', { name: 'Move Diabetes down' }).click()
     await saves
     await expect(rows(page)).toHaveText(['Home', 'Diabetes', 'Medicine cabinet', 'Travel'])
 
-    saves = Promise.all([patched(page), patched(page)])
+    saves = bothSaved(page)
     await page.getByRole('button', { name: 'Move Travel up' }).click()
     await saves
     await expect(rows(page)).toHaveText(['Home', 'Diabetes', 'Travel', 'Medicine cabinet'])
@@ -60,7 +75,7 @@ test.describe('Categories reorder', () => {
       ['Diabetes', 'Travel', 'Home', 'Medicine cabinet'],
       ['Travel', 'Diabetes', 'Home', 'Medicine cabinet'],
     ]) {
-      const saves = Promise.all([patched(page), patched(page)])
+      const saves = bothSaved(page)
       await page.keyboard.press('Enter')
       await saves
       await expect(rows(page)).toHaveText(expected)

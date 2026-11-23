@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { vibrateRefused } from '../utils/haptics'
 
 // Movement (px) before deciding whether the gesture is a horizontal swipe or a
 // vertical scroll. Below it nothing moves, so a tap stays a tap.
@@ -128,6 +129,12 @@ export function useSwipeAction({ enabled, blocked, onCommit, onBlockedAttempt, m
     const now = Date.now()
     gesture.samples = gesture.samples.filter((s) => now - s.t <= VELOCITY_WINDOW_MS)
     gesture.samples.push({ t: now, x: event.clientX })
+
+    // A blocked gesture says no once, at the distance that would have armed it.
+    if (blocked && !gesture.refused && dx >= threshold) {
+      gesture.refused = true
+      vibrateRefused()
+    }
 
     if (dx < 0) setOffset(dampLeft(dx))
     else if (blocked) setOffset(Math.min(dx * BLOCKED_RESISTANCE, blockedCap))

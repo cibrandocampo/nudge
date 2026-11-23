@@ -5,6 +5,7 @@ import LotPickerModal from '../../components/LotPickerModal'
 import { list } from '../../offline/queue'
 import { server } from '../../test/mocks/server'
 import { flushQueueReads, renderWithProviders } from '../../test/helpers'
+import { REFUSED_PATTERN } from '../../utils/haptics'
 import { useConsumeOne } from '../useConsumeOne'
 
 const BASE = '*/api'
@@ -48,6 +49,29 @@ describe('useConsumeOne', () => {
     await go()
     expect(await screen.findByText('Not enough stock (1 needed, 0 available).')).toBeInTheDocument()
     expect(calls).toHaveLength(0)
+  })
+
+  it('buzzes when there is nothing to consume', async () => {
+    navigator.vibrate = vi.fn()
+    const { go } = setup({ ...oneLot, lots: [lot(10, 'A', '2020-01-01')] })
+    await go()
+    await screen.findByText('Not enough stock (1 needed, 0 available).')
+    expect(navigator.vibrate).toHaveBeenCalledWith(REFUSED_PATTERN)
+    delete navigator.vibrate
+  })
+
+  it('buzzes when the server refuses for lack of stock', async () => {
+    navigator.vibrate = vi.fn()
+    server.use(
+      http.post(`${BASE}/stock/1/consume/`, () =>
+        HttpResponse.json({ code: 'insufficient_stock', required: 1, available: 0 }, { status: 422 }),
+      ),
+    )
+    const { go } = setup()
+    await go()
+    await screen.findByText('Not enough stock (1 needed, 0 available).')
+    expect(navigator.vibrate).toHaveBeenCalledWith(REFUSED_PATTERN)
+    delete navigator.vibrate
   })
 
   it('with one lot consumes directly, leaving the order to the server', async () => {

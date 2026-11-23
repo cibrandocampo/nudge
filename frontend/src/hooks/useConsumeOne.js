@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useToast } from '../components/useToast'
 import { errorToastMessage } from '../utils/errors'
+import { vibrateIfOutOfStock, vibrateRefused } from '../utils/haptics'
 import { expiryToday, lotsForSelection, needsLotChoice } from '../utils/lotsForSelection'
 import { useConsumeStock } from './mutations/useConsumeStock'
 import { useUndoConsumeStock } from './mutations/useUndoConsumeStock'
@@ -59,6 +60,7 @@ export function useConsumeOne({ onConsumed } = {}) {
     if (inFlight.current) return
     const groups = lotsForSelection(stock, expiryToday())
     if (groups.length === 0) {
+      vibrateRefused()
       showToast({ type: 'error', message: t('errors.insufficientStock', { required: 1, available: 0 }) })
       return
     }
@@ -72,6 +74,7 @@ export function useConsumeOne({ onConsumed } = {}) {
       const result = await consumeStock.mutateAsync({ stockId: stock.id, stockName: stock.name, quantity: 1 })
       announce(stock, result)
     } catch (err) {
+      vibrateIfOutOfStock(err)
       showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       inFlight.current = false

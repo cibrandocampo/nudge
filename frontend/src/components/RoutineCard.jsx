@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatRelativeTime, formatAbsoluteDate } from '../utils/time'
 import cx from '../utils/cx'
 import { findCachedStock } from '../utils/lotsForSelection'
+import { vibrateRefused } from '../utils/haptics'
 import { iconClassForStock } from '../utils/stockSeverity'
 import { useSwipeAction } from '../hooks/useSwipeAction'
 import Icon from './Icon'
@@ -204,6 +205,7 @@ export default function RoutineCard({ routine, onMarkDone, completing, highlight
   const onCheckClick = () => {
     if (!idle) return
     if (stockDepleted) {
+      vibrateRefused()
       setNudging(true)
       timersRef.current.push(setTimeout(() => setNudging(false), NUDGE_MS))
       return

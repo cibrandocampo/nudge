@@ -23,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext'
 import cx from '../utils/cx'
 import { avatarInitial } from '../utils/displayName'
 import { errorToastMessage, lotDecisionError } from '../utils/errors'
+import { vibrateIfOutOfStock, vibrateRefused } from '../utils/haptics'
 import { formatAbsoluteDate, formatRelativeTime } from '../utils/time'
 import { groupEntriesByDate } from '../utils/historyGroups'
 import { expiryToday, findCachedStock, routineLotDecision } from '../utils/lotsForSelection'
@@ -67,6 +68,11 @@ export default function RoutineDetailPage() {
   // rows ultimately call markDone(iso); the value only records the origin.
   const [dateModalMode, setDateModalMode] = useState(null)
 
+  const refuseNoStock = () => {
+    vibrateRefused()
+    showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+  }
+
   const runLog = async (lotSelections, clientCreatedAt) => {
     setCompleting(true)
     try {
@@ -77,6 +83,7 @@ export default function RoutineDetailPage() {
         clientCreatedAt,
       })
     } catch (err) {
+      vibrateIfOutOfStock(err)
       showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       setCompleting(false)
@@ -97,6 +104,7 @@ export default function RoutineDetailPage() {
       setLotModal({ lots: decision.groups, clientCreatedAt })
       return
     }
+    if (decision.action === 'insufficient') vibrateRefused()
     showToast({ type: 'error', message: lotDecisionError(decision, routine, t) })
   }
 
@@ -110,7 +118,7 @@ export default function RoutineDetailPage() {
   // buttons apply before logging.
   const openDateModal = (mode) => {
     if (routineStockDepleted) {
-      showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+      refuseNoStock()
       return
     }
     setDateModalMode(mode)
@@ -404,7 +412,7 @@ export default function RoutineDetailPage() {
                 )}
                 onClick={() => {
                   if (routineStockDepleted) {
-                    showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                    refuseNoStock()
                     return
                   }
                   markDone()
@@ -445,7 +453,7 @@ export default function RoutineDetailPage() {
                 )}
                 onClick={() => {
                   if (routineStockDepleted) {
-                    showToast({ type: 'error', message: t('routine.detail.noStockToast') })
+                    refuseNoStock()
                     return
                   }
                   setShowAdvanceConfirm(true)

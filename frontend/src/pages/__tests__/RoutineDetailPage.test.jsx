@@ -5,6 +5,7 @@ import { clear, enqueue, list } from '../../offline/queue'
 import { mockNetworkError } from '../../test/mocks/handlers'
 import { server } from '../../test/mocks/server'
 import { renderWithProviders } from '../../test/helpers'
+import { REFUSED_PATTERN } from '../../utils/haptics'
 import RoutineDetailPage from '../RoutineDetailPage'
 
 // Reachability as the page reads it; true unless a test flips it (and resets
@@ -790,11 +791,14 @@ describe('RoutineDetailPage — stock-depleted disables action buttons', () => {
         }),
       ),
     )
+    navigator.vibrate = vi.fn()
     const { user } = renderDetail()
     const button = await screen.findByRole('button', { name: 'Mark as done' })
     await user.click(button)
     expect(await screen.findByText(/no stock available/i)).toBeInTheDocument()
     expect(logCalls).toHaveLength(0)
+    expect(navigator.vibrate).toHaveBeenCalledWith(REFUSED_PATTERN)
+    delete navigator.vibrate
   })
 
   it('clicking "Do it now" with no stock fires the no-stock toast and does not advance', async () => {

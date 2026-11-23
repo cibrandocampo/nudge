@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { act, fireEvent, screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/helpers'
+import { REFUSED_PATTERN } from '../../utils/haptics'
 import RoutineCard, { COLLAPSE_MS, EXIT_MS } from '../RoutineCard'
 
 function clientWithStock(stock) {
@@ -224,6 +225,13 @@ describe('RoutineCard', () => {
     expect(screen.queryByText('Detail page')).not.toBeInTheDocument()
   })
 
+  it('the check of a routine with no stock buzzes the refused pattern', () => {
+    navigator.vibrate = vi.fn()
+    renderCard({ ...baseRoutine, ...depleted })
+    fireEvent.click(checkButton())
+    expect(navigator.vibrate).toHaveBeenCalledWith(REFUSED_PATTERN)
+  })
+
   it('vibrates once when the swipe crosses the threshold', () => {
     vi.useFakeTimers()
     navigator.vibrate = vi.fn()
@@ -323,8 +331,8 @@ describe('RoutineCard', () => {
   })
 
   it('keeps the time status on a row the stock blocks', () => {
-    // The CSS paints a blocked strip grey whatever the status; the status
-    // itself stays the time's, like the dot.
+    // The resting strip follows the time status on a blocked card too; the
+    // hatched action colour only shows while it is dragged.
     renderCard({ ...baseRoutine, ...depleted, is_due: true, is_overdue: true })
     expect(row()).toHaveAttribute('data-status', 'overdue')
     expect(layer()).toHaveAttribute('data-state', 'blocked')
