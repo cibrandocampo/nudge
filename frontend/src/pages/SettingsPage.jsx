@@ -582,7 +582,9 @@ export default function SettingsPage() {
           onChange={(tz) => {
             setForm((f) => ({ ...f, timezone: tz }))
             // Combobox (no free text) only reports a picked option, never ''.
-            if (tz !== user?.timezone) autosave({ timezone: tz })
+            // While a save is running `user` is behind what is being stored,
+            // so going back to its value is still a change.
+            if (updateMe.isPending || tz !== user?.timezone) autosave({ timezone: tz })
           }}
           options={TIMEZONES}
           placeholder={t('settings.timezoneSearch')}

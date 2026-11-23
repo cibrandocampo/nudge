@@ -1245,6 +1245,39 @@ describe('SettingsPage', () => {
       await new Promise((resolve) => setTimeout(resolve, 300))
       expect(patches).toEqual([])
     })
+
+    it('saves the way back to the current timezone while another save is running', async () => {
+      let release
+      const held = new Promise((resolve) => {
+        release = resolve
+      })
+      const sent = []
+      server.use(
+        http.patch('http://localhost/api/auth/me/', async ({ request }) => {
+          const body = await request.json()
+          sent.push(body.timezone)
+          if (sent.length === 1) await held
+          return HttpResponse.json({ ...mockUser, ...body })
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />)
+      const input = await screen.findByPlaceholderText('Search timezone…')
+
+      await user.click(input)
+      await user.clear(input)
+      await user.keyboard('Tokyo')
+      await user.click(screen.getByText('Asia/Tokyo'))
+      await waitFor(() => expect(sent).toEqual(['Asia/Tokyo']))
+
+      await user.click(input)
+      await user.clear(input)
+      await user.keyboard('Madrid')
+      await user.click(screen.getByText('Europe/Madrid'))
+      await act(async () => release())
+
+      await waitFor(() => expect(sent).toEqual(['Asia/Tokyo', 'Europe/Madrid']))
+      await waitFor(() => expect(input).toHaveValue('Europe/Madrid'))
+    })
   })
 
   it('keeps the form defaults while there is no user (mid sign-out)', async () => {
