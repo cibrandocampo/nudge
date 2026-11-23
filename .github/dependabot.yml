@@ -1,14 +1,11 @@
-# Monthly and grouped, so updates arrive as a few PRs. Majors come one by one.
+# Only updates without weight: minor and patch, monthly and grouped.
+#   - Majors are never proposed. They are tested and adopted by hand.
+#   - LTS lines stay where they are on purpose: Django only gets 5.2.x patches.
+#   - In a 0.x package a minor can break things, so it only gets patches.
+#   - Runtimes (Python, Node, PostgreSQL, Redis server) and GitHub Actions are
+#     not listed here, so nothing proposes changing them.
 version: 2
 updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
-    groups:
-      actions:
-        patterns: ['*']
-
   # Each requirements.txt is compiled from the requirements.in next to it.
   - package-ecosystem: pip
     directory: /backend
@@ -18,10 +15,16 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Django stays on the 5.2 LTS until a deliberate upgrade.
-      - dependency-name: django
+      - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      - dependency-name: django
+        update-types: ['version-update:semver-minor']
+      - dependency-name: nh3
+        update-types: ['version-update:semver-minor']
+      - dependency-name: django-environ
+        update-types: ['version-update:semver-minor']
 
+  # The dev requirements include the backend's, so the same limits apply.
   - package-ecosystem: pip
     directory: /dev
     schedule:
@@ -29,6 +32,17 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: django
+        update-types: ['version-update:semver-minor']
+      - dependency-name: nh3
+        update-types: ['version-update:semver-minor']
+      - dependency-name: django-environ
+        update-types: ['version-update:semver-minor']
+      - dependency-name: ruff
+        update-types: ['version-update:semver-minor']
 
   - package-ecosystem: npm
     directory: /frontend
@@ -37,6 +51,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: eslint-plugin-react-refresh
+        update-types: ['version-update:semver-minor']
 
   - package-ecosystem: npm
     directory: /site
@@ -45,6 +64,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@astrojs/check'
+        update-types: ['version-update:semver-minor']
 
   - package-ecosystem: npm
     directory: /e2e
@@ -54,5 +78,7 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
       # Must match the Playwright tag of the base image in e2e/Dockerfile.
       - dependency-name: '@playwright/test'
