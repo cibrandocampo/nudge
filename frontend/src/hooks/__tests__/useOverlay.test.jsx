@@ -137,6 +137,19 @@ describe('useOverlay', () => {
     expect(path()).toBe('/next')
   })
 
+  it('keeps the direction of travel across an entry that was replaced', async () => {
+    renderPage()
+    await press('open first')
+    await press('close and leave')
+    act(() => router.navigate('/replaced', { replace: true }))
+    back()
+    expect(path()).toBe('/page')
+
+    act(() => router.navigate(1))
+
+    expect(path()).toBe('/replaced')
+  })
+
   it('does not stay on a dead entry at the end of the history', async () => {
     renderPage()
     await press('open first')
@@ -211,6 +224,35 @@ describe('useOverlay', () => {
 
     expect(screen.getByText('modal')).toBeInTheDocument()
     expect(window.history.state.usr.overlays).toHaveLength(1)
+  })
+
+  it('adds no entry for a modal closed before its turn to add one', async () => {
+    function Swap() {
+      const [shown, setShown] = useState('menu')
+      return (
+        <>
+          <button onClick={() => setShown('modal')}>swap</button>
+          <button onClick={() => setShown(null)}>close all</button>
+          {shown === 'menu' && <Overlay key="menu" name="menu" onClose={() => setShown(null)} />}
+          {shown === 'modal' && <Overlay key="modal" name="modal" onClose={() => setShown(null)} />}
+        </>
+      )
+    }
+    window.history.pushState(null, '', '/page')
+    render(
+      <BrowserRouter>
+        <OverlayHistory />
+        <Swap />
+      </BrowserRouter>,
+    )
+    await act(async () => {})
+
+    await press('swap')
+    await press('close all')
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+
+    expect(screen.queryByText('modal')).not.toBeInTheDocument()
+    expect(window.history.state?.usr?.overlays).toBeUndefined()
   })
 
   it('stays registered once when the route changes under it', async () => {
