@@ -17,7 +17,7 @@ describe('LogDateModal', () => {
 
   it('names the date input after the question it answers', () => {
     renderWithProviders(<LogDateModal {...props} />)
-    expect(screen.getByLabelText('When did you do it?')).toBe(screen.getByTestId('log-date-input'))
+    expect(screen.getByTestId('log-date-input')).toHaveAccessibleName('When did you do it?')
   })
 
   it('defaults the input to a present-time local value with a max set', () => {

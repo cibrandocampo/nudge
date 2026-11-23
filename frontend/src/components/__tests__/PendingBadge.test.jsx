@@ -3,11 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { enqueue, list } from '../../offline/queue'
 import { __resetSyncWorkerForTests, initSyncWorker } from '../../offline/sync'
 import { server } from '../../test/mocks/server'
-import { flushQueueReads } from '../../test/helpers'
+import { BrowserBack, flushQueueReads } from '../../test/helpers'
 // Import the hook module so its `registerRollback('consumeStock', …)`
 // side effect populates the registry before the discard tests run.
 import '../../hooks/mutations/useConsumeStock'
@@ -23,7 +24,10 @@ function renderBadge(options = {}) {
   const qc = options.qc ?? new QueryClient()
   const utils = render(
     <QueryClientProvider client={qc}>
-      <PendingBadge />
+      <MemoryRouter>
+        <PendingBadge />
+        {options.withBack && <BrowserBack />}
+      </MemoryRouter>
     </QueryClientProvider>,
   )
   return { ...utils, qc }
@@ -79,6 +83,30 @@ describe('PendingBadge', () => {
     await user.click(screen.getByTestId('pending-badge'))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText(/POST \/routines\/5\/log\//)).toBeInTheDocument()
+  })
+
+  it('closes the panel on back', async () => {
+    await enqueue(entry({ id: 'a' }))
+    const user = userEvent.setup()
+    renderBadge({ withBack: true })
+    await user.click(await screen.findByTestId('pending-badge'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Not a user click: a press outside the panel would close it first.
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('closes the panel on Escape', async () => {
+    await enqueue(entry({ id: 'a' }))
+    const user = userEvent.setup()
+    renderBadge()
+    await user.click(await screen.findByTestId('pending-badge'))
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('discards an entry via the panel button', async () => {

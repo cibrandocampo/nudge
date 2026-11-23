@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '../hooks/useClickOutside'
+import { useOverlay } from '../hooks/useOverlay'
 import { useQueueEntries } from '../hooks/useQueueEntries'
 import { discard } from '../offline/queue'
 import { forceSync } from '../offline/sync'
@@ -34,6 +35,8 @@ export default function PendingBadge() {
   const wrapperRef = useRef(null)
 
   useClickOutside(wrapperRef, () => setOpen(false), open)
+  // The panel only exists while there are entries to list.
+  useOverlay({ open: open && entries.length > 0, onClose: () => setOpen(false) })
 
   // Sync-errors toast (T065) dispatches this event so the user can jump to
   // the pending panel without hunting for the badge.

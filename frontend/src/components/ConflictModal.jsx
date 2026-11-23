@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
 import { diffPayloads } from '../utils/diffPayloads'
-import Icon from './Icon'
 import ModalFrame from './ModalFrame'
 import buttons from '../styles/buttons.module.css'
 import cx from '../utils/cx'
@@ -35,7 +34,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
   const diffs = diffPayloads(local, server)
 
   return (
-    <ModalFrame onClose={onClose} variant="framed" size="md">
+    <ModalFrame onClose={onClose} variant="framed" size="md" labelledBy="conflict-title">
       <div data-testid="conflict-modal" className={s.inner}>
         <div className={s.header}>
           <div>
@@ -44,9 +43,6 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
             </h2>
             <p className={s.subtitle}>{t('conflict.subtitle')}</p>
           </div>
-          <button type="button" className={cx(buttons.hit, s.close)} onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="x" size="sm" />
-          </button>
         </div>
         <div className={s.body}>
           {diffs.length === 0 ? (

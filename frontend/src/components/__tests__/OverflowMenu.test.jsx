@@ -1,7 +1,7 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { vi } from 'vitest'
-import { renderWithProviders } from '../../test/helpers'
+import { BrowserBack, renderWithProviders } from '../../test/helpers'
 import OverflowMenu from '../OverflowMenu'
 
 function Where() {
@@ -22,6 +22,7 @@ function setup({ items } = {}) {
     <>
       <OverflowMenu items={list} />
       <button type="button">After</button>
+      <BrowserBack />
       <Routes>
         <Route path="*" element={<Where />} />
       </Routes>
@@ -35,6 +36,26 @@ function setup({ items } = {}) {
 const items = () => screen.getAllByRole('menuitem')
 
 describe('OverflowMenu', () => {
+  it('closes on back without leaving the screen, and returns focus', async () => {
+    const { user, trigger } = setup()
+    await user.click(trigger)
+
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }))
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('/product')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('keeps the navigation of a link item', async () => {
+    const { user, trigger } = setup()
+    await user.click(trigger)
+
+    await user.click(screen.getByRole('menuitem', { name: 'View history' }))
+
+    expect(screen.getByTestId('where')).toHaveTextContent('/history')
+  })
+
   it('is a menu button: closed, it says it opens a menu and controls nothing yet', () => {
     const { trigger } = setup()
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu')

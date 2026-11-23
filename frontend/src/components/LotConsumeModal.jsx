@@ -102,10 +102,7 @@ export default function LotConsumeModal({
   const groupLabel = (group) => group.lot_number ?? t('lot.modal.noId')
 
   return (
-    <ModalFrame onClose={onCancel} size="lg">
-      <h2 className={s.title}>{heading}</h2>
-      <p className={s.subtitle}>{subheading}</p>
-
+    <ModalFrame onClose={onCancel} size="lg" title={heading} subtitle={subheading}>
       {showingEmpty ? (
         <p className={s.error}>{emptyMessage}</p>
       ) : (

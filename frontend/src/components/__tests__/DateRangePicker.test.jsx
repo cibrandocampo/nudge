@@ -1,5 +1,5 @@
-import { screen, waitFor } from '@testing-library/react'
-import { renderWithProviders } from '../../test/helpers'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { BrowserBack, renderWithProviders } from '../../test/helpers'
 import DateRangePicker from '../DateRangePicker'
 
 function daysAgo(n) {
@@ -12,14 +12,30 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function renderPicker(props = {}) {
+function renderPicker({ withBack = false, ...props } = {}) {
   const onChange = vi.fn()
   const defaults = { dateFrom: daysAgo(15), dateTo: todayStr(), onChange }
-  const result = renderWithProviders(<DateRangePicker {...defaults} {...props} />)
+  const result = renderWithProviders(
+    <>
+      <DateRangePicker {...defaults} {...props} />
+      {withBack && <BrowserBack />}
+    </>,
+  )
   return { ...result, onChange }
 }
 
 describe('DateRangePicker', () => {
+  it('closes the popover on back', async () => {
+    const { user } = renderPicker({ withBack: true })
+    await user.click(screen.getByRole('button', { name: /Last 15 days/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Not a user click: a press outside the popover would close it first.
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('renders trigger with preset label', () => {
     renderPicker()
     expect(screen.getByRole('button', { name: /Last 15 days/i })).toBeInTheDocument()

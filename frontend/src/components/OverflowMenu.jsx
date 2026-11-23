@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useOverlay } from '../hooks/useOverlay'
 import buttons from '../styles/buttons.module.css'
 import cx from '../utils/cx'
 import Icon from './Icon'
@@ -15,7 +16,8 @@ import s from './OverflowMenu.module.css'
  * `role="menuitem"` entries with a roving focus.
  *   - Enter / Space / ↓ on the trigger open it on the first item, ↑ on the last.
  *   - ↓ / ↑ move with wrap-around, Home / End jump to the ends.
- *   - Esc closes and returns focus to the trigger; Tab closes and lets focus
+ *   - Esc and Android «back» close it and return focus to the trigger (through
+ *     `useOverlay`); Tab closes and lets focus
  *     move on from the trigger.
  *   - Choosing an item, a pointer outside the menu or a route change close it.
  *
@@ -65,6 +67,8 @@ export default function OverflowMenu({ items, testId = 'more-menu' }) {
     if (returnFocus) triggerRef.current?.focus()
   }
 
+  useOverlay({ open, onClose: () => close({ returnFocus: true }) })
+
   const onTriggerKeyDown = (event) => {
     if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -86,9 +90,6 @@ export default function OverflowMenu({ items, testId = 'more-menu' }) {
     if (event.key in moves) {
       event.preventDefault()
       setFocusIndex(moves[event.key])
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      close({ returnFocus: true })
     } else if (event.key === 'Tab') {
       // Hand the focus to the trigger before the menu unmounts, without
       // cancelling the Tab: the browser then moves on from the trigger (to
