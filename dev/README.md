@@ -198,7 +198,7 @@ default.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `E2E_SEED_ALLOWED` | _unset_ | Gate for the destructive `seed` management command (and the `/api/internal/seed/` endpoint). The command refuses to run unless this is `true` **or** `DJANGO_DEBUG=True`. Never set in production — the production `docker-compose.yml` hard-sets it to `""` as a defence-in-depth override. |
+| `E2E_SEED_ALLOWED` | _unset_ | Gate for the destructive `seed` management command (and the `/api/internal/seed/` endpoint, which is not routed at all otherwise). The command refuses to run unless this is `true` **or** `DJANGO_DEBUG=True`. Never set in production — the production `docker-compose.yml` hard-sets it to `""` as a defence-in-depth override. |
 | `DEMO_USERS_PASSWORD` | `change-me` | Password applied to all three demo users (`cibran`, `maria`, `laura`) created by `seed`. Read at runtime by the Playwright helpers (`e2e/tests/helpers/constants.js`) and by the screenshots pipeline (`make screenshots`). |
 | `VITE_E2E_MODE` | `false` | Build-time flag consumed by Vite. When `true`, the dev-only reachability hooks (`__NUDGE_REACHABILITY_SET__`, `__NUDGE_REACHABILITY_POLL_MS__`, `__NUDGE_REACHABILITY_LOCK__`, `__NUDGE_SYNC_RETRY_DELAYS_MS__`) are included in the preview build at `:4173` so offline specs can drive the reachability flag without relying on `navigator.onLine`. Set via the `frontend-preview` service in `dev/docker-compose.yml`; not a runtime switch. |
 

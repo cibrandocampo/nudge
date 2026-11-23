@@ -5,7 +5,8 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -140,6 +141,29 @@ def login_verify(request):
             "is_new": is_new,
         }
     )
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def logout(request):
+    """Revoke a refresh token. Always answers 204: nothing may block signing out.
+
+    Unauthenticated on purpose. The credential is the refresh token itself, and
+    whoever holds it could already use it, so revoking only takes power away.
+    An expired access token in the header must not turn this into a 401.
+    """
+    try:
+        data = request.data
+    except ParseError:
+        data = None
+    refresh = data.get("refresh") if isinstance(data, dict) else None
+    if isinstance(refresh, str):
+        try:
+            RefreshToken(refresh).blacklist()
+        except TokenError:
+            pass  # Already invalid or expired: there is nothing left to revoke.
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["POST"])

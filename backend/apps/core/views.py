@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from django.conf import settings
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -42,11 +43,21 @@ def version_info(request):
     )
 
 
+def seed_allowed():
+    """Dev, or an environment that opted in explicitly (the E2E stack)."""
+    return settings.DEBUG or os.environ.get("E2E_SEED_ALLOWED", "").lower() == "true"
+
+
 class SeedView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        if not (settings.DEBUG or os.environ.get("E2E_SEED_ALLOWED", "").lower() == "true"):
+        # The URL is only routed when this holds. Checked again here because the
+        # process may have imported its URLconf under another configuration.
+        if not seed_allowed():
             return Response(status=403)
-        call_command("seed")
+        try:
+            call_command("seed")
+        except CommandError:
+            return Response(status=409)  # It looks like a real database.
         return Response(status=204)

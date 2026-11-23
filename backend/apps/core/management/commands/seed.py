@@ -105,11 +105,20 @@ def _consumed(lot_number, expiry_date, quantity, serial_number=None):
     }
 
 
+# Demo users sign in with a password, so OTP accounts are real signups.
+MAX_OTP_USERS_TO_WIPE = 10
+
+
 class Command(BaseCommand):
     help = "Wipes business data and seeds the unified Nudge demo fixture."
 
+    def add_arguments(self, parser):
+        parser.add_argument("--force", action="store_true", help="Seed even if the database looks real.")
+
     def handle(self, *args, **options):
         self._assert_gate()
+        if not options["force"]:
+            self._assert_not_real_database()
         self.stdout.write(self.style.WARNING("⚠ WIPING DATABASE — DEV/DEMO ONLY"))
 
         with transaction.atomic():
@@ -132,6 +141,14 @@ class Command(BaseCommand):
         if os.environ.get("E2E_SEED_ALLOWED", "").lower() == "true":
             return
         raise CommandError("seed refused to run: DEBUG is False and E2E_SEED_ALLOWED is not 'true'.")
+
+    def _assert_not_real_database(self):
+        real_users = User.objects.filter(auth_method="otp").count()
+        if real_users > MAX_OTP_USERS_TO_WIPE:
+            raise CommandError(
+                f"Refusing to seed: {real_users} OTP users found, this looks like a real database. "
+                "Pass --force to override."
+            )
 
     # ── Wipe ────────────────────────────────────────────────────────────────
 

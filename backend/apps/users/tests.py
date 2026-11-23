@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .models import LoginCode, validate_timezone
 
@@ -948,6 +950,59 @@ class TokenAuthTest(APITestCase):
 
 
 # ── /api/auth/me/ ────────────────────────────────────────────────────────────
+
+
+class LogoutTest(APITestCase):
+    """POST /api/auth/logout/ (T060): the refresh token stops working."""
+
+    url = "/api/auth/logout/"
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="out", email="out@example.com", password="pw12345678")
+        self.refresh = RefreshToken.for_user(self.user)
+
+    def _refresh_status(self, token):
+        return self.client.post("/api/auth/refresh/", {"refresh": token}, format="json").status_code
+
+    def test_a_revoked_refresh_token_stops_working(self):
+        token = str(self.refresh)
+        response = self.client.post(self.url, {"refresh": token}, format="json")
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(self._refresh_status(token), 401)
+
+    def test_logging_out_twice_is_fine(self):
+        token = str(self.refresh)
+        self.client.post(self.url, {"refresh": token}, format="json")
+        self.assertEqual(self.client.post(self.url, {"refresh": token}, format="json").status_code, 204)
+
+    def test_it_never_fails_on_a_bad_body(self):
+        for body in ({"refresh": "garbage"}, {}, {"refresh": 123}, {"refresh": None}, ["refresh"]):
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(self.url, body, format="json").status_code, 204)
+
+    def test_it_never_fails_on_malformed_json(self):
+        response = self.client.post(self.url, "{not json", content_type="application/json")
+        self.assertEqual(response.status_code, 204)
+
+    def test_an_access_token_is_not_revocable_as_a_refresh_token(self):
+        token = str(self.refresh)
+        self.client.post(self.url, {"refresh": str(self.refresh.access_token)}, format="json")
+        self.assertEqual(self._refresh_status(token), 200)
+
+    def test_an_expired_access_token_in_the_header_does_not_block_it(self):
+        expired = AccessToken.for_user(self.user)
+        expired.set_exp(lifetime=-timedelta(minutes=1))
+        token = str(self.refresh)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {expired}")
+        response = self.client.post(self.url, {"refresh": token}, format="json")
+        self.client.credentials()
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(self._refresh_status(token), 401)
+
+    def test_a_token_of_a_deleted_user_does_not_fail(self):
+        token = str(self.refresh)
+        self.user.delete()
+        self.assertEqual(self.client.post(self.url, {"refresh": token}, format="json").status_code, 204)
 
 
 class MeViewTest(APITestCase):
