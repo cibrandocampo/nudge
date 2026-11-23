@@ -182,3 +182,8 @@
     padding-bottom: 1.5rem;
   }
 }
+
+/* The keyboard is up (useKeyboardOpen): a fixed bar would ride on top of it. */
+:global(html[data-keyboard='open']) .nav {
+  display: none;
+}

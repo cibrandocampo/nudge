@@ -53,14 +53,16 @@ test('StockFormPage: Share with, Add batch and Cancel render the same size', asy
   expect(Math.abs(shareBox.width - cancelBox.width)).toBeLessThan(0.5)
   expect(Math.abs(addBox.width - cancelBox.width)).toBeLessThan(0.5)
 
-  // Horizontal alignment: the right edge of all three must match within
-  // 0.5 px so the column of section-level buttons + Cancel reads as a
-  // single vertical axis.
+  // Horizontal alignment: since UX-031 Cancel sits on the left and the primary
+  // on the right, so the primary's right edge is the one that must match the
+  // section-level buttons within 0.5 px, keeping a single vertical axis.
+  const primaryBox = await page.getByRole('button', { name: 'Create' }).boundingBox()
   const shareRight = shareBox.x + shareBox.width
   const addRight = addBox.x + addBox.width
-  const cancelRight = cancelBox.x + cancelBox.width
-  expect(Math.abs(shareRight - cancelRight)).toBeLessThan(0.5)
-  expect(Math.abs(addRight - cancelRight)).toBeLessThan(0.5)
+  const primaryRight = primaryBox.x + primaryBox.width
+  expect(Math.abs(shareRight - primaryRight)).toBeLessThan(0.5)
+  expect(Math.abs(addRight - primaryRight)).toBeLessThan(0.5)
+  expect(cancelBox.x).toBeLessThan(primaryBox.x)
 
   // Computed height, padding, font-size identical across the three.
   expect(shareStyles.height).toBe(cancelStyles.height)

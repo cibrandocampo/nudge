@@ -43,6 +43,16 @@ beforeEach(() => {
 })
 
 describe('StockFormPage — create', () => {
+  it('puts Cancel before the primary action', async () => {
+    mockGroups([])
+    mockContacts()
+    renderCreate()
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
+    const create = screen.getByRole('button', { name: 'Create' })
+
+    expect(cancel.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('names the category chips by their visible label', async () => {
     mockGroups([{ id: 5, name: 'Supplements', display_order: 0 }])
     mockContacts()

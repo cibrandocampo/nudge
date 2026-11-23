@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import FormActions from '../components/FormActions'
 import CategoryChips from '../components/CategoryChips'
 import FormField from '../components/FormField'
 import Icon from '../components/Icon'
@@ -472,23 +473,19 @@ export default function StockFormPage() {
           {errors.submit && <p className={forms.error}>{errors.submit}</p>}
           {disabledCreate && <p className={forms.helpText}>{t('offline.requiresConnection')}</p>}
 
-          <div className={forms.formFooter}>
+          <FormActions inset>
+            <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={() => navigate(-1)}>
+              {t('stockForm.cancel')}
+            </button>
             <button
               type="submit"
-              className={cx(buttons.btn, buttons.primary, buttons.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.primary)}
               disabled={submitting || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
               {submitting ? t('stockForm.saving') : isEditing ? t('stockForm.submitEdit') : t('stockForm.submitCreate')}
             </button>
-            <button
-              type="button"
-              className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
-              onClick={() => navigate(-1)}
-            >
-              {t('stockForm.cancel')}
-            </button>
-          </div>
+          </FormActions>
         </form>
       </div>
     </QueryHandler>

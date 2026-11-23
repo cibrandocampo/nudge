@@ -45,6 +45,14 @@ const editRoutine = {
 }
 
 describe('RoutineFormPage', () => {
+  it('puts Cancel before the primary action', async () => {
+    renderCreate()
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
+    const save = screen.getByRole('button', { name: 'Save' })
+
+    expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('names the description textarea by its label', async () => {
     renderCreate()
     expect((await screen.findByLabelText('Description')).tagName).toBe('TEXTAREA')

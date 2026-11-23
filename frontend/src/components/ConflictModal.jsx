@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { diffPayloads } from '../utils/diffPayloads'
+import FormActions from './FormActions'
 import ModalFrame from './ModalFrame'
 import buttons from '../styles/buttons.module.css'
 import cx from '../utils/cx'
@@ -65,7 +66,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
             </dl>
           )}
         </div>
-        <div className={s.footer}>
+        <FormActions className={s.footer}>
           <button
             type="button"
             className={cx(buttons.btn, buttons.secondary)}
@@ -82,7 +83,7 @@ export default function ConflictModal({ mutation, onKeepMine, onUseServer, onClo
           >
             {t('conflict.keepMine')}
           </button>
-        </div>
+        </FormActions>
       </div>
     </ModalFrame>
   )

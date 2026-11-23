@@ -2,6 +2,7 @@ import { Suspense, lazy, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Combobox from './Combobox'
 import FormField from './FormField'
+import FormActions from './FormActions'
 import Icon from './Icon'
 import { useToast } from './useToast'
 import { useFieldDisclosure } from '../hooks/useFieldDisclosure'
@@ -418,14 +419,14 @@ export default function AddLotForm({ stock, today, onSubmit }) {
           </p>
         )}
 
-        <div className={s.addLotActions}>
+        <FormActions fill>
           <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={close} disabled={adding}>
             {t('common.cancel')}
           </button>
           <button type="submit" className={cx(buttons.btn, buttons.primary)} disabled={adding || Boolean(blocker)}>
             {adding ? t('inventory.adding') : t('common.save')}
           </button>
-        </div>
+        </FormActions>
       </form>
     </div>
   )
