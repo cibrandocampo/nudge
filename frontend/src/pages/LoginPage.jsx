@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
 import PasswordInput from '../components/PasswordInput'
+import { shouldAutoFocus, showInvalid } from '../utils/forms'
 import forms from '../styles/forms.module.css'
 import s from './LoginPage.module.css'
 
@@ -30,6 +31,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [otpFocused, setOtpFocused] = useState(false)
+  const formRef = useRef(null)
+
+  // An error about what was typed takes the user back to the field. A rate limit
+  // is not about the field, so it only shows its message.
+  const failOnField = (message) => showInvalid(formRef.current, () => setError(message))
+  const fieldInvalid = Boolean(error) && error !== t('login.rateLimited')
+  const invalidProps = fieldInvalid ? { 'aria-invalid': true, 'data-invalid': 'true' } : {}
 
   // Returning logged-in-but-incomplete user (redirected here by the
   // onboarding gate in ProtectedRoute). Skip straight to the name step.
@@ -66,8 +74,8 @@ export default function LoginPage() {
       setResendCooldown(method === 'otp' ? RESEND_COOLDOWN_SECONDS : 0)
       setStep(method === 'password' ? 'password' : 'otp')
     } catch (err) {
-      if (err?.message === 'user_not_found') setError(t('login.errorUserNotFound'))
-      else if (err?.message === 'disposable_email') setError(t('login.errorDisposableEmail'))
+      if (err?.message === 'user_not_found') failOnField(t('login.errorUserNotFound'))
+      else if (err?.message === 'disposable_email') failOnField(t('login.errorDisposableEmail'))
       else if (err?.status === 429) setError(t('login.rateLimited'))
       else setError(t('login.error'))
     } finally {
@@ -96,7 +104,7 @@ export default function LoginPage() {
       await finishLogin({ code: codeValue })
     } catch (err) {
       if (err?.status === 429) setError(t('login.rateLimited'))
-      else setError(t('login.codeInvalid'))
+      else failOnField(t('login.codeInvalid'))
     } finally {
       setLoading(false)
     }
@@ -124,7 +132,7 @@ export default function LoginPage() {
       await finishLogin({ password })
     } catch (err) {
       if (err?.status === 429) setError(t('login.rateLimited'))
-      else setError(t('login.error'))
+      else failOnField(t('login.error'))
     } finally {
       setLoading(false)
     }
@@ -149,7 +157,7 @@ export default function LoginPage() {
     const first = firstName.trim()
     const last = lastName.trim()
     if (!first || !last) {
-      setError(t('login.namesRequired'))
+      failOnField(t('login.namesRequired'))
       return
     }
     setError('')
@@ -171,7 +179,7 @@ export default function LoginPage() {
         <p className={s.tagline}>{t('login.tagline')}</p>
 
         {step === 'email' && (
-          <form onSubmit={handleEmailSubmit} className={s.form}>
+          <form ref={formRef} onSubmit={handleEmailSubmit} className={s.form}>
             {allowSelfSignup === true && <h2 className={s.stepTitle}>{t('login.signInOrRegister')}</h2>}
             {allowSelfSignup === false && <h2 className={s.stepTitle}>{t('login.signIn')}</h2>}
             <input
@@ -181,7 +189,8 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoFocus
+              autoFocus={shouldAutoFocus()}
+              {...invalidProps}
             />
             {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading}>
@@ -191,7 +200,7 @@ export default function LoginPage() {
         )}
 
         {step === 'otp' && (
-          <form onSubmit={handleOtpSubmit} className={s.form}>
+          <form ref={formRef} onSubmit={handleOtpSubmit} className={s.form}>
             <h2 className={s.stepTitle}>{t('login.checkEmail')}</h2>
             <p className={forms.helpText}>{t('login.checkEmailHint', { email })}</p>
             <div className={s.otpWrap}>
@@ -209,7 +218,8 @@ export default function LoginPage() {
                 onFocus={() => setOtpFocused(true)}
                 onBlur={() => setOtpFocused(false)}
                 required
-                autoFocus
+                autoFocus={shouldAutoFocus()}
+                {...invalidProps}
               />
               <div className={s.otpSlots} aria-hidden="true">
                 {[0, 1, 2, 3, 4, 5].map((i) => {
@@ -238,14 +248,15 @@ export default function LoginPage() {
         )}
 
         {step === 'password' && (
-          <form onSubmit={handlePasswordSubmit} className={s.form}>
+          <form ref={formRef} onSubmit={handlePasswordSubmit} className={s.form}>
             <h2 className={s.stepTitle}>{t('login.welcomeBack')}</h2>
             <PasswordInput
               placeholder={t('login.password')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoFocus
+              autoFocus={shouldAutoFocus()}
+              {...invalidProps}
             />
             {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading || password.length === 0}>
@@ -258,7 +269,7 @@ export default function LoginPage() {
         )}
 
         {step === 'name' && (
-          <form onSubmit={handleNameSubmit} className={s.form}>
+          <form ref={formRef} onSubmit={handleNameSubmit} className={s.form}>
             <h2 className={s.stepTitle}>{t('login.completeProfile')}</h2>
             <p className={forms.helpText}>{t('login.completeProfileHint')}</p>
             <input
@@ -268,7 +279,8 @@ export default function LoginPage() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
-              autoFocus
+              autoFocus={shouldAutoFocus()}
+              data-invalid={fieldInvalid && !firstName.trim() ? 'true' : undefined}
             />
             <input
               className={forms.input}
@@ -277,6 +289,7 @@ export default function LoginPage() {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               required
+              data-invalid={fieldInvalid && !lastName.trim() ? 'true' : undefined}
             />
             {error && <p className={forms.error}>{error}</p>}
             <button className={s.btn} type="submit" disabled={loading || !firstName.trim() || !lastName.trim()}>

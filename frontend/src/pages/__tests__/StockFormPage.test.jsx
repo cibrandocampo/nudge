@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { server } from '../../test/mocks/server'
-import { renderWithProviders } from '../../test/helpers'
+import { mockFinePointer, renderWithProviders } from '../../test/helpers'
 import StockFormPage from '../StockFormPage'
 
 const reachableRef = { current: true }
@@ -43,6 +43,31 @@ beforeEach(() => {
 })
 
 describe('StockFormPage — create', () => {
+  it('focuses the name after submitting it empty', async () => {
+    mockGroups([])
+    mockContacts()
+    const { user } = renderCreate()
+    await user.click(await screen.findByRole('button', { name: 'Create' }))
+
+    expect(screen.getByPlaceholderText(/ibuprofen/i)).toHaveFocus()
+    expect(screen.getByPlaceholderText(/ibuprofen/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('does not focus the name by itself on a touch screen', async () => {
+    mockGroups([])
+    mockContacts()
+    renderCreate()
+    expect(await screen.findByPlaceholderText(/ibuprofen/i)).not.toHaveFocus()
+  })
+
+  it('focuses the name on arrival with a mouse', async () => {
+    mockFinePointer()
+    mockGroups([])
+    mockContacts()
+    renderCreate()
+    expect(await screen.findByPlaceholderText(/ibuprofen/i)).toHaveFocus()
+  })
+
   it('puts Cancel before the primary action', async () => {
     mockGroups([])
     mockContacts()

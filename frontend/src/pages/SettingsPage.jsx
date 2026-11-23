@@ -25,6 +25,7 @@ import { subscribeToPush, unsubscribeFromPush } from '../utils/push'
 import cx from '../utils/cx'
 import { avatarInitial, fullName } from '../utils/displayName'
 import { errorToastMessage } from '../utils/errors'
+import { showInvalid } from '../utils/forms'
 import buttons from '../styles/buttons.module.css'
 import cards from '../styles/cards.module.css'
 import forms from '../styles/forms.module.css'
@@ -106,6 +107,7 @@ export default function SettingsPage() {
   // border / text on the input so the offending email is visually
   // marked even after the error toast fades out.
   const [contactEmailInvalid, setContactEmailInvalid] = useState(false)
+  const contactFormRef = useRef(null)
   // { id, name } when the user clicks the X on a contact row; cleared
   // when they confirm or cancel the ConfirmModal. `name` is the display
   // string shown in the confirmation copy (never `username`).
@@ -282,7 +284,7 @@ export default function SettingsPage() {
     const email = contactEmail.trim()
     if (!isValidEmail(email)) {
       showToast({ type: 'error', message: t('settings.addContact.errorEmail') })
-      setContactEmailInvalid(true)
+      showInvalid(contactFormRef.current, () => setContactEmailInvalid(true))
       return
     }
     try {
@@ -309,7 +311,7 @@ export default function SettingsPage() {
         message = detail || t('common.actionError')
       }
       showToast({ type: 'error', message })
-      setContactEmailInvalid(true)
+      showInvalid(contactFormRef.current, () => setContactEmailInvalid(true))
     }
   }
 
@@ -431,9 +433,11 @@ export default function SettingsPage() {
           <p className={forms.helpText}>{t('settings.noContacts')}</p>
         )}
 
-        <form className={s.addContactForm} onSubmit={handleAddContact} noValidate>
+        <form ref={contactFormRef} className={s.addContactForm} onSubmit={handleAddContact} noValidate>
           <input
             className={cx(forms.input, contactEmailInvalid && s.inputInvalid)}
+            aria-invalid={contactEmailInvalid || undefined}
+            data-invalid={contactEmailInvalid ? 'true' : undefined}
             type="email"
             placeholder={t('settings.addContact.email')}
             value={contactEmail}

@@ -170,11 +170,11 @@ test.describe('Android back with an overlay open', () => {
 
   test('with typed text, a tap outside keeps the modal and back closes it', async ({ page }) => {
     await openChangePassword(page)
-    await page.getByPlaceholder('Current password').fill('half typed')
+    await page.getByLabel('Current password').fill('half typed')
 
     await page.mouse.click(4, 4)
     await expect(dialog(page)).toBeVisible()
-    await expect(page.getByPlaceholder('Current password')).toHaveValue('half typed')
+    await expect(page.getByLabel('Current password')).toHaveValue('half typed')
 
     await page.goBack()
     await expect(dialog(page)).toHaveCount(0)
