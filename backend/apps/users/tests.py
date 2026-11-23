@@ -4,14 +4,19 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
+from django.utils.timezone import now
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
-from .models import LoginCode, validate_timezone
+from .models import FailedLoginAttempt, LoginCode, validate_timezone
+from .services import LOGIN_LOCKOUT_ATTEMPTS, LOGIN_LOCKOUT_WINDOW
+from .tasks import cleanup_login_codes
+from .throttles import ChangePasswordThrottle
 
 User = get_user_model()
 
@@ -1003,6 +1008,103 @@ class LogoutTest(APITestCase):
         token = str(self.refresh)
         self.user.delete()
         self.assertEqual(self.client.post(self.url, {"refresh": token}, format="json").status_code, 204)
+
+
+class PasswordLockoutTest(APITestCase):
+    """T062: wrong passwords lock the account's password login."""
+
+    VERIFY = "/api/auth/login/verify/"
+    TOKEN = "/api/auth/token/"
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="locked", email="locked@example.com", password="right-pass-1", auth_method="password"
+        )
+
+    def _verify(self, password):
+        return self.client.post(self.VERIFY, {"email": self.user.email, "password": password}, format="json")
+
+    def _token(self, password):
+        return self.client.post(self.TOKEN, {"username": self.user.username, "password": password}, format="json")
+
+    def _fail(self, times):
+        for _ in range(times):
+            self.assertEqual(self._verify("wrong").status_code, 400)
+
+    def test_the_right_password_is_refused_after_five_failures(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS)
+        response = self._verify("right-pass-1")
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.data, {"error": "locked"})
+
+    def test_a_correct_login_resets_the_counter(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS - 1)
+        self.assertEqual(self._verify("right-pass-1").status_code, 200)
+        self.assertEqual(self.user.failed_logins.count(), 0)
+
+    def test_the_lock_ends_with_the_window(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS)
+        self.user.failed_logins.update(created_at=now() - LOGIN_LOCKOUT_WINDOW - timedelta(seconds=1))
+        self.assertEqual(self._verify("right-pass-1").status_code, 200)
+
+    def test_a_locked_attempt_does_not_extend_the_lock(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS)
+        self._verify("wrong")
+        self.assertEqual(self.user.failed_logins.count(), LOGIN_LOCKOUT_ATTEMPTS)
+
+    def test_the_token_route_cannot_get_around_the_lock(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS)
+        self.assertEqual(self._token("right-pass-1").status_code, 429)
+
+    def test_failures_on_the_token_route_count(self):
+        for _ in range(LOGIN_LOCKOUT_ATTEMPTS):
+            self.assertEqual(self._token("wrong").status_code, 401)
+        self.assertEqual(self._verify("right-pass-1").status_code, 429)
+
+    def test_a_correct_token_login_resets_the_counter(self):
+        self._fail(LOGIN_LOCKOUT_ATTEMPTS - 1)
+        self.assertEqual(self._token("right-pass-1").status_code, 200)
+        self.assertEqual(self.user.failed_logins.count(), 0)
+
+    def test_the_token_route_handles_an_unknown_or_malformed_username(self):
+        for username in ("nobody", 123):
+            with self.subTest(username=username):
+                response = self.client.post(self.TOKEN, {"username": username, "password": "x"}, format="json")
+                self.assertIn(response.status_code, (400, 401))
+
+    def test_the_lock_does_not_touch_the_otp_path(self):
+        otp_user = User.objects.create_user(username="otp", email="otp@example.com", auth_method="otp")
+        FailedLoginAttempt.objects.bulk_create(FailedLoginAttempt(user=otp_user) for _ in range(LOGIN_LOCKOUT_ATTEMPTS))
+        LoginCode.objects.create(
+            user=otp_user, code_hash=LoginCode.hash_code("123456"), expires_at=now() + timedelta(minutes=5)
+        )
+        response = self.client.post(self.VERIFY, {"email": otp_user.email, "code": "123456"}, format="json")
+        self.assertEqual(response.status_code, 200)
+
+    def test_cleanup_purges_only_attempts_outside_the_window(self):
+        self._fail(2)
+        old = self.user.failed_logins.first()
+        FailedLoginAttempt.objects.filter(pk=old.pk).update(
+            created_at=now() - LOGIN_LOCKOUT_WINDOW - timedelta(minutes=1)
+        )
+        self.assertEqual(cleanup_login_codes(), 1)
+        self.assertEqual(self.user.failed_logins.count(), 1)
+
+
+class ChangePasswordThrottleTest(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user(username="cp", email="cp@example.com", password="right-pass-1")
+        self.client.force_authenticate(self.user)
+
+    def test_the_sixth_attempt_in_the_hour_is_refused(self):
+        body = {"current_password": "wrong", "new_password": "another-pass-2"}
+        with patch.object(ChangePasswordThrottle, "THROTTLE_RATES", {"change_password": "5/hour"}):
+            for _ in range(5):
+                self.assertEqual(self.client.post("/api/auth/change-password/", body, format="json").status_code, 400)
+            response = self.client.post("/api/auth/change-password/", body, format="json")
+        self.assertEqual(response.status_code, 429)
 
 
 class MeViewTest(APITestCase):

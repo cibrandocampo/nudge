@@ -1,4 +1,4 @@
-from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle, UserRateThrottle
 
 
 class AuthRateThrottle(AnonRateThrottle):
@@ -18,6 +18,13 @@ class LoginVerifyThrottle(AnonRateThrottle):
     """Per-IP rate on /api/auth/login/verify/."""
 
     scope = "login_verify"
+
+
+class ChangePasswordThrottle(UserRateThrottle):
+    """Per-user rate on /api/auth/change-password/: a stolen session must not
+    be able to guess the current password."""
+
+    scope = "change_password"
 
 
 class EmailDestThrottle(SimpleRateThrottle):
