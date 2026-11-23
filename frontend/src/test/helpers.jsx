@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { ToastProvider } from '../components/Toast'
 import { AppVersionProvider } from '../contexts/AppVersionContext'
 import { AuthContext } from '../contexts/AuthContext'
@@ -65,6 +65,12 @@ export function renderWithProviders(ui, options = {}) {
     authValue,
     queryClient: qc,
   }
+}
+
+/** Stands in for the browser's (or Android's) «back» in a test. */
+export function BrowserBack() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate(-1)}>browser back</button>
 }
 
 /**

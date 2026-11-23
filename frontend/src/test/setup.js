@@ -10,6 +10,7 @@ import { initReactI18next } from 'react-i18next'
 import en from '../i18n/en.json'
 import { clear as clearOfflineQueue } from '../offline/queue'
 import { server } from './mocks/server'
+import { resetOverlays } from '../hooks/useOverlay'
 
 // ── i18next (synchronous, no detector) ──────────────────────────────────────
 i18n.use(initReactI18next).init({
@@ -106,5 +107,6 @@ afterEach(() => {
 // next one's first GET. `beforeEach` guarantees the queue is empty when
 // the test body starts, independent of afterEach hook ordering.
 beforeEach(async () => {
+  resetOverlays()
   await clearOfflineQueue()
 })

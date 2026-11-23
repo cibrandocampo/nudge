@@ -8,7 +8,7 @@ export default function ConfirmModal({ message, onConfirm, onCancel, confirmLabe
   const { t } = useTranslation()
 
   return (
-    <ModalFrame onClose={onCancel}>
+    <ModalFrame onClose={onCancel} showClose={false}>
       <p className={s.message}>{message}</p>
       <div className={s.actions}>
         <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel}>

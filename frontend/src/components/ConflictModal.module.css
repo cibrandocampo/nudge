@@ -7,7 +7,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem 3rem 0.875rem 1rem;
   border-bottom: 1px solid var(--c-border-inner);
 }
 
@@ -22,23 +22,6 @@
   margin: 0.1rem 0 0;
   font-size: var(--fs-xs);
   color: var(--c-text-3);
-}
-
-.close {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--c-text-3);
-  cursor: pointer;
-  padding: 0.2rem;
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.close:hover {
-  color: var(--c-text);
-  background: var(--c-border-inner);
 }
 
 .body {

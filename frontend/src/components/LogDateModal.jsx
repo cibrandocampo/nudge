@@ -20,7 +20,8 @@ function toLocalInputValue(date) {
  */
 export default function LogDateModal({ onConfirm, onCancel }) {
   const { t } = useTranslation()
-  const [value, setValue] = useState(() => toLocalInputValue(new Date()))
+  const [initial] = useState(() => toLocalInputValue(new Date()))
+  const [value, setValue] = useState(initial)
   const max = toLocalInputValue(new Date())
 
   const handleConfirm = () => {
@@ -31,7 +32,7 @@ export default function LogDateModal({ onConfirm, onCancel }) {
   }
 
   return (
-    <ModalFrame onClose={onCancel} title={t('routine.detail.logDateTitle')}>
+    <ModalFrame onClose={onCancel} title={t('routine.detail.logDateTitle')} dirty={value !== initial}>
       <p className={s.hint}>{t('routine.detail.logDateHint')}</p>
       <input
         type="datetime-local"

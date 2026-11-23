@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enqueue, list } from '../../offline/queue'
 import { __resetSyncWorkerForTests } from '../../offline/sync'
@@ -43,7 +44,9 @@ async function keepMine(user) {
 function renderWithQC(qc = new QueryClient()) {
   return render(
     <QueryClientProvider client={qc}>
-      <ConflictOrchestrator />
+      <MemoryRouter>
+        <ConflictOrchestrator />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }

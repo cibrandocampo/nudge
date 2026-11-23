@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '../hooks/useClickOutside'
-import { useEscapeKey } from '../hooks/useEscapeKey'
+import { useOverlay } from '../hooks/useOverlay'
 import cx from '../utils/cx'
 import { formatShortDate } from '../utils/time'
 import Icon from './Icon'
@@ -69,7 +69,7 @@ export default function DateRangePicker({ dateFrom, dateTo, onChange }) {
   }, [open, dateFrom, dateTo])
 
   useClickOutside(ref, () => setOpen(false), open)
-  useEscapeKey(() => setOpen(false), open)
+  useOverlay({ open, onClose: () => setOpen(false) })
 
   const selectPreset = (preset) => {
     onChange({ dateFrom: preset.from(), dateTo: preset.to() })

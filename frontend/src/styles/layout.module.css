@@ -18,6 +18,7 @@
 }
 
 .modalBox {
+  position: relative;
   background: var(--c-surface);
   border-radius: var(--radius-xxl);
   padding: 1.5rem;
@@ -31,6 +32,69 @@
   font-weight: 700;
   color: var(--c-text);
   margin: 0 0 1rem;
+}
+
+.modalTitleWithClose {
+  padding-right: 1.75rem;
+}
+
+.modalTitleTight {
+  margin-bottom: 0.25rem;
+}
+
+.modalSubtitle {
+  margin: 0 0 1rem;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+
+.modalClose {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+}
+
+.overlaySheet {
+  align-items: flex-end;
+  padding: 0;
+  animation: sheetFade 0.18s ease-out;
+}
+
+.modalSheet {
+  position: relative;
+  background: var(--c-surface);
+  width: 100%;
+  max-width: 480px;
+  border-top-left-radius: var(--radius-xxl);
+  border-top-right-radius: var(--radius-xxl);
+  padding: 1.25rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-lg);
+  animation: sheetSlide 0.25s ease-out;
+}
+
+@keyframes sheetSlide {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The box takes focus only to hold it for keyboard users; it is not a control. */
+.modalSheet:focus,
+.modalBox:focus,
+.modalBoxFramed:focus {
+  outline: none;
 }
 
 @media (max-width: 380px) {
@@ -110,6 +174,7 @@
 }
 
 .modalBoxFramed {
+  position: relative;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);

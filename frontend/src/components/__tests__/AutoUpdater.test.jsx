@@ -25,6 +25,7 @@ function NavBar() {
       <button onClick={() => navigate('/inventory/abc/edit')}>nav-inv-edit</button>
       <button onClick={() => navigate('/inventory/groups')}>nav-inv-groups</button>
       <button onClick={() => navigate('/login')}>nav-login</button>
+      <button onClick={() => navigate('/', { state: { overlays: [1] } })}>open-overlay</button>
     </div>
   )
 }
@@ -50,6 +51,18 @@ describe('AutoUpdater', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs()
+  })
+
+  it('does not reload when an overlay adds a history entry at the same URL', async () => {
+    const user = userEvent.setup()
+    setup('/')
+    act(() => {
+      publishRemoteVersion('2.0.0')
+    })
+
+    await user.click(screen.getByText('open-overlay'))
+
+    expect(forceReload).not.toHaveBeenCalled()
   })
 
   it('does not reload when there is no version mismatch', async () => {

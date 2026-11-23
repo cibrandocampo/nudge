@@ -1,7 +1,11 @@
-import { render, screen, within } from '@testing-library/react'
+import { render as rtlRender, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import ConflictModal from '../ConflictModal'
+
+// ModalFrame registers with the history, so it needs a router.
+const render = (ui) => rtlRender(ui, { wrapper: MemoryRouter })
 
 const mutation = {
   id: 'k-1',
