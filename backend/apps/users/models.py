@@ -122,3 +122,14 @@ class LoginCode(models.Model):
     @staticmethod
     def hash_code(raw: str) -> str:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+class FailedLoginAttempt(models.Model):
+    """One wrong password for an account. Counted over a time window to lock
+    the account's password login, whichever IP the attempts come from."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="failed_logins")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "created_at"])]

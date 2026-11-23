@@ -8,7 +8,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.timezone import now
 
-from .models import LoginCode, User
+from .models import FailedLoginAttempt, LoginCode, User
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +91,13 @@ def _attach_logo(msg: EmailMultiAlternatives) -> None:
 
 @shared_task(name="apps.users.tasks.cleanup_login_codes")
 def cleanup_login_codes() -> int:
-    """Delete LoginCode rows whose expires_at is in the past. Runs daily
-    via Celery beat (`cleanup-login-codes` schedule). Returns the count
-    deleted, mirroring the pattern of `cleanup_idempotency_records`.
+    """Delete LoginCode rows whose expires_at is in the past, and failed
+    logins outside the lockout window. Runs daily via Celery beat
+    (`cleanup-login-codes` schedule). Returns the count deleted, mirroring
+    the pattern of `cleanup_idempotency_records`.
     """
-    deleted, _ = LoginCode.objects.filter(expires_at__lt=now()).delete()
-    return deleted
+    from .services import LOGIN_LOCKOUT_WINDOW  # services imports this module
+
+    codes, _ = LoginCode.objects.filter(expires_at__lt=now()).delete()
+    attempts, _ = FailedLoginAttempt.objects.filter(created_at__lt=now() - LOGIN_LOCKOUT_WINDOW).delete()
+    return codes + attempts

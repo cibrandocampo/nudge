@@ -1,8 +1,9 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .throttles import AuthRateThrottle
 from .views import (
+    LockedTokenObtainPairView,
     admin_access,
     auth_config,
     change_password,
@@ -15,7 +16,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path("token/", TokenObtainPairView.as_view(throttle_classes=[AuthRateThrottle]), name="token-obtain"),
+    path("token/", LockedTokenObtainPairView.as_view(), name="token-obtain"),
     path("refresh/", TokenRefreshView.as_view(throttle_classes=[AuthRateThrottle]), name="token-refresh"),
     path("config/", auth_config, name="auth-config"),
     path("login/start/", login_start, name="login-start"),

@@ -6,11 +6,12 @@ from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
-from rest_framework.exceptions import ParseError
+from rest_framework.exceptions import AuthenticationFailed, ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.core.mixins import parse_http_date
 from apps.notifications.push import notify_contact_added
@@ -25,8 +26,22 @@ from .serializers import (
     UserSerializer,
     UserUpdateSerializer,
 )
-from .services import create_signup_user, issue_otp, resolve_lang, verify_otp
-from .throttles import EmailDestThrottle, LoginStartThrottle, LoginVerifyThrottle
+from .services import (
+    clear_failed_logins,
+    create_signup_user,
+    is_login_locked,
+    issue_otp,
+    record_failed_login,
+    resolve_lang,
+    verify_otp,
+)
+from .throttles import (
+    AuthRateThrottle,
+    ChangePasswordThrottle,
+    EmailDestThrottle,
+    LoginStartThrottle,
+    LoginVerifyThrottle,
+)
 
 
 @api_view(["GET"])
@@ -129,8 +144,12 @@ def login_verify(request):
     else:
         if user.auth_method != "password":
             return Response({"error": "method_mismatch"}, status=status.HTTP_400_BAD_REQUEST)
+        if is_login_locked(user):
+            return Response({"error": "locked"}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         if not user.check_password(password):
+            record_failed_login(user)
             return Response({"error": "invalid"}, status=status.HTTP_400_BAD_REQUEST)
+        clear_failed_logins(user)
 
     refresh = RefreshToken.for_user(user)
     is_new = not (user.first_name or user.last_name)
@@ -166,7 +185,30 @@ def logout(request):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class LockedTokenObtainPairView(TokenObtainPairView):
+    """Username + password login, under the same account lockout as
+    `login_verify`: otherwise this route would be a way around it."""
+
+    throttle_classes = [AuthRateThrottle]
+
+    def post(self, request, *args, **kwargs):
+        username = request.data.get("username")
+        user = User.objects.filter(username=username).first() if isinstance(username, str) else None
+        if user is not None and is_login_locked(user):
+            return Response({"error": "locked"}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        try:
+            response = super().post(request, *args, **kwargs)
+        except AuthenticationFailed:
+            if user is not None:
+                record_failed_login(user)
+            raise
+        if user is not None:
+            clear_failed_logins(user)
+        return response
+
+
 @api_view(["POST"])
+@throttle_classes([ChangePasswordThrottle])
 def change_password(request):
     current = request.data.get("current_password", "")
     new = request.data.get("new_password", "")

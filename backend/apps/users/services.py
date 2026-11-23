@@ -12,11 +12,13 @@ from datetime import timedelta
 
 from django.utils.timezone import now
 
-from .models import LoginCode, User
+from .models import FailedLoginAttempt, LoginCode, User
 from .tasks import send_login_email
 
 OTP_TTL = timedelta(minutes=10)
 OTP_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_ATTEMPTS = 5
+LOGIN_LOCKOUT_WINDOW = timedelta(minutes=15)
 ALLOWED_LANGS = ("en", "es", "gl")
 DEFAULT_LANG = "en"
 
@@ -99,3 +101,17 @@ def resolve_lang(request) -> str:
         if code in ALLOWED_LANGS:
             return code
     return DEFAULT_LANG
+
+
+def is_login_locked(user: User) -> bool:
+    """Too many wrong passwords for this account within the window."""
+    since = now() - LOGIN_LOCKOUT_WINDOW
+    return FailedLoginAttempt.objects.filter(user=user, created_at__gte=since).count() >= LOGIN_LOCKOUT_ATTEMPTS
+
+
+def record_failed_login(user: User) -> None:
+    FailedLoginAttempt.objects.create(user=user)
+
+
+def clear_failed_logins(user: User) -> None:
+    FailedLoginAttempt.objects.filter(user=user).delete()
