@@ -51,6 +51,15 @@ init:       ## First-time setup: create .env, start dev, migrate, create admin, 
 	$(DEV) exec backend python manage.py ensure_admin
 	bash scripts/install-hooks.sh
 
+lock:       ## Regenerate the Python lockfiles from the requirements.in files
+	docker run --rm -e CUSTOM_COMPILE_COMMAND="make lock" -v "$(CURDIR)":/r -w /r python:3.13-slim sh -c '\
+		pip install -q --root-user-action=ignore pip-tools && \
+		for d in backend dev; do \
+			(cd $$d && pip-compile -q --upgrade --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url \
+				--output-file requirements.txt requirements.in) || exit 1; \
+		done; \
+		chown $(shell id -u):$(shell id -g) backend/requirements.txt dev/requirements.txt'
+
 hooks:      ## Install git pre-commit hook
 	bash scripts/install-hooks.sh
 

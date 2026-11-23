@@ -282,6 +282,17 @@ How to behave when a test fails is not a matter of taste: see
 
 ---
 
+## Python dependencies
+
+`backend/requirements.in` and `dev/requirements.in` state the allowed ranges. The `requirements.txt` next to each pins every package with hashes, and images and CI install only the lock.
+
+To add or bump a dependency:
+
+1. Edit the `.in` file if the range changes.
+2. Run `make lock`. It moves every package to the newest version the ranges allow.
+3. Rebuild with `docker compose -f dev/docker-compose.yml --env-file .env build backend celery beat`, then run the backend tests.
+4. Commit the `.in` and `.lock` files together.
+
 ## Demo seed
 
 One management command wipes the business tables and rebuilds a deterministic

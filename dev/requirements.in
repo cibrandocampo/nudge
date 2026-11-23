@@ -1,0 +1,5 @@
+# Dev-only packages, installed alongside backend/requirements.txt in the dev
+# image and in CI. The constraint keeps any shared package on the same version.
+-c ../backend/requirements.txt
+coverage>=7.17
+ruff>=0.17

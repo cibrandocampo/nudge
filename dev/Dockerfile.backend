@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install prod requirements + dev-only requirements
 COPY backend/requirements.txt requirements.txt
 COPY dev/requirements.txt requirements.dev.txt
-RUN pip install --no-cache-dir -r requirements.txt -r requirements.dev.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt -r requirements.dev.txt
 
 # Copy the entrypoint outside /app so volume mounts don't shadow it
 COPY backend/entrypoint.sh /entrypoint.sh
