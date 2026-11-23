@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { fireEvent, screen } from '@testing-library/react'
 import { renderWithProviders } from '../../test/helpers'
 import ModalFrame from '../ModalFrame'
@@ -232,6 +232,94 @@ describe('ModalFrame', () => {
       await user.keyboard('{Escape}')
 
       expect(screen.getByRole('heading', { name: 'Page title' })).toHaveFocus()
+    })
+
+    it('leaves the focus alone when there is no heading to fall back to', async () => {
+      function NoHeading() {
+        const [open, setOpen] = useState(false)
+        const [triggerGone, setTriggerGone] = useState(false)
+        return (
+          <>
+            {!triggerGone && <button onClick={() => setOpen(true)}>open</button>}
+            {open && (
+              <ModalFrame
+                onClose={() => {
+                  setOpen(false)
+                  setTriggerGone(true)
+                }}
+              />
+            )}
+          </>
+        )
+      }
+      const { user } = renderWithProviders(<NoHeading />)
+      await user.click(screen.getByRole('button', { name: 'open' }))
+
+      await user.keyboard('{Escape}')
+
+      expect(document.body).toHaveFocus()
+    })
+
+    it('does not take the focus back from a control that claimed it on close', async () => {
+      function Claims() {
+        const [open, setOpen] = useState(false)
+        const otherRef = useRef(null)
+        return (
+          <>
+            <button onClick={() => setOpen(true)}>open</button>
+            <input aria-label="other" ref={otherRef} />
+            {open && (
+              <ModalFrame
+                onClose={() => {
+                  otherRef.current.focus()
+                  setOpen(false)
+                }}
+              />
+            )}
+          </>
+        )
+      }
+      const { user } = renderWithProviders(<Claims />)
+      await user.click(screen.getByRole('button', { name: 'open' }))
+
+      await user.keyboard('{Escape}')
+
+      expect(screen.getByLabelText('other')).toHaveFocus()
+    })
+
+    it('has nothing to return to when it opened with no control focused', () => {
+      const { unmount } = renderWithProviders(<ModalFrame onClose={vi.fn()} />)
+
+      unmount()
+
+      expect(document.body).toHaveFocus()
+    })
+
+    it('keeps an autofocused child focused under StrictMode', () => {
+      renderWithProviders(
+        <ModalFrame onClose={vi.fn()}>
+          <input aria-label="field" autoFocus />
+        </ModalFrame>,
+        { reactStrictMode: true },
+      )
+
+      expect(screen.getByLabelText('field')).toHaveFocus()
+    })
+
+    it('leaves Tab to the inner dialog when one modal opens inside another', async () => {
+      const { user } = renderWithProviders(
+        <ModalFrame onClose={vi.fn()} title="Outer">
+          <button>outer action</button>
+          <ModalFrame onClose={vi.fn()} title="Inner" showClose={false}>
+            <button>inner action</button>
+          </ModalFrame>
+        </ModalFrame>,
+      )
+      screen.getByRole('button', { name: 'inner action' }).focus()
+
+      await user.tab()
+
+      expect(screen.getByRole('button', { name: 'inner action' })).toHaveFocus()
     })
   })
 
