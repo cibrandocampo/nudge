@@ -43,8 +43,10 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - run: pip install -r requirements.txt -r ../dev/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            dev/requirements.txt
+      - run: pip install --require-hashes -r requirements.txt -r ../dev/requirements.txt
       - run: ruff check .
       - run: ruff format --check .
       - run: coverage run manage.py test
@@ -169,6 +171,27 @@ jobs:
             e2e/test-results/
             e2e-stack.log
           retention-days: 14
+
+  audit:
+    runs-on: ubuntu-latest
+    # Informative for now: findings show on the run without blocking the PR.
+    # Review on 2026-12-07: if it has stayed clean, remove continue-on-error so
+    # it becomes a gate. For an unfixable finding use --ignore-vuln with a
+    # comment explaining why, never disable the job.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt --require-hashes --disable-pip
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - run: corepack enable npm && corepack prepare npm@11 --activate
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
 
   build-backend:
     needs: [test-backend, test-frontend]

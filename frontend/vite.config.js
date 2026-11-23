@@ -29,6 +29,18 @@ export default defineConfig({
     },
     allowedHosts: true,
   },
+  optimizeDeps: {
+    // Only the service worker imports these, and Vite's dependency scan starts
+    // from index.html, so it finds them when the dev SW first loads and then
+    // reloads the page. Declared here, a cold dev server loads the page once.
+    include: [
+      'workbox-cacheable-response',
+      'workbox-expiration',
+      'workbox-precaching',
+      'workbox-routing',
+      'workbox-strategies',
+    ],
+  },
   preview: {
     // Used by the `frontend-preview` service in dev/docker-compose.yml to
     // serve a production build for offline E2E tests (T069–T071). Mirrors

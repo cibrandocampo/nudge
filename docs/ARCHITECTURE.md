@@ -79,7 +79,8 @@ backend/
 │   ├── notifications/   # Push subscription + Celery tasks
 │   └── regulatory/      # Official medicine data (CIMA / AEMPS) linked to stocks
 ├── entrypoint.sh        # Runs migrations + ensure_admin on startup (collectstatic runs at build time)
-└── requirements.txt
+├── requirements.in     # Direct dependencies and their allowed ranges
+└── requirements.txt    # Exact versions with hashes, what images and CI install
 ```
 
 ### Data model
@@ -583,10 +584,10 @@ the sync if the fetched file has fewer than 1000 lines (the real list is
 
 ## Dependency versioning strategy
 
-- **Python** (`requirements.txt`): `~=X.Y` compatible release specifier. Allows patch upgrades (e.g., `~=5.0` accepts `5.0.1`, `5.0.2` but not `5.1`).
+- **Python** (`requirements.in`): `~=X.Y` compatible release specifier states the intent (e.g., `~=5.0` accepts `5.0.1`, `5.0.2` but not `5.1`). `requirements.txt` pins every package with hashes, and is the only thing images and CI install.
 - **npm** (`package.json`): `~X.Y` tilde prefix. Allows patch-only upgrades within the same minor version (e.g., `~18.3` accepts `18.3.5` but not `18.4.0`).
 
-The weekly rebuild picks up whatever patch versions are available at build time.
+The weekly rebuild picks up new npm patch versions and base images. Python versions only change when the lockfile is regenerated with `make lock` (see `docs/development.md`).
 
 ---
 

@@ -46,10 +46,14 @@ test.describe('Settings', () => {
 
     await tzInput.click()
     await tzInput.fill('Madrid')
-    // Autosave fires a PATCH on selection — wait for it to land before
-    // reloading, otherwise the reload can race ahead of the persisted value.
+    // Autosave fires a PATCH on selection — wait for this pick's own PATCH
+    // before reloading. The Tokyo one may still be answering at this point.
     const saved = page.waitForResponse(
-      (r) => r.url().includes('/api/auth/me/') && r.request().method() === 'PATCH',
+      (r) =>
+        r.url().includes('/api/auth/me/') &&
+        r.request().method() === 'PATCH' &&
+        r.request().postDataJSON()?.timezone === 'Europe/Madrid' &&
+        r.ok(),
     )
     await page.getByRole('option', { name: 'Europe/Madrid' }).click()
     await saved

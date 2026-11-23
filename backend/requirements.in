@@ -1,0 +1,20 @@
+django~=5.2
+djangorestframework~=3.18
+django-cors-headers~=4.9
+psycopg2-binary~=2.9
+gunicorn~=26.2
+whitenoise~=6.12
+celery[redis]~=5.6
+# redis-py is only used as Celery's broker client. Kept on the 6.x major
+# (6.4.0 is its last release); kombu >= 5.7 accepts up to redis<9, so moving
+# to 8.x is a deliberate major bump, not a compatibility blocker anymore.
+redis~=6.4
+pywebpush~=2.5
+# Outbound HTTP to the regulatory agencies (apps.regulatory.clients). Already
+# a transitive dependency of pywebpush; pinned here because our code imports it.
+requests~=2.34
+# Sanitises the third-party leaflet HTML before the app renders it (apps.regulatory.sanitize).
+nh3~=0.3.7
+djangorestframework-simplejwt~=5.5
+django-environ~=0.14
+drf-flex-fields~=1.0

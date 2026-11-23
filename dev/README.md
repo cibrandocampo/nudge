@@ -156,7 +156,7 @@ This produces all required sizes and formats:
 
 ## Rebuild images
 
-Required after changing `requirements.txt` or any `Dockerfile`:
+Required after changing a `requirements.txt` or any `Dockerfile`:
 
 ```bash
 docker compose -f dev/docker-compose.yml --env-file .env build
