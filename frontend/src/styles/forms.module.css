@@ -116,6 +116,7 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 }
 
 .formSectionHeader {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -129,6 +130,7 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
 }
 
 .formFooter {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 0.5rem;
