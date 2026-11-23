@@ -29,7 +29,7 @@
     "lucide-react": "~1.68",
     "react": "~19.3",
     "react-dom": "~19.3",
-    "react-i18next": "~17.1",
+    "react-i18next": "~18.0",
     "react-router-dom": "~7.18",
     "workbox-cacheable-response": "~7.4",
     "workbox-expiration": "~7.4",
