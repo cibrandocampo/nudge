@@ -193,7 +193,7 @@ billiard==4.3.2 \
     --hash=sha256:37735a7b4117aafa73532b3b493db4c02fb85c0e69d5f3447f113fd30ff27872 \
     --hash=sha256:9eb83c99b1cf7acb1fed86c1dfd477157000a1a2c0108005c1e5837b55d2acba
     # via celery
-celery==5.7.0 \
+celery[redis]==5.7.0 \
     --hash=sha256:18310a9c919f9029e4735367484d93e6a25cdfd30afdc474622cc263d9b35f6e \
     --hash=sha256:6a5dfcf6662287204f009a02002b9e66c83d4105e47ebabdc7079108772fc6f0
     # via -r requirements.in
@@ -724,9 +724,9 @@ frozenlist==1.8.0 \
     # via
     #   aiohttp
     #   aiosignal
-gunicorn==26.2.0 \
-    --hash=sha256:62b864895d9ebff0b2f9867ba04fe811c93121596540830c9c916d0769668447 \
-    --hash=sha256:bd249d0b3f7972f7432f0a6b6ff3b3ee2d129f70cd1ff6c09a9dd9e29a2b88e3
+gunicorn==27.0.1 \
+    --hash=sha256:378b26b9a38adcf4592f28828233c1716acc55e833ea06bf48719782efaa0d10 \
+    --hash=sha256:b1514965361c8b7e8107a80aa2a92636878df1ccfac6dd204a676426e04d9e3e
     # via -r requirements.in
 http-ece==1.2.1 \
     --hash=sha256:8c6ab23116bbf6affda894acfd5f2ca0fb8facbcbb72121c11c75c33e7ce8cff
@@ -737,7 +737,7 @@ idna==3.20 \
     # via
     #   requests
     #   yarl
-kombu==5.7.0 \
+kombu[redis]==5.7.0 \
     --hash=sha256:31e62fdfd2381caa3422f8e02b84a491d9a2180ddda74507b57f4cb1e1c2c2c9 \
     --hash=sha256:dede73bff4c89175be382c4203d2f167cf7017c384396ec75c36a1b5678f1587
     # via celery

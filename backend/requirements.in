@@ -2,7 +2,7 @@ django~=5.2
 djangorestframework~=3.18
 django-cors-headers~=4.9
 psycopg2-binary~=2.9
-gunicorn~=26.2
+gunicorn~=27.0
 whitenoise~=6.12
 celery[redis]~=5.6
 # redis-py is only used as Celery's broker client. Kept on the 6.x major
