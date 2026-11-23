@@ -16,6 +16,7 @@ import { useLogRoutine } from '../hooks/mutations/useLogRoutine'
 import { useUndoLogRoutine } from '../hooks/mutations/useUndoLogRoutine'
 import cx from '../utils/cx'
 import { errorToastMessage, lotDecisionError } from '../utils/errors'
+import { vibrateIfOutOfStock, vibrateRefused } from '../utils/haptics'
 import { expiryToday, findCachedStock, routineLotDecision } from '../utils/lotsForSelection'
 import buttons from '../styles/buttons.module.css'
 import layout from '../styles/layout.module.css'
@@ -104,6 +105,7 @@ export default function DashboardPage() {
       // played its exit comes back to rest.
       setHighlightId(null)
       revert?.()
+      vibrateIfOutOfStock(err)
       showToast({ type: 'error', message: errorToastMessage(err, t) })
     } finally {
       setCompleting(null)
@@ -127,6 +129,7 @@ export default function DashboardPage() {
       setLotModal({ routine, lots: decision.groups })
       return
     }
+    if (decision.action === 'insufficient') vibrateRefused()
     showToast({ type: 'error', message: lotDecisionError(decision, routine, t) })
   }
 

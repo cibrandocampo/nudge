@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { REFUSED_PATTERN } from '../../utils/haptics'
 import { LEFT_MAX_PX, useSwipeAction } from '../useSwipeAction'
 
 // The element is 300px wide: the threshold sits at 114px (0.38) and a blocked
@@ -357,5 +358,47 @@ describe('useSwipeAction — a stop and no flick (T130)', () => {
     move(target, 60, 0, 10)
     up(target, 60, 10)
     expect(props.onCommit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useSwipeAction — refusing a blocked gesture', () => {
+  beforeEach(() => {
+    navigator.vibrate = vi.fn()
+  })
+
+  afterEach(() => {
+    delete navigator.vibrate
+  })
+
+  it('buzzes the refused pattern once, however far the drag goes', () => {
+    const { target } = renderHarness({ blocked: true })
+    down(target)
+    slowDragTo(target, 280)
+    expect(navigator.vibrate).toHaveBeenCalledTimes(1)
+    expect(navigator.vibrate).toHaveBeenCalledWith(REFUSED_PATTERN)
+  })
+
+  it('does not buzz on a short drag', () => {
+    const { target } = renderHarness({ blocked: true })
+    down(target)
+    slowDragTo(target, 60)
+    expect(navigator.vibrate).not.toHaveBeenCalled()
+  })
+
+  it('buzzes again on a new attempt', () => {
+    const { target } = renderHarness({ blocked: true })
+    down(target)
+    slowDragTo(target, 200)
+    up(target, 200)
+    down(target)
+    slowDragTo(target, 200)
+    expect(navigator.vibrate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not use the refused pattern when the action is available', () => {
+    const { target } = renderHarness()
+    down(target)
+    slowDragTo(target, 200)
+    expect(navigator.vibrate).not.toHaveBeenCalledWith(REFUSED_PATTERN)
   })
 })

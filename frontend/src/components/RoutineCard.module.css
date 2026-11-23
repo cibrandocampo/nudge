@@ -174,8 +174,9 @@
 
 /* Touch, at rest: the 4 px strip is a status edge, not the action. It repeats
  * the dot — green not due, amber due today, red overdue — so the list scans
- * at a glance; a card the stock blocks is grey, the usual "can't be used".
- * (A green "completable" edge next to a red overdue dot read as two states.)
+ * at a glance, also on a card the stock blocks: its red stock line says that.
+ * (A green "completable" edge next to a red overdue dot read as two states,
+ * and a grey one kept the amber ring and looked broken.)
  * It takes the action colour (green, or red and hatched) only while the card
  * is dragged or leaving, and when the keyboard focuses the check, which is
  * what the user is about to press. The media query is the exact complement
@@ -203,12 +204,6 @@
   .row[data-phase='rest'][data-status='overdue']:not([data-dragging='true']):not(:has(.check:focus-visible))
     .actionLayer {
     background: var(--c-danger);
-  }
-
-  .row[data-phase='rest']:not([data-dragging='true']):not(:has(.check:focus-visible))
-    .actionLayer[data-state='blocked'] {
-    background: var(--c-border);
-    color: var(--c-text-3);
   }
 
   /* The strip and the card read as one shape: the card's left side is square
