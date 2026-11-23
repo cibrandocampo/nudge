@@ -207,6 +207,8 @@ REST_FRAMEWORK = {
         # how many OTP emails a single address can receive, even if the
         # requests come from different IPs.
         "email_dest": "9999/hour" if DEBUG else "3/hour",
+        # Per-user rate on /api/auth/change-password/.
+        "change_password": "9999/minute" if DEBUG else "5/hour",
     },
 }
 

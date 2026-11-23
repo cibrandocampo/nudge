@@ -33,6 +33,9 @@ export default function ChangePasswordModal({ onClose }) {
     if (res.ok) {
       setSaved(true)
       setTimeout(onClose, 1500)
+    } else if (res.status === 429) {
+      // DRF's throttle detail is English and quotes seconds.
+      setError(t('login.rateLimited'))
     } else {
       const data = await res.json()
       setError(data.detail || t('header.passwordError'))

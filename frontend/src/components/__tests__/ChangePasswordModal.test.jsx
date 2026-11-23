@@ -46,6 +46,20 @@ describe('ChangePasswordModal', () => {
     await waitFor(() => expect(screen.getByText('Wrong password')).toBeInTheDocument())
   })
 
+  it('explains a throttled attempt in the app language, not with the server text', async () => {
+    server.use(
+      http.post(`${BASE}/auth/change-password/`, () =>
+        HttpResponse.json({ detail: 'Request was throttled. Expected available in 3599 seconds.' }, { status: 429 }),
+      ),
+    )
+    const { user } = renderWithProviders(<ChangePasswordModal onClose={vi.fn()} />)
+    await user.type(screen.getByPlaceholderText('Current password'), 'wrong')
+    await user.type(screen.getByPlaceholderText('New password'), 'newpass')
+    await user.type(screen.getByPlaceholderText('Confirm new password'), 'newpass')
+    await user.click(screen.getByRole('button', { name: 'Change password' }))
+    expect(await screen.findByText('Too many attempts. Try again later.')).toBeInTheDocument()
+  })
+
   it('falls back to a generic error when the API has no detail', async () => {
     server.use(http.post(`${BASE}/auth/change-password/`, () => HttpResponse.json({}, { status: 400 })))
     const { user } = renderWithProviders(<ChangePasswordModal onClose={vi.fn()} />)
