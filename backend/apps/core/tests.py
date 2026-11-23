@@ -1,19 +1,26 @@
+import importlib
 import os
 from datetime import datetime, timezone
+from io import StringIO
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase, override_settings
+from django.urls import clear_url_caches
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.test import APIRequestFactory, APITestCase
 from rest_framework.views import APIView
 
+from apps.core import urls as core_urls
 from apps.core.exception_handler import exception_handler
+from apps.core.management.commands.seed import MAX_OTP_USERS_TO_WIPE
 from apps.core.mixins import SharedWithMixin, parse_http_date
 from apps.core.permissions import IsOwner
+from apps.core.views import SeedView
 from apps.idempotency.models import IdempotencyRecord
 from apps.notifications.models import PushSubscription
 from apps.routines.exceptions import DomainError, InsufficientStock, InvalidLotSelection, LotUnavailable
@@ -663,6 +670,33 @@ class SeedCommandTest(TestCase):
             self.assertTrue(user.check_password("test-pw-xyz"), msg=f"{username} password mismatch")
 
 
+def _create_otp_users(count):
+    User.objects.bulk_create(
+        User(username=f"real{n}", email=f"real{n}@example.com", auth_method="otp") for n in range(count)
+    )
+
+
+@override_settings(DEBUG=True)
+class SeedRealDatabaseGuardTest(TestCase):
+    """The command will not wipe what looks like real signups."""
+
+    def test_refuses_above_the_limit_and_wipes_nothing(self):
+        _create_otp_users(MAX_OTP_USERS_TO_WIPE + 1)
+        with self.assertRaisesMessage(CommandError, "looks like a real database"):
+            call_command("seed", stdout=StringIO())
+        self.assertEqual(User.objects.filter(username__startswith="real").count(), MAX_OTP_USERS_TO_WIPE + 1)
+
+    def test_runs_at_the_limit(self):
+        _create_otp_users(MAX_OTP_USERS_TO_WIPE)
+        call_command("seed", stdout=StringIO())
+        self.assertTrue(User.objects.filter(username="cibran").exists())
+
+    def test_force_overrides_the_guard(self):
+        _create_otp_users(MAX_OTP_USERS_TO_WIPE + 1)
+        call_command("seed", "--force", stdout=StringIO())
+        self.assertTrue(User.objects.filter(username="cibran").exists())
+
+
 class SeedGateTest(TestCase):
     """The triple gate keeps the destructive command out of production."""
 
@@ -680,49 +714,71 @@ class SeedGateTest(TestCase):
         self.assertTrue(User.objects.filter(username="cibran").exists())
 
 
+def _reload_urls():
+    """The seed route is decided when the URLconf is imported."""
+    importlib.reload(core_urls)
+    importlib.reload(importlib.import_module(settings.ROOT_URLCONF))
+    clear_url_caches()
+
+
 class SeedEndpointTest(APITestCase):
+    def _post_with_env(self, value=None):
+        """POST to the route as a process started with this `E2E_SEED_ALLOWED`."""
+        self.addCleanup(_reload_urls)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("E2E_SEED_ALLOWED", None)
+            if value is not None:
+                os.environ["E2E_SEED_ALLOWED"] = value
+            _reload_urls()
+            return self.client.post("/api/internal/seed/")
+
     @override_settings(DEBUG=True)
-    def test_post_triggers_seed(self):
-        response = self.client.post("/api/internal/seed/")
-        self.assertEqual(response.status_code, 204)
+    def test_post_triggers_seed_in_dev(self):
+        self.assertEqual(self._post_with_env().status_code, 204)
         self.assertTrue(User.objects.filter(username="cibran").exists())
 
     @override_settings(DEBUG=False)
-    def test_post_forbidden_without_gate(self):
+    def test_post_triggers_seed_with_the_env_gate(self):
+        self.assertEqual(self._post_with_env("true").status_code, 204)
+        self.assertTrue(User.objects.filter(username="cibran").exists())
+
+    @override_settings(DEBUG=False)
+    def test_route_does_not_exist_in_production(self):
+        self.assertEqual(self._post_with_env().status_code, 404)
+        self.assertFalse(User.objects.filter(username="cibran").exists())
+
+    @override_settings(DEBUG=False)
+    def test_route_does_not_exist_with_explicit_empty_env_var(self):
+        """The production `docker-compose.yml` hard-sets `E2E_SEED_ALLOWED=""`
+        to defend against `.env` drift."""
+        self.assertEqual(self._post_with_env("").status_code, 404)
+
+    @override_settings(DEBUG=False)
+    def test_route_does_not_exist_with_truthy_but_not_literal_true(self):
+        """`E2E_SEED_ALLOWED` must be the literal string "true"."""
+        for impostor in ("1", "yes", "True ", "TRUE\n"):
+            with self.subTest(impostor=impostor):
+                self.assertEqual(self._post_with_env(impostor).status_code, 404)
+
+    @override_settings(DEBUG=False)
+    def test_view_refuses_even_if_the_route_was_registered(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("E2E_SEED_ALLOWED", None)
-            response = self.client.post("/api/internal/seed/")
+            response = SeedView.as_view()(APIRequestFactory().post("/api/internal/seed/"))
         self.assertEqual(response.status_code, 403)
         self.assertFalse(User.objects.filter(username="cibran").exists())
+
+    @override_settings(DEBUG=True)
+    def test_view_answers_409_on_what_looks_like_a_real_database(self):
+        _create_otp_users(MAX_OTP_USERS_TO_WIPE + 1)
+        response = SeedView.as_view()(APIRequestFactory().post("/api/internal/seed/"))
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(User.objects.filter(auth_method="otp").count(), MAX_OTP_USERS_TO_WIPE + 1)
 
     def test_legacy_endpoint_returns_404(self):
         """The old `/api/internal/e2e-seed/` path must no longer exist."""
         response = self.client.post("/api/internal/e2e-seed/")
         self.assertEqual(response.status_code, 404)
-
-    @override_settings(DEBUG=False)
-    def test_post_forbidden_with_explicit_empty_env_var(self):
-        """The production `docker-compose.yml` hard-sets `E2E_SEED_ALLOWED=""`
-        to defend against `.env` drift. The view must still refuse: an
-        empty string is not the literal `"true"`, regardless of how it
-        got into the environment."""
-        with mock.patch.dict(os.environ, {"E2E_SEED_ALLOWED": ""}):
-            response = self.client.post("/api/internal/seed/")
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(User.objects.filter(username="cibran").exists())
-
-    @override_settings(DEBUG=False)
-    def test_post_forbidden_with_truthy_but_not_literal_true(self):
-        """`E2E_SEED_ALLOWED` must be the literal string "true"; "1" or
-        "yes" do not unlock the gate. Pins the contract."""
-        for impostor in ("1", "yes", "True ", "TRUE\n"):
-            with mock.patch.dict(os.environ, {"E2E_SEED_ALLOWED": impostor}):
-                response = self.client.post("/api/internal/seed/")
-            self.assertEqual(
-                response.status_code,
-                403,
-                msg=f"Impostor value {impostor!r} should not unlock the gate",
-            )
 
 
 # ── IsOwner permission ──────────────────────────────────────────────────────
