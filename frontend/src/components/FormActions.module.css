@@ -25,10 +25,12 @@
   padding: 0 calc(1rem + 1px);
 }
 
-.inset > :not(:last-child) {
-  min-width: min(9.5rem, 100%);
+/* Side by side, the huge grow factor gives the primary all the free space. When
+   they no longer fit and wrap, each is alone on its row and fills it. */
+.inset > * {
+  flex: 1 1 9.5rem;
 }
 
 .inset > :last-child {
-  flex: 1 1 auto;
+  flex-grow: 9999;
 }
