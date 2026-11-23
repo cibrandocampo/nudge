@@ -132,6 +132,18 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     // Still authenticated: the backend call needs the token.
     await unsubscribeFromPush().catch(() => {})
+    // Revoke the refresh token on the server. A plain `fetch`: `api` would
+    // retry a 401 and redirect. Not awaited, and `keepalive` so it survives the
+    // navigation: offline the device is cleaned anyway and the token expires.
+    const refresh = localStorage.getItem('refresh_token')
+    if (refresh) {
+      fetch(`${BASE_URL}/auth/logout/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+        keepalive: true,
+      }).catch(() => {})
+    }
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     // Null before any cache removal, so the active observer sees user=null

@@ -10,6 +10,7 @@ from .views import (
     contact_list_create,
     login_start,
     login_verify,
+    logout,
     me,
 )
 
@@ -19,6 +20,7 @@ urlpatterns = [
     path("config/", auth_config, name="auth-config"),
     path("login/start/", login_start, name="login-start"),
     path("login/verify/", login_verify, name="login-verify"),
+    path("logout/", logout, name="auth-logout"),
     path("me/", me, name="auth-me"),
     path("change-password/", change_password, name="change-password"),
     path("admin-access/", admin_access, name="admin-access"),

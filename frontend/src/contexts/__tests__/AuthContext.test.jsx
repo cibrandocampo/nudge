@@ -327,6 +327,44 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('refresh_token')).toBeNull()
   })
 
+  it('logout revokes the refresh token it had before clearing it', async () => {
+    localStorage.setItem('access_token', 'tok')
+    localStorage.setItem('refresh_token', 'refresh-1')
+    let body = null
+    server.use(
+      http.post(`${BASE}/auth/logout/`, async ({ request }) => {
+        body = await request.json()
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.logout()
+    })
+
+    await waitFor(() => expect(body).toEqual({ refresh: 'refresh-1' }))
+    expect(localStorage.getItem('refresh_token')).toBeNull()
+  })
+
+  it('logout still cleans the device when the revocation cannot be sent', async () => {
+    localStorage.setItem('access_token', 'tok')
+    localStorage.setItem('refresh_token', 'refresh-1')
+    await enqueue(queueEntry('k-1'))
+    server.use(http.post(`${BASE}/auth/logout/`, () => HttpResponse.error()))
+    const { result } = renderHook(() => useAuth(), { wrapper })
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+
+    await act(async () => {
+      await result.current.logout()
+    })
+
+    await waitFor(() => expect(result.current.user).toBeNull())
+    expect(localStorage.getItem('access_token')).toBeNull()
+    expect(await list()).toEqual([])
+  })
+
   it('logout empties the offline queue', async () => {
     localStorage.setItem('access_token', 'tok')
     await enqueue(queueEntry('k-1'))
