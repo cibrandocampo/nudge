@@ -81,6 +81,7 @@
  * inside its card. A long label wraps inside its button at large text sizes. */
 .optionRow {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -206,13 +207,12 @@
   flex-shrink: 0;
 }
 
+/* Wraps: the email is how two people with the same name are told apart. */
 .contactName {
   font-size: var(--fs-sm);
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .error {
