@@ -43,7 +43,12 @@ export default function ChangePasswordModal({ onClose }) {
   }
 
   return (
-    <ModalFrame onClose={onClose} title={t('header.changePassword')} size="lg">
+    <ModalFrame
+      onClose={onClose}
+      title={t('header.changePassword')}
+      size="lg"
+      dirty={!saved && Object.values(form).some(Boolean)}
+    >
       {saved ? (
         <p className={s.success}>{t('header.passwordSaved')}</p>
       ) : (

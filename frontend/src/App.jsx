@@ -5,6 +5,7 @@ import { AppVersionProvider } from './contexts/AppVersionContext'
 import { AuthProvider } from './contexts/AuthContext'
 import AppearanceProvider from './components/AppearanceProvider'
 import ConflictOrchestrator from './components/ConflictOrchestrator'
+import OverlayHistory from './components/OverlayHistory'
 import IconsSprite from './components/IconsSprite'
 import Layout from './components/Layout'
 import OfflineRouteGuard from './components/OfflineRouteGuard'
@@ -48,6 +49,7 @@ export default function App() {
           <AuthProvider>
             <AppearanceProvider>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <OverlayHistory />
                 <ConflictOrchestrator />
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />

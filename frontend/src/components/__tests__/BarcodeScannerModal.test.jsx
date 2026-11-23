@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderWithProviders } from '../../test/helpers'
+import { BrowserBack, renderWithProviders } from '../../test/helpers'
 import { ZXING_WASM_URL } from '../../utils/wasmAsset'
 import BarcodeScannerModal from '../BarcodeScannerModal'
 
@@ -192,6 +193,38 @@ describe('BarcodeScannerModal', () => {
     renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={vi.fn()} />)
 
     expect(await screen.findByText('No camera found')).toBeInTheDocument()
+  })
+
+  it('stops the camera when back closes it', async () => {
+    mockCamera()
+    const onDecoded = vi.fn()
+    function Harness() {
+      const [open, setOpen] = useState(true)
+      return (
+        <>
+          {open && <BarcodeScannerModal onDecoded={onDecoded} onClose={() => setOpen(false)} />}
+          <BrowserBack />
+        </>
+      )
+    }
+    renderWithProviders(<Harness />)
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => tracks.forEach((track) => expect(track.stop).toHaveBeenCalled()))
+  })
+
+  it('shows a close button over the live camera', async () => {
+    mockCamera()
+    const onClose = vi.fn()
+    renderWithProviders(<BarcodeScannerModal onDecoded={vi.fn()} onClose={onClose} />)
+    await waitFor(() => expect(readBarcodes).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('stops every camera track on unmount', async () => {

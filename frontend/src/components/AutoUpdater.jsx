@@ -29,9 +29,10 @@ export default function AutoUpdater() {
     if (updateRef.current && SAFE_ROUTES.has(location.pathname)) {
       forceReload()
     }
-    // Intentional: deps limited to navigation events. See comment above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key])
+    // Intentional: deps limited to route changes. Not `location.key`: opening
+    // a modal adds a history entry at the same URL (useOverlay), and that must
+    // not reload the app underneath it.
+  }, [location.pathname])
 
   return null
 }

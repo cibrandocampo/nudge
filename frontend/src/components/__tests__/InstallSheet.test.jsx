@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { renderWithProviders } from '../../test/helpers'
+import { BrowserBack, renderWithProviders } from '../../test/helpers'
 import InstallSheet from '../InstallSheet'
 
 describe('InstallSheet', () => {
@@ -81,6 +81,21 @@ describe('InstallSheet', () => {
     const { user } = renderWithProviders(<InstallSheet platform="ios" onClose={onClose} />)
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onClose on back', async () => {
+    const onClose = vi.fn()
+    const { user } = renderWithProviders(
+      <>
+        <InstallSheet platform="ios" onClose={onClose} />
+        <BrowserBack />
+      </>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }))
+    await user.tab()
+
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 

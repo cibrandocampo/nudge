@@ -1,9 +1,6 @@
-import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useEscapeKey } from '../hooks/useEscapeKey'
 import Icon from './Icon'
-import buttons from '../styles/buttons.module.css'
-import cx from '../utils/cx'
+import ModalFrame from './ModalFrame'
 import s from './InstallSheet.module.css'
 
 /**
@@ -56,49 +53,27 @@ const PLATFORM_VARIANTS = {
 
 export default function InstallSheet({ platform, onClose }) {
   const { t } = useTranslation()
-  const titleId = useId()
-  useEscapeKey(onClose)
-
-  const stopPropagation = (e) => e.stopPropagation()
-
   const variant = PLATFORM_VARIANTS[platform] ?? PLATFORM_VARIANTS.generic
 
   return (
-    <div className={s.overlay} onClick={onClose} data-testid="install-sheet-overlay">
-      <div
-        className={s.sheet}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onClick={stopPropagation}
-        data-testid="install-sheet"
-      >
-        <div className={s.header}>
-          <h2 id={titleId} className={s.title}>
-            {t(variant.titleKey)}
-          </h2>
-          <button
-            type="button"
-            className={cx(buttons.hit, s.closeBtn)}
-            onClick={onClose}
-            aria-label={t('pwa.install.sheetClose')}
-          >
-            <Icon name="x" size="sm" />
-          </button>
-        </div>
-        <p className={s.subtitle}>{t('pwa.install.sheetSubtitle')}</p>
-        <ol className={s.steps}>
-          {variant.steps.map(({ icon, labelKey }, i) => (
-            <li key={labelKey} className={s.step}>
-              <span className={s.stepNumber} aria-hidden="true">
-                {i + 1}
-              </span>
-              <Icon name={icon} size="sm" className={s.stepIcon} />
-              <span className={s.stepLabel}>{t(labelKey)}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
+    <ModalFrame
+      onClose={onClose}
+      variant="sheet"
+      title={t(variant.titleKey)}
+      subtitle={t('pwa.install.sheetSubtitle')}
+      testId="install-sheet"
+    >
+      <ol className={s.steps}>
+        {variant.steps.map(({ icon, labelKey }, i) => (
+          <li key={labelKey} className={s.step}>
+            <span className={s.stepNumber} aria-hidden="true">
+              {i + 1}
+            </span>
+            <Icon name={icon} size="sm" className={s.stepIcon} />
+            <span className={s.stepLabel}>{t(labelKey)}</span>
+          </li>
+        ))}
+      </ol>
+    </ModalFrame>
   )
 }
