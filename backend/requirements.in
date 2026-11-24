@@ -5,10 +5,10 @@ psycopg2-binary~=2.9
 gunicorn~=26.2
 whitenoise~=6.12
 celery[redis]~=5.6
-# redis-py is only used as Celery's broker client. Kept on the 6.x major
-# (6.4.0 is its last release); kombu >= 5.7 accepts up to redis<9, so moving
-# to 8.x is a deliberate major bump, not a compatibility blocker anymore.
-redis~=6.4
+# redis-py is only used as Celery's broker and result-backend client. On 8.x
+# since T217 (kombu >= 5.7 accepts redis<9); 8.x defaults to RESP3 and to 5 s
+# socket timeouts, checked against the worker, beat and broker restarts.
+redis~=8.1
 pywebpush~=2.5
 # Outbound HTTP to the regulatory agencies (apps.regulatory.clients). Already
 # a transitive dependency of pywebpush; pinned here because our code imports it.

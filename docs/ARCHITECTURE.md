@@ -54,7 +54,7 @@ Browser / Mobile
 | Backend | Django + Django REST Framework | Django 5.2 LTS, DRF 3.18 |
 | Auth | JWT (simplejwt) | 5.5.x |
 | Database | PostgreSQL | 17 |
-| Task queue | Celery + Redis | Celery 5.6, Redis 8 (redis-py 6.4) |
+| Task queue | Celery + Redis | Celery 5.6, Redis 8 (redis-py 8.2) |
 | Push | Web Push API / VAPID (pywebpush) | 2.x |
 | Runtime | Python 3.13, Node 24 | — |
 | Testing (backend) | unittest + coverage.py | — |
