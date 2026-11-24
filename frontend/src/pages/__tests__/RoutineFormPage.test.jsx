@@ -45,6 +45,20 @@ const editRoutine = {
 }
 
 describe('RoutineFormPage', () => {
+  it('Cancel returns to the previous page', async () => {
+    const { user } = renderWithProviders(
+      <Routes>
+        <Route path="/previous" element={<div>Previous page</div>} />
+        <Route path="/routines/new" element={<RoutineFormPage />} />
+      </Routes>,
+      { initialEntries: ['/previous', '/routines/new'] },
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('Previous page')).toBeInTheDocument()
+  })
+
   it('focuses the name after submitting it empty', async () => {
     const { user } = renderCreate()
     await user.click(await screen.findByRole('button', { name: 'Save' }))
