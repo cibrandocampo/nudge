@@ -58,7 +58,7 @@ Browser / Mobile
 | Push | Web Push API / VAPID (pywebpush) | 2.x |
 | Runtime | Python 3.13, Node 24 | — |
 | Testing (backend) | unittest + coverage.py | — |
-| Testing (frontend) | Vitest + Testing Library + MSW | Vitest 4.x |
+| Testing (frontend) | Vitest + Testing Library + MSW | Vitest 5.x |
 | Linting (backend) | ruff (check + format) | 0.15+ |
 | Linting (frontend) | ESLint 10 (flat config) + Prettier | 10.x |
 | Deploy | Docker Compose | — |
