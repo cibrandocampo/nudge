@@ -1,0 +1,36 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.actions > * {
+  max-width: 100%;
+}
+
+/* Never wider than the row: at 320 px with «Extra large», a fixed minimum
+   pushed the second button off the screen (T158). */
+.fill > * {
+  flex: 1 1 0;
+  min-width: min(9.5rem, 100%);
+}
+
+/* The inner padding of `.formSection` (1rem) plus its 1 px border, so the
+   buttons line up with the controls inside the cards above. The secondary keeps
+   the width of the cards' own secondary buttons; the primary takes the rest. */
+.inset {
+  padding: 0 calc(1rem + 1px);
+}
+
+/* Side by side, the huge grow factor gives the primary all the free space. When
+   they no longer fit and wrap, each is alone on its row and fills it. */
+.inset > * {
+  flex: 1 1 9.5rem;
+}
+
+.inset > :last-child {
+  flex-grow: 9999;
+}

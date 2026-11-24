@@ -21,10 +21,6 @@
 /* Primary button grows to fill the footer; Cancel keeps the common
    min-width of `.formSecondaryBtn`. Both are 44 px tall (`buttons.btn`).
  */
-.submitBtn {
-  flex: 1;
-}
-
 /* Notifications — mode picker (2 stacked cards, radio inside) */
 .modeOptions {
   display: flex;

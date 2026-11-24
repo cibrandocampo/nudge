@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import FormActions from './FormActions'
 import ModalFrame from './ModalFrame'
 import cx from '../utils/cx'
 import buttons from '../styles/buttons.module.css'
@@ -10,14 +11,14 @@ export default function ConfirmModal({ message, onConfirm, onCancel, confirmLabe
   return (
     <ModalFrame onClose={onCancel} showClose={false}>
       <p className={s.message}>{message}</p>
-      <div className={s.actions}>
+      <FormActions>
         <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel}>
           {t('common.cancel')}
         </button>
         <button className={cx(buttons.btn, buttons.danger, buttons.filled)} onClick={onConfirm}>
           {confirmLabel ?? t('common.confirm')}
         </button>
-      </div>
+      </FormActions>
     </ModalFrame>
   )
 }

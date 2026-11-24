@@ -25,6 +25,8 @@
 }
 
 .body {
+  flex: 1;
+  min-height: 0;
   padding: 1rem;
   overflow-y: auto;
 }
@@ -84,11 +86,9 @@
 }
 
 .footer {
+  margin-top: 0;
   padding: 0.625rem 1rem;
   border-top: 1px solid var(--c-border-inner);
-  display: flex;
-  gap: 0.4rem;
-  justify-content: flex-end;
 }
 
 @media (min-width: 520px) {

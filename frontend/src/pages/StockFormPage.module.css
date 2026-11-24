@@ -76,10 +76,6 @@
 /* Submit button grows to fill the footer while Cancel keeps the common
    min-width of `.formSecondaryBtn`. Both are 44 px tall (`buttons.btn`).
  */
-.submitBtn {
-  flex: 1;
-}
-
 /* The reveal control for the folded batch fields. One per list, not per row:
    someone registering six scanned boxes wants the serial field once. Quieter
    than the form's real actions — it adds inputs, it does not do anything. */

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
+import FormActions from '../components/FormActions'
 import ConfirmModal from '../components/ConfirmModal'
 import FormField from '../components/FormField'
 import Icon from '../components/Icon'
@@ -18,6 +19,7 @@ import { useUpdateRoutine } from '../hooks/mutations/useUpdateRoutine'
 import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
+import { shouldAutoFocus, showInvalid } from '../utils/forms'
 import { findCachedStock } from '../utils/lotsForSelection'
 import { hoursToHuman } from '../utils/interval'
 import { parseIntSafe } from '../utils/number'
@@ -85,6 +87,7 @@ export default function RoutineFormPage() {
   const [lastDoneEnabled, setLastDoneEnabled] = useState(false)
   const [lastDoneAt, setLastDoneAt] = useState('')
   const [errors, setErrors] = useState({})
+  const formRef = useRef(null)
   const [coupledShareConfirm, setCoupledShareConfirm] = useState(null)
   const [showIntervalHelp, setShowIntervalHelp] = useState(false)
 
@@ -194,7 +197,7 @@ export default function RoutineFormPage() {
     e.preventDefault()
     const err = validate()
     if (Object.keys(err).length) {
-      setErrors(err)
+      showInvalid(formRef.current, () => setErrors(err))
       return
     }
     setErrors({})
@@ -261,7 +264,7 @@ export default function RoutineFormPage() {
           <h1 className={layout.pageTitle}>{isEditing ? t('routine.form.editTitle') : t('routine.form.newTitle')}</h1>
         </div>
 
-        <form onSubmit={handleSubmit} className={s.form} noValidate>
+        <form ref={formRef} onSubmit={handleSubmit} className={s.form} noValidate>
           {/* Basics */}
           <section className={forms.formSection}>
             <FormField label={t('routine.form.name')} error={errors.name} required>
@@ -270,7 +273,7 @@ export default function RoutineFormPage() {
                 value={form.name}
                 onChange={field('name')}
                 placeholder={t('routine.form.placeholder')}
-                autoFocus
+                autoFocus={shouldAutoFocus()}
               />
             </FormField>
             <FormField label={t('routine.form.description')}>
@@ -334,7 +337,12 @@ export default function RoutineFormPage() {
                     return (
                       <div key={i} className={cx(s.intervalRow, multi && s.intervalCard)}>
                         <div className={s.intervalControls}>
-                          <span className={s.intervalEvery}>
+                          <span
+                            className={s.intervalEvery}
+                            data-invalid={
+                              errors[`phase_interval_`] || (!multi && errors.interval_hours) ? 'true' : undefined
+                            }
+                          >
                             <span className={s.everyLabel}>{t('routine.form.phaseEvery')}</span>
                             <IntervalPicker
                               valueHours={row.interval_hours}
@@ -355,7 +363,10 @@ export default function RoutineFormPage() {
                           </span>
                           {multi && !isLast && (
                             // A <label>: the input is named by the words around it ("for N times").
-                            <label className={s.intervalCount}>
+                            <label
+                              className={s.intervalCount}
+                              data-invalid={errors[`phase_count_`] ? 'true' : undefined}
+                            >
                               <span className={s.phaseDuringLabel}>{t('routine.form.phaseDuring')}</span>
                               <input
                                 type="number"
@@ -584,23 +595,19 @@ export default function RoutineFormPage() {
           {errors.submit && <p className={forms.error}>{errors.submit}</p>}
           {disabledCreate && <p className={forms.helpText}>{t('offline.requiresConnection')}</p>}
 
-          <div className={forms.formFooter}>
+          <FormActions inset>
+            <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={() => navigate(-1)}>
+              {t('routine.form.cancel')}
+            </button>
             <button
               type="submit"
-              className={cx(buttons.btn, buttons.primary, buttons.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.primary)}
               disabled={saving || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
               {saving ? t('routine.form.saving') : t('routine.form.save')}
             </button>
-            <button
-              type="button"
-              className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
-              onClick={() => navigate(-1)}
-            >
-              {t('routine.form.cancel')}
-            </button>
-          </div>
+          </FormActions>
         </form>
         {coupledShareConfirm && (
           <ConfirmModal

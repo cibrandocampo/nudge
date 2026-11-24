@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import FormActions from './FormActions'
 import ModalFrame from './ModalFrame'
 import buttons from '../styles/buttons.module.css'
 import cx from '../utils/cx'
@@ -43,14 +44,14 @@ export default function LogDateModal({ onConfirm, onCancel }) {
         onChange={(e) => setValue(e.target.value)}
         data-testid="log-date-input"
       />
-      <div className={s.actions}>
+      <FormActions>
         <button className={cx(buttons.btn, buttons.secondary)} onClick={onCancel}>
           {t('common.cancel')}
         </button>
         <button className={cx(buttons.btn, buttons.primary)} onClick={handleConfirm} data-testid="log-date-confirm">
           {t('routine.detail.logDateConfirm')}
         </button>
-      </div>
+      </FormActions>
     </ModalFrame>
   )
 }

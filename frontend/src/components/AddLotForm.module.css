@@ -61,15 +61,6 @@
   padding: 0.5rem 0.65rem;
 }
 
-.addLotActions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
-.addLotActions > button {
-  flex: 1;
-}
-
 /* A section of its own under the lots table: its heading over the two ways
    in (resting) or over the form card (open), spaced like the page sections. */
 .entry {

@@ -217,6 +217,12 @@ html {
   scroll-padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 
+/* The keyboard is up and the bottom bar is hidden (useKeyboardOpen): nothing
+   keeps room for it. */
+html[data-keyboard='open'] {
+  --nav-h: 0px;
+}
+
 body {
   margin: 0;
   background: var(--c-bg);

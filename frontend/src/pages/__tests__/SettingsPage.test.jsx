@@ -567,6 +567,8 @@ describe('SettingsPage', () => {
     await user.click(screen.getByTestId('add-contact-submit'))
     await waitFor(() => expect(screen.getByText('Please enter a valid email address.')).toBeInTheDocument())
     expect(posted).toBe(false)
+    expect(input).toHaveFocus()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('shows the not-found error when the backend returns 404', async () => {

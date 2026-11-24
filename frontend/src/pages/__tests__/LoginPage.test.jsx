@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { renderWithProviders } from '../../test/helpers'
+import { mockFinePointer, renderWithProviders } from '../../test/helpers'
 import LoginPage from '../LoginPage'
 
 const mockNavigate = vi.fn()
@@ -19,6 +19,44 @@ describe('LoginPage — wizard (T196)', () => {
   })
 
   // ── Happy paths ──────────────────────────────────────────────────────────
+
+  it('returns to the password field after a wrong password', async () => {
+    const loginStart = vi.fn().mockResolvedValue({ method: 'password' })
+    const verifyErr = Object.assign(new Error('login_verify_failed'), { status: 400 })
+    const loginVerify = vi.fn().mockRejectedValue(verifyErr)
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, loginVerify, isNewUser: false } })
+    await user.type(screen.getByPlaceholderText('Email'), 'admin@example.com')
+    await user.click(screen.getByText('Continue'))
+    const password = await screen.findByPlaceholderText('Password')
+    await user.type(password, 'wrong')
+
+    await user.click(screen.getByText('Sign in'))
+
+    await waitFor(() => expect(password).toHaveFocus())
+    expect(password).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('does not mark the field as wrong on a rate limit', async () => {
+    const loginStart = vi.fn().mockRejectedValue(Object.assign(new Error('limited'), { status: 429 }))
+    const { user } = renderWithProviders(<LoginPage />, { auth: { loginStart, isNewUser: false } })
+    await user.type(screen.getByPlaceholderText('Email'), 'admin@example.com')
+
+    await user.click(screen.getByText('Continue'))
+
+    await screen.findByText(/too many/i)
+    expect(screen.getByPlaceholderText('Email')).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('does not open the keyboard by itself on a touch screen', () => {
+    renderWithProviders(<LoginPage />, { auth: { isNewUser: false } })
+    expect(screen.getByPlaceholderText('Email')).not.toHaveFocus()
+  })
+
+  it('focuses the email with a mouse', () => {
+    mockFinePointer()
+    renderWithProviders(<LoginPage />, { auth: { isNewUser: false } })
+    expect(screen.getByPlaceholderText('Email')).toHaveFocus()
+  })
 
   it('OTP login of an existing user navigates to /', async () => {
     const loginStart = vi.fn().mockResolvedValue({ method: 'otp' })
