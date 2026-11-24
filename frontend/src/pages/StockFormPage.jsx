@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import FormActions from '../components/FormActions'
 import CategoryChips from '../components/CategoryChips'
 import FormField from '../components/FormField'
 import Icon from '../components/Icon'
@@ -17,6 +18,7 @@ import { useUpdateStock } from '../hooks/mutations/useUpdateStock'
 import { useToast } from '../components/useToast'
 import cx from '../utils/cx'
 import { errorToastMessage } from '../utils/errors'
+import { shouldAutoFocus, showInvalid } from '../utils/forms'
 import { isValidGtin, spanishCnFromGtin } from '../utils/gs1'
 import { parseIntSafe } from '../utils/number'
 import buttons from '../styles/buttons.module.css'
@@ -77,6 +79,7 @@ export default function StockFormPage() {
   const [sharedWith, setSharedWith] = useState([])
   const [batches, setBatches] = useState([])
   const [errors, setErrors] = useState({})
+  const formRef = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const disclosure = useFieldDisclosure(FOLDABLE)
 
@@ -165,7 +168,7 @@ export default function StockFormPage() {
     e.preventDefault()
     const err = validate()
     if (Object.keys(err).length) {
-      setErrors(err)
+      showInvalid(formRef.current, () => setErrors(err))
       return
     }
     setErrors({})
@@ -248,7 +251,8 @@ export default function StockFormPage() {
 
       navigate(`/inventory/${newStockId}`)
     } catch (err) {
-      setErrors(submitErrors(err))
+      const next = submitErrors(err)
+      showInvalid(formRef.current, () => setErrors(next))
     } finally {
       setSubmitting(false)
     }
@@ -271,7 +275,7 @@ export default function StockFormPage() {
           <h1 className={layout.pageTitle}>{isEditing ? t('stockForm.editTitle') : t('stockForm.newTitle')}</h1>
         </div>
 
-        <form onSubmit={handleSubmit} className={s.form} noValidate>
+        <form ref={formRef} onSubmit={handleSubmit} className={s.form} noValidate>
           <section className={forms.formSection}>
             <FormField label={t('stockForm.nameLabel')} error={errors.name} required>
               <div className={isOwner ? undefined : forms.lockedInput}>
@@ -280,7 +284,8 @@ export default function StockFormPage() {
                   value={form.name}
                   onChange={field('name')}
                   placeholder={t('stockForm.namePlaceholder')}
-                  autoFocus={isOwner}
+                  autoFocus={isOwner && shouldAutoFocus()}
+                  aria-invalid={errors.name ? true : undefined}
                   disabled={!isOwner}
                 />
                 {!isOwner && (
@@ -465,30 +470,30 @@ export default function StockFormPage() {
                   <span>{t('inventory.moreFields')}</span>
                 </button>
               )}
-              {errors.batches && <p className={forms.error}>{errors.batches}</p>}
+              {errors.batches && (
+                <p className={forms.error} data-invalid="true" tabIndex={-1}>
+                  {errors.batches}
+                </p>
+              )}
             </section>
           )}
 
           {errors.submit && <p className={forms.error}>{errors.submit}</p>}
           {disabledCreate && <p className={forms.helpText}>{t('offline.requiresConnection')}</p>}
 
-          <div className={forms.formFooter}>
+          <FormActions inset>
+            <button type="button" className={cx(buttons.btn, buttons.secondary)} onClick={() => navigate(-1)}>
+              {t('stockForm.cancel')}
+            </button>
             <button
               type="submit"
-              className={cx(buttons.btn, buttons.primary, buttons.formSecondaryBtn, s.submitBtn)}
+              className={cx(buttons.btn, buttons.primary)}
               disabled={submitting || disabledCreate}
               title={disabledCreate ? t('offline.requiresConnection') : undefined}
             >
               {submitting ? t('stockForm.saving') : isEditing ? t('stockForm.submitEdit') : t('stockForm.submitCreate')}
             </button>
-            <button
-              type="button"
-              className={cx(buttons.btn, buttons.secondary, buttons.formSecondaryBtn)}
-              onClick={() => navigate(-1)}
-            >
-              {t('stockForm.cancel')}
-            </button>
-          </div>
+          </FormActions>
         </form>
       </div>
     </QueryHandler>

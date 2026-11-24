@@ -45,6 +45,40 @@ const editRoutine = {
 }
 
 describe('RoutineFormPage', () => {
+  it('Cancel returns to the previous page', async () => {
+    const { user } = renderWithProviders(
+      <Routes>
+        <Route path="/previous" element={<div>Previous page</div>} />
+        <Route path="/routines/new" element={<RoutineFormPage />} />
+      </Routes>,
+      { initialEntries: ['/previous', '/routines/new'] },
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('Previous page')).toBeInTheDocument()
+  })
+
+  it('focuses the name after submitting it empty', async () => {
+    const { user } = renderCreate()
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
+
+    expect(screen.getByPlaceholderText('e.g. Change water filter')).toHaveFocus()
+  })
+
+  it('does not focus the name by itself on a touch screen', async () => {
+    renderCreate()
+    expect(await screen.findByPlaceholderText('e.g. Change water filter')).not.toHaveFocus()
+  })
+
+  it('puts Cancel before the primary action', async () => {
+    renderCreate()
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
+    const save = screen.getByRole('button', { name: 'Save' })
+
+    expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('names the description textarea by its label', async () => {
     renderCreate()
     expect((await screen.findByLabelText('Description')).tagName).toBe('TEXTAREA')

@@ -1,7 +1,8 @@
-import { useLayoutEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { Link, Outlet, matchPath, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import cx from '../utils/cx'
+import { useKeyboardOpen } from '../hooks/useKeyboardOpen'
 import { useRoutines } from '../hooks/useRoutines'
 import { useServerReachable } from '../hooks/useServerReachable'
 import AutoUpdater from './AutoUpdater'
@@ -27,6 +28,15 @@ export default function Layout() {
   const reachable = useServerReachable()
   const { showToast } = useToast()
   const { pathname } = useLocation()
+  const keyboardOpen = useKeyboardOpen()
+
+  // On the root element, because `--nav-h` also places the toasts and the
+  // page's scroll padding: with the bar hidden, none of them keeps its room.
+  useEffect(() => {
+    if (!keyboardOpen) return undefined
+    document.documentElement.dataset.keyboard = 'open'
+    return () => delete document.documentElement.dataset.keyboard
+  }, [keyboardOpen])
 
   // A new page opens at its top. The browser keeps the window's offset across
   // client-side navigation, so a page opened from far down a list would land

@@ -43,6 +43,48 @@ async function stubSubscription(sub) {
 beforeEach(() => setNotification('default'))
 
 describe('Layout', () => {
+  describe('with the on-screen keyboard', () => {
+    let viewport
+    let field
+
+    const resize = (height) =>
+      act(() => {
+        viewport.height = height
+        viewport.dispatchEvent(new Event('resize'))
+      })
+
+    beforeEach(() => {
+      viewport = Object.assign(new EventTarget(), { width: 412, height: 900, scale: 1 })
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport })
+      field = document.createElement('input')
+      document.body.appendChild(field)
+    })
+
+    afterEach(() => {
+      field.remove()
+      delete window.visualViewport
+    })
+
+    it('marks the document while the keyboard is up', () => {
+      renderWithProviders(<Layout />)
+      act(() => field.focus())
+
+      resize(500)
+
+      expect(document.documentElement.dataset.keyboard).toBe('open')
+    })
+
+    it('clears the mark when the keyboard closes', () => {
+      renderWithProviders(<Layout />)
+      act(() => field.focus())
+      resize(500)
+
+      resize(900)
+
+      expect(document.documentElement.dataset.keyboard).toBeUndefined()
+    })
+  })
+
   it('renders 4 nav links', () => {
     renderWithProviders(<Layout />)
     expect(screen.getByText('Routines')).toBeInTheDocument()

@@ -129,19 +129,6 @@ input[type='time'].input::-webkit-calendar-picker-indicator {
   color: var(--c-text);
 }
 
-.formFooter {
-  flex-wrap: wrap;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  /* Match the inner padding of `.formSection` (1rem) **plus** the
-     section's 1 px border, so the submit/cancel buttons line up
-     pixel-perfect with the secondary buttons that live inside the
-     bordered section cards above. */
-  padding: 0 calc(1rem + 1px);
-}
-
 .formChipsRow {
   display: flex;
   flex-wrap: wrap;

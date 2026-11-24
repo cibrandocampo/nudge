@@ -32,11 +32,17 @@ const LABELABLE = new Set(['input', 'textarea', 'select'])
  * themselves three different ways. `hint` is for genuine extra detail
  * ("· UTC", "· max 20 characters").
  *
+ * **An error marks the field** (`data-invalid`) for `focusFirstInvalid`, and a
+ * native child gets `aria-invalid` and `aria-describedby`. A control inside a
+ * wrapper sets its own, using `errorId` for the message.
+ *
  * The asterisk is `aria-hidden`: a lone "*" read aloud means nothing. A
  * native child gets `aria-required` instead, so assistive tech hears it.
  */
-export default function FormField({ label, children, error, hint, required, controlId }) {
+export default function FormField({ label, children, error, hint, required, controlId, errorId }) {
   const generatedId = useId()
+  const generatedErrorId = useId()
+  const messageId = errorId ?? generatedErrorId
   const only = Children.count(children) === 1 && isValidElement(children) ? children : null
   const nativeChild = only && LABELABLE.has(only.type) ? only : null
   const id = controlId ?? nativeChild?.props.id ?? (nativeChild ? generatedId : undefined)
@@ -44,11 +50,12 @@ export default function FormField({ label, children, error, hint, required, cont
     ? cloneElement(nativeChild, {
         id,
         ...(required && nativeChild.props['aria-required'] === undefined && { 'aria-required': true }),
+        ...(error && { 'aria-invalid': true, 'aria-describedby': messageId }),
       })
     : children
 
   return (
-    <div className={s.field}>
+    <div className={s.field} data-invalid={error ? 'true' : undefined}>
       {label && (
         <label className={cx(forms.inputLabel, s.label)} htmlFor={id}>
           {label}
@@ -62,7 +69,11 @@ export default function FormField({ label, children, error, hint, required, cont
         </label>
       )}
       {control}
-      {error && <p className={forms.error}>{error}</p>}
+      {error && (
+        <p id={messageId} className={forms.error}>
+          {error}
+        </p>
+      )}
     </div>
   )
 }

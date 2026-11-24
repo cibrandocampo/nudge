@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import FormActions from './FormActions'
 import ModalFrame from './ModalFrame'
 import cx from '../utils/cx'
 import buttons from '../styles/buttons.module.css'
@@ -79,7 +80,7 @@ export default function StockValuesConfirmModal({
             </li>
           ))}
         </ul>
-        <div className={s.actions}>
+        <FormActions>
           <button
             className={cx(buttons.btn, buttons.secondary)}
             onClick={onCancel}
@@ -96,7 +97,7 @@ export default function StockValuesConfirmModal({
           >
             {t('stockValues.update')}
           </button>
-        </div>
+        </FormActions>
       </div>
     </ModalFrame>
   )

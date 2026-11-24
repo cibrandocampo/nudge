@@ -435,6 +435,16 @@ export const SCENES = [
     },
   },
   {
+    id: 'stock-form__invalid',
+    user: 'user1',
+    run: async ({ page }) => {
+      await go(page, '/inventory/new')
+      await page.getByRole('button', { name: 'Create' }).click()
+      await expect(page.getByText('Name is required.')).toBeVisible()
+      await expect(page.getByPlaceholder(/ibuprofen/i)).toBeFocused()
+    },
+  },
+  {
     id: 'stock-form__edit',
     user: 'user1',
     run: async ({ page, ids }) => {
@@ -517,6 +527,21 @@ export const SCENES = [
       await go(page, '/settings')
       await page.getByRole('button', { name: 'Change password' }).click()
       await expect(page.getByRole('dialog')).toBeVisible()
+    },
+  },
+  {
+    id: 'settings__change-password-error',
+    user: 'user1',
+    run: async ({ page }) => {
+      await go(page, '/settings')
+      await page.getByRole('button', { name: 'Change password' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('Current password').fill('current')
+      await dialog.getByLabel('New password', { exact: true }).fill('first')
+      await dialog.getByLabel('Confirm new password').fill('second')
+      await dialog.locator('button[type="submit"]').click()
+      await expect(dialog.getByText("Passwords don't match")).toBeVisible()
+      await expect(dialog.getByLabel('Confirm new password')).toBeFocused()
     },
   },
 
