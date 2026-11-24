@@ -3,12 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { enqueue, list } from '../../offline/queue'
 import { __resetSyncWorkerForTests, initSyncWorker } from '../../offline/sync'
 import { server } from '../../test/mocks/server'
 import { BrowserBack, flushQueueReads } from '../../test/helpers'
+import { overlayChain } from '../../hooks/useOverlay'
 // Import the hook module so its `registerRollback('consumeStock', …)`
 // side effect populates the registry before the discard tests run.
 import '../../hooks/mutations/useConsumeStock'
@@ -27,11 +28,22 @@ function renderBadge(options = {}) {
       <MemoryRouter>
         <PendingBadge />
         {options.withBack && <BrowserBack />}
+        {options.withOverlayDepth && <OverlayDepth />}
       </MemoryRouter>
     </QueryClientProvider>,
   )
   return { ...utils, qc }
 }
+
+// How many overlay entries the router holds. When the queue empties with the panel
+// open, the badge unmounts and its overlay leaves history from a passive effect,
+// which can run after a `waitFor` on the DOM has already returned; waiting for
+// this to read 0 keeps that router update inside the test.
+function OverlayDepth() {
+  return <p data-testid="overlay-depth">{overlayChain(useLocation()).length}</p>
+}
+
+const overlayLeft = () => waitFor(() => expect(screen.getByTestId('overlay-depth')).toHaveTextContent('0'))
 
 const BASE = 'http://localhost/api'
 
@@ -129,15 +141,17 @@ describe('PendingBadge', () => {
     )
     initSyncWorker({ invalidateQueries: async () => {} })
     await enqueue(entry({ id: 'err', status: 'error', errorMessage: 'HTTP 400' }))
-    renderBadge()
+    renderBadge({ withOverlayDepth: true })
     await waitFor(() => expect(screen.getByTestId('pending-badge')).toHaveTextContent('!'))
     const user = userEvent.setup()
     await user.click(screen.getByTestId('pending-badge'))
+    expect(screen.getByTestId('overlay-depth')).toHaveTextContent('1')
     await user.click(screen.getByRole('button', { name: /retry/i }))
     // forceSync resets error → pending and then drains; the entry should be
     // processed and the queue empty — so the badge goes away.
     await waitFor(() => expect(hits).toBe(1))
     await waitFor(() => expect(screen.queryByTestId('pending-badge')).not.toBeInTheDocument())
+    await overlayLeft()
     expect(await list()).toEqual([])
   })
 
