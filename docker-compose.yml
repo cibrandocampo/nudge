@@ -98,7 +98,10 @@ services:
     init: true
     # The worker only runs tasks; the schedule lives in `beat` below. Never add
     # `-B` here: a second scheduler would send every periodic task twice.
-    command: celery -A nudge worker --loglevel=${CELERY_LOG_LEVEL:-info}
+    # Without --concurrency prefork starts one process per CPU, and on a many-core
+    # host they outgrow the 512M limit below: the cgroup OOM-kills the worker in a
+    # restart loop.
+    command: celery -A nudge worker --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency ${CELERY_CONCURRENCY:-2}
     env_file: .env
     environment:
       # Same hardening as the backend service — celery loads the same
@@ -190,7 +193,9 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://localhost || exit 1"]
+      # 127.0.0.1, not localhost: localhost resolves to ::1 first and nginx only
+      # listens on IPv4, so the check failed while nginx was serving.
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

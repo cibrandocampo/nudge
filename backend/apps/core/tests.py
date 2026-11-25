@@ -964,6 +964,33 @@ class DomainExceptionHandlerTest(TestCase):
         self.assertEqual(settings.REST_FRAMEWORK["EXCEPTION_HANDLER"], "apps.core.exception_handler.exception_handler")
 
 
+class CeleryLoggingTests(TestCase):
+    """The worker and beat must log through Django's LOGGING, not drop their INFO lines."""
+
+    def test_the_worker_does_not_take_over_logging(self):
+        from nudge.celery import app
+
+        self.assertIs(settings.CELERY_WORKER_HIJACK_ROOT_LOGGER, False)
+        self.assertIs(app.conf.worker_hijack_root_logger, False)
+
+    def test_the_celery_logger_keeps_its_handler_after_the_worker_sets_up_logging(self):
+        # LOGGING gives `celery` its own handler and `propagate: False`. When the
+        # worker hijacked logging it stripped that handler, so every INFO line
+        # (connected, ready, task succeeded) went nowhere.
+        import logging
+
+        from nudge.celery import app
+
+        celery_logger = logging.getLogger("celery")
+        before = list(celery_logger.handlers)
+        self.assertTrue(before, "LOGGING should give the celery logger a handler")
+
+        app.log.setup(loglevel="INFO", redirect_stdouts=False)
+
+        self.assertEqual(celery_logger.handlers, before)
+        self.assertFalse(celery_logger.propagate)
+
+
 class BeatSchedulerTests(TestCase):
     """Beat's schedule store must not be Python 3.13's SQLite dbm (it crashed the embedded beat)."""
 

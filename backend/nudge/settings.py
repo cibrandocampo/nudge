@@ -234,6 +234,11 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
+# Leave logging to LOGGING below. When the worker takes over the root logger it
+# also strips the handlers of the `celery` logger, which LOGGING declares with
+# `propagate: False`: every INFO line (connected, ready, task received /
+# succeeded) was silently dropped.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 # Beat keeps its schedule in dbm.dumb files, not Python 3.13's default SQLite
 # store, which crashed the embedded beat (see `nudge/celery.py`).
 CELERY_BEAT_SCHEDULER = "nudge.celery:DumbDbmScheduler"
