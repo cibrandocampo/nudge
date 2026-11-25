@@ -226,11 +226,12 @@ calls it, so it needs outbound HTTPS to `cima.aemps.es`.
 |----------|---------|-------------|
 | `PROJECT_NAME` | `nudge` | Docker Compose project name |
 | `DOCKER_NUDGE_VERSION` | `stable` | Docker image tag (`latest`, `stable`, or `X.Y.Z`) |
-| `DOCKER_POSTGRES_VERSION` | `16-alpine` | PostgreSQL image version |
-| `DOCKER_REDIS_VERSION` | `7-alpine` | Redis image version |
+| `DOCKER_POSTGRES_VERSION` | `17-alpine` | PostgreSQL image version |
+| `DOCKER_REDIS_VERSION` | `8-alpine` | Redis image version |
 | `NUDGE_HTTP_PORT` | `80` | Port exposed on the host for the frontend |
 | `BACKEND_PORT` | `8000` | Internal backend port (don't change unless you also update nginx.conf) |
 | `GUNICORN_WORKERS` | `2` | Gunicorn worker processes (rule of thumb: 2 × CPU cores + 1) |
+| `CELERY_CONCURRENCY` | `2` | Celery worker processes. Each holds a copy of the app (~100 MB) and the container is capped at 512M, so raise it with care; unset, Celery would start one per CPU |
 | `DATA_PATH` | `./data` | Host path for PostgreSQL data persistence |
 
 ## Development / E2E
