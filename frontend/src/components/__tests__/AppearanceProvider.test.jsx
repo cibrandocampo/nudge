@@ -78,4 +78,24 @@ describe('AppearanceProvider', () => {
     expect(html.dataset.theme).toBe('dark')
     expect(html.style.fontSize).toBe('125%')
   })
+
+  it('keeps a language chosen in Settings while the profile still has the old one', async () => {
+    // Settings switches the language at once and saves it afterwards; the
+    // profile only carries it when the PATCH answers. Since react-i18next 18
+    // the `i18n` from `useTranslation` is a new object on every language
+    // change, so an effect keyed on it put the old profile language back.
+    const tree = (user) => (
+      <AuthContext.Provider value={{ user }}>
+        <AppearanceProvider />
+      </AuthContext.Provider>
+    )
+    const { rerender } = render(tree(profile({ language: 'en' })))
+    expect(i18n.language).toBe('en')
+
+    await act(() => i18n.changeLanguage('es'))
+    expect(i18n.language).toBe('es')
+
+    rerender(tree(profile({ language: 'es' })))
+    expect(i18n.language).toBe('es')
+  })
 })
