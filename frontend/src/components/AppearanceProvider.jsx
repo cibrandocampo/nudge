@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import { appearanceOf, applyAppearance, storeAppearance } from '../appearance'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -16,7 +16,6 @@ import { useAuth } from '../contexts/AuthContext'
  */
 export default function AppearanceProvider({ children }) {
   const { user } = useAuth()
-  const { i18n } = useTranslation()
   const signedIn = Boolean(user)
   const theme = user?.theme
   const textSize = user?.text_size
@@ -30,9 +29,13 @@ export default function AppearanceProvider({ children }) {
     storeAppearance(appearance)
   }, [signedIn, theme, textSize])
 
+  // Keyed on the profile language only, on the i18next instance itself: since
+  // react-i18next 18 the `i18n` from `useTranslation` is a new object after every
+  // language change, so depending on it re-ran this on Settings' own switch and
+  // put the old profile language back until the save answered (T219).
   useEffect(() => {
     if (language && language !== i18n.language) i18n.changeLanguage(language)
-  }, [language, i18n])
+  }, [language])
 
   return children
 }
